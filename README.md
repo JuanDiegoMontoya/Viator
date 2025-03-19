@@ -1,35 +1,36 @@
-# Frogfood
+# Viator
 
-A froggylicious renderer.
+A voxel game with unrealistic ambitions.
 
-## Features
+## Tech
 
-- Vulkan 1.3
-- Virtual shadow mapping (henceforth VSM shall stand for it and absolutely nothing else)
-- Meshlet rendering without mesh shaders
-- Visibility buffer deferred rendering (the scene is drawn to a 32-bit-per-pixel visibility buffer, then a standard G-buffer is generated)
-- Super basic physically-based shading
-- Granular culling:
-  - Meshlets: hi-z and frustum culling
-  - Triangles: frustum, back-facing, and small primitive culling
-- Bloom based on the implementation in [Call of Duty: Advanced Warfare](https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/)
-- Auto exposure based on vibes
-- Mediocre but not too terrible color handling and image formation
-- Epically fast glTF loading powered by [fastgltf](https://github.com/spnda/fastgltf) (on compilers that support std::execution::par (MSVC))
-- HDR display support and wide gamut rendering
+C++ and Vulkan.
 
-## OpenGL
+### Storage
 
-This renderer was previously written in OpenGL 4.6. The last commit using OpenGL is 439be52. As of writing, all the mentioned features were supported in the OpenGL version (including mesh shader-less meshlet rendering and VSMs).
+Voxels are stored in a simple two-level grid consisting of top-level and bottom-level chunks.
+I sometimes call it a brickmap, but I haven't read the paper so I don't know if that's accurate.
+Top- and bottom-level chunks both hold 8x8x8 (512) elements, but homogeneous chunks can be collapsed into a single value.
+Bottom-level bricks additionally store a bitmask indicating the "occupancy" of each voxel. The occupancy bitmask is used to
+improve cache coherency in ray tracing.
+
+A fixed memory pool is employed for the grid structure. It is mirrored exactly on the GPU side, so propagating updates from 
+the CPU to the GPU is as simple as marking which pages of the pool were touched by a modification, then copying them into 
+the GPU-side representation.
+
+### Rendering
+
+Lighting is entirely path traced, with 1 sample per pixel, 2 bounces after the primary ray, and 1 NEE ray per bounce.
+Rays traverse the voxel grid with hierarchical DDA. Meshes (for dynamic game entities) can be arbitrarily placed 
+and lit, but do not themselves affect lighting.
+
+Light is emitted by either voxels or by explicitly sampled local or directional lights.
+
+A primitive spatial à-trous denoiser is used to make the image more tolerable to look at.
 
 ## Building
 
 Get a modern version of CMake and do the `mkdir build && cd build && cmake ..` thing after cloning this repo. All dependencies are vendored or fetched with FetchContent. Should work on any sufficiently modern desktop GPU on Windows and Linux (I only test on Windows however).
-
-## Pictures That Will Become Outdated Almost Immediately
-
-![A scene featuring the exterior of the namesake bistro from the famous Lumberyard Bistro model](media/bistro_0.png)
-![A showcase of basic editing features within the application's GUI. In the center is a viewport showing a large tree from the Lumberyard Bistro model. The tree and its surroundings are tinted by colored square tiles that increase in size with distance from the viewer. These square tiles are rendered when the debug toggle "Show Page Address" is enabled in the GUI.](media/bistro_1.png)
 
 ## Dependencies
 
@@ -40,14 +41,17 @@ Get a modern version of CMake and do the `mkdir build && cd build && cmake ..` t
 - [volk](https://github.com/zeux/volk.git)
 - [vk-bootstrap](https://github.com/charles-lunarg/vk-bootstrap)
 - [Vulkan Memory Allocator](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator)
-- [fastgltf](https://github.com/spnda/fastgltf.git)
-- [KTX](https://github.com/KhronosGroup/KTX-Software.git)
 - [glslang](https://github.com/KhronosGroup/glslang.git)
 - [Dear ImGui](https://github.com/ocornut/imgui)
 - [ImPlot](https://github.com/epezent/implot.git)
-- [meshoptimizer](https://github.com/zeux/meshoptimizer.git)
 - [FidelityFX Super Resolution 2](https://github.com/JuanDiegoMontoya/FidelityFX-FSR2.git) (my fork)
 - [Tracy](https://github.com/wolfpld/tracy.git)
+- [EnTT](https://github.com/skypjack/entt)
+- [Jolt Physics](https://github.com/jrouwe/JoltPhysics)
+- [FastNoise2](https://github.com/Auburn/FastNoise2)
+- [ankerl::unordered_dense](https://github.com/martinus/unordered_dense/)
+- [CHOC](https://github.com/Tracktion/choc/)
+- [cereal](https://uscilab.github.io/cereal/)
 
 ### Vendored
 
@@ -59,6 +63,6 @@ Get a modern version of CMake and do the `mkdir build && cd build && cmake ..` t
 - [AgX shader](https://www.shadertoy.com/view/Dt3XDr)
 - Probably several more code snippets that I've forgotten about
 
-## Acknowledgements
+## Philosophy
 
-Meshlet and visibility buffer rendering wouldn't have been possible without the early contributions by [LVSTRI](https://github.com/LVSTRI/).
+No bikeshedding!

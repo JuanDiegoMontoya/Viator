@@ -14,11 +14,8 @@ add_executable(frogRender
     src/main.cpp
     src/Application.cpp
     src/Application.h
-    src/SceneLoader.cpp
-    src/SceneLoader.h
     vendor/stb_image.cpp
     vendor/tiny_obj_loader.cpp
-    src/Gui.cpp
     src/PCG.h
     src/techniques/Bloom.h
     src/techniques/Bloom.cpp
@@ -46,8 +43,6 @@ add_executable(frogRender
     src/Fvog/detail/ApiToEnum2.cpp
     src/Fvog/Buffer2.h
     src/Fvog/Buffer2.cpp
-    src/FrogRenderer2.h
-    src/FrogRenderer2.cpp
     src/Fvog/detail/SamplerCache2.h
     src/Fvog/detail/SamplerCache2.cpp
     src/Fvog/detail/Hash2.h
@@ -56,8 +51,6 @@ add_executable(frogRender
     src/ImGui/imgui_impl_fvog.h
     src/Fvog/Timer2.h
     src/Fvog/Timer2.cpp
-    src/Scene.h
-    src/Scene.cpp
     src/Renderables.h
     src/Fvog/AccelerationStructure.h
     src/Fvog/AccelerationStructure.cpp
@@ -209,9 +202,6 @@ target_link_libraries(frogRender
     glm
     lib_imgui
     ${FSR2_LIBS}
-    ktx
-    fastgltf
-    meshoptimizer
     Tracy::TracyClient
     lib_implot
     volk::volk

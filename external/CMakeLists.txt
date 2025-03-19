@@ -18,21 +18,9 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-    fastgltf
-    GIT_REPOSITORY https://github.com/spnda/fastgltf.git
-    GIT_TAG        916723260c6c064a7c5350f768a07187499d509c
-)
-
-FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui
     GIT_TAG        fdc084f532189fda8474079f79e74fa5e3541c9f
-)
-
-FetchContent_Declare(
-    meshoptimizer
-    GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
-    GIT_TAG        v0.19
 )
 
 FetchContent_Declare(
@@ -45,20 +33,6 @@ FetchContent_Declare(
     fastNoise2
     GIT_REPOSITORY https://github.com/Auburn/FastNoise2.git
     GIT_TAG        v0.10.0-alpha
-)
-
-option(KTX_FEATURE_TESTS "" OFF)
-option(KTX_FEATURE_VULKAN "" OFF)
-option(KTX_FEATURE_GL_UPLOAD "" OFF)
-option(KTX_FEATURE_VK_UPLOAD "" OFF)
-option(KTX_FEATURE_WRITE "" OFF)
-option(KTX_FEATURE_TOOLS "" OFF)
-option(KTX_FEATURE_STATIC_LIBRARY "" ON)
-FetchContent_Declare(
-    ktx
-    GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
-    GIT_TAG        v4.3.2
-    SYSTEM
 )
 
 FetchContent_Declare(
@@ -84,6 +58,10 @@ FetchContent_Declare(
 )
 
 option(ENABLE_OPT "" OFF)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     glslang
     GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
@@ -190,9 +168,6 @@ option(TRACY_ONLY_IPV4 "IPv4 only" ON)
 
 FetchContent_MakeAvailable(
     glm
-    fastgltf
-    ktx
-    meshoptimizer
     tracy
     volk
     vkbootstrap
