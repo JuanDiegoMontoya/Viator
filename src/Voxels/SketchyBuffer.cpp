@@ -2,6 +2,7 @@
 
 #include "Fvog/detail/Common.h"
 #include "tracy/Tracy.hpp"
+#include "vk_mem_alloc.h"
 
 #include <bit>
 

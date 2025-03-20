@@ -216,7 +216,7 @@ namespace Core::Serialization
 
       if constexpr (!Save)
       {
-        tlBrickPtr.topLevelBrick = grid->AllocateTopLevelBrick(0);
+        tlBrickPtr.topLevelBrick = grid->AllocateTopLevelBrick(voxel_t::Air);
       }
       auto& tlBrick = grid->GetTopLevelBrick(tlBrickPtr.topLevelBrick);
       Serialize2(ar, tlBrick);
@@ -232,7 +232,7 @@ namespace Core::Serialization
 
         if constexpr (!Save)
         {
-          blBrickPtr.bottomLevelBrick = grid->AllocateBottomLevelBrick(0);
+          blBrickPtr.bottomLevelBrick = grid->AllocateBottomLevelBrick(voxel_t::Air);
         }
         auto& blBrick = grid->GetBottomLevelBrick(blBrickPtr.bottomLevelBrick);
         Serialize2(ar, blBrick);
@@ -329,7 +329,7 @@ namespace Core::Serialization
     for (uint32_t i = 0; i < numSets; i++)
     {
       ZoneScopedN("Component");
-      auto id   = entt::id_type();
+      auto id = entt::id_type();
       auto size = uint32_t();
       Serialize<false>(inputArchive, entt::forward_as_meta(id));
       Serialize<false>(inputArchive, entt::forward_as_meta(size));

@@ -1,5 +1,6 @@
 #pragma once
 #include "ClassImplMacros.h"
+#include "VoxelType.h"
 
 #include "glm/vec3.hpp"
 
@@ -8,6 +9,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <span>
+#include <unordered_map>
 
 using PrefabId = uint32_t;
 class World;
@@ -45,7 +48,7 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override;
 
-  std::vector<std::pair<glm::ivec3, uint32_t>> voxels;
+  std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
 };
 
 class PrefabRegistry

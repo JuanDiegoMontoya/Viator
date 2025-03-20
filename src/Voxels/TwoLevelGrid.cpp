@@ -59,7 +59,7 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
     if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(dimensions_))))
     {
       const voxel_t voxel = GetVoxelAt(ivec3(mapPos));
-      if (voxel != 0 && (!skipNonSolid || materials_[voxel].isSolid))
+      if (voxel != voxel_t::Air && (!skipNonSolid || materials_[(uint32_t)voxel].isSolid))
       {
         const vec3 p      = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
         const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
@@ -97,7 +97,7 @@ TwoLevelGrid::TwoLevelGrid(glm::ivec3 topLevelBrickDims)
   {
     auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
     std::construct_at(&topLevelBrickPtr);
-    topLevelBrickPtr = {.voxelsDoBeAllSame = true, .voxelIfAllSame = 0};
+    topLevelBrickPtr = {.voxelsDoBeAllSame = true, .voxelIfAllSame = voxel_t::Air};
 #ifndef GAME_HEADLESS
     buffer.MarkDirtyPages(&topLevelBrickPtr);
 #endif
@@ -120,13 +120,13 @@ TwoLevelGrid::GridHierarchyCoords TwoLevelGrid::GetCoordsOfVoxelAt(glm::ivec3 vo
   return {topLevelCoord, bottomLevelCoord, localVoxelCoord};
 }
 
-TwoLevelGrid::voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
+voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
 {
   //assert(glm::all(glm::greaterThanEqual(voxelCoord, glm::ivec3(0))));
   //assert(glm::all(glm::lessThan(voxelCoord, dimensions_)));
   if (glm::any(glm::lessThan(voxelCoord, glm::ivec3(0))) || glm::any(glm::greaterThanEqual(voxelCoord, dimensions_)))
   {
-    return 0;
+    return voxel_t::Air;
   }
 
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
@@ -193,7 +193,7 @@ void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
   assert(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
   auto& blBrick  = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
   auto& dstVoxel = blBrick.voxels[localVoxelIndex] = voxel;
-  blBrick.occupancy.Set(localVoxelIndex, materials_[voxel].isVisible);
+  blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
 #ifndef GAME_HEADLESS
   buffer.MarkDirtyPages(&dstVoxel);
   buffer.MarkDirtyPages(&blBrick.occupancy.bitmask[localVoxelIndex / 32u]);
@@ -380,7 +380,7 @@ uint32_t TwoLevelGrid::AllocateTopLevelBrick(voxel_t initialVoxel)
   // Initialize
   auto& top = buffer.GetBase<TopLevelBrick>()[index];
   std::construct_at(&top);
-  std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .bottomLevelBrick = initialVoxel});
+  std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .voxelIfAllSame = initialVoxel});
 #ifndef GAME_HEADLESS
   auto lk = std::unique_lock(*mutex_);
   buffer.MarkDirtyPages(&top);
@@ -405,7 +405,7 @@ uint32_t TwoLevelGrid::AllocateBottomLevelBrick(voxel_t initialVoxel)
   auto& bottom = buffer.GetBase<BottomLevelBrick>()[index];
   std::construct_at(&bottom);
   std::ranges::fill(bottom.voxels, initialVoxel);
-  std::ranges::fill(bottom.occupancy.bitmask, materials_[initialVoxel].isVisible ? ~0u : 0u);
+  std::ranges::fill(bottom.occupancy.bitmask, materials_[(uint32_t)initialVoxel].isVisible ? ~0u : 0u);
 #ifndef GAME_HEADLESS
   auto lk = std::unique_lock(*mutex_);
   buffer.MarkDirtyPages(&bottom);
@@ -467,7 +467,7 @@ void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   assert(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
   auto& blBrick  = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
   blBrick.voxels[localVoxelIndex] = voxel;
-  blBrick.occupancy.Set(localVoxelIndex, materials_[voxel].isVisible);
+  blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
 }
 
 uint32_t TwoLevelGrid::AllocateTopLevelBrickNoDirty(voxel_t initialVoxel)
@@ -487,7 +487,7 @@ uint32_t TwoLevelGrid::AllocateTopLevelBrickNoDirty(voxel_t initialVoxel)
   // Initialize
   auto& top = buffer.GetBase<TopLevelBrick>()[index];
   std::construct_at(&top);
-  std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .bottomLevelBrick = initialVoxel});
+  std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .voxelIfAllSame = initialVoxel});
   return index;
 }
 
@@ -508,7 +508,7 @@ uint32_t TwoLevelGrid::AllocateBottomLevelBrickNoDirty(voxel_t initialVoxel)
   auto& bottom = buffer.GetBase<BottomLevelBrick>()[index];
   std::construct_at(&bottom);
   std::ranges::fill(bottom.voxels, initialVoxel);
-  std::ranges::fill(bottom.occupancy.bitmask, materials_[initialVoxel].isVisible ? ~0u : 0u);
+  std::ranges::fill(bottom.occupancy.bitmask, materials_[(uint32_t)initialVoxel].isVisible ? ~0u : 0u);
   return index;
 }
 

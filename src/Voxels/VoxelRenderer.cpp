@@ -33,6 +33,8 @@
 
 #include "tracy/TracyVulkan.hpp"
 
+#include "vk_mem_alloc.h"
+
 #include <memory>
 #include <numeric>
 #include <type_traits>
@@ -1269,7 +1271,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             ImGui::TextWrapped("%s: %d", def.GetName().c_str(), ingredient.count);
           }
           ImGui::Unindent();
-          if (recipe.craftingStation != 0)
+          if (recipe.craftingStation != voxel_t::Air)
           {
             ImGui::Text("Required: %s", blockRegistry.Get(recipe.craftingStation).GetName().c_str());
           }

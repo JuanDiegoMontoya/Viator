@@ -2,6 +2,7 @@
 #include "Serialization.h"
 #include "TwoLevelGrid.h"
 #include "Game.h"
+#include "Physics/Physics.h"
 
 #include "imgui.h"
 #include "entt/meta/container.hpp"

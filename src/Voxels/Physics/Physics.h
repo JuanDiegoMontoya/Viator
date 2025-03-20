@@ -14,6 +14,8 @@
 
 #include "entt/fwd.hpp"
 
+#include "glm/gtc/quaternion.hpp"
+
 #include <optional>
 #include <vector>
 #include <variant>

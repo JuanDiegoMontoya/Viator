@@ -1,5 +1,5 @@
 #pragma once
-#include "vk_mem_alloc.h"
+#include "Fvog/detail/VmaFwd.h"
 #ifndef GAME_HEADLESS
   #include "Fvog/Buffer2.h"
 #endif

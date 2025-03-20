@@ -1,4 +1,5 @@
 #pragma once
+#include "VoxelType.h"
 #include "ClassImplMacros.h"
 #include "SketchyBuffer.h"
 #include "glm/vec2.hpp"
@@ -22,8 +23,6 @@ struct TwoLevelGrid
 
   static constexpr int VOXELS_PER_TL_BRICK      = CELLS_PER_TL_BRICK * CELLS_PER_BL_BRICK * CELLS_PER_TL_BRICK;
   static constexpr int TL_BRICK_VOXELS_PER_SIDE = TL_BRICK_SIDE_LENGTH * BL_BRICK_SIDE_LENGTH;
-
-  using voxel_t = uint32_t;
 
   struct OccupancyBitmask
   {
@@ -135,7 +134,7 @@ struct TwoLevelGrid
 
   bool IsVoxelSolid(voxel_t voxel) const
   {
-    return materials_[voxel].isSolid;
+    return materials_[(uint32_t)voxel].isSolid;
   }
 
   // LOW LEVEL

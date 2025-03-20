@@ -101,24 +101,26 @@ add_executable(frogRender
     src/MathUtilities.cpp
     src/Voxels/Serialization.h
     src/Voxels/Serialization.cpp
+    src/Voxels/VoxelType.h
+    src/Fvog/detail/VkFwd.h
 )
 
 # Precompiled headers for standard library
 target_precompile_headers(frogRender PRIVATE 
     <algorithm>
-    <array>
-    <bit>
+#    <array>
+#    <bit>
     <chrono>
     <filesystem>
     <functional>
     <memory>
-    <optional>
+#    <optional>
     <string>
-    <span>
-    <unordered_map>
-    <unordered_set>
-    <variant>
-    <vector>
+#    <span>
+#    <unordered_map>
+#    <unordered_set>
+#    <variant>
+#    <vector>
 )
 
 target_compile_options(frogRender

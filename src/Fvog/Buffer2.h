@@ -4,8 +4,7 @@
 #include "detail/Flags.h"
 #include "detail/VmaFwd.h"
 #include "shaders/Resources.h.glsl"
-
-#include "vulkan/vulkan_core.h"
+#include "detail/VkFwd.h"
 
 #include <string>
 #include <string_view>
@@ -49,7 +48,7 @@ namespace Fvog
   struct BufferFillInfo
   {
     VkDeviceSize offset = 0;
-    VkDeviceSize size = VK_WHOLE_SIZE;
+    VkDeviceSize size = ~0ULL;
     uint32_t data = 0;
   };
   

@@ -1,8 +1,7 @@
 #pragma once
 #include "ClassImplMacros.h"
 #include "PCG.h"
-#include "TwoLevelGrid.h"
-#include "Physics/Physics.h"
+#include "VoxelType.h"
 #include "Fvog/detail/Flags.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "MathUtilities.h"
@@ -21,9 +20,17 @@
 #include <variant>
 #include <vector>
 #include <unordered_map>
-#include <functional>
+#include <span>
+
+namespace Physics
+{
+  struct CharacterController;
+  struct CharacterControllerShrimple;
+  struct RigidBody;
+}
 
 struct ItemState;
+class World;
 using namespace entt::literals;
 
 struct Name
@@ -104,8 +111,8 @@ struct ItemState
   float useAccum = 1000;
 };
 
-using BlockId               = TwoLevelGrid::voxel_t;
-constexpr BlockId nullBlock = ~0u;
+using BlockId               = voxel_t;
+constexpr BlockId nullBlock = voxel_t::Null;
 
 using EntityPrefabId = uint32_t;
 
@@ -723,7 +730,7 @@ public:
     return 0.125f;
   }
 
-  TwoLevelGrid::voxel_t voxel;
+  voxel_t voxel;
 };
 
 class Spear : public ItemDefinition
@@ -829,7 +836,7 @@ struct Crafting
   {
     std::vector<ItemIdAndCount> ingredients;
     std::vector<ItemIdAndCount> output;
-    BlockId craftingStation = 0;
+    BlockId craftingStation = voxel_t(0);
   };
 
   std::vector<Recipe> recipes;

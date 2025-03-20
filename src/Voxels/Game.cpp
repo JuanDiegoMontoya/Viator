@@ -387,7 +387,7 @@ static std::optional<glm::vec3> SampleWalkablePosition(const TwoLevelGrid& grid,
   const auto pos    = origin + Math::SphericalToCartesian(theta, phi, r); // Totally not uniform, but fine for testing.
 
   // Validate the position
-  if (!grid.IsPositionInGrid(pos) || grid.GetVoxelAt(pos) != 0)
+  if (!grid.IsPositionInGrid(pos) || grid.GetVoxelAt(pos) != voxel_t::Air)
   {
     return std::nullopt;
   }
@@ -400,7 +400,7 @@ static std::optional<glm::vec3> SampleWalkablePosition(const TwoLevelGrid& grid,
     for (int i = 0; i < 20; i++)
     {
       const auto nextPos = lastValidPos - glm::vec3(0, i, 0);
-      if (!grid.IsPositionInGrid(nextPos) || grid.GetVoxelAt(nextPos) != 0)
+      if (!grid.IsPositionInGrid(nextPos) || grid.GetVoxelAt(nextPos) != voxel_t::Air)
       {
         foundSolidSurface = true;
         break;
@@ -2508,7 +2508,7 @@ void World::GenerateMap()
                         }
                         else
                         {
-                          grid.SetVoxelAtNoDirty(p, 1);
+                          grid.SetVoxelAtNoDirty(p, voxel_t(1));
                         }
                         if (trees->GenSingle3D((float)p.x, (float)p.y, (float)p.z, 123321) > 0.99999f)
                         {
@@ -2519,7 +2519,7 @@ void World::GenerateMap()
                     }
                     else
                     {
-                      grid.SetVoxelAtNoDirty(p, 0);
+                      grid.SetVoxelAtNoDirty(p, voxel_t::Air);
                     }
                   }
                 }
@@ -2550,7 +2550,7 @@ void World::GenerateMap()
     const auto numVoxels = grid.topLevelBricksDims_ * grid.TL_BRICK_VOXELS_PER_SIDE;
     const auto pos       = glm::ivec3(Rng().RandU32() % numVoxels.x, Rng().RandU32() % numVoxels.y, Rng().RandU32() % numVoxels.z);
     const auto testPos   = pos - glm::ivec3(0, 1, 0);
-    if (grid.IsPositionInGrid(testPos) && grid.GetVoxelAt(pos) == 0 && grid.GetVoxelAt(testPos) != 0)
+    if (grid.IsPositionInGrid(testPos) && grid.GetVoxelAt(pos) == voxel_t::Air && grid.GetVoxelAt(testPos) != voxel_t::Air)
     {
       MUSHROOM.OnTryPlaceBlock(*this, pos);
     }
@@ -2923,7 +2923,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
 {
   auto& grid = registry_.ctx().get<TwoLevelGrid>();
   auto prevVoxel = grid.GetVoxelAt(voxelPos);
-  if (prevVoxel == 0)
+  if (prevVoxel == voxel_t::Air)
   {
     return 0;
   }
@@ -3587,7 +3587,7 @@ void Block::UsePrimary(float dt, World& world, entt::entity self, ItemState& sta
     if (grid.TraceRaySimple(pos, dir, 10, hit))
     {
       const auto newPos = glm::ivec3(hit.voxelPosition + hit.flatNormalWorld);
-      if (grid.GetVoxelAt(newPos) == 0)
+      if (grid.GetVoxelAt(newPos) == voxel_t::Air)
       {
         // Ensure area is clear of entities before placing
         const auto box = JPH::BoxShape(JPH::Vec3::sReplicate(0.45f));
@@ -3802,17 +3802,17 @@ bool BlockDefinition::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition) co
 void BlockDefinition::OnDestroyBlock(World& world, glm::ivec3 voxelPosition) const
 {
   auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
-  grid.SetVoxelAt(voxelPosition, 0);
+  grid.SetVoxelAt(voxelPosition, voxel_t::Air);
 }
 
 const BlockDefinition& BlockRegistry::Get(const std::string& name) const
 {
-  return *idToDefinition_.at(nameToId_.at(name));
+  return *idToDefinition_.at((uint32_t)nameToId_.at(name));
 }
 
 const BlockDefinition& BlockRegistry::Get(BlockId id) const
 {
-  return *idToDefinition_.at(id);
+  return *idToDefinition_.at((uint32_t)id);
 }
 
 BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
