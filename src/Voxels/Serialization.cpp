@@ -362,5 +362,10 @@ namespace Core::Serialization
         }
       }
     }
+
+    for (auto entity : registry.view<LocalTransform>())
+    {
+      UpdateLocalTransform({registry, entity});
+    }
   }
 } // namespace Core::Serialization

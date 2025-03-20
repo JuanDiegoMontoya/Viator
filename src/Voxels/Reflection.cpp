@@ -845,6 +845,10 @@ void Core::Reflection::Initialize()
     DATA(TwoLevelGrid::OccupancyBitmask, bitmask)
     TRAITS(SERIALIZE);
 
+  REFLECT_ENUM(voxel_t)
+    ENUMERATOR(voxel_t, Air)
+    ENUMERATOR(voxel_t, Null);
+
   // TODO: TEMP
   REFLECT_COMPONENT(LocalPlayer);
 }
