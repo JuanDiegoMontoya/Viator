@@ -109,6 +109,12 @@ FetchContent_Declare(
     GIT_TAG        08bfc6dd16120dbf9c04037201e76bba77817aad
 )
 
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.15.1
+)
+
 if (NOT choc_POPULATED)
     FetchContent_Populate(choc)
     add_library(choc INTERFACE)
@@ -177,6 +183,7 @@ FetchContent_MakeAvailable(
     fastNoise2
     unordered_dense
     cereal
+    spdlog
 )
 
 set(FSR2_SOURCE ${fsr2_SOURCE_DIR} PARENT_SCOPE)

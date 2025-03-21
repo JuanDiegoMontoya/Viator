@@ -10,6 +10,8 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "spdlog/spdlog.h"
+
 #include <cstdio>
 #include <array>
 #include <ranges>
@@ -47,6 +49,26 @@ namespace Fvog
       base->pNext    = oldPNext;
       return v;
     }
+
+    // From Sascha Willems
+    // https://github.com/SaschaWillems/vulkan.gpuinfo.org/blob/1e6ca6e3c0763daabd6a101b860ab4354a07f5d3/functions.php#L294
+    std::string DriverVersonToString(uint32_t rawVersion, uint32_t vendorID)
+    {
+      // NVIDIA
+      if (vendorID == 4318)
+      {
+        return fmt::format("{}.{}.{}.{}", (rawVersion >> 22) & 0x3ff, (rawVersion >> 14) & 0x0ff, (rawVersion >> 6) & 0x0ff, (rawVersion) & 0x003f);
+      }
+#if _WIN32 || _WIN64
+      // Intel
+      if (vendorID == 0x8086)
+      {
+        return fmt::format("{}.{}", (rawVersion >> 14), (rawVersion) & 0x3fff);
+      }
+#endif
+      // Use Vulkan version conventions if AMD or if vendor mapping is not available
+      return fmt::format("{}.{}.{}", (rawVersion >> 22), (rawVersion >> 12) & 0x3ff, rawVersion & 0xfff);
+    }
   }
 
   Device::Device(vkb::Instance& instance, VkSurfaceKHR surface)
@@ -58,8 +80,28 @@ namespace Fvog
     ZoneScoped;
     auto selector = vkb::PhysicalDeviceSelector{instance_};
 
+    auto physicalDeviceCount = uint32_t{};
+    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+    auto physicalDevices = std::make_unique<VkPhysicalDevice[]>(physicalDeviceCount);
+    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.get());
+
+    auto physicalDeviceNames = std::string();
+    for (uint32_t i = 0; i < physicalDeviceCount; i++)
+    {
+      const auto physicalDevice = physicalDevices[i];
+      auto properties           = VkPhysicalDeviceProperties{};
+      vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+      physicalDeviceNames += properties.deviceName;
+      if (i < physicalDeviceCount - 1)
+      {
+        physicalDeviceNames += ", ";
+      }
+    }
+
+    spdlog::info("Found {} device{}: {}", physicalDeviceCount, physicalDeviceCount == 1 ? "" : "s", physicalDeviceNames);
+
     // physical device
-    physicalDevice_ = selector
+    auto maybePhysicalDevice = selector
       .set_minimum_version(1, 3)
       .require_present()
       .set_surface(surface_)
@@ -141,8 +183,18 @@ namespace Fvog
         .shaderIntegerDotProduct = true,
         .maintenance4 = true,
       })
-      .select()
-      .value();
+      .select();
+
+    if (!maybePhysicalDevice)
+    {
+      spdlog::critical("Failed to find suitable physical device.");
+      std::abort();
+    }
+
+    physicalDevice_ = maybePhysicalDevice.value();
+
+    [[maybe_unused]] auto driverVersionString = DriverVersonToString(physicalDevice_.properties.driverVersion, physicalDevice_.properties.vendorID);
+    spdlog::info("Selected device: {}. Driver version {}", physicalDevice_.properties.deviceName, driverVersionString);
 
     supportsRayTracing = physicalDevice_.is_extension_present(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
                          physicalDevice_.is_extension_present(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) &&

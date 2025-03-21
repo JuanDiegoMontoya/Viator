@@ -14,6 +14,8 @@
 #include "Prefab.h"
 #include "Reflection.h"
 #include "Serialization.h"
+#include "Logging.h"
+#include "Assert2.h"
 
 #include "entt/entity/handle.hpp"
 
@@ -35,6 +37,8 @@
 
 #include "FastNoise/FastNoise.h"
 
+#include "spdlog/spdlog.h"
+
 #include <chrono>
 #include <stack>
 #include <execution>
@@ -47,7 +51,7 @@
 static void OnDeferredDeleteConstruct(entt::registry& registry, entt::entity entity)
 {
   ZoneScoped;
-  assert(registry.valid(entity));
+  ASSERT(registry.valid(entity));
   auto* h = registry.try_get<Hierarchy>(entity);
   if (h && h->parent != entt::null)
   {
@@ -73,7 +77,7 @@ void TryTwice(const P& pair, F&& function)
 static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 {
   ZoneScoped;
-  assert(ppair);
+  ASSERT(ppair);
   auto& pair = *ppair;
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity1))
@@ -184,7 +188,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppair)
 {
   ZoneScoped;
-  assert(ppair);
+  ASSERT(ppair);
   auto& pair = *ppair;
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity1))
@@ -316,6 +320,8 @@ void OnLinearPathRemove(entt::registry& registry, entt::entity entity)
 static Head* gHead_HORRIBLE_HACK{};
 Game::Game(uint32_t)
 {
+  Core::Logging::Initialize();
+  spdlog::info("Initializing game");
   world_ = std::make_unique<World>();
   Physics::Initialize(*world_);
   Physics::GetDispatcher().sink<Physics::ContactAddedPair*>().connect<&OnContactAdded>(*world_);
@@ -344,6 +350,7 @@ Game::Game(uint32_t)
 
 void CreateContextVariablesAndObservers(World& world)
 {
+  ZoneScoped;
   auto& registry = world.GetRegistry();
 #ifndef GAME_HEADLESS
   registry.ctx().emplace<GameState>() = GameState::MENU;
@@ -368,9 +375,9 @@ void CreateContextVariablesAndObservers(World& world)
   registry.on_destroy<GlobalTransform>().connect<&OnGlobalTransformRemove>();
   registry.on_destroy<LinearPath>().connect<&OnLinearPathRemove>();
 
-  world.InitializeGameDefinitions();
-
   Physics::CreateObservers(registry);
+
+  world.InitializeGameDefinitions();
 }
 
 Game::~Game()
@@ -852,7 +859,7 @@ public:
 
     auto& registry = world.GetRegistry();
     auto parent = registry.get<Hierarchy>(self).parent;
-    assert(registry.valid(parent));
+    ASSERT(registry.valid(parent));
     if (auto* health = registry.try_get<Health>(parent))
     {
       if (health->hp < health->maxHp)
@@ -899,7 +906,7 @@ public:
             if (chest.OnTryPlaceBlock(world, blockPos))
             {
               auto chestEntity = world.GetBlockEntity(blockPos);
-              assert(chestEntity != entt::null);
+              ASSERT(chestEntity != entt::null);
               if (auto [e, i] = world.GetComponentFromDescendant<Inventory>(chestEntity); i)
               {
                 i->slots[0][0] = {.id = items.GetId("Electrum"), .count = 10};
@@ -1020,7 +1027,7 @@ void World::FixedUpdate(float dt)
     registry_.ctx().get<std::vector<Debug::Line>>().clear();
 #endif
 
-    assert(registry_.view<LocalPlayer>().size() <= 1);
+    ASSERT(registry_.view<LocalPlayer>().size() <= 1);
 
     // Update previous transforms before updating it (this should be done after updating the game state from networking)
     for (auto&& [entity, transform, interpolatedTransform] : registry_.view<GlobalTransform, PreviousGlobalTransform>().each())
@@ -1050,7 +1057,7 @@ void World::FixedUpdate(float dt)
     // Process linear transform paths
     for (auto&& [entity, linearPath, transform] : registry_.view<LinearPath, LocalTransform>().each())
     {
-      assert(!linearPath.frames.empty());
+      ASSERT(!linearPath.frames.empty());
       if (linearPath.secondsElapsed <= 0)
       {
         linearPath.originalLocalTransform = transform;
@@ -1796,7 +1803,7 @@ void World::FixedUpdate(float dt)
         if (auto* loot = registry_.try_get<Loot>(entity))
         {
           auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
-          assert(table);
+          ASSERT(table);
           const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
           for (auto drop : table->Collect(Rng()))
           {
@@ -1874,10 +1881,11 @@ void World::FixedUpdate(float dt)
         }
       }
     }
-
+    
     // Actually destroy entities that were marked for deletion.
     for (auto entity : registry_.view<DeferredDelete>())
     {
+      spdlog::debug("Destroyed entity {}", entt::to_integral(entity));
       registry_.destroy(entity);
     }
 
@@ -2018,10 +2026,11 @@ void World::InitializeGameState()
 
 void World::InitializeGameDefinitions()
 {
+  ZoneScoped;
   // Reset entity prefab registry
   auto& entityPrefabs = registry_.ctx().insert_or_assign<EntityPrefabRegistry>({});
-  [[maybe_unused]] auto meleeFrogId = entityPrefabs.Add("Melee Frog", new MeleeFrogDefinition({.spawnChance = 0.095f}));
-  [[maybe_unused]] auto flyingFrogId = entityPrefabs.Add("Flying Frog", new FlyingFrogDefinition({.spawnChance = 0.035f, .canSpawnFloating = true}));
+  [[maybe_unused]] auto meleeFrogId = entityPrefabs.Add("Melee Frog", new MeleeFrogDefinition({.name = "Melee Frog", .spawnChance = 0.095f}));
+  [[maybe_unused]] auto flyingFrogId = entityPrefabs.Add("Flying Frog", new FlyingFrogDefinition({.name = "Flying Frog", .spawnChance = 0.035f, .canSpawnFloating = true}));
   [[maybe_unused]] auto torchId     = entityPrefabs.Add("Torch", new TorchDefinition());
   [[maybe_unused]] auto chestId      = entityPrefabs.Add("Chest", new ChestDefinition({.isVisible = false}));
   [[maybe_unused]] auto mushroomId   = entityPrefabs.Add("Mushroom", new ShrimpleMeshPrefabDefinition("mushroom", {.52f, .31f, .16f}));
@@ -2662,7 +2671,7 @@ entt::entity World::GetChildNamed(entt::entity entity, std::string_view name) co
 
 glm::vec3 World::GetInheritedLinearVelocity(entt::entity entity)
 {
-  assert(registry_.valid(entity));
+  ASSERT(registry_.valid(entity));
   if (auto* vel = registry_.try_get<LinearVelocity>(entity))
   {
     return vel->v;
@@ -2676,7 +2685,7 @@ glm::vec3 World::GetInheritedLinearVelocity(entt::entity entity)
 
 const TeamFlags* World::GetTeamFlags(entt::entity entity) const
 {
-  assert(registry_.valid(entity));
+  ASSERT(registry_.valid(entity));
   if (auto* teamFlags = registry_.try_get<TeamFlags>(entity))
   {
     return teamFlags;
@@ -2725,7 +2734,7 @@ void World::GivePlayerColliders(entt::entity playerEntity)
 {
   constexpr float playerHalfHeight = 0.8f * 1.0f;
   constexpr float playerHalfWidth  = 0.3f * 1.0f;
-  assert(playerHalfHeight - playerHalfWidth >= 0);
+  ASSERT(playerHalfHeight - playerHalfWidth >= 0);
   auto playerHitbox      = Physics::Capsule(playerHalfHeight - playerHalfWidth, playerHalfWidth);
 
   auto pHitbox                          = registry_.create();
@@ -2984,7 +2993,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
       else if (auto* lp = std::get_if<std::string>(&dropType))
       {
         auto* table           = registry_.ctx().get<LootRegistry>().Get(*lp);
-        assert(table);
+        ASSERT(table);
         const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
         for (auto drop : table->Collect(Rng()))
         {
@@ -3027,7 +3036,7 @@ entt::entity World::GetBlockEntity(glm::ivec3 voxelPosition)
 glm::vec3 GetFootPosition(entt::handle handle)
 {
   const auto* t = handle.try_get<GlobalTransform>();
-  assert(t);
+  ASSERT(t);
 
   if (const auto* s = handle.try_get<Physics::Shape>())
   {
@@ -3117,7 +3126,7 @@ bool SwapInventorySlots(World& world, entt::entity parent1, glm::ivec2 parent1Sl
 void UpdateLocalTransform(entt::handle handle)
 {
   ZoneScoped;
-  assert(handle.valid());
+  ASSERT(handle.valid());
   RefreshGlobalTransform(handle);
 }
 
@@ -3138,8 +3147,8 @@ glm::vec3 GetRight(glm::quat rotation)
 
 void SetParent(entt::handle handle, entt::entity parent)
 {
-  assert(handle.valid());
-  assert(handle.entity() != parent);
+  ASSERT(handle.valid());
+  ASSERT(handle.entity() != parent);
 
   auto& registry = *handle.registry();
   auto& h        = handle.get<Hierarchy>();
@@ -3175,7 +3184,7 @@ void SetParent(entt::handle handle, entt::entity parent)
   // Detect cycles in debug mode
   for ([[maybe_unused]] entt::entity cParent = parent; cParent != entt::null; cParent = registry.get<Hierarchy>(cParent).parent)
   {
-    assert(cParent != handle.entity());
+    ASSERT(cParent != handle.entity());
   }
 
   UpdateLocalTransform(handle);
@@ -3183,13 +3192,13 @@ void SetParent(entt::handle handle, entt::entity parent)
 
 void Hierarchy::AddChild(entt::entity child)
 {
-  assert(std::count(children.begin(), children.end(), child) == 0);
+  ASSERT(std::count(children.begin(), children.end(), child) == 0);
   children.emplace_back(child);
 }
 
 void Hierarchy::RemoveChild(entt::entity child)
 {
-  assert(std::count(children.begin(), children.end(), child) == 1);
+  ASSERT(std::count(children.begin(), children.end(), child) == 1);
   std::erase(children, child);
 }
 
@@ -3620,7 +3629,7 @@ void ItemDefinition::Dematerialize(World& world, entt::entity self) const
 
 Physics::RigidBody& ItemDefinition::GiveCollider(World& world, entt::entity self) const
 {
-  assert(self != entt::null);
+  ASSERT(self != entt::null);
   world.GetRegistry().emplace<Friction>(self).axes = {.2, .1, .2};
   world.GetRegistry().emplace<Physics::RigidBodySettings>(self,
     Physics::RigidBodySettings{
@@ -3678,7 +3687,7 @@ std::vector<ItemIdAndCount> RandomLootDrop::Sample(PCG::Rng& rng) const
 
 std::vector<ItemIdAndCount> PoolLootDrop::Sample(PCG::Rng& rng) const
 {
-  assert(!pool.empty());
+  ASSERT(!pool.empty());
   if (rng.RandFloat() <= chance)
   {
     const auto sampled = (int)rng.RandFloat(0.5f, GetTotalWeight() + 0.5f);
@@ -3817,8 +3826,8 @@ const BlockDefinition& BlockRegistry::Get(BlockId id) const
 
 BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
 {
-  assert(!nameToId_.contains(blockDefinition->GetName()));
-  assert(world_->GetRegistry().ctx().contains<ItemRegistry>());
+  ASSERT(!nameToId_.contains(blockDefinition->GetName()));
+  ASSERT(world_->GetRegistry().ctx().contains<ItemRegistry>());
 
   const auto myBlockId = (BlockId)idToDefinition_.size();
   blockDefinition->blockId_ = myBlockId;
@@ -3910,7 +3919,7 @@ void BlockEntityDefinition::OnDestroyBlock(World& world, glm::ivec3 voxelPositio
 {
   BlockDefinition::OnDestroyBlock(world, voxelPosition);
   auto entity = world.GetBlockEntity(voxelPosition);
-  assert(entity != entt::null && "Block entity didn't exist!");
+  ASSERT(entity != entt::null && "Block entity didn't exist!");
   world.GetRegistry().emplace<DeferredDelete>(entity);
 }
 
@@ -3949,7 +3958,8 @@ void NpcSpawnDirector::Update(float dt)
         {
           if (auto realPos = SampleWalkablePosition(grid, rng, transform.position, info.minSpawnDistance, info.maxSpawnDistance, info.canSpawnFloating))
           {
-            pDefinition->Spawn(*world_, *realPos);
+            auto newEntity = pDefinition->Spawn(*world_, *realPos);
+            spdlog::debug("[NpcSpawnDirector] Spawned {}: {}", pDefinition->GetCreateInfo().name, entt::to_integral(newEntity));
             break;
           }
         }

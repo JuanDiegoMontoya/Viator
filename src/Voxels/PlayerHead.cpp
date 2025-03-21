@@ -30,6 +30,8 @@
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
+#include "spdlog/spdlog.h"
+
 #include <bit>
 #include <exception>
 #include <filesystem>
@@ -154,6 +156,7 @@ static auto MakeVkbSwapchain(const vkb::Device& device,
   VkSwapchainKHR oldSwapchain,
   VkSurfaceFormatKHR format)
 {
+  spdlog::info("Creating swapchain with size {}x{}", width, height);
   return vkb::SwapchainBuilder{device}
     .set_desired_min_image_count(imageCount)
     .set_old_swapchain(oldSwapchain)
@@ -264,6 +267,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   const GLFWvidmode* videoMode = glfwGetVideoMode(monitor);
   {
     ZoneScopedN("Create Window");
+    spdlog::info("Creating window");
     window = glfwCreateWindow(static_cast<int>(videoMode->width * .75), static_cast<int>(videoMode->height * .75), createInfo.name.data(), nullptr, nullptr);
     if (!window)
     {
@@ -312,6 +316,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   // instance
   {
     ZoneScopedN("Create Vulkan Instance");
+    spdlog::info("Creating Vulkan instance");
     instance_ = vkb::InstanceBuilder()
                   .set_app_name("Frogrenderer")
                   .require_api_version(1, 3, 0)
@@ -339,6 +344,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   // surface
   {
     ZoneScopedN("Create Window Surface");
+    spdlog::info("Creating window surface");
     if (auto err = glfwCreateWindowSurface(instance_, window, nullptr, &surface_); err != VK_SUCCESS)
     {
       const char* error_msg;
@@ -358,6 +364,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   // device
   {
     ZoneScopedN("Create Device");
+    spdlog::info("Creating device");
     Fvog::CreateDevice(instance_, surface_);
   }
 
@@ -709,7 +716,7 @@ void PlayerHead::RemakeSwapchain([[maybe_unused]] uint32_t newWidth, [[maybe_unu
   swapchainOk = true;
 
   shouldResizeNextFrame = true;
-
+  
   // This line triggers the recreation of window-size-dependent resources.
   // Commenting it out results in a faster, but lower quality resizing experience.
   // OnUpdate(0);

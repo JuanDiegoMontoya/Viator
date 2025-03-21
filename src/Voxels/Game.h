@@ -426,6 +426,7 @@ class EntityPrefabDefinition
 public:
   struct CreateInfo
   {
+    std::string name       = "entity";
     float spawnChance      = 0;
     float minSpawnDistance = 30;
     float maxSpawnDistance = 90;

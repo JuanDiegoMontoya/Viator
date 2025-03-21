@@ -2,6 +2,7 @@
 #include "Reflection.h"
 #include "TwoLevelGrid.h"
 #include "Game.h"
+#include "Assert2.h"
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -15,6 +16,9 @@
 #include "cereal/types/string.hpp"
 
 #include "tracy/Tracy.hpp"
+
+#include "spdlog/spdlog.h"
+#include "spdlog/fmt/std.h"
 
 #include <cstdint>
 #include <fstream>
@@ -70,10 +74,10 @@ namespace Core::Serialization
       if constexpr (Save)
       {
         auto idFunc = value.type().func("type_hash"_hs);
-        assert(idFunc);
+        ASSERT(idFunc);
         Serialize<Save>(ar, idFunc.invoke({}, value));
         auto valueFunc = value.type().func("const_value"_hs);
-        assert(valueFunc);
+        ASSERT(valueFunc);
         Serialize<Save>(ar, valueFunc.invoke({}, value.as_ref()));
       }
       else
@@ -81,11 +85,11 @@ namespace Core::Serialization
         auto id = entt::id_type();
         Serialize<Save>(ar, entt::forward_as_meta(id));
         auto variantMeta = entt::resolve(id);
-        assert(variantMeta);
+        ASSERT(variantMeta);
         auto variantTypeInstance = variantMeta.construct();
         Serialize<Save>(ar, variantTypeInstance.as_ref());
         [[maybe_unused]] auto succ = value.assign(value.type().construct(variantTypeInstance));
-        assert(succ);
+        ASSERT(succ);
       }
       return;
     }
@@ -93,7 +97,7 @@ namespace Core::Serialization
     if (value.type().is_enum())
     {
       auto toUnderlyingFunc = value.type().func("to_underlying"_hs);
-      assert(toUnderlyingFunc);
+      ASSERT(toUnderlyingFunc);
       if constexpr (Save)
       {
         Serialize<Save>(ar, toUnderlyingFunc.invoke({}, value));
@@ -265,12 +269,12 @@ namespace Core::Serialization
     MAKE_SERIALIZERS(entt::entity);
     MAKE_SERIALIZERS(bool);
     MAKE_SERIALIZERS(std::string);
-
   }
 
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path)
   {
     ZoneScoped;
+    spdlog::info("Saving world {}", path);
     const auto& registry = world.GetRegistry();
     auto file            = std::ofstream(path, std::ios::binary | std::ios::out | std::ios::trunc);
     auto outputArchive   = cereal::BinaryOutputArchive(file);
@@ -299,6 +303,7 @@ namespace Core::Serialization
         }
       }
     }
+    spdlog::info("Saving complete");
   }
 
   // TODO: ctx.PCG
@@ -306,9 +311,13 @@ namespace Core::Serialization
   void LoadRegistryFromFile(World& world, const std::filesystem::path& path)
   {
     ZoneScoped;
+    spdlog::info("Loading world {}", path);
     auto& registry     = world.GetRegistry();
     auto remoteToLocal = std::unordered_map<entt::entity, entt::entity>();
-    registry.clear(); // Required to invoke on_destroy observers. In particular, for cleaning up physics objects.
+    {
+      ZoneScopedN("registry.clear()");
+      registry.clear(); // Required to invoke on_destroy observers. In particular, for cleaning up physics objects.
+    }
     registry = {};
     CreateContextVariablesAndObservers(world);
     registry.ctx().get<GameState>() = GameState::PAUSED;
@@ -319,7 +328,7 @@ namespace Core::Serialization
     // Load relevant context variables.
     auto pGrid = std::unique_ptr<TwoLevelGrid>();
     Serialize<false>(inputArchive, pGrid);
-    assert(pGrid);
+    ASSERT(pGrid);
     pGrid->CoalesceBricksSLOW();
     pGrid->MarkAllBricksDirty();
     registry.ctx().emplace<TwoLevelGrid>(std::move(*pGrid));
@@ -334,16 +343,16 @@ namespace Core::Serialization
       Serialize<false>(inputArchive, entt::forward_as_meta(id));
       Serialize<false>(inputArchive, entt::forward_as_meta(size));
       auto meta = entt::resolve(id);
-      assert(meta);
-      assert(meta.traits<Traits>() & Traits::COMPONENT);
+      ASSERT(meta);
+      ASSERT(meta.traits<Traits>() & Traits::COMPONENT);
       ZoneText(meta.info().name().data(), meta.info().name().size());
       for (uint32_t j = 0; j < size; j++)
       {
         auto remoteEntity = entt::entity();
         Serialize<false>(inputArchive, entt::forward_as_meta(remoteEntity));
-        assert(remoteEntity != entt::null);
+        ASSERT(remoteEntity != entt::null);
         auto value = meta.construct();
-        assert(value && "Type is missing default constructor");
+        ASSERT(value, "Type is missing default constructor");
         Serialize<false>(inputArchive, value.as_ref());
         auto localEntity = entt::entity();
         if (auto it = remoteToLocal.find(remoteEntity); it != remoteToLocal.end())
@@ -367,5 +376,6 @@ namespace Core::Serialization
     {
       UpdateLocalTransform({registry, entity});
     }
+    spdlog::info("Loading complete");
   }
 } // namespace Core::Serialization
