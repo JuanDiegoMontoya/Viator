@@ -8,16 +8,16 @@ namespace Assert::detail
   constexpr bool debug = false;
 #endif
   // TODO: Support function signatures.
-  void AssertImpl(const char* condition, const char* fileName, int lineNumber, const char* message);
-  void AssertImpl(const char* condition, const char* fileName, int lineNumber);
+  void LogAssert(const char* condition, const char* fileName, int lineNumber, const char* message);
+  void LogAssert(const char* condition, const char* fileName, int lineNumber);
   void LogPanic(const char* fileName, int lineNumber);
-  [[noreturn]] void PanicImpl(const char* fileName, int lineNumber);
+  [[noreturn]] void Panic(const char* fileName, int lineNumber);
   [[noreturn]] void Abort();
 } // namespace Assert::detail
 
 #ifdef FROG_DEBUG
-  #define UNREACHABLE ASSERT(0)
-  #define ASSUME(x)   ASSERT(x)
+  #define UNREACHABLE ASSERT(0, "Unreachable path.")
+  #define ASSUME(x)   ASSERT(x, "Assumption broken.")
 #else
   #ifdef _MSC_VER
     #define UNREACHABLE __assume(0)
@@ -31,7 +31,7 @@ namespace Assert::detail
   do                                               \
   {                                                \
     Assert::detail::LogPanic(__FILE__, __LINE__);  \
-    Assert::detail::PanicImpl(__FILE__, __LINE__); \
+    Assert::detail::Panic(__FILE__, __LINE__); \
   } while (0)
 
 // Aborts in debug, does nothing in release.
@@ -41,7 +41,7 @@ namespace Assert::detail
     {                                                                                 \
       if (!(x))                                                                       \
       {                                                                               \
-        Assert::detail::AssertImpl(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
+        Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
         Assert::detail::Abort();                                                      \
       }                                                                               \
     } while (0)
@@ -60,10 +60,7 @@ namespace Assert::detail
   {                                                                                 \
     if (!(x))                                                                       \
     {                                                                               \
-      Assert::detail::AssertImpl(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
-      if constexpr (Assert::detail::debug)                                          \
-        Assert::detail::Abort();                                                    \
-      else                                                                          \
-        Assert::detail::PanicImpl(__FILE__, __LINE__);                              \
+      Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
+      Assert::detail::Panic(__FILE__, __LINE__);                              \
     }                                                                               \
   } while (0)

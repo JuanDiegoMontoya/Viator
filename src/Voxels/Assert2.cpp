@@ -6,12 +6,12 @@
 
 namespace Assert::detail
 {
-  void AssertImpl(const char* condition, const char* fileName, int lineNumber, const char* message)
+  void LogAssert(const char* condition, const char* fileName, int lineNumber, const char* message)
   {
     spdlog::error("Assertion: {} failed at {}:{}: {}", condition, fileName, lineNumber, message);
   }
 
-  void AssertImpl(const char* condition, const char* fileName, int lineNumber)
+  void LogAssert(const char* condition, const char* fileName, int lineNumber)
   {
     spdlog::error("Assertion: {} failed at {}:{}", condition, fileName, lineNumber);
   }
@@ -21,7 +21,7 @@ namespace Assert::detail
     spdlog::critical("Panic at {}:{}", fileName, lineNumber);
   }
 
-  void PanicImpl(const char* fileName, int lineNumber)
+  void Panic(const char* fileName, int lineNumber)
   {
     spdlog::default_logger()->flush();
     if constexpr (debug)
