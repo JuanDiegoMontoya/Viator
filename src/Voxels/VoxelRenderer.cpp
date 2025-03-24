@@ -1134,7 +1134,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         if (ImGui::Begin("###death_window", nullptr, flags))
         {
           ImGui::Text("You died");
-          ImGui::Text("%s%.0fs", gp->remainingSeconds < 1 ? "Your computer will explode in " : "", gp->remainingSeconds);
+          ImGui::Text("%.0fs", gp->remainingSeconds);
         }
         ImGui::End();
       }

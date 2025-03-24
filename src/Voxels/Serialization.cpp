@@ -24,13 +24,45 @@
 #include <fstream>
 #include <memory>
 
+#define ENET_IMPLEMENTATION
+#include "enet/enet.h"
+
 namespace Core::Serialization
 {
   using namespace Reflection;
   using namespace entt::literals;
 
+  namespace
+  {
+    // This context is used for the deserialization of objects that require non-local context, as in remote-to-local entity ID remapping.
+    struct SerializationContext
+    {
+      bool remapRemoteEntities = false;
+      std::unordered_map<entt::entity, entt::entity>* remoteToLocalEntity;
+    };
+
+    template<typename Archive, typename T>
+    void Serialize2(Archive& ar, T& value, const SerializationContext& = {})
+    {
+      ar(value);
+    }
+
+    template<typename Archive>
+    void Serialize2(Archive& ar, entt::entity& value, const SerializationContext& context)
+    {
+      ar(value);
+      if (context.remapRemoteEntities)
+      {
+        DEBUG_ASSERT(context.remoteToLocalEntity);
+        auto it = context.remoteToLocalEntity->find(value);
+        ASSERT(it != context.remoteToLocalEntity->end());
+        value = it->second;
+      }
+    }
+  }
+
   template<bool Save, typename Archive>
-  static void Serialize(Archive& ar, entt::meta_any value)
+  static void Serialize(Archive& ar, entt::meta_any value, const SerializationContext& context = {})
   {
     ZoneScoped;
 
@@ -40,7 +72,7 @@ namespace Core::Serialization
     {
       if (func.arg(0).info() == archiveHash)
       {
-        func.invoke({}, entt::forward_as_meta(ar), value.as_ref());
+        func.invoke({}, entt::forward_as_meta(ar), value.as_ref(), entt::forward_as_meta(context));
         return;
       }
     }
@@ -52,18 +84,18 @@ namespace Core::Serialization
       if constexpr (Save)
       {
         auto size = (uint32_t)sequence.size();
-        Serialize<Save>(ar, entt::forward_as_meta(size));
+        Serialize<Save>(ar, entt::forward_as_meta(size), context);
       }
       else
       {
         auto size = uint32_t();
-        Serialize<Save>(ar, entt::forward_as_meta(size));
+        Serialize<Save>(ar, entt::forward_as_meta(size), context);
         sequence.resize(size); // Returns false for un-resizable containers such as std::array.
       }
 
       for (auto element : sequence)
       {
-        Serialize<Save>(ar, element.as_ref());
+        Serialize<Save>(ar, element.as_ref(), context);
       }
 
       return;
@@ -75,19 +107,19 @@ namespace Core::Serialization
       {
         auto idFunc = value.type().func("type_hash"_hs);
         ASSERT(idFunc);
-        Serialize<Save>(ar, idFunc.invoke({}, value));
+        Serialize<Save>(ar, idFunc.invoke({}, value), context);
         auto valueFunc = value.type().func("const_value"_hs);
         ASSERT(valueFunc);
-        Serialize<Save>(ar, valueFunc.invoke({}, value.as_ref()));
+        Serialize<Save>(ar, valueFunc.invoke({}, value.as_ref()), context);
       }
       else
       {
         auto id = entt::id_type();
-        Serialize<Save>(ar, entt::forward_as_meta(id));
+        Serialize<Save>(ar, entt::forward_as_meta(id), context);
         auto variantMeta = entt::resolve(id);
         ASSERT(variantMeta);
         auto variantTypeInstance = variantMeta.construct();
-        Serialize<Save>(ar, variantTypeInstance.as_ref());
+        Serialize<Save>(ar, variantTypeInstance.as_ref(), context);
         [[maybe_unused]] auto succ = value.assign(value.type().construct(variantTypeInstance));
         ASSERT(succ);
       }
@@ -100,12 +132,12 @@ namespace Core::Serialization
       ASSERT(toUnderlyingFunc);
       if constexpr (Save)
       {
-        Serialize<Save>(ar, toUnderlyingFunc.invoke({}, value));
+        Serialize<Save>(ar, toUnderlyingFunc.invoke({}, value), context);
       }
       else
       {
         auto underlying = toUnderlyingFunc.ret().construct();
-        Serialize<Save>(ar, underlying.as_ref());
+        Serialize<Save>(ar, underlying.as_ref(), context);
         value.assign(underlying);
       }
 
@@ -117,7 +149,7 @@ namespace Core::Serialization
     {
       if (data.traits<Traits>() & Traits::SERIALIZE)
       {
-        Serialize<Save>(ar, data.get(value).as_ref());
+        Serialize<Save>(ar, data.get(value).as_ref(), context);
       }
     }
   }
@@ -131,12 +163,12 @@ namespace Core::Serialization
     {
       for (auto& bits : blBrick.occupancy.bitmask)
       {
-        detail::Serialize2(ar, bits);
+        Serialize2(ar, bits);
       }
 
       for (auto& voxel : blBrick.voxels)
       {
-        detail::Serialize2(ar, voxel);
+        Serialize2(ar, voxel);
       }
     }
 
@@ -145,27 +177,27 @@ namespace Core::Serialization
     {
       for (auto& bits : blBrick.occupancy.bitmask)
       {
-        detail::Serialize2(ar, bits);
+        Serialize2(ar, bits);
       }
 
       for (auto& voxel : blBrick.voxels)
       {
-        detail::Serialize2(ar, voxel);
+        Serialize2(ar, voxel);
       }
     }
 
     template<typename Archive>
     void Serialize2(Archive& ar, TwoLevelGrid::BottomLevelBrickPtr& blBrickPtr)
     {
-      detail::Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
-      detail::Serialize2(ar, blBrickPtr.bottomLevelBrick);
+      Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
+      Serialize2(ar, blBrickPtr.bottomLevelBrick);
     }
 
     template<typename Archive>
     void Serialize2(Archive& ar, const TwoLevelGrid::BottomLevelBrickPtr& blBrickPtr)
     {
-      detail::Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
-      detail::Serialize2(ar, blBrickPtr.bottomLevelBrick);
+      Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
+      Serialize2(ar, blBrickPtr.bottomLevelBrick);
     }
 
     template<typename Archive>
@@ -246,7 +278,6 @@ namespace Core::Serialization
 
   void Initialize()
   {
-    using namespace detail;
 #define MAKE_SERIALIZERS(T)                                                     \
   entt::meta_factory<T>()                                                       \
     .func<Serialize2<cereal::XMLInputArchive, T>>("XMLInputArchive"_hs)         \
@@ -338,11 +369,11 @@ namespace Core::Serialization
     for (uint32_t i = 0; i < numSets; i++)
     {
       ZoneScopedN("Component");
-      auto id = entt::id_type();
+      auto typeId = entt::id_type();
       auto size = uint32_t();
-      Serialize<false>(inputArchive, entt::forward_as_meta(id));
+      Serialize<false>(inputArchive, entt::forward_as_meta(typeId));
       Serialize<false>(inputArchive, entt::forward_as_meta(size));
-      auto meta = entt::resolve(id);
+      auto meta = entt::resolve(typeId);
       ASSERT(meta);
       ASSERT(meta.traits<Traits>() & Traits::COMPONENT);
       ZoneText(meta.info().name().data(), meta.info().name().size());
@@ -362,13 +393,13 @@ namespace Core::Serialization
         else
         {
           localEntity = registry.create(remoteEntity);
+          ASSERT(localEntity == remoteEntity, "Local and remote must be the same until deep entity remapping is supported.");
           remoteToLocal.emplace(remoteEntity, localEntity);
         }
-        
-        if (auto emplaceFunc = meta.func("EmplaceMove"_hs))
-        {
-          emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
-        }
+
+        auto emplaceFunc = meta.func("EmplaceMove"_hs);
+        ASSERT(emplaceFunc);
+        emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
       }
     }
 
@@ -377,5 +408,87 @@ namespace Core::Serialization
       UpdateLocalTransform({registry, entity});
     }
     spdlog::info("Loading complete");
+  }
+
+  std::vector<char> SerializeEntity(const World& world, entt::entity entity)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      auto& registry = world.GetRegistry();
+
+      Serialize<true>(outputArchive, entity);
+      const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(), [&](const auto& p)
+      {
+        return p.second.contains(entity) && entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT;
+      });
+      Serialize<true>(outputArchive, numComponents);
+      for (auto [id, set] : registry.storage())
+      {
+        if (!set.contains(entity))
+        {
+          continue;
+        }
+
+        if (auto meta = entt::resolve(id))
+        {
+          if (meta.traits<Traits>() & Traits::COMPONENT)
+          {
+            ZoneScopedN("Component");
+            ZoneText(meta.info().name().data(), meta.info().name().size());
+            Serialize<true>(outputArchive, id);
+            Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+          }
+        }
+      }
+    }
+    // Ensure outputArchive has gone out of scope so it flushes the data to stream.
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  void DeserializeEntity(World& world, std::span<const char> entityBytes, std::unordered_map<entt::entity, entt::entity>& remoteToLocal)
+  {
+    ZoneScoped;
+    auto& registry = world.GetRegistry();
+
+    auto stream       = std::stringstream(std::string(entityBytes.data(), entityBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+
+    auto remoteEntity = entt::entity();
+    Serialize<false>(inputArchive, entt::forward_as_meta(remoteEntity));
+    auto it = remoteToLocal.find(remoteEntity);
+    ASSERT(it != remoteToLocal.end(), "Entity and its mapping must have already been created.");
+    auto localEntity = it->second;
+
+    auto context = SerializationContext{.remapRemoteEntities = true, .remoteToLocalEntity = &remoteToLocal};
+
+    auto numComponents = uint32_t();
+    Serialize<false>(inputArchive, entt::forward_as_meta(numComponents));
+    for (uint32_t i = 0; i < numComponents; i++)
+    {
+      ZoneScopedN("Component");
+      auto typeId   = entt::id_type();
+      Serialize<false>(inputArchive, entt::forward_as_meta(typeId));
+      auto meta = entt::resolve(typeId);
+      ASSERT(meta);
+      ASSERT(meta.traits<Traits>() & Traits::COMPONENT);
+      ZoneText(meta.info().name().data(), meta.info().name().size());
+      ASSERT(remoteEntity != entt::null);
+      auto value = meta.construct();
+      ASSERT(value, "Type is missing default constructor");
+      Serialize<false>(inputArchive, value.as_ref(), context);
+
+      auto emplaceFunc = meta.func("EmplaceMove"_hs);
+      ASSERT(emplaceFunc);
+      emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+    }
+
+    if (registry.all_of<LocalTransform>(localEntity))
+    {
+      UpdateLocalTransform({registry, localEntity});
+    }
   }
 } // namespace Core::Serialization

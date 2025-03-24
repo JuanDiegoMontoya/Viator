@@ -504,11 +504,9 @@ void Core::Reflection::Initialize()
 
   using namespace Physics;
   entt::meta_factory<CharacterController>{}
-    .traits(COMPONENT)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterController(e); }>("add"_hs);
   
   entt::meta_factory<CharacterControllerShrimple>{}
-    .traits(COMPONENT)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterControllerShrimple(e); }>("add"_hs);
 
   REFLECT_COMPONENT(Name)
