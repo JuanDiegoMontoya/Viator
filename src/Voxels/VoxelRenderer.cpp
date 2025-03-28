@@ -10,6 +10,9 @@
 #include "shaders/Config.shared.h"
 #include "Reflection.h"
 #include "Serialization.h"
+#include "Networking/Client.h"
+#include "Networking/Server.h"
+#include "Assert2.h"
 
 #include "Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -1114,6 +1117,22 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
         world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
       }
+      
+      auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+      static char hostName[256] = "localhost";
+      ImGui::InputText("##Host", hostName, 256);
+      ImGui::BeginDisabled(networking->get() != nullptr);
+      if (ImGui::Button("Connect (WIP)"))
+      {
+        *networking = std::make_unique<Networking::Client>(world, hostName);
+        gameState   = GameState::LOADING;
+      }
+      ImGui::EndDisabled();
+
+      if (ImGui::Button("Exit to desktop"))
+      {
+        world.GetRegistry().ctx().emplace<CloseApplication>();
+      }
     }
     ImGui::End();
     break;
@@ -1292,6 +1311,22 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::GAME;
       }
 
+      auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+
+      ImGui::BeginDisabled(networking->get());
+      if (ImGui::Button("Open Server (WIP)"))
+      {
+        *networking = std::make_unique<Networking::Server>(world);
+      }
+      ImGui::EndDisabled();
+
+      ImGui::BeginDisabled(!world.IsServer());
+      if (ImGui::Button("Close Server (WIP)"))
+      {
+        networking->reset();
+      }
+      ImGui::EndDisabled();
+
       if (ImGui::Button("Save (WIP)"))
       {
         Core::Serialization::SaveRegistryToFile(world, "TEST.bin");
@@ -1304,6 +1339,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
       if (ImGui::Button("Exit to main menu"))
       {
+        networking->reset();
         gameState = GameState::MENU;
       }
 
@@ -1316,6 +1352,24 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     break;
   case GameState::LOADING:
   {
+    if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+    {
+      auto* client = dynamic_cast<Networking::Client*>(networking->get());
+      ASSERT(client);
+      if (ImGui::Begin("Loading"))
+      {
+        ImGui::Text("%s", Core::Reflection::EnumToString(client->GetStatus()));
+
+        if (ImGui::Button("Cancel"))
+        {
+          networking->reset();
+          gameState = GameState::MENU;
+        }
+      }
+      ImGui::End();
+      break;
+    }
+
     // There is an ongoing connection attempt or the world is loading.
     auto& future = world.GetRegistry().ctx().get<std::future<void>>("loading"_hs);
     using namespace std::chrono_literals;

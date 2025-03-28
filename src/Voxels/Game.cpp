@@ -16,6 +16,8 @@
 #include "Serialization.h"
 #include "Logging.h"
 #include "Assert2.h"
+#include "Networking/Client.h"
+#include "Networking/Server.h"
 
 #include "entt/entity/handle.hpp"
 
@@ -318,6 +320,7 @@ void OnLinearPathRemove(entt::registry& registry, entt::entity entity)
 }
 
 static Head* gHead_HORRIBLE_HACK{};
+static std::unique_ptr<Networking::Interface>* gNetworking_HORRIBLE_HACK{};
 Game::Game(uint32_t)
 {
   Core::Logging::Initialize();
@@ -341,6 +344,7 @@ Game::Game(uint32_t)
   });
   gHead_HORRIBLE_HACK = head_.get();
 #endif
+  gNetworking_HORRIBLE_HACK = &networking_;
 
   CreateContextVariablesAndObservers(*world_);
 
@@ -365,6 +369,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<Pathfinding::PathCache>(); // Note: should be invalidated when voxel grid changes
   registry.ctx().emplace<HashGrid>(16);
   registry.ctx().emplace<Head*>() = gHead_HORRIBLE_HACK; // Hack
+  registry.ctx().emplace<std::unique_ptr<Networking::Interface>*>() = gNetworking_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<NpcSpawnDirector>(world);
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
@@ -985,13 +990,21 @@ void Game::Run()
         head_->VariableUpdatePre(dt, *world_);
       }
 
+      if (networking_)
+      {
+        networking_->ProcessMessages(*world_);
+      }
+
       constexpr int MAX_TICKS = 10;
       int accumTicks          = 0;
       fixedUpdateAccum += realDeltaTime * timeScale;
       while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
       {
         fixedUpdateAccum -= tickDuration;
-        // TODO: Networking update before FixedUpdate
+        if (networking_)
+        {
+          networking_->SendMessages(*world_);
+        }
         world_->FixedUpdate(static_cast<float>(tickDuration));
       }
 
@@ -1037,7 +1050,7 @@ void World::FixedUpdate(float dt)
       interpolatedTransform.scale    = transform.scale;
     }
 
-    for (auto&& [entity] : registry_.view<LocalPlayer>().each())
+    for (auto entity : registry_.view<LocalPlayer, Hierarchy>())
     {
       UpdateLocalTransform({registry_, entity});
     }
@@ -2000,7 +2013,7 @@ void World::InitializeGameState()
       .layer      = Physics::Layers::HURTBOX,
     });
 
-  auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(glm::vec3{4, 5, 4}));
+  auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(glm::vec3{2, 5, 2}));
 
   auto voxelMats = std::vector<TwoLevelGrid::Material>();
   for (const auto& def : registry_.ctx().get<BlockRegistry>().GetAllDefinitions())
@@ -3033,6 +3046,27 @@ entt::entity World::GetBlockEntity(glm::ivec3 voxelPosition)
   return entt::null;
 }
 
+entt::entity World::GetRootEntityOfHierarchy(entt::entity entity) const
+{
+  if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+  {
+    return GetRootEntityOfHierarchy(entity);
+  }
+  return entity;
+}
+
+bool World::IsClient() const
+{
+  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
+  return networking->get() && dynamic_cast<Networking::Client*>(networking->get());
+}
+
+bool World::IsServer() const
+{
+  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
+  return networking->get() && dynamic_cast<Networking::Server*>(networking->get());
+}
+
 glm::vec3 GetFootPosition(entt::handle handle)
 {
   const auto* t = handle.try_get<GlobalTransform>();
@@ -3060,17 +3094,22 @@ float GetHeight(entt::handle handle)
 
 static void RefreshGlobalTransform(entt::handle handle)
 {
+  ASSERT(handle.valid());
+  auto* h = handle.try_get<Hierarchy>();
+  if (!h)
+  {
+    return;
+  }
   auto& lt = handle.get<LocalTransform>(); // parent_local_from_local
   auto& gt = handle.get<GlobalTransform>(); // world_from_local
-  auto& h = handle.get<Hierarchy>();
 
-  if (h.parent == entt::null)
+  if (h->parent == entt::null)
   {
     gt = {lt.position, lt.rotation, lt.scale};
   }
   else
   {
-    const auto& pt = handle.registry()->get<GlobalTransform>(h.parent);
+    const auto& pt = handle.registry()->get<GlobalTransform>(h->parent);
     gt.position    = pt.position + lt.position * pt.scale;
 
     gt.scale = lt.scale * pt.scale;
@@ -3079,7 +3118,7 @@ static void RefreshGlobalTransform(entt::handle handle)
     gt.position = glm::mat3_cast(pt.rotation) * gt.position;
     gt.position += pt.position;
 
-    if (h.useLocalRotationAsGlobal)
+    if (h->useLocalRotationAsGlobal)
     {
       gt.rotation = lt.rotation;
     }
@@ -3088,7 +3127,7 @@ static void RefreshGlobalTransform(entt::handle handle)
       gt.rotation = pt.rotation * lt.rotation;
     }
 
-    if (h.useLocalPositionAsGlobal)
+    if (h->useLocalPositionAsGlobal)
     {
       gt.position = lt.position;
     }
@@ -3099,7 +3138,7 @@ static void RefreshGlobalTransform(entt::handle handle)
     handle.registry()->ctx().get<HashGrid>().set(gt.position, handle.entity());
   }
 
-  for (auto child : h.children)
+  for (auto child : h->children)
   {
     RefreshGlobalTransform({*handle.registry(), child});
   }

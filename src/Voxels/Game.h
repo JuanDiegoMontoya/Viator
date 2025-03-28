@@ -5,6 +5,7 @@
 #include "Fvog/detail/Flags.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "MathUtilities.h"
+#include "Networking/Interface.h"
 
 #include "entt/entity/registry.hpp"
 #include "entt/entity/entity.hpp"
@@ -409,10 +410,18 @@ public:
 
   [[nodiscard]] entt::entity GetBlockEntity(glm::ivec3 voxelPosition);
 
-  uint64_t GetTicks() const
+  // Given an entity which is part of a hierarchy, return the highest-level entity in the tree.
+  // The returned entity could be the same as the one passed in.
+  [[nodiscard]] entt::entity GetRootEntityOfHierarchy(entt::entity entity) const;
+
+  [[nodiscard]] uint64_t GetTicks() const
   {
     return ticks_;
   }
+
+  [[nodiscard]] bool IsClient() const;
+
+  [[nodiscard]] bool IsServer() const;
 
 private:
   uint64_t ticks_ = 0;
@@ -883,17 +892,6 @@ struct Inventory
 // If parent1 and parent2 both have an inventory, swaps items between them.
 bool SwapInventorySlots(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
 
-class Networking
-{
-public:
-  NO_COPY_NO_MOVE(Networking);
-  explicit Networking() = default;
-  virtual ~Networking() = default;
-
-  virtual void SendState()    = 0;
-  virtual void ReceiveState() = 0;
-};
-
 // Windowing, input polling, and rendering (if applicable)
 class Head
 {
@@ -1239,6 +1237,6 @@ public:
 private:
   bool isRunning_ = false;
   std::unique_ptr<Head> head_;
-  std::unique_ptr<Networking> networking_;
+  std::unique_ptr<Networking::Interface> networking_;
   std::unique_ptr<World> world_;
 };

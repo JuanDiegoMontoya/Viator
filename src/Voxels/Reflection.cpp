@@ -1,8 +1,11 @@
 #include "Reflection.h"
+
+#include "Assert2.h"
 #include "Serialization.h"
 #include "TwoLevelGrid.h"
 #include "Game.h"
 #include "Physics/Physics.h"
+#include "Networking/Client.h"
 
 #include "imgui.h"
 #include "entt/meta/container.hpp"
@@ -316,6 +319,32 @@ namespace Core::Reflection
     }
   }
 } // namespace Core::Reflection
+
+const char* Core::Reflection::EnumToString(entt::meta_any value)
+{
+  ASSERT(value.type());
+  ASSERT(value.type().is_enum());
+
+  for (auto [id, data] : value.type().data())
+  {
+    PropertiesMap dataProps = {};
+    if (auto* mp = static_cast<const PropertiesMap*>(data.custom()))
+    {
+      dataProps = *mp;
+    }
+
+    if (auto it = dataProps.find("name"_hs); it != dataProps.end())
+    {
+      auto name = it->second.cast<const char*>();
+      if (value == data.get({}))
+      {
+        return name;
+      }
+    }
+  }
+
+  return "Unknown enumerator";
+}
 
 void Core::Reflection::Initialize()
 {
@@ -679,15 +708,16 @@ void Core::Reflection::Initialize()
     DATA(BlockHealth, health, PROP_MIN(0.0f), PROP_MAX(100.0f))
     TRAITS(SERIALIZE | EDITOR);
 
-  REFLECT_COMPONENT(Hierarchy)
-    DATA(Hierarchy, parent)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Hierarchy, children)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Hierarchy, useLocalPositionAsGlobal)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Hierarchy, useLocalRotationAsGlobal)
-    TRAITS(SERIALIZE | EDITOR_READ);
+  // TODO: Uncomment this stuff
+  //REFLECT_COMPONENT(Hierarchy)
+  //  DATA(Hierarchy, parent)
+  //  TRAITS(SERIALIZE | EDITOR_READ)
+  //  DATA(Hierarchy, children)
+  //  TRAITS(SERIALIZE | EDITOR_READ)
+  //  DATA(Hierarchy, useLocalPositionAsGlobal)
+  //  TRAITS(SERIALIZE | EDITOR_READ)
+  //  DATA(Hierarchy, useLocalRotationAsGlobal)
+  //  TRAITS(SERIALIZE | EDITOR_READ);
 
   REFLECT_COMPONENT(Lifetime)
     DATA(Lifetime, remainingSeconds)
@@ -849,4 +879,22 @@ void Core::Reflection::Initialize()
 
   // TODO: TEMP
   REFLECT_COMPONENT(LocalPlayer);
+
+  REFLECT_TYPE(Serialization::SerializedEntityBundle)
+    DATA(Serialization::SerializedEntityBundle, entities)
+    TRAITS(SERIALIZE)
+    DATA(Serialization::SerializedEntityBundle, serializedEntities)
+    TRAITS(SERIALIZE);
+
+  REFLECT_ENUM(Networking::ClientStatus)
+    ENUMERATOR(Networking::ClientStatus, Resolving)
+    ENUMERATOR(Networking::ClientStatus, Joining)
+    ENUMERATOR(Networking::ClientStatus, Connected)
+    ENUMERATOR(Networking::ClientStatus, Disconnected);
+
+  REFLECT_TYPE(Serialization::Packet)
+    DATA(Serialization::Packet, type)
+    TRAITS(SERIALIZE)
+    DATA(Serialization::Packet, bytes)
+    TRAITS(SERIALIZE);
 }

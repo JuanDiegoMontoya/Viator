@@ -131,6 +131,12 @@ FetchContent_Declare(
     GIT_TAG        a56bad8bbb770ee266e930c95d37fff2a5be7fea
 )
 
+FetchContent_Declare(
+    enet
+    GIT_REPOSITORY https://github.com/JuanDiegoMontoya/enet.git
+    GIT_TAG        0bddff3717d0df95810779821d5bc0b9fea775b2
+)
+
 set(DOUBLE_PRECISION OFF)
 #set(GENERATE_DEBUG_SYMBOLS ON)
 #set(OVERRIDE_CXX_FLAGS ON)
@@ -184,6 +190,7 @@ FetchContent_MakeAvailable(
     unordered_dense
     cereal
     spdlog
+    enet
 )
 
 set(FSR2_SOURCE ${fsr2_SOURCE_DIR} PARENT_SCOPE)

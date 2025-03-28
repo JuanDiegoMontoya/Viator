@@ -14,6 +14,7 @@
 #include "cereal/archives/binary.hpp"
 #include "cereal/archives/xml.hpp"
 #include "cereal/types/string.hpp"
+#include "cereal/types/vector.hpp"
 
 #include "tracy/Tracy.hpp"
 
@@ -23,9 +24,6 @@
 #include <cstdint>
 #include <fstream>
 #include <memory>
-
-#define ENET_IMPLEMENTATION
-#include "enet/enet.h"
 
 namespace Core::Serialization
 {
@@ -159,6 +157,18 @@ namespace Core::Serialization
   namespace
   {
     template<typename Archive>
+    void Serialize2(Archive& ar, Packet& packet)
+    {
+      ar(packet.type, packet.bytes);
+    }
+
+    template<typename Archive>
+    void Serialize2(Archive& ar, const Packet& packet)
+    {
+      ar(packet.type, packet.bytes);
+    }
+
+    template<typename Archive>
     void Serialize2(Archive& ar, TwoLevelGrid::BottomLevelBrick& blBrick)
     {
       for (auto& bits : blBrick.occupancy.bitmask)
@@ -287,6 +297,9 @@ namespace Core::Serialization
     //.func<Serialize2<cereal::JSONInputArchive, float>>("JSONInputArchive"_hs)
     //.func<Serialize2<cereal::JSONOutputArchive, float>>("JSONOutputArchive"_hs)
 
+    MAKE_SERIALIZERS(char);
+    MAKE_SERIALIZERS(unsigned char);
+    MAKE_SERIALIZERS(uint8_t);
     MAKE_SERIALIZERS(int8_t);
     MAKE_SERIALIZERS(int16_t);
     MAKE_SERIALIZERS(int32_t);
@@ -485,10 +498,122 @@ namespace Core::Serialization
       ASSERT(emplaceFunc);
       emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
     }
+  }
 
-    if (registry.all_of<LocalTransform>(localEntity))
+  std::vector<char> SerializeEntityBundle(const SerializedEntityBundle& bundle)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
     {
-      UpdateLocalTransform({registry, localEntity});
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      Serialize<true>(outputArchive, entt::forward_as_meta(bundle));
     }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  SerializedEntityBundle DeserializeEntityBundle(std::span<const char> bundleBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(bundleBytes.data(), bundleBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto bundle       = SerializedEntityBundle{};
+    Serialize<false>(inputArchive, entt::forward_as_meta(bundle));
+    return bundle;
+  }
+
+  std::vector<char> SerializeTwoLevelGrid(const TwoLevelGrid& grid)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      Serialize<true>(outputArchive, &grid);
+    }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  std::unique_ptr<TwoLevelGrid> DeserializeTwoLevelGrid(std::span<const char> gridBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(gridBytes.data(), gridBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto grid         = std::unique_ptr<TwoLevelGrid>();
+    Serialize<false>(inputArchive, grid);
+    return grid;
+  }
+
+  std::vector<char> SerializePacket(const Packet& packet)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      //Serialize<true>(outputArchive, entt::forward_as_meta(packet));
+      Serialize2(outputArchive, packet);
+    }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  Packet DeserializePacket(std::span<const char> packetBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(packetBytes.data(), packetBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto packet = Packet{};
+    //Serialize<false>(inputArchive, entt::forward_as_meta(packet));
+    Serialize2(inputArchive, packet);
+    return packet;
+  }
+
+  std::vector<char> SerializeInputState(const InputState& inputState)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      Serialize<true>(outputArchive, entt::forward_as_meta(inputState));
+    }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  InputState DeserializeInputState(std::span<const char> inputStateBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(inputStateBytes.data(), inputStateBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto inputState   = InputState{};
+    Serialize<false>(inputArchive, entt::forward_as_meta(inputState));
+    return inputState;
+  }
+
+  std::vector<char> SerializeEntityId(entt::entity entity)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      Serialize<true>(outputArchive, entt::forward_as_meta(entity));
+    }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  entt::entity DeserializeEntityId(std::span<const char> entityIdBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(entityIdBytes.data(), entityIdBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto inputState   = entt::entity{};
+    Serialize<false>(inputArchive, entt::forward_as_meta(inputState));
+    return inputState;
   }
 } // namespace Core::Serialization

@@ -108,6 +108,13 @@ add_executable(frogRender
     src/Voxels/Assert2.h
     src/Voxels/Assert2.cpp
     src/Voxels/Exception.h
+    src/Voxels/Networking/Server.h
+    src/Voxels/Networking/Client.h
+    src/Voxels/Networking/EnetFwd.h
+    src/Voxels/Networking/ThreadSafeQueue.h
+    src/Voxels/Networking/Server.cpp
+    src/Voxels/Networking/Interface.h
+    src/Voxels/Networking/Client.cpp
 )
 
 # Precompiled headers for standard library
@@ -204,6 +211,7 @@ target_include_directories(frogRender
     vendor
     data
     src
+    ${enet_SOURCE_DIR}/include # hack
 )
 
 target_link_libraries(frogRender

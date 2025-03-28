@@ -22,6 +22,8 @@ namespace Core::Reflection
   }
 
   using PropertiesMap = std::unordered_map<entt::id_type, entt::meta_any>;
+  
+  const char* EnumToString(entt::meta_any value);
 
   void Initialize();
 }
