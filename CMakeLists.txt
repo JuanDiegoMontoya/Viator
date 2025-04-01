@@ -115,6 +115,8 @@ add_executable(frogRender
     src/Voxels/Networking/Server.cpp
     src/Voxels/Networking/Interface.h
     src/Voxels/Networking/Client.cpp
+    src/Voxels/Networking/RPC.h
+    src/Voxels/Networking/RPC.cpp
 )
 
 # Precompiled headers for standard library

@@ -1,5 +1,6 @@
 #pragma once
 #include "Interface.h"
+#include "ThreadSafeQueue.h"
 #include "../ClassImplMacros.h"
 #include "EnetFwd.h"
 
@@ -20,6 +21,7 @@ namespace Networking
 
     void ProcessMessages(World& world) final;
     void SendMessages(World& world) final;
+    void EnqueueRPC(RpcInfo rpc) final;
 
   private:
     void OnEntityDestroy(entt::registry&, entt::entity entity);
@@ -34,5 +36,6 @@ namespace Networking
     };
     std::unordered_map<ENetPeer*, ClientInfo> connections_;
     World* world_;
+    ThreadSafeQueue<RpcInfo> rpcs_;
   };
 } // namespace Networking

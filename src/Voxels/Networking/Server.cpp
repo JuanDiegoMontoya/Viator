@@ -1,8 +1,11 @@
 #include "Server.h"
 #include "../Serialization.h"
+#include "../Reflection.h"
 #include "../Game.h"
 #include "../TwoLevelGrid.h"
 #include "../Assert2.h"
+#include "RPC.h"
+
 #include "enet/enet.h"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
@@ -94,7 +97,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
-        spdlog::info("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
+        spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, event.peer, *event.packet);
         enet_packet_destroy(event.packet);
         break;
@@ -145,7 +148,35 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   ZoneScoped;
   if (connections_.empty())
   {
+    rpcs_.clear();
     return;
+  }
+
+  // Flush RPCs
+  while (!rpcs_.empty())
+  {
+    auto rpc = rpcs_.pop_front();
+
+    using Core::Reflection::RpcTraits;
+
+    auto packetInfo = Core::Serialization::Packet{
+      .type  = entt::type_id<Core::Reflection::RpcTraits>().hash(),
+      .bytes = std::move(rpc.serializedRpc),
+    };
+
+    auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
+
+    const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
+    auto* packet = enet_packet_create(packetSerialized.data(), packetSerialized.size(), packetFlags);
+
+    for (auto& [peer, clientInfo] : connections_)
+    {
+      // TODO: Filter RPC based on connection type.
+      if (clientInfo.status == ClientStatus::Connected)
+      {
+        enet_peer_send(peer, 0, packet);
+      }
+    }
   }
 
   // Set of entities that have no parent.
@@ -161,13 +192,13 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   {
     auto bundle = Core::Serialization::SerializedEntityBundle{};
     AddEntityAndChildrenToVector(world.GetRegistry(), rootEntity, bundle.entities);
-    auto string = std::string();
+    //auto string = std::string();
     for (auto entity : bundle.entities)
     {
       bundle.serializedEntities.emplace_back(Core::Serialization::SerializeEntity(world, entity));
-      string += fmt::format("{}, ", entt::to_integral(entity));
+      //string += fmt::format("{}, ", entt::to_integral(entity));
     }
-    spdlog::info("Sending entities: {}", string);
+    //spdlog::info("Sending entities: {}", string);
 
     auto packetInfo = Core::Serialization::Packet{
       .type  = entt::type_id<Core::Serialization::SerializedEntityBundle>().hash(),
@@ -186,6 +217,11 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
       }
     }
   }
+}
+
+void Networking::Server::EnqueueRPC(RpcInfo rpc)
+{
+  rpcs_.push_back(std::move(rpc));
 }
 
 void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
@@ -224,5 +260,9 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
   {
     auto inputState = Core::Serialization::DeserializeInputState(packet.bytes);
     world.GetRegistry().emplace_or_replace<InputState>(peerIt->second.entity, inputState);
+  }
+  else if (packet.type == entt::type_id<Core::Reflection::RpcTraits>().hash())
+  {
+    detail::InvokeSerializedRPC(world, packet.bytes);
   }
 }

@@ -868,6 +868,7 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
 {
   using namespace Core::Reflection;
   auto meta = instance.type();
+  readonly  = readonly || meta.traits<Traits>() & Traits::EDITOR_READ_ONLY;
 
   // If the type has a bespoke EditorWrite or EditorRead function, use that. Otherwise, recurse over data members.
   PropertiesMap properties = {};
@@ -967,11 +968,11 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
   {
     for (auto [id, data] : meta.data())
     {
-      if (auto traits = data.traits<Traits>(); traits & Traits::EDITOR || traits & Traits::EDITOR_READ)
+      if (const auto traits = data.traits<Traits>(); !(traits & Traits::NO_EDITOR))
       {
         ImGui::PushID(guiId++);
         ImGui::Indent();
-        changed |= DrawComponentHelper(handle, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ, guiId);
+        changed |= DrawComponentHelper(handle, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
         ImGui::Unindent();
         ImGui::PopID();
       }
@@ -1177,7 +1178,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     ImGui::End();
 
     // Get information about the local player
-    auto range = world.GetRegistry().view<Player, LocalPlayer, Inventory, GlobalTransform>().each();
+    auto range = world.GetRegistry().view<Player, LocalPlayer, Inventory, GlobalTransform>(entt::exclude<GhostPlayer>).each();
 
     if (range.begin() == range.end())
     {
@@ -1320,7 +1321,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
       ImGui::EndDisabled();
 
-      ImGui::BeginDisabled(!world.IsServer());
+      ImGui::BeginDisabled(!networking->get() || !world.IsServer());
       if (ImGui::Button("Close Server (WIP)"))
       {
         networking->reset();
@@ -1552,7 +1553,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             DrawComponentHelper({registry, e},
               meta.from_void(storage->value(e)),
               meta.custom(),
-              meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ,
+              meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ_ONLY,
               i);
           }
           else

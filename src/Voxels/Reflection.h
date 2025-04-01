@@ -9,16 +9,62 @@ namespace Core::Reflection
 {
   enum Traits : uint16_t
   {
-    SERIALIZE   = 1 << 0,
-    EDITOR      = 1 << 1,
-    EDITOR_READ = 1 << 2,
-    COMPONENT   = 1 << 3,
-    VARIANT     = 1 << 4,
+    // The component or member will not be serialized.
+    // When loaded or replicated on the network, it will be initialized with its default value.
+    TRANSIENT = 1 << 0,
+
+    // The component or member will be completely excluded from the editor.
+    NO_EDITOR = 1 << 1,
+
+    // The component or member will appear in the editor, but cannot be modified.
+    EDITOR_READ_ONLY = 1 << 2,
+
+    // The type is a variant and has registered the following functions (see the VARIANT_FUNCS macro in Reflection.cpp):
+    // "type_hash"_hs: returns the hash (with entt::type_id<T>().hash()) of its currently held type.
+    // "const_value"_hs: returns a const ref to the currently held value.
+    // "value"_hs: returns a ref to the currently held value.
+    VARIANT = 1 << 3,
+
+    // Indicates top-level component types. Components appear in the editor and serve
+    // as the root for serialization (saving, loading, and network replication).
+    COMPONENT = 1 << 4,
+
+    // The component will be replicated to clients on the network.
+    REPLICATED = 1 << 5,
   };
 
   inline Traits operator|(Traits a, Traits b)
   {
     return static_cast<Traits>((uint32_t)a | (uint32_t)b);
+  }
+
+  // https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine#matrixofrpcexecution
+  enum class RpcTraits
+  {
+    // Executes on clients or the server if there's no applicable client connection.
+    Client = 1 << 0,
+
+    // Executes on the server only.
+    Server = 1 << 1,
+
+    // Executes on the remote side of the connection only.
+    Remote = 1 << 2,
+
+    // Executes on all clients and the server. If called by a client, only executes on that client.
+    Broadcast = 1 << 3,
+
+    // Low latency, but RPC may be dropped. RPCs are otherwise reliable.
+    Unreliable = 1 << 4,
+  };
+
+  inline RpcTraits operator|(RpcTraits a, RpcTraits b)
+  {
+    return static_cast<RpcTraits>((uint32_t)a | (uint32_t)b);
+  }
+
+  inline RpcTraits operator&(RpcTraits a, RpcTraits b)
+  {
+    return static_cast<RpcTraits>((uint32_t)a & (uint32_t)b);
   }
 
   using PropertiesMap = std::unordered_map<entt::id_type, entt::meta_any>;

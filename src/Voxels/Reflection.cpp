@@ -357,13 +357,13 @@ void Core::Reflection::Initialize()
 #define REFLECT_COMPONENT_NO_DEFAULT(T) \
   MAKE_IDENTIFIER(T);                   \
   entt::meta_factory<T>{}\
-  .traits(Traits::COMPONENT)
-#define REFLECT_COMPONENT(T) \
-  MAKE_IDENTIFIER(T);        \
-  entt::meta_factory<T>{}    \
-  .traits(Traits::COMPONENT) \
-  .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \
-  .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs)
+  .traits(COMPONENT)
+#define REFLECT_COMPONENT(T, ...)                                                                                   \
+  MAKE_IDENTIFIER(T);                                                                                               \
+  entt::meta_factory<T>{}                                                                                           \
+    .traits(COMPONENT __VA_OPT__(| __VA_ARGS__))                                                                    \
+    .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \
+    .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs)
 #define TRAITS(TraitsV) .traits(TraitsV)
 #define DATA(Type, Member, ...) \
   .data<&Type :: Member, entt::as_ref_t>(#Member##_hs) \
@@ -403,133 +403,88 @@ void Core::Reflection::Initialize()
   entt::meta_factory<float>().func<&EditorWriteScalar<float>>("EditorWrite"_hs).func<&EditorReadScalar<float>>("EditorRead"_hs);
   entt::meta_factory<glm::vec3>().func<&EditorWriteVec3>("EditorWrite"_hs).func<&EditorReadVec3>("EditorRead"_hs)
     DATA(glm::vec3, x)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(glm::vec3, y)
-    TRAITS(EDITOR | SERIALIZE)
-    DATA(glm::vec3, z)
-  TRAITS(EDITOR | SERIALIZE);
+    DATA(glm::vec3, z);
   entt::meta_factory<glm::ivec3>()
     DATA(glm::ivec3, x)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(glm::ivec3, y)
-    TRAITS(EDITOR | SERIALIZE)
-    DATA(glm::ivec3, z)
-    TRAITS(EDITOR | SERIALIZE);
+    DATA(glm::ivec3, z);
   entt::meta_factory<glm::ivec2>()
     DATA(glm::ivec2, x)
-    TRAITS(EDITOR | SERIALIZE)
-    DATA(glm::ivec2, y)
-    TRAITS(EDITOR | SERIALIZE);
+    DATA(glm::ivec2, y);
   entt::meta_factory<glm::quat>().func<&EditorWriteQuat>("EditorWrite"_hs).func<&EditorReadQuat>("EditorRead"_hs)
     DATA(glm::quat, w)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(glm::quat, x)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(glm::quat, y)
-    TRAITS(EDITOR | SERIALIZE)
-    DATA(glm::quat, z)
-    TRAITS(EDITOR | SERIALIZE);
+    DATA(glm::quat, z);
   entt::meta_factory<std::string>().func<&EditorWriteString>("EditorWrite"_hs).func<&EditorReadString>("EditorRead"_hs);
   entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs);
   entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs);
   
-  REFLECT_COMPONENT(LocalTransform)
+  REFLECT_COMPONENT(LocalTransform, REPLICATED)
     .func<&EditorUpdateTransform>("OnUpdate"_hs)
     DATA(LocalTransform, position, PROP_SPEED(0.20f))
-    TRAITS(EDITOR | SERIALIZE)
     DATA(LocalTransform, rotation)
-    TRAITS(EDITOR | SERIALIZE)
-    DATA(LocalTransform, scale, PROP_SPEED(0.0125f))
-    TRAITS(EDITOR | SERIALIZE);
+    DATA(LocalTransform, scale, PROP_SPEED(0.0125f));
   
-  REFLECT_COMPONENT(GlobalTransform)
+  REFLECT_COMPONENT(GlobalTransform, EDITOR_READ_ONLY | REPLICATED)
     DATA(GlobalTransform, position)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(GlobalTransform, rotation)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(GlobalTransform, scale)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(GlobalTransform, scale);
 
-  REFLECT_COMPONENT(PreviousGlobalTransform)
+  REFLECT_COMPONENT(PreviousGlobalTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
     DATA(PreviousGlobalTransform, position)
-    TRAITS(Traits::EDITOR_READ)
     DATA(PreviousGlobalTransform, rotation)
-    TRAITS(Traits::EDITOR_READ)
-    DATA(PreviousGlobalTransform, scale)
-    TRAITS(Traits::EDITOR_READ);
+    DATA(PreviousGlobalTransform, scale);
 
-  REFLECT_COMPONENT(RenderTransform)
-    DATA(RenderTransform, transform)
-    TRAITS(Traits::EDITOR_READ);
+  REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
+    DATA(RenderTransform, transform);
 
   REFLECT_COMPONENT(Health)
     DATA(Health, hp, PROP_MIN(0.0f), PROP_MAX(100.0f))
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(Health, maxHp, PROP_MIN(0.0f), PROP_MAX(100.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Health, maxHp, PROP_MIN(0.0f), PROP_MAX(100.0f));
 
   REFLECT_COMPONENT(ContactDamage)
     DATA(ContactDamage, damage, PROP_MIN(0.125f), PROP_MAX(100.0f))
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(ContactDamage, knockback, PROP_MIN(0.125f), PROP_MAX(100.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(ContactDamage, knockback, PROP_MIN(0.125f), PROP_MAX(100.0f));
 
   REFLECT_COMPONENT(LinearVelocity)
-    DATA(LinearVelocity, v, PROP_SPEED(0.0125f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(LinearVelocity, v, PROP_SPEED(0.0125f));
 
   REFLECT_COMPONENT(TeamFlags)
-    DATA(TeamFlags, flags)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(TeamFlags, flags);
 
   REFLECT_COMPONENT(Friction)
-    DATA(Friction, axes, PROP_MAX(5.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Friction, axes, PROP_MAX(5.0f));
 
-  REFLECT_COMPONENT(Player)
+  REFLECT_COMPONENT(Player, EDITOR_READ_ONLY | REPLICATED)
     DATA(Player, id)
-    TRAITS(Traits::EDITOR_READ)
-    DATA(Player, inventoryIsOpen)
-    TRAITS(Traits::EDITOR_READ);
+    DATA(Player, inventoryIsOpen);
 
-  REFLECT_COMPONENT(InputState)
+  REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY)
     DATA(InputState, strafe)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, forward)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, elevate)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, jump)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, sprint)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, walk)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, usePrimary)
-    TRAITS(Traits::EDITOR_READ)
     DATA(InputState, useSecondary)
-    TRAITS(Traits::EDITOR_READ)
-    DATA(InputState, interact)
-    TRAITS(Traits::EDITOR_READ);
+    DATA(InputState, interact);
 
-  REFLECT_COMPONENT(InputLookState)
+  REFLECT_COMPONENT(InputLookState, EDITOR_READ_ONLY | REPLICATED)
     DATA(InputLookState, pitch)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(InputLookState, yaw)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(InputLookState, yaw);
 
-  REFLECT_COMPONENT(Mesh)
-    DATA(Mesh, name)
-    TRAITS(SERIALIZE | EDITOR);
+  REFLECT_COMPONENT(Mesh, REPLICATED)
+    DATA(Mesh, name);
 
   REFLECT_COMPONENT(NoclipCharacterController);
 
   REFLECT_COMPONENT(FlyingCharacterController)
     .func<[](World* w, entt::entity e) { w->GivePlayerFlyingCharacterController(e); }>("add"_hs)
     DATA(FlyingCharacterController, maxSpeed, PROP_MAX(50.0f))
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(FlyingCharacterController, acceleration, PROP_MAX(50.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(FlyingCharacterController, acceleration, PROP_MAX(50.0f));
 
   using namespace Physics;
   entt::meta_factory<CharacterController>{}
@@ -538,59 +493,46 @@ void Core::Reflection::Initialize()
   entt::meta_factory<CharacterControllerShrimple>{}
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterControllerShrimple(e); }>("add"_hs);
 
-  REFLECT_COMPONENT(Name)
-    DATA(Name, name)
-    TRAITS(SERIALIZE | EDITOR);
+  REFLECT_COMPONENT(Name, REPLICATED)
+    DATA(Name, name);
 
   //REFLECT_COMPONENT(RigidBody);
-  REFLECT_COMPONENT(CharacterControllerSettings)
-    DATA(CharacterControllerSettings, shape)
-    TRAITS(SERIALIZE | EDITOR_READ);
+  REFLECT_COMPONENT(CharacterControllerSettings, EDITOR_READ_ONLY)
+    DATA(CharacterControllerSettings, shape);
   
-  REFLECT_COMPONENT(CharacterControllerShrimpleSettings)
-    DATA(CharacterControllerShrimpleSettings, shape)
-    TRAITS(SERIALIZE | EDITOR_READ);
+  REFLECT_COMPONENT(CharacterControllerShrimpleSettings, EDITOR_READ_ONLY)
+    DATA(CharacterControllerShrimpleSettings, shape);
 
-  REFLECT_COMPONENT(RigidBodySettings)
+  REFLECT_COMPONENT(RigidBodySettings, EDITOR_READ_ONLY)
     DATA(RigidBodySettings, shape)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, activate)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, isSensor)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, gravityFactor)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, motionType)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, motionQuality)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(RigidBodySettings, layer)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(RigidBodySettings, degreesOfFreedom)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(RigidBodySettings, degreesOfFreedom);
 
   REFLECT_TYPE(std::monostate);
   REFLECT_TYPE(UseTwoLevelGrid);
 
   REFLECT_TYPE(Sphere)
-    DATA(Sphere, radius)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Sphere, radius);
 
   REFLECT_TYPE(Capsule)
+    TRAITS(EDITOR_READ_ONLY)
     DATA(Capsule, radius)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Capsule, cylinderHalfHeight)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(Capsule, cylinderHalfHeight);
   
   REFLECT_TYPE(Box)
-    DATA(Box, halfExtent)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Box, halfExtent);
 
   REFLECT_TYPE(Plane)
+    TRAITS(EDITOR_READ_ONLY)
     DATA(Plane, normal)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Plane, constant)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(Plane, constant);
 
   REFLECT_TYPE(PolyShape)
     .ctor<std::monostate>()
@@ -603,14 +545,11 @@ void Core::Reflection::Initialize()
     .VARIANT_FUNCS(PolyShape);
 
   REFLECT_TYPE(ShapeSettings)
+    TRAITS(EDITOR_READ_ONLY)
     DATA(ShapeSettings, shape)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(ShapeSettings, density)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(ShapeSettings, translation)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(ShapeSettings, rotation)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(ShapeSettings, rotation);
 
   REFLECT_ENUM(JPH::EMotionType)
     ENUMERATOR(JPH::EMotionType, Static)
@@ -633,22 +572,16 @@ void Core::Reflection::Initialize()
     ENUMERATOR(JPH::EAllowedDOFs, Plane2D)
 
   REFLECT_COMPONENT(DroppedItem)
-    DATA(DroppedItem, item)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(DroppedItem, item);
 
   REFLECT_TYPE(ItemState)
     DATA(ItemState, id)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(ItemState, count)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(ItemState, useAccum)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(ItemState, useAccum);
 
   REFLECT_TYPE(TwoLevelGrid::Material)
     DATA(TwoLevelGrid::Material, isVisible)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(TwoLevelGrid::Material, isSolid)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(TwoLevelGrid::Material, isSolid);
 
   REFLECT_COMPONENT(DeferredDelete);
 
@@ -658,15 +591,11 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(PredatoryBirdBehavior)
     DATA(PredatoryBirdBehavior, state)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(PredatoryBirdBehavior, accum)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(PredatoryBirdBehavior, target)
-    TRAITS(SERIALIZE | EDITOR_READ)
+    TRAITS(EDITOR_READ_ONLY)
     DATA(PredatoryBirdBehavior, idlePosition)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(PredatoryBirdBehavior, lineOfSightDuration)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(PredatoryBirdBehavior, lineOfSightDuration);
 
   REFLECT_ENUM(PredatoryBirdBehavior::State)
     ENUMERATOR(PredatoryBirdBehavior::State, IDLE)
@@ -678,164 +607,111 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(NoHashGrid);
 
   REFLECT_COMPONENT(WormEnemyBehavior)
-    DATA(WormEnemyBehavior, maxTurnSpeedDegPerSec)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(WormEnemyBehavior, maxTurnSpeedDegPerSec);
 
   REFLECT_COMPONENT(LinearPath)
     .func<&EditorUpdateLinearPath>("OnUpdate"_hs)
     DATA(LinearPath, frames)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(LinearPath, secondsElapsed)
-    TRAITS(EDITOR | SERIALIZE)
     DATA(LinearPath, originalLocalTransform)
-    TRAITS(SERIALIZE);
+    TRAITS(NO_EDITOR);
 
   //using LinearPath::KeyFrame;
   REFLECT_TYPE(LinearPath::KeyFrame)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(LinearPath::KeyFrame, position)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(LinearPath::KeyFrame, rotation)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(LinearPath::KeyFrame, scale)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(LinearPath::KeyFrame, offsetSeconds)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(LinearPath::KeyFrame, easing)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(LinearPath::KeyFrame, easing);
 
   REFLECT_COMPONENT(BlockHealth)
-    DATA(BlockHealth, health, PROP_MIN(0.0f), PROP_MAX(100.0f))
-    TRAITS(SERIALIZE | EDITOR);
-
-  // TODO: Uncomment this stuff
-  //REFLECT_COMPONENT(Hierarchy)
-  //  DATA(Hierarchy, parent)
-  //  TRAITS(SERIALIZE | EDITOR_READ)
-  //  DATA(Hierarchy, children)
-  //  TRAITS(SERIALIZE | EDITOR_READ)
-  //  DATA(Hierarchy, useLocalPositionAsGlobal)
-  //  TRAITS(SERIALIZE | EDITOR_READ)
-  //  DATA(Hierarchy, useLocalRotationAsGlobal)
-  //  TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(BlockHealth, health, PROP_MIN(0.0f), PROP_MAX(100.0f));
+    
+  REFLECT_COMPONENT(Hierarchy, EDITOR_READ_ONLY /* | REPLICATED */)
+    DATA(Hierarchy, parent)
+    DATA(Hierarchy, children)
+    DATA(Hierarchy, useLocalPositionAsGlobal)
+    DATA(Hierarchy, useLocalRotationAsGlobal);
 
   REFLECT_COMPONENT(Lifetime)
-    DATA(Lifetime, remainingSeconds)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Lifetime, remainingSeconds);
 
-  REFLECT_COMPONENT(GhostPlayer)
-    DATA(GhostPlayer, remainingSeconds)
-    TRAITS(SERIALIZE | EDITOR);
+  REFLECT_COMPONENT(GhostPlayer, REPLICATED)
+    DATA(GhostPlayer, remainingSeconds);
 
   REFLECT_COMPONENT(Invulnerability)
-    DATA(Invulnerability, remainingSeconds, PROP_MAX(1000.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Invulnerability, remainingSeconds, PROP_MAX(1000.0f));
 
   REFLECT_COMPONENT(CannotDamageEntities)
-    DATA(CannotDamageEntities, entities)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(CannotDamageEntities, entities);
 
   REFLECT_COMPONENT(Projectile)
     DATA(Projectile, initialSpeed, PROP_MAX(500.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(Projectile, drag)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(Projectile, restitution)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Projectile, restitution);
 
-  REFLECT_COMPONENT(Inventory)
+  REFLECT_COMPONENT(Inventory, EDITOR_READ_ONLY | REPLICATED)
     DATA(Inventory, activeSlotCoord)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(Inventory, canHaveActiveItem)
-    TRAITS(SERIALIZE | EDITOR_READ)
     DATA(Inventory, activeSlotEntity)
-    TRAITS(SERIALIZE | EDITOR_READ)
-    DATA(Inventory, slots)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    DATA(Inventory, slots);
 
-  REFLECT_COMPONENT(Billboard)
-    DATA(Billboard, name)
-    TRAITS(SERIALIZE | EDITOR);
+  REFLECT_COMPONENT(Billboard, REPLICATED)
+    DATA(Billboard, name);
 
-  REFLECT_COMPONENT(GpuLight)
+  REFLECT_COMPONENT(GpuLight, REPLICATED)
     DATA(GpuLight, color)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, type)
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, direction, PROP_MIN(-1.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, intensity, PROP_MAX(50.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, position)
-    TRAITS(SERIALIZE | EDITOR_READ)
+    TRAITS(EDITOR_READ_ONLY)
     DATA(GpuLight, range, PROP_MAX(200.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, innerConeAngle, PROP_MAX(6.28f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(GpuLight, outerConeAngle, PROP_MAX(6.28f))
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(GpuLight, colorSpace)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(GpuLight, colorSpace);
 
-  REFLECT_COMPONENT(BlockEntity);
+  REFLECT_COMPONENT(BlockEntity, REPLICATED);
 
   REFLECT_COMPONENT(DespawnWhenFarFromPlayer)
     DATA(DespawnWhenFarFromPlayer, maxDistance)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(DespawnWhenFarFromPlayer, gracePeriod)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(DespawnWhenFarFromPlayer, gracePeriod);
 
   REFLECT_COMPONENT(Loot)
-    DATA(Loot, name)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(Loot, name);
 
   REFLECT_COMPONENT(Enemy);
 
   REFLECT_COMPONENT(AiWanderBehavior)
     DATA(AiWanderBehavior, minWanderDistance, PROP_MAX(10.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(AiWanderBehavior, maxWanderDistance, PROP_MAX(10.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(AiWanderBehavior, timeBetweenMoves, PROP_MAX(10.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(AiWanderBehavior, accumulator)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(AiWanderBehavior, targetCanBeFloating)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(AiWanderBehavior, targetCanBeFloating);
 
   REFLECT_COMPONENT(AiTarget)
     DATA(AiTarget, currentTarget)
-    TRAITS(SERIALIZE | EDITOR_READ);
+    TRAITS(EDITOR_READ_ONLY);
 
   REFLECT_COMPONENT(AiVision)
     DATA(AiVision, coneAngleRad, PROP_MAX(glm::two_pi<float>()))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(AiVision, distance, PROP_MAX(50.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(AiVision, invAcuity, PROP_MAX(5.0f))
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(AiVision, accumulator)
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(AiVision, accumulator);
 
   REFLECT_COMPONENT(AiHearing)
-    DATA(AiHearing, distance, PROP_MAX(50.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(AiHearing, distance, PROP_MAX(50.0f));
 
   REFLECT_COMPONENT(KnockbackMultiplier)
-    DATA(KnockbackMultiplier, factor, PROP_MAX(10.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(KnockbackMultiplier, factor, PROP_MAX(10.0f));
 
-  REFLECT_COMPONENT(Tint)
-    DATA(Tint, color)
-    TRAITS(SERIALIZE | EDITOR);
+  REFLECT_COMPONENT(Tint, REPLICATED)
+    DATA(Tint, color);
 
   REFLECT_COMPONENT(WalkingMovementAttributes)
     DATA(WalkingMovementAttributes, runBaseSpeed, PROP_MAX(20.0f))
-    TRAITS(SERIALIZE | EDITOR)
     DATA(WalkingMovementAttributes, walkModifier)
-    TRAITS(SERIALIZE | EDITOR)
-    DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f))
-    TRAITS(SERIALIZE | EDITOR);
+    DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f));
 
   REFLECT_COMPONENT(Voxels);
 
@@ -847,44 +723,35 @@ void Core::Reflection::Initialize()
     ENUMERATOR(Math::Easing, EASE_IN_CUBIC)
     ENUMERATOR(Math::Easing, EASE_OUT_CUBIC);
 
+  // TODO: TwoLevelGrid reflection should be removed
   REFLECT_TYPE(TwoLevelGrid::TopLevelBrickPtr)
     DATA(TwoLevelGrid::TopLevelBrickPtr, voxelsDoBeAllSame)
-    TRAITS(SERIALIZE)
-    DATA(TwoLevelGrid::TopLevelBrickPtr, voxelIfAllSame)
-    TRAITS(SERIALIZE);
+    DATA(TwoLevelGrid::TopLevelBrickPtr, voxelIfAllSame);
 
   REFLECT_TYPE(TwoLevelGrid::TopLevelBrick)
-    DATA(TwoLevelGrid::TopLevelBrick, bricks)
-    TRAITS(SERIALIZE);
+    DATA(TwoLevelGrid::TopLevelBrick, bricks);
   
   REFLECT_TYPE(TwoLevelGrid::BottomLevelBrickPtr)
     DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelsDoBeAllSame)
-    TRAITS(SERIALIZE)
-    DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelIfAllSame)
-    TRAITS(SERIALIZE);
+    DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelIfAllSame);
   
   REFLECT_TYPE(TwoLevelGrid::BottomLevelBrick)
     DATA(TwoLevelGrid::BottomLevelBrick, occupancy)
-    TRAITS(SERIALIZE)
-    DATA(TwoLevelGrid::BottomLevelBrick, voxels)
-    TRAITS(SERIALIZE);
+    DATA(TwoLevelGrid::BottomLevelBrick, voxels);
 
   REFLECT_TYPE(TwoLevelGrid::OccupancyBitmask)
-    DATA(TwoLevelGrid::OccupancyBitmask, bitmask)
-    TRAITS(SERIALIZE);
+    DATA(TwoLevelGrid::OccupancyBitmask, bitmask);
 
   REFLECT_ENUM(voxel_t)
     ENUMERATOR(voxel_t, Air)
     ENUMERATOR(voxel_t, Null);
 
   // TODO: TEMP
-  REFLECT_COMPONENT(LocalPlayer);
+  REFLECT_COMPONENT(LocalPlayer, REPLICATED);
 
   REFLECT_TYPE(Serialization::SerializedEntityBundle)
     DATA(Serialization::SerializedEntityBundle, entities)
-    TRAITS(SERIALIZE)
-    DATA(Serialization::SerializedEntityBundle, serializedEntities)
-    TRAITS(SERIALIZE);
+    DATA(Serialization::SerializedEntityBundle, serializedEntities);
 
   REFLECT_ENUM(Networking::ClientStatus)
     ENUMERATOR(Networking::ClientStatus, Resolving)
@@ -894,7 +761,8 @@ void Core::Reflection::Initialize()
 
   REFLECT_TYPE(Serialization::Packet)
     DATA(Serialization::Packet, type)
-    TRAITS(SERIALIZE)
-    DATA(Serialization::Packet, bytes)
-    TRAITS(SERIALIZE);
+    DATA(Serialization::Packet, bytes);
+
+  entt::meta_factory<const char*>().conv<std::string>().conv<std::string_view>();
+  entt::meta_factory<char*>().conv<std::string>().conv<std::string_view>();
 }

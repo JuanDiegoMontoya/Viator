@@ -61,6 +61,12 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
         transform.rotation  = glm::angleAxis(inputLook.yaw, glm::vec3{0, 1, 0}) * glm::angleAxis(inputLook.pitch, glm::vec3{1, 0, 0});
         gtransform.rotation = transform.rotation;
 
+        // Do not allow inventory manipulation when dead.
+        if (world.GetRegistry().any_of<GhostPlayer>(entity))
+        {
+          continue;
+        }
+
         if (auto* i = world.GetRegistry().try_get<Inventory>(entity))
         {
           for (size_t j = 0; j < i->width; j++)

@@ -12,7 +12,6 @@
 
 #include "cereal/cereal.hpp"
 #include "cereal/archives/binary.hpp"
-#include "cereal/archives/xml.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
 
@@ -145,7 +144,7 @@ namespace Core::Serialization
     // Serialize data members.
     for (auto [id, data] : value.type().data())
     {
-      if (data.traits<Traits>() & Traits::SERIALIZE)
+      if (!(data.traits<Traits>() & Traits::TRANSIENT))
       {
         Serialize<Save>(ar, data.get(value).as_ref(), context);
       }
@@ -290,10 +289,10 @@ namespace Core::Serialization
   {
 #define MAKE_SERIALIZERS(T)                                                     \
   entt::meta_factory<T>()                                                       \
-    .func<Serialize2<cereal::XMLInputArchive, T>>("XMLInputArchive"_hs)         \
-    .func<Serialize2<cereal::XMLOutputArchive, const T>>("XMLOutputArchive"_hs) \
     .func<Serialize2<cereal::BinaryInputArchive, T>>("BinaryInputArchive"_hs)   \
     .func<Serialize2<cereal::BinaryOutputArchive, const T>>("BinaryOutputArchive"_hs)
+    //.func<Serialize2<cereal::XMLInputArchive, T>>("XMLInputArchive"_hs)         \
+    //.func<Serialize2<cereal::XMLOutputArchive, const T>>("XMLOutputArchive"_hs) \
     //.func<Serialize2<cereal::JSONInputArchive, float>>("JSONInputArchive"_hs)
     //.func<Serialize2<cereal::JSONOutputArchive, float>>("JSONOutputArchive"_hs)
 
@@ -313,6 +312,9 @@ namespace Core::Serialization
     MAKE_SERIALIZERS(entt::entity);
     MAKE_SERIALIZERS(bool);
     MAKE_SERIALIZERS(std::string);
+    //entt::meta_factory<char*>().func<[](cereal::BinaryOutputArchive& ar, char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
+    //entt::meta_factory<const char*>().func<[](cereal::BinaryOutputArchive& ar, const char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
+    //entt::meta_factory<std::string_view>().func<[](cereal::BinaryOutputArchive& ar, std::string_view str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
   }
 
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path)
@@ -333,7 +335,8 @@ namespace Core::Serialization
     {
       if (auto meta = entt::resolve(id))
       {
-        if (meta.traits<Traits>() & Traits::COMPONENT)
+        const auto traits = meta.traits<Traits>();
+        if (traits & Traits::COMPONENT)
         {
           ZoneScopedN("Component");
           ZoneText(meta.info().name().data(), meta.info().name().size());
@@ -342,7 +345,10 @@ namespace Core::Serialization
           for (auto entity : set)
           {
             Serialize<true>(outputArchive, entity);
-            Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+            if (!(traits & Traits::TRANSIENT))
+            {
+              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+            }
           }
         }
       }
@@ -388,16 +394,14 @@ namespace Core::Serialization
       Serialize<false>(inputArchive, entt::forward_as_meta(size));
       auto meta = entt::resolve(typeId);
       ASSERT(meta);
-      ASSERT(meta.traits<Traits>() & Traits::COMPONENT);
+      const auto traits = meta.traits<Traits>();
+      ASSERT(traits & Traits::COMPONENT);
       ZoneText(meta.info().name().data(), meta.info().name().size());
       for (uint32_t j = 0; j < size; j++)
       {
         auto remoteEntity = entt::entity();
         Serialize<false>(inputArchive, entt::forward_as_meta(remoteEntity));
         ASSERT(remoteEntity != entt::null);
-        auto value = meta.construct();
-        ASSERT(value, "Type is missing default constructor");
-        Serialize<false>(inputArchive, value.as_ref());
         auto localEntity = entt::entity();
         if (auto it = remoteToLocal.find(remoteEntity); it != remoteToLocal.end())
         {
@@ -410,9 +414,21 @@ namespace Core::Serialization
           remoteToLocal.emplace(remoteEntity, localEntity);
         }
 
-        auto emplaceFunc = meta.func("EmplaceMove"_hs);
-        ASSERT(emplaceFunc);
-        emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+        if (traits & Traits::TRANSIENT)
+        {
+          auto emplaceFunc = meta.func("EmplaceDefault"_hs);
+          ASSERT(emplaceFunc);
+          emplaceFunc.invoke({}, &registry, localEntity);
+        }
+        else
+        {
+          auto value = meta.construct();
+          ASSERT(value, "Type is missing default constructor");
+          Serialize<false>(inputArchive, value.as_ref());
+          auto emplaceFunc = meta.func("EmplaceMove"_hs);
+          ASSERT(emplaceFunc);
+          emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+        }
       }
     }
 
@@ -433,10 +449,12 @@ namespace Core::Serialization
       auto& registry = world.GetRegistry();
 
       Serialize<true>(outputArchive, entity);
-      const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(), [&](const auto& p)
-      {
-        return p.second.contains(entity) && entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT;
-      });
+      const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(),
+        [&](const auto& p)
+        {
+          const auto traits = entt::resolve(p.first).template traits<Traits>();
+          return p.second.contains(entity) && traits & Traits::COMPONENT && traits & Traits::REPLICATED;
+        });
       Serialize<true>(outputArchive, numComponents);
       for (auto [id, set] : registry.storage())
       {
@@ -447,12 +465,16 @@ namespace Core::Serialization
 
         if (auto meta = entt::resolve(id))
         {
-          if (meta.traits<Traits>() & Traits::COMPONENT)
+          const auto traits = meta.traits<Traits>();
+          if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
           {
             ZoneScopedN("Component");
             ZoneText(meta.info().name().data(), meta.info().name().size());
             Serialize<true>(outputArchive, id);
-            Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+            if (!(traits & Traits::TRANSIENT))
+            {
+              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+            }
           }
         }
       }
@@ -483,20 +505,36 @@ namespace Core::Serialization
     for (uint32_t i = 0; i < numComponents; i++)
     {
       ZoneScopedN("Component");
-      auto typeId   = entt::id_type();
+      auto typeId = entt::id_type();
       Serialize<false>(inputArchive, entt::forward_as_meta(typeId));
       auto meta = entt::resolve(typeId);
       ASSERT(meta);
-      ASSERT(meta.traits<Traits>() & Traits::COMPONENT);
+      const auto traits = meta.traits<Traits>();
+      ASSERT(traits & Traits::COMPONENT && traits & Traits::REPLICATED);
       ZoneText(meta.info().name().data(), meta.info().name().size());
       ASSERT(remoteEntity != entt::null);
-      auto value = meta.construct();
-      ASSERT(value, "Type is missing default constructor");
-      Serialize<false>(inputArchive, value.as_ref(), context);
 
-      auto emplaceFunc = meta.func("EmplaceMove"_hs);
-      ASSERT(emplaceFunc);
-      emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+      if (traits & Traits::TRANSIENT)
+      {
+        // We don't want transient components to be overwritten by the default value if they already exist.
+        auto* storage = registry.storage(typeId);
+        if (!storage || !storage->contains(localEntity))
+        {
+          auto emplaceFunc = meta.func("EmplaceDefault"_hs);
+          ASSERT(emplaceFunc);
+          emplaceFunc.invoke({}, &registry, localEntity);
+        }
+      }
+      else
+      {
+        auto value = meta.construct();
+        ASSERT(value, "Type is missing default constructor");
+        Serialize<false>(inputArchive, value.as_ref(), context);
+
+        auto emplaceFunc = meta.func("EmplaceMove"_hs);
+        ASSERT(emplaceFunc);
+        emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+      }
     }
   }
 
@@ -615,5 +653,54 @@ namespace Core::Serialization
     auto inputState   = entt::entity{};
     Serialize<false>(inputArchive, entt::forward_as_meta(inputState));
     return inputState;
+  }
+
+  void SerializeObjectStream(std::stringstream& stream, entt::meta_any object)
+  {
+    ZoneScoped;
+    auto outputArchive = cereal::BinaryOutputArchive(stream);
+    Serialize<true>(outputArchive, object.type().info().hash());
+    Serialize<true>(outputArchive, object.as_ref());
+  }
+
+  entt::meta_any DeserializeObjectStream(std::stringstream& stream)
+  {
+    ZoneScoped;
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto typeHash     = uint32_t{};
+    Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
+    auto type = entt::resolve(typeHash);
+    ASSERT(type);
+    auto object = type.construct();
+    Serialize<false>(inputArchive, object.as_ref());
+    return object;
+  }
+
+  std::vector<char> SerializeObject(entt::meta_any object)
+  {
+    ZoneScoped;
+    auto stream = std::stringstream();
+    
+    {
+      auto outputArchive = cereal::BinaryOutputArchive(stream);
+      Serialize<true>(outputArchive, object.type().info().hash());
+      Serialize<true>(outputArchive, object.as_ref());
+    }
+
+    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
+  }
+
+  entt::meta_any DeserializeObject(std::span<const char> objectBytes)
+  {
+    ZoneScoped;
+    auto stream       = std::stringstream(std::string(objectBytes.data(), objectBytes.size()));
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+    auto typeHash     = uint32_t{};
+    Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
+    auto type = entt::resolve(typeHash);
+    ASSERT(type);
+    auto object = type.construct();
+    Serialize<false>(inputArchive, object.as_ref());
+    return object;
   }
 } // namespace Core::Serialization

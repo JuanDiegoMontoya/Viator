@@ -1,5 +1,6 @@
 #pragma once
 #include "Interface.h"
+#include "ThreadSafeQueue.h"
 #include "../ClassImplMacros.h"
 #include "EnetFwd.h"
 
@@ -18,6 +19,7 @@ namespace Networking
 
     void ProcessMessages(World& world) final;
     void SendMessages(World& world) final;
+    void EnqueueRPC(RpcInfo rpc) final;
 
     [[nodiscard]] ClientStatus GetStatus() const
     {
@@ -34,5 +36,6 @@ namespace Networking
     ClientStatus status_ = ClientStatus::Resolving;
     std::unordered_map<entt::entity, entt::entity> remoteToLocalEntity_;
     std::unordered_map<entt::entity, entt::entity> localToRemoteEntity_;
+    ThreadSafeQueue<RpcInfo> rpcs_;
   };
 }

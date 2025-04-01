@@ -5,6 +5,7 @@
 #include <vector>
 #include <span>
 #include <unordered_map>
+#include <iosfwd>
 
 class World;
 struct TwoLevelGrid;
@@ -48,4 +49,11 @@ namespace Core::Serialization
 
   std::vector<char> SerializeEntityId(entt::entity entity);
   entt::entity DeserializeEntityId(std::span<const char> entityIdBytes);
+
+  // Serialize and deserialize anything to binary.
+  void SerializeObjectStream(std::stringstream& stream, entt::meta_any object);
+  entt::meta_any DeserializeObjectStream(std::stringstream& stream);
+
+  std::vector<char> SerializeObject(entt::meta_any object);
+  entt::meta_any DeserializeObject(std::span<const char> objectBytes);
 }

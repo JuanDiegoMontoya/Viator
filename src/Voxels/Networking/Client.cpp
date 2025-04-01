@@ -3,6 +3,7 @@
 #include "../Serialization.h"
 #include "../Game.h"
 #include "../Assert2.h"
+#include "RPC.h"
 
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
@@ -69,7 +70,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
-        spdlog::info("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
+        spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, *event.packet);
         enet_packet_destroy(event.packet);
         break;
@@ -107,11 +108,42 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
 
 void Networking::Client::SendMessages(World& world)
 {
+  if (status_ != ClientStatus::Connected)
+  {
+    rpcs_.clear();
+    return;
+  }
+
+  // Flush RPCs
+  while (!rpcs_.empty())
+  {
+    auto rpc = rpcs_.pop_front();
+
+    using Core::Reflection::RpcTraits;
+
+    auto packetInfo = Core::Serialization::Packet{
+      .type  = entt::type_id<Core::Reflection::RpcTraits>().hash(),
+      .bytes = std::move(rpc.serializedRpc),
+    };
+
+    auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
+
+    const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
+    auto* packet           = enet_packet_create(packetSerialized.data(), packetSerialized.size(), packetFlags);
+    
+    enet_peer_send(remotePeer_, 0, packet);
+  }
+
   auto localPlayer = world.TryGetLocalPlayer();
   if (localPlayer != entt::null)
   {
     // TODO
   }
+}
+
+void Networking::Client::EnqueueRPC(RpcInfo rpc)
+{
+  rpcs_.push_back(std::move(rpc));
 }
 
 void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
@@ -171,9 +203,15 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
     if (auto it = remoteToLocalEntity_.find(remoteEntity); it != remoteToLocalEntity_.end())
     {
       auto localEntity = it->second;
-      world.GetRegistry().destroy(localEntity);
-      //world.GetRegistry().emplace<DeferredDelete>(localEntity);
+      //world.GetRegistry().destroy(localEntity);
+      world.GetRegistry().emplace<DeferredDelete>(localEntity);
+      localToRemoteEntity_.erase(localEntity);
+      remoteToLocalEntity_.erase(it);
     }
+  }
+  else if (packet.type == entt::type_id<Core::Reflection::RpcTraits>().hash())
+  {
+    detail::InvokeSerializedRPC(world, packet.bytes);
   }
   else
   {

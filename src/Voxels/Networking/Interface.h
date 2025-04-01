@@ -1,10 +1,19 @@
 #pragma once
 #include "../ClassImplMacros.h"
+#include "../Reflection.h"
+
+#include <vector>
 
 class World;
 
 namespace Networking
 {
+  struct RpcInfo
+  {
+    Core::Reflection::RpcTraits traits;
+    std::vector<char> serializedRpc;
+  };
+
   class Interface
   {
   public:
@@ -13,7 +22,8 @@ namespace Networking
     virtual ~Interface() = default;
 
     virtual void ProcessMessages(World&) = 0;
-    virtual void SendMessages(World&) = 0;
+    virtual void SendMessages(World&)    = 0;
+    virtual void EnqueueRPC(RpcInfo rpc) = 0;
   };
 
   enum class ClientStatus

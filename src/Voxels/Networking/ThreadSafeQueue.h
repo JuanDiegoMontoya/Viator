@@ -9,6 +9,7 @@ template<typename T>
 class ThreadSafeQueue
 {
 public:
+  explicit ThreadSafeQueue() = default;
   NO_COPY_NO_MOVE(ThreadSafeQueue);
 
   void push_back(const T& value)
@@ -43,7 +44,13 @@ public:
     return queue_.size();
   }
 
+  void clear()
+  {
+    auto lock = std::lock_guard(mutex_);
+    queue_ = {};
+  }
+
 private:
-  std::shared_mutex mutex_;
+  mutable std::shared_mutex mutex_;
   std::queue<T> queue_;
 };
