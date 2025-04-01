@@ -1341,6 +1341,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (ImGui::Button("Exit to main menu"))
       {
         networking->reset();
+        world.GetRegistry().clear();
+        world.GetRegistry() = {};
+        CreateContextVariablesAndObservers(world);
         gameState = GameState::MENU;
       }
 
