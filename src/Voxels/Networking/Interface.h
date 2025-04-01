@@ -33,4 +33,17 @@ namespace Networking
     Connected,
     Disconnected,
   };
+
+  enum class PacketType : uint8_t
+  {
+    // std::vector<entt::entity> + std::vector<char>
+    EntityBundle,
+
+    // entt::id_type + serialized args
+    Rpc,
+
+    RemovedEntity,
+    InputState,
+    TwoLevelGrid,
+  };
 }

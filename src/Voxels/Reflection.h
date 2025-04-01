@@ -31,6 +31,9 @@ namespace Core::Reflection
 
     // The component will be replicated to clients on the network.
     REPLICATED = 1 << 5,
+
+    // The type can be trivially copied (e.g. by memcpy) instead of member-wise copied.
+    TRIVIAL = 1 << 6,
   };
 
   inline Traits operator|(Traits a, Traits b)

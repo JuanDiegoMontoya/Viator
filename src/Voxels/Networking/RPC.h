@@ -18,7 +18,7 @@ namespace Networking
 {
   // Execute the RPC on the remote end of the connection only.
   template<typename... Args>
-  void CallRPC(World& world, entt::id_type funcId, Args&& ...args)
+  void CallRPC(entt::id_type funcId, World& world, Args&&... args)
   {
     ZoneScoped;
     using Core::Reflection::RpcTraits;
@@ -79,6 +79,6 @@ namespace Networking
 
   namespace detail
   {
-    void InvokeSerializedRPC(World& world, std::span<const char> serializedRpc);
+    void InvokeSerializedRPC(World& world, std::stringstream& stream);
   }
 }

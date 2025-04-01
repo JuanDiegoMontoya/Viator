@@ -85,6 +85,7 @@ struct TwoLevelGrid
     };
   };
 
+  explicit TwoLevelGrid();
   explicit TwoLevelGrid(glm::ivec3 topLevelBrickDims);
 
   struct GridHierarchyCoords

@@ -121,15 +121,12 @@ void Networking::Client::SendMessages(World& world)
 
     using Core::Reflection::RpcTraits;
 
-    auto packetInfo = Core::Serialization::Packet{
-      .type  = entt::type_id<Core::Reflection::RpcTraits>().hash(),
-      .bytes = std::move(rpc.serializedRpc),
-    };
-
-    auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
+    auto stream = std::stringstream();
+    Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
+    stream.write(rpc.serializedRpc.data(), rpc.serializedRpc.size());
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
-    auto* packet           = enet_packet_create(packetSerialized.data(), packetSerialized.size(), packetFlags);
+    auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
     
     enet_peer_send(remotePeer_, 0, packet);
   }
@@ -159,20 +156,22 @@ void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
 void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket)
 {
   ZoneScoped;
-  auto packet = Core::Serialization::DeserializePacket(std::span{(const char*)enetPacket.data, enetPacket.dataLength});
+  auto stream = std::stringstream(std::string(reinterpret_cast<const char*>(enetPacket.data), enetPacket.dataLength));
+  auto packetType = Core::Serialization::DeserializeObjectStream<PacketType>(stream);
 
-  if (packet.type == entt::type_id<TwoLevelGrid>().hash())
+  if (packetType == PacketType::TwoLevelGrid)
   {
     spdlog::info("Connected");
     status_   = ClientStatus::Connected;
-    auto grid = Core::Serialization::DeserializeTwoLevelGrid(packet.bytes);
-    world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(*grid));
+    auto grid = Core::Serialization::DeserializeObjectStream<TwoLevelGrid>(stream);
+    world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));
     world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
   }
-  else if (packet.type == entt::type_id<Core::Serialization::SerializedEntityBundle>().hash())
+  else if (packetType == PacketType::EntityBundle)
   {
-    auto bundle = Core::Serialization::DeserializeEntityBundle(packet.bytes);
-    for (auto remoteEntity : bundle.entities)
+    auto entities = Core::Serialization::DeserializeObjectStream<std::vector<entt::entity>>(stream);
+
+    for (auto remoteEntity : entities)
     {
       if (auto it = remoteToLocalEntity_.find(remoteEntity); it == remoteToLocalEntity_.end())
       {
@@ -182,12 +181,12 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       }
     }
 
-    for (auto serializedEntity : bundle.serializedEntities)
+    for ([[maybe_unused]] auto _ : entities)
     {
-      Core::Serialization::DeserializeEntity(world, serializedEntity, remoteToLocalEntity_);
+      Core::Serialization::DeserializeEntity(stream, world, remoteToLocalEntity_);
     }
 
-    for (auto remoteEntity : bundle.entities)
+    for (auto remoteEntity : entities)
     {
       auto localEntity = remoteToLocalEntity_.at(remoteEntity);
       if (world.GetRegistry().all_of<LocalTransform, Hierarchy>(localEntity))
@@ -196,10 +195,10 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       }
     }
   }
-  else if (packet.type == entt::type_id<entt::entity>().hash())
+  else if (packetType == PacketType::RemovedEntity)
   {
     // Delete entity.
-    auto remoteEntity = Core::Serialization::DeserializeEntityId(packet.bytes);
+    auto remoteEntity = Core::Serialization::DeserializeObjectStream<entt::entity>(stream);
     if (auto it = remoteToLocalEntity_.find(remoteEntity); it != remoteToLocalEntity_.end())
     {
       auto localEntity = it->second;
@@ -209,9 +208,9 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       remoteToLocalEntity_.erase(it);
     }
   }
-  else if (packet.type == entt::type_id<Core::Reflection::RpcTraits>().hash())
+  else if (packetType == PacketType::Rpc)
   {
-    detail::InvokeSerializedRPC(world, packet.bytes);
+    detail::InvokeSerializedRPC(world, stream);
   }
   else
   {

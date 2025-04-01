@@ -72,15 +72,12 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
         auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = world.GetRegistry().create(), .status = ClientStatus::Joining}).first;
 
         // TODO: Send packet informing the client of their entity ID.
+        auto stream = std::stringstream();
 
-        auto packetInfo = Core::Serialization::Packet{
-          .type  = entt::type_id<TwoLevelGrid>().hash(),
-          .bytes = Core::Serialization::SerializeTwoLevelGrid(world.GetRegistry().ctx().get<TwoLevelGrid>()),
-        };
+        Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid);
+        Core::Serialization::SerializeObjectStream(stream, entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
 
-        auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
-
-        auto* packet = enet_packet_create(packetSerialized.data(), packetSerialized.size(), ENET_PACKET_FLAG_RELIABLE);
+        auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
         packet->userData = &pair;
 
         enet_packet_set_free_callback(packet,
@@ -159,15 +156,13 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
 
     using Core::Reflection::RpcTraits;
 
-    auto packetInfo = Core::Serialization::Packet{
-      .type  = entt::type_id<Core::Reflection::RpcTraits>().hash(),
-      .bytes = std::move(rpc.serializedRpc),
-    };
+    auto stream = std::stringstream();
 
-    auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
+    Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
+    stream.write(rpc.serializedRpc.data(), rpc.serializedRpc.size());
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
-    auto* packet = enet_packet_create(packetSerialized.data(), packetSerialized.size(), packetFlags);
+    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
 
     for (auto& [peer, clientInfo] : connections_)
     {
@@ -190,24 +185,22 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   // For each root entity, create a serialized "bundle" containing it and all descendants, then send it.
   for (auto rootEntity : rootEntities)
   {
-    auto bundle = Core::Serialization::SerializedEntityBundle{};
-    AddEntityAndChildrenToVector(world.GetRegistry(), rootEntity, bundle.entities);
+    auto stream = std::stringstream();
+
+    Core::Serialization::SerializeObjectStream(stream, PacketType::EntityBundle);
+
+    auto entities = std::vector<entt::entity>();
+    AddEntityAndChildrenToVector(world.GetRegistry(), rootEntity, entities);
+    Core::Serialization::SerializeObjectStream(stream, entities);
     //auto string = std::string();
-    for (auto entity : bundle.entities)
+    for (auto entity : entities)
     {
-      bundle.serializedEntities.emplace_back(Core::Serialization::SerializeEntity(world, entity));
+      Core::Serialization::SerializeEntity(stream, world, entity);
       //string += fmt::format("{}, ", entt::to_integral(entity));
     }
     //spdlog::info("Sending entities: {}", string);
 
-    auto packetInfo = Core::Serialization::Packet{
-      .type  = entt::type_id<Core::Serialization::SerializedEntityBundle>().hash(),
-      .bytes = Core::Serialization::SerializeEntityBundle(bundle),
-    };
-
-    auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
-
-    auto* packet = enet_packet_create(packetSerialized.data(), packetSerialized.size(), ENET_PACKET_FLAG_RELIABLE);
+    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
 
     for (auto& [peer, clientInfo] : connections_)
     {
@@ -231,14 +224,11 @@ void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
     return;
   }
 
-  auto packetInfo = Core::Serialization::Packet{
-    .type  = entt::type_id<entt::entity>().hash(),
-    .bytes = Core::Serialization::SerializeEntityId(entity),
-  };
+  auto stream = std::stringstream();
+  Core::Serialization::SerializeObjectStream(stream, PacketType::RemovedEntity);
+  Core::Serialization::SerializeObjectStream(stream, entity);
 
-  auto packetSerialized = Core::Serialization::SerializePacket(packetInfo);
-
-  auto* packet = enet_packet_create(packetSerialized.data(), packetSerialized.size(), ENET_PACKET_FLAG_RELIABLE);
+  auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
 
   for (auto& [peer, clientInfo] : connections_)
   {
@@ -254,15 +244,18 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
   ZoneScoped;
   auto peerIt = connections_.find(peer);
   ASSERT(peerIt != connections_.end());
-  auto packet = Core::Serialization::DeserializePacket(std::span{(const char*)enetPacket.data, enetPacket.dataLength});
 
-  if (packet.type == entt::type_id<InputState>().hash())
+  auto stream = std::stringstream(std::string(reinterpret_cast<const char*>(enetPacket.data), enetPacket.dataLength));
+
+  auto packetType = Core::Serialization::DeserializeObjectStream<PacketType>(stream);
+
+  if (packetType == PacketType::InputState)
   {
-    auto inputState = Core::Serialization::DeserializeInputState(packet.bytes);
+    auto inputState = Core::Serialization::DeserializeObjectStream<InputState>(stream);
     world.GetRegistry().emplace_or_replace<InputState>(peerIt->second.entity, inputState);
   }
-  else if (packet.type == entt::type_id<Core::Reflection::RpcTraits>().hash())
+  else if (packetType == PacketType::Rpc)
   {
-    detail::InvokeSerializedRPC(world, packet.bytes);
+    detail::InvokeSerializedRPC(world, stream);
   }
 }

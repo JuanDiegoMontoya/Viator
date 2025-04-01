@@ -12,6 +12,7 @@
 
 #include "cereal/cereal.hpp"
 #include "cereal/archives/binary.hpp"
+//#include "cereal/archives/xml.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
 
@@ -69,7 +70,8 @@ namespace Core::Serialization
     {
       if (func.arg(0).info() == archiveHash)
       {
-        func.invoke({}, entt::forward_as_meta(ar), value.as_ref(), entt::forward_as_meta(context));
+        auto ret = func.invoke({}, entt::forward_as_meta(ar), value.as_ref(), entt::forward_as_meta(context));
+        ASSERT(ret);
         return;
       }
     }
@@ -90,9 +92,26 @@ namespace Core::Serialization
         sequence.resize(size); // Returns false for un-resizable containers such as std::array.
       }
 
-      for (auto element : sequence)
+      // TODO
+      //if (sequence.size() > 0 && sequence.value_type().traits<Traits>() & Traits::TRIVIAL)
+      //{
+      //  // memcpy time
+      //  //auto front = sequence.begin()->try_cast<void*>();
+      //  if constexpr (Save)
+      //  {
+      //    
+      //  }
+      //  else
+      //  {
+      //    
+      //  }
+      //}
+      //else
       {
-        Serialize<Save>(ar, element.as_ref(), context);
+        for (auto element : sequence)
+        {
+          Serialize<Save>(ar, element.as_ref(), context);
+        }
       }
 
       return;
@@ -156,18 +175,6 @@ namespace Core::Serialization
   namespace
   {
     template<typename Archive>
-    void Serialize2(Archive& ar, Packet& packet)
-    {
-      ar(packet.type, packet.bytes);
-    }
-
-    template<typename Archive>
-    void Serialize2(Archive& ar, const Packet& packet)
-    {
-      ar(packet.type, packet.bytes);
-    }
-
-    template<typename Archive>
     void Serialize2(Archive& ar, TwoLevelGrid::BottomLevelBrick& blBrick)
     {
       for (auto& bits : blBrick.occupancy.bitmask)
@@ -229,13 +236,13 @@ namespace Core::Serialization
   } // namespace
 
   template<bool Save, typename Archive>
-  static void Serialize(Archive& ar, std::conditional_t<Save, const TwoLevelGrid*, std::unique_ptr<TwoLevelGrid>&> grid)
+  static void SerializeGrid(Archive& ar, std::conditional_t<Save, const TwoLevelGrid, TwoLevelGrid>& grid, const SerializationContext& = {})
   {
     ZoneScoped;
     if constexpr (Save)
     {
-      Serialize<Save>(ar, grid->materials_);
-      Serialize<Save>(ar, grid->topLevelBricksDims_);
+      Serialize<Save>(ar, grid.materials_);
+      Serialize<Save>(ar, grid.topLevelBricksDims_);
     }
     else
     {
@@ -243,16 +250,16 @@ namespace Core::Serialization
       Serialize<Save>(ar, entt::forward_as_meta(materials));
       auto dims = glm::ivec3();
       Serialize<Save>(ar, entt::forward_as_meta(dims));
-      grid = std::make_unique<TwoLevelGrid>(dims);
-      grid->SetMaterialArray(std::move(materials));
+      grid = TwoLevelGrid(dims);
+      grid.SetMaterialArray(std::move(materials));
     }
 
-    for (int tz = 0; tz < grid->topLevelBricksDims_.z; tz++)
-    for (int ty = 0; ty < grid->topLevelBricksDims_.y; ty++)
-    for (int tx = 0; tx < grid->topLevelBricksDims_.x; tx++)
+    for (int tz = 0; tz < grid.topLevelBricksDims_.z; tz++)
+    for (int ty = 0; ty < grid.topLevelBricksDims_.y; ty++)
+    for (int tx = 0; tx < grid.topLevelBricksDims_.x; tx++)
     {
-      const auto tlBrickIndex = grid->FlattenTopLevelBrickCoord({tx, ty, tz});
-      auto& tlBrickPtr  = grid->GetTopLevelBrickPtr(tlBrickIndex);
+      const auto tlBrickIndex = grid.FlattenTopLevelBrickCoord({tx, ty, tz});
+      auto& tlBrickPtr  = grid.GetTopLevelBrickPtr(tlBrickIndex);
       Serialize<Save>(ar, entt::forward_as_meta(tlBrickPtr));
       if (tlBrickPtr.voxelsDoBeAllSame)
       {
@@ -261,9 +268,9 @@ namespace Core::Serialization
 
       if constexpr (!Save)
       {
-        tlBrickPtr.topLevelBrick = grid->AllocateTopLevelBrick(voxel_t::Air);
+        tlBrickPtr.topLevelBrick = grid.AllocateTopLevelBrick(voxel_t::Air);
       }
-      auto& tlBrick = grid->GetTopLevelBrick(tlBrickPtr.topLevelBrick);
+      auto& tlBrick = grid.GetTopLevelBrick(tlBrickPtr.topLevelBrick);
       Serialize2(ar, tlBrick);
 
       // Bottom-level bricks are handled essentially the same as top-level bricks.
@@ -277,9 +284,9 @@ namespace Core::Serialization
 
         if constexpr (!Save)
         {
-          blBrickPtr.bottomLevelBrick = grid->AllocateBottomLevelBrick(voxel_t::Air);
+          blBrickPtr.bottomLevelBrick = grid.AllocateBottomLevelBrick(voxel_t::Air);
         }
-        auto& blBrick = grid->GetBottomLevelBrick(blBrickPtr.bottomLevelBrick);
+        auto& blBrick = grid.GetBottomLevelBrick(blBrickPtr.bottomLevelBrick);
         Serialize2(ar, blBrick);
       }
     }
@@ -290,15 +297,16 @@ namespace Core::Serialization
 #define MAKE_SERIALIZERS(T)                                                     \
   entt::meta_factory<T>()                                                       \
     .func<Serialize2<cereal::BinaryInputArchive, T>>("BinaryInputArchive"_hs)   \
-    .func<Serialize2<cereal::BinaryOutputArchive, const T>>("BinaryOutputArchive"_hs)
+    .func<Serialize2<cereal::BinaryOutputArchive, const T>>("BinaryOutputArchive"_hs) 
     //.func<Serialize2<cereal::XMLInputArchive, T>>("XMLInputArchive"_hs)         \
-    //.func<Serialize2<cereal::XMLOutputArchive, const T>>("XMLOutputArchive"_hs) \
+    //.func<Serialize2<cereal::XMLOutputArchive, const T>>("XMLOutputArchive"_hs)
     //.func<Serialize2<cereal::JSONInputArchive, float>>("JSONInputArchive"_hs)
     //.func<Serialize2<cereal::JSONOutputArchive, float>>("JSONOutputArchive"_hs)
 
+    MAKE_SERIALIZERS(bool);
     MAKE_SERIALIZERS(char);
+    MAKE_SERIALIZERS(signed char);
     MAKE_SERIALIZERS(unsigned char);
-    MAKE_SERIALIZERS(uint8_t);
     MAKE_SERIALIZERS(int8_t);
     MAKE_SERIALIZERS(int16_t);
     MAKE_SERIALIZERS(int32_t);
@@ -310,8 +318,14 @@ namespace Core::Serialization
     MAKE_SERIALIZERS(float);
     MAKE_SERIALIZERS(double);
     MAKE_SERIALIZERS(entt::entity);
-    MAKE_SERIALIZERS(bool);
+    MAKE_SERIALIZERS(entt::id_type);
     MAKE_SERIALIZERS(std::string);
+
+    entt::meta_factory<TwoLevelGrid>()
+      .func<SerializeGrid<false, cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
+      .func<SerializeGrid<true, cereal::BinaryOutputArchive>>("BinaryOutputArchive"_hs);
+      //.func<SerializeGrid<false, cereal::XMLInputArchive>>("XMLInputArchive"_hs)
+      //.func<SerializeGrid<true, cereal::XMLOutputArchive>>("XMLOutputArchive"_hs);
     //entt::meta_factory<char*>().func<[](cereal::BinaryOutputArchive& ar, char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
     //entt::meta_factory<const char*>().func<[](cereal::BinaryOutputArchive& ar, const char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
     //entt::meta_factory<std::string_view>().func<[](cereal::BinaryOutputArchive& ar, std::string_view str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
@@ -326,8 +340,8 @@ namespace Core::Serialization
     auto outputArchive   = cereal::BinaryOutputArchive(file);
 
     // Save relevant context variables.
-    auto* pGrid = &registry.ctx().get<TwoLevelGrid>();
-    Serialize<true>(outputArchive, pGrid);
+    auto& grid = registry.ctx().get<TwoLevelGrid>();
+    SerializeGrid<true>(outputArchive, grid);
 
     const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(), [](const auto& p) { return entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT; });
     Serialize<true>(outputArchive, numSets);
@@ -376,12 +390,11 @@ namespace Core::Serialization
     auto inputArchive = cereal::BinaryInputArchive(file);
 
     // Load relevant context variables.
-    auto pGrid = std::unique_ptr<TwoLevelGrid>();
-    Serialize<false>(inputArchive, pGrid);
-    ASSERT(pGrid);
-    pGrid->CoalesceBricksSLOW();
-    pGrid->MarkAllBricksDirty();
-    registry.ctx().emplace<TwoLevelGrid>(std::move(*pGrid));
+    auto grid = TwoLevelGrid();
+    SerializeGrid<false>(inputArchive, grid);
+    grid.CoalesceBricksSLOW();
+    grid.MarkAllBricksDirty();
+    registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
 
     auto numSets = uint32_t();
     Serialize<false>(inputArchive, entt::forward_as_meta(numSets));
@@ -439,57 +452,50 @@ namespace Core::Serialization
     spdlog::info("Loading complete");
   }
 
-  std::vector<char> SerializeEntity(const World& world, entt::entity entity)
+  void SerializeEntity(std::stringstream& stream, const World& world, entt::entity entity)
   {
     ZoneScoped;
-    auto stream = std::stringstream();
+    
+    auto outputArchive = cereal::BinaryOutputArchive(stream);
+    auto& registry = world.GetRegistry();
 
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      auto& registry = world.GetRegistry();
-
-      Serialize<true>(outputArchive, entity);
-      const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(),
-        [&](const auto& p)
-        {
-          const auto traits = entt::resolve(p.first).template traits<Traits>();
-          return p.second.contains(entity) && traits & Traits::COMPONENT && traits & Traits::REPLICATED;
-        });
-      Serialize<true>(outputArchive, numComponents);
-      for (auto [id, set] : registry.storage())
+    Serialize<true>(outputArchive, entity);
+    const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(),
+      [&](const auto& p)
       {
-        if (!set.contains(entity))
-        {
-          continue;
-        }
+        const auto traits = entt::resolve(p.first).template traits<Traits>();
+        return p.second.contains(entity) && traits & Traits::COMPONENT && traits & Traits::REPLICATED;
+      });
+    Serialize<true>(outputArchive, numComponents);
+    for (auto [id, set] : registry.storage())
+    {
+      if (!set.contains(entity))
+      {
+        continue;
+      }
 
-        if (auto meta = entt::resolve(id))
+      if (auto meta = entt::resolve(id))
+      {
+        const auto traits = meta.traits<Traits>();
+        if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
         {
-          const auto traits = meta.traits<Traits>();
-          if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
+          ZoneScopedN("Component");
+          ZoneText(meta.info().name().data(), meta.info().name().size());
+          Serialize<true>(outputArchive, id);
+          if (!(traits & Traits::TRANSIENT))
           {
-            ZoneScopedN("Component");
-            ZoneText(meta.info().name().data(), meta.info().name().size());
-            Serialize<true>(outputArchive, id);
-            if (!(traits & Traits::TRANSIENT))
-            {
-              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
-            }
+            Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
           }
         }
       }
     }
-    // Ensure outputArchive has gone out of scope so it flushes the data to stream.
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
   }
 
-  void DeserializeEntity(World& world, std::span<const char> entityBytes, std::unordered_map<entt::entity, entt::entity>& remoteToLocal)
+  void DeserializeEntity(std::stringstream& stream, World& world, std::unordered_map<entt::entity, entt::entity>& remoteToLocal)
   {
     ZoneScoped;
     auto& registry = world.GetRegistry();
-
-    auto stream       = std::stringstream(std::string(entityBytes.data(), entityBytes.size()));
+    
     auto inputArchive = cereal::BinaryInputArchive(stream);
 
     auto remoteEntity = entt::entity();
@@ -538,138 +544,20 @@ namespace Core::Serialization
     }
   }
 
-  std::vector<char> SerializeEntityBundle(const SerializedEntityBundle& bundle)
-  {
-    ZoneScoped;
-    auto stream = std::stringstream();
-
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      Serialize<true>(outputArchive, entt::forward_as_meta(bundle));
-    }
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
-  }
-
-  SerializedEntityBundle DeserializeEntityBundle(std::span<const char> bundleBytes)
-  {
-    ZoneScoped;
-    auto stream       = std::stringstream(std::string(bundleBytes.data(), bundleBytes.size()));
-    auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto bundle       = SerializedEntityBundle{};
-    Serialize<false>(inputArchive, entt::forward_as_meta(bundle));
-    return bundle;
-  }
-
-  std::vector<char> SerializeTwoLevelGrid(const TwoLevelGrid& grid)
-  {
-    ZoneScoped;
-    auto stream = std::stringstream();
-
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      Serialize<true>(outputArchive, &grid);
-    }
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
-  }
-
-  std::unique_ptr<TwoLevelGrid> DeserializeTwoLevelGrid(std::span<const char> gridBytes)
-  {
-    ZoneScoped;
-    auto stream       = std::stringstream(std::string(gridBytes.data(), gridBytes.size()));
-    auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto grid         = std::unique_ptr<TwoLevelGrid>();
-    Serialize<false>(inputArchive, grid);
-    return grid;
-  }
-
-  std::vector<char> SerializePacket(const Packet& packet)
-  {
-    ZoneScoped;
-    auto stream = std::stringstream();
-
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      //Serialize<true>(outputArchive, entt::forward_as_meta(packet));
-      Serialize2(outputArchive, packet);
-    }
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
-  }
-
-  Packet DeserializePacket(std::span<const char> packetBytes)
-  {
-    ZoneScoped;
-    auto stream       = std::stringstream(std::string(packetBytes.data(), packetBytes.size()));
-    auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto packet = Packet{};
-    //Serialize<false>(inputArchive, entt::forward_as_meta(packet));
-    Serialize2(inputArchive, packet);
-    return packet;
-  }
-
-  std::vector<char> SerializeInputState(const InputState& inputState)
-  {
-    ZoneScoped;
-    auto stream = std::stringstream();
-
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      Serialize<true>(outputArchive, entt::forward_as_meta(inputState));
-    }
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
-  }
-
-  InputState DeserializeInputState(std::span<const char> inputStateBytes)
-  {
-    ZoneScoped;
-    auto stream       = std::stringstream(std::string(inputStateBytes.data(), inputStateBytes.size()));
-    auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto inputState   = InputState{};
-    Serialize<false>(inputArchive, entt::forward_as_meta(inputState));
-    return inputState;
-  }
-
-  std::vector<char> SerializeEntityId(entt::entity entity)
-  {
-    ZoneScoped;
-    auto stream = std::stringstream();
-
-    {
-      auto outputArchive = cereal::BinaryOutputArchive(stream);
-      Serialize<true>(outputArchive, entt::forward_as_meta(entity));
-    }
-
-    return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
-  }
-
-  entt::entity DeserializeEntityId(std::span<const char> entityIdBytes)
-  {
-    ZoneScoped;
-    auto stream       = std::stringstream(std::string(entityIdBytes.data(), entityIdBytes.size()));
-    auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto inputState   = entt::entity{};
-    Serialize<false>(inputArchive, entt::forward_as_meta(inputState));
-    return inputState;
-  }
-
   void SerializeObjectStream(std::stringstream& stream, entt::meta_any object)
   {
     ZoneScoped;
     auto outputArchive = cereal::BinaryOutputArchive(stream);
-    Serialize<true>(outputArchive, object.type().info().hash());
+    //Serialize<true>(outputArchive, object.type().info().hash());
     Serialize<true>(outputArchive, object.as_ref());
   }
 
-  entt::meta_any DeserializeObjectStream(std::stringstream& stream)
+  entt::meta_any DeserializeObjectStream(std::stringstream& stream, const entt::meta_type& type)
   {
     ZoneScoped;
     auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto typeHash     = uint32_t{};
-    Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
-    auto type = entt::resolve(typeHash);
+    //auto typeHash     = uint32_t{};
+    //Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
     ASSERT(type);
     auto object = type.construct();
     Serialize<false>(inputArchive, object.as_ref());

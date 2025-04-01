@@ -83,6 +83,8 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
   return false;
 }
 
+TwoLevelGrid::TwoLevelGrid() : buffer(16) {}
+
 TwoLevelGrid::TwoLevelGrid(glm::ivec3 topLevelBrickDims)
   : buffer(1'000'000'000, "World"),
     topLevelBricksDims_(topLevelBrickDims),

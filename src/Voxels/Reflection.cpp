@@ -749,20 +749,14 @@ void Core::Reflection::Initialize()
   // TODO: TEMP
   REFLECT_COMPONENT(LocalPlayer, REPLICATED);
 
-  REFLECT_TYPE(Serialization::SerializedEntityBundle)
-    DATA(Serialization::SerializedEntityBundle, entities)
-    DATA(Serialization::SerializedEntityBundle, serializedEntities);
-
   REFLECT_ENUM(Networking::ClientStatus)
     ENUMERATOR(Networking::ClientStatus, Resolving)
     ENUMERATOR(Networking::ClientStatus, Joining)
     ENUMERATOR(Networking::ClientStatus, Connected)
     ENUMERATOR(Networking::ClientStatus, Disconnected);
 
-  REFLECT_TYPE(Serialization::Packet)
-    DATA(Serialization::Packet, type)
-    DATA(Serialization::Packet, bytes);
-
   entt::meta_factory<const char*>().conv<std::string>().conv<std::string_view>();
   entt::meta_factory<char*>().conv<std::string>().conv<std::string_view>();
+
+  REFLECT_ENUM(Networking::PacketType);
 }

@@ -1,5 +1,9 @@
 #pragma once
+#include "Assert2.h"
+
 #include "entt/fwd.hpp"
+#include "entt/meta/resolve.hpp"
+#include "entt/meta/meta.hpp"
 
 #include <filesystem>
 #include <vector>
@@ -18,41 +22,21 @@ namespace Core::Serialization
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path);
   void LoadRegistryFromFile(World& world, const std::filesystem::path& path);
 
-  std::vector<char> SerializeEntity(const World& world, entt::entity entity);
-  void DeserializeEntity(World& world, std::span<const char> entityBytes, std::unordered_map<entt::entity, entt::entity>& remoteToLocal);
-
-  // Contains entities that may be part of the same hierarchy.
-  // This is like, totally temporary.
-  struct SerializedEntityBundle
-  {
-    std::vector<entt::entity> entities;
-    std::vector<std::vector<char>> serializedEntities;
-  };
-
-  std::vector<char> SerializeEntityBundle(const SerializedEntityBundle& bundle);
-  SerializedEntityBundle DeserializeEntityBundle(std::span<const char> bundleBytes);
-
-  std::vector<char> SerializeTwoLevelGrid(const TwoLevelGrid& grid);
-  std::unique_ptr<TwoLevelGrid> DeserializeTwoLevelGrid(std::span<const char> gridBytes);
-
-  struct Packet
-  {
-    entt::id_type type{};
-    std::vector<char> bytes;
-  };
-
-  std::vector<char> SerializePacket(const Packet& packet);
-  Packet DeserializePacket(std::span<const char> packetBytes);
-
-  std::vector<char> SerializeInputState(const InputState& inputState);
-  InputState DeserializeInputState(std::span<const char> inputStateBytes);
-
-  std::vector<char> SerializeEntityId(entt::entity entity);
-  entt::entity DeserializeEntityId(std::span<const char> entityIdBytes);
+  void SerializeEntity(std::stringstream& stream, const World& world, entt::entity entity);
+  void DeserializeEntity(std::stringstream& stream, World& world, std::unordered_map<entt::entity, entt::entity>& remoteToLocal);
 
   // Serialize and deserialize anything to binary.
   void SerializeObjectStream(std::stringstream& stream, entt::meta_any object);
-  entt::meta_any DeserializeObjectStream(std::stringstream& stream);
+  entt::meta_any DeserializeObjectStream(std::stringstream& stream, const entt::meta_type& type);
+
+  template<typename T>
+  T DeserializeObjectStream(std::stringstream& stream)
+  {
+    auto meta = DeserializeObjectStream(stream, entt::resolve<T>());
+    auto object = meta.try_cast<T>();
+    ASSERT(object);
+    return std::move(*object); // Required for non-copyable types.
+  }
 
   std::vector<char> SerializeObject(entt::meta_any object);
   entt::meta_any DeserializeObject(std::span<const char> objectBytes);
