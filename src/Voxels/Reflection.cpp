@@ -396,6 +396,10 @@ void Core::Reflection::Initialize()
       return value;                                                           \
     }>("value"_hs)
 
+  #define REGISTER_RPC(Function, Traits) \
+    entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
+    .traits<RpcTraits>(Traits)
+
   entt::meta_factory<int>().func<&EditorWriteScalar<int>>("EditorWrite"_hs).func<&EditorReadScalar<int>>("EditorRead"_hs);
   entt::meta_factory<uint32_t>().func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint32_t>>("EditorRead"_hs);
   entt::meta_factory<uint16_t>().func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint16_t>>("EditorRead"_hs);
@@ -459,9 +463,10 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(Player, EDITOR_READ_ONLY | REPLICATED)
     DATA(Player, id)
-    DATA(Player, inventoryIsOpen);
+    DATA(Player, inventoryIsOpen)
+    TRAITS(TRANSIENT);
 
-  REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY)
+  REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
     DATA(InputState, strafe)
     DATA(InputState, forward)
     DATA(InputState, elevate)
@@ -472,7 +477,7 @@ void Core::Reflection::Initialize()
     DATA(InputState, useSecondary)
     DATA(InputState, interact);
 
-  REFLECT_COMPONENT(InputLookState, EDITOR_READ_ONLY | REPLICATED)
+  REFLECT_COMPONENT(InputLookState, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
     DATA(InputLookState, pitch)
     DATA(InputLookState, yaw);
 
@@ -759,4 +764,27 @@ void Core::Reflection::Initialize()
   entt::meta_factory<char*>().conv<std::string>().conv<std::string_view>();
 
   REFLECT_ENUM(Networking::PacketType);
+
+  entt::meta_factory<RpcTraits>().func<[](World& world, entt::entity entity, InputState is, InputLookState ils)
+  {
+    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
+    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
+  }>("UpdatePlayerInput"_hs).traits(RpcTraits::Server);
+
+  REFLECT_TYPE(ItemIdAndCount)
+    DATA(ItemIdAndCount, item)
+    DATA(ItemIdAndCount, count);
+
+  REFLECT_TYPE(Crafting::Recipe)
+    DATA(Crafting::Recipe, ingredients)
+    DATA(Crafting::Recipe, output)
+    DATA(Crafting::Recipe, craftingStation);
+
+  REFLECT_ENUM(voxel_t);
+
+  REGISTER_RPC(DropItemRPC, RpcTraits::Server);
+  REGISTER_RPC(ThrowItemRPC, RpcTraits::Server);
+  REGISTER_RPC(TryCraftRecipeRPC, RpcTraits::Server);
+  REGISTER_RPC(SwapInventorySlotsRPC, RpcTraits::Server);
+  REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
 }

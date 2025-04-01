@@ -20,6 +20,7 @@
 #ifdef JPH_DEBUG_RENDERER
 #include "Physics/DebugRenderer.h"
 #endif
+#include "Networking/RPC.h"
 
 #include "volk.h"
 #include "Fvog/detail/ApiToEnum2.h"
@@ -989,9 +990,8 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
 
 // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
 // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
-static void DrawInventory(World& world, entt::entity parent, const GlobalTransform& userTransform, Inventory& inventory, bool minified = false)
+static void DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
 {
-  auto& registry = world.GetRegistry();
   struct InventoryDragDropPayload
   {
     glm::ivec2 sourceRowCol;
@@ -1027,7 +1027,7 @@ static void DrawInventory(World& world, entt::entity parent, const GlobalTransfo
         const auto cursorPos = ImGui::GetCursorPos();
         if (ImGui::Selectable(("##" + nameStr).c_str(), inventory.canHaveActiveItem && inventory.activeSlotCoord == currentSlotCoord, 0, {50, 50}))
         {
-          inventory.SetActiveSlot(world, currentSlotCoord, parent);
+          Networking::CallRPC("SetActiveSlotRPC"_hs, world, parent, currentSlotCoord);
         }
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
         {
@@ -1045,7 +1045,7 @@ static void DrawInventory(World& world, entt::entity parent, const GlobalTransfo
           {
             assert(payload->DataSize == sizeof(InventoryDragDropPayload));
             const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
-            SwapInventorySlots(world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, currentSlotCoord);
+            Networking::CallRPC("SwapInventorySlotsRPC"_hs, world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, currentSlotCoord);
           }
           ImGui::EndDragDropTarget();
         }
@@ -1073,20 +1073,7 @@ static void DrawInventory(World& world, entt::entity parent, const GlobalTransfo
           assert(payload->DataSize == sizeof(InventoryDragDropPayload));
           const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
 
-          if (registry.valid(inventoryPayload.sourceEntity))
-          {
-            if (auto* plInventory = registry.try_get<Inventory>(inventoryPayload.sourceEntity))
-            {
-              if (auto dropped = plInventory->DropItem(world, inventoryPayload.sourceRowCol); dropped != entt::null)
-              {
-                const auto throwdir                                       = GetForward(userTransform.rotation);
-                const auto pos                                            = userTransform.position + throwdir * 1.0f;
-                world.GetRegistry().get<LocalTransform>(dropped).position = pos;
-                world.GetRegistry().get<LinearVelocity>(dropped).v        = throwdir * 3.0f;
-                UpdateLocalTransform({world.GetRegistry(), dropped});
-              }
-            }
-          }
+          Networking::CallRPC("ThrowItemRPC"_hs, world, inventoryPayload.sourceEntity, user, inventoryPayload.sourceRowCol);
         }
         ImGui::EndDragDropTarget();
       }
@@ -1218,14 +1205,14 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    DrawInventory(world, playerEntity, gt, inventory, !p.inventoryIsOpen);
+    DrawInventory(world, playerEntity, playerEntity, inventory, !p.inventoryIsOpen);
 
     if (world.GetRegistry().valid(p.openContainerId))
     {
       if (auto* ip = world.GetRegistry().try_get<Inventory>(p.openContainerId))
       {
         p.inventoryIsOpen = true;
-        DrawInventory(world, p.openContainerId, gt, *ip);
+        DrawInventory(world, p.openContainerId, playerEntity, *ip);
       }
     }
 
@@ -1272,7 +1259,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::BeginDisabled(!inventory.CanCraftRecipe(recipe) || !nearVoxels.contains(recipe.craftingStation));
           if (ImGui::Button("Craft"))
           {
-            inventory.CraftRecipe(world, recipe, playerEntity);
+            Networking::CallRPC("TryCraftRecipeRPC"_hs, world, playerEntity, recipe);
           }
           ImGui::Text("Output");
           ImGui::Indent();

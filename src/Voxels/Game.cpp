@@ -18,6 +18,7 @@
 #include "Assert2.h"
 #include "Networking/Client.h"
 #include "Networking/Server.h"
+#include "Networking/RPC.h"
 
 #include "entt/entity/handle.hpp"
 
@@ -1050,12 +1051,15 @@ void World::FixedUpdate(float dt)
       interpolatedTransform.scale    = transform.scale;
     }
 
-    for (auto entity : registry_.view<LocalPlayer, Hierarchy>())
+    for (auto entity : registry_.view<LocalPlayer>())
     {
       UpdateLocalTransform({registry_, entity});
     }
 
-    registry_.ctx().get<NpcSpawnDirector>().Update(dt);
+    if (IsServer())
+    {
+      registry_.ctx().get<NpcSpawnDirector>().Update(dt);
+    }
     
     Physics::FixedUpdate(dt, *this);
 
@@ -1068,161 +1072,171 @@ void World::FixedUpdate(float dt)
     }
 
     // Process linear transform paths
-    for (auto&& [entity, linearPath, transform] : registry_.view<LinearPath, LocalTransform>().each())
+    if (IsServer())
     {
-      ASSERT(!linearPath.frames.empty());
-      if (linearPath.secondsElapsed <= 0)
+      for (auto&& [entity, linearPath, transform] : registry_.view<LinearPath, LocalTransform>().each())
       {
-        linearPath.originalLocalTransform = transform;
-      }
+        ASSERT(!linearPath.frames.empty());
+        if (linearPath.secondsElapsed <= 0)
+        {
+          linearPath.originalLocalTransform = transform;
+        }
 
-      linearPath.secondsElapsed += dt;
+        linearPath.secondsElapsed += dt;
 
-      // See if the path is finished, reset original transform
-      {
-        float sum = 0;
+        // See if the path is finished, reset original transform
+        {
+          float sum = 0;
+          for (const auto& frame : linearPath.frames)
+          {
+            sum += frame.offsetSeconds;
+          }
+          if (linearPath.secondsElapsed > sum)
+          {
+            transform = linearPath.originalLocalTransform;
+            registry_.remove<LinearPath>(entity);
+            continue;
+          }
+        }
+
+        // Locate frames to interpolate between with simple linear search
+        LinearPath::KeyFrame firstFrame;
+        LinearPath::KeyFrame secondFrame = {};
+        float sum                        = 0;
         for (const auto& frame : linearPath.frames)
         {
+          firstFrame  = secondFrame;
+          secondFrame = frame;
           sum += frame.offsetSeconds;
+          if (sum >= linearPath.secondsElapsed)
+          {
+            break;
+          }
         }
-        if (linearPath.secondsElapsed > sum)
-        {
-          transform = linearPath.originalLocalTransform;
-          registry_.remove<LinearPath>(entity);
-          continue;
-        }
+
+        // Do da interpolate
+        const float alpha = Math::Ease((linearPath.secondsElapsed - firstFrame.offsetSeconds) / (sum - firstFrame.offsetSeconds), secondFrame.easing);
+        const glm::vec3 newRelativePosition = glm::mix(firstFrame.position, secondFrame.position, alpha);
+        const glm::quat newRelativeRotation = glm::slerp(firstFrame.rotation, secondFrame.rotation, alpha);
+        const float newRelativeScale        = glm::mix(firstFrame.scale, secondFrame.scale, alpha);
+
+        // Apply new relative transform stuff relatively to the original transform
+        transform.position = linearPath.originalLocalTransform.position + newRelativePosition;
+        transform.rotation = linearPath.originalLocalTransform.rotation * newRelativeRotation;
+        transform.scale    = linearPath.originalLocalTransform.scale * newRelativeScale;
+
+        UpdateLocalTransform({registry_, entity});
       }
-
-      // Locate frames to interpolate between with simple linear search
-      LinearPath::KeyFrame firstFrame;
-      LinearPath::KeyFrame secondFrame = {};
-      float sum                        = 0;
-      for (const auto& frame : linearPath.frames)
-      {
-        firstFrame = secondFrame;
-        secondFrame = frame;
-        sum += frame.offsetSeconds;
-        if (sum >= linearPath.secondsElapsed)
-        {
-          break;
-        }
-      }
-
-      // Do da interpolate
-      const float alpha                   = Math::Ease((linearPath.secondsElapsed - firstFrame.offsetSeconds) / (sum - firstFrame.offsetSeconds), secondFrame.easing);
-      const glm::vec3 newRelativePosition = glm::mix(firstFrame.position, secondFrame.position, alpha);
-      const glm::quat newRelativeRotation = glm::slerp(firstFrame.rotation, secondFrame.rotation, alpha);
-      const float newRelativeScale        = glm::mix(firstFrame.scale, secondFrame.scale, alpha);
-
-      // Apply new relative transform stuff relatively to the original transform
-      transform.position = linearPath.originalLocalTransform.position + newRelativePosition;
-      transform.rotation = linearPath.originalLocalTransform.rotation * newRelativeRotation;
-      transform.scale    = linearPath.originalLocalTransform.scale * newRelativeScale;
-
-      UpdateLocalTransform({registry_, entity});
     }
 
     // Avians
-    for (auto&& [entity, input, transform, behavior] : registry_.view<InputState, LocalTransform, PredatoryBirdBehavior>().each())
+    if (IsServer())
     {
-      behavior.accum += dt;
-
-      const auto nearestPlayer = GetNearestPlayer(transform.position);
-
-      if (nearestPlayer != entt::null)
+      for (auto&& [entity, input, transform, behavior] : registry_.view<InputState, LocalTransform, PredatoryBirdBehavior>().each())
       {
-        const auto& pt = registry_.get<GlobalTransform>(nearestPlayer);
-        if (glm::distance(pt.position, transform.position) < 20)
-        {
-          behavior.target = nearestPlayer;
+        behavior.accum += dt;
 
-          if (behavior.state == PredatoryBirdBehavior::State::IDLE)
+        const auto nearestPlayer = GetNearestPlayer(transform.position);
+
+        if (nearestPlayer != entt::null)
+        {
+          const auto& pt = registry_.get<GlobalTransform>(nearestPlayer);
+          if (glm::distance(pt.position, transform.position) < 20)
           {
-            behavior.state = PredatoryBirdBehavior::State::CIRCLING;
-            behavior.accum = 0;
+            behavior.target = nearestPlayer;
+
+            if (behavior.state == PredatoryBirdBehavior::State::IDLE)
+            {
+              behavior.state = PredatoryBirdBehavior::State::CIRCLING;
+              behavior.accum = 0;
+            }
+          }
+          else if (behavior.state != PredatoryBirdBehavior::State::IDLE || behavior.accum < 0.2f) // Hack to prevent idle position from being jacked up when spawning
+          {
+            behavior.state        = PredatoryBirdBehavior::State::IDLE;
+            behavior.idlePosition = transform.position + glm::vec3(0, 0, 0);
           }
         }
-        else if (behavior.state != PredatoryBirdBehavior::State::IDLE || behavior.accum < 0.2f) // Hack to prevent idle position from being jacked up when spawning
+        else if (behavior.state != PredatoryBirdBehavior::State::IDLE)
         {
-          behavior.state = PredatoryBirdBehavior::State::IDLE;
+          behavior.state        = PredatoryBirdBehavior::State::IDLE;
           behavior.idlePosition = transform.position + glm::vec3(0, 0, 0);
         }
-      }
-      else if (behavior.state != PredatoryBirdBehavior::State::IDLE)
-      {
-        behavior.state = PredatoryBirdBehavior::State::IDLE;
-        behavior.idlePosition = transform.position + glm::vec3(0, 0, 0);
-      }
 
-      // Birds always be moving forward.
-      input.forward = 1;
+        // Birds always be moving forward.
+        input.forward = 1;
 
-      switch (behavior.state)
-      {
-      case PredatoryBirdBehavior::State::IDLE:
-      {
-        const auto target = behavior.idlePosition + glm::vec3(sin(behavior.accum * 1.2f) * 8, 2 + sin(behavior.accum * 4) * 2, cos(behavior.accum * 1.2f) * 8);
-        transform.rotation = glm::quatLookAtRH(glm::normalize(target - transform.position), {0, 1, 0});
-        input.forward      = 0.5f;
-        break;
-      }
-      case PredatoryBirdBehavior::State::CIRCLING:
-      {
-        const auto& pt = registry_.get<GlobalTransform>(behavior.target);
-        const auto target = pt.position + glm::vec3(sin(behavior.accum * 1.2f) * 8, 4 + sin(behavior.accum * 4) * 2, cos(behavior.accum * 1.2f) * 8);
-
-        transform.rotation = glm::quatLookAtRH(glm::normalize(target - transform.position), {0, 1, 0});
-        
-        auto rayCast = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(target - transform.position));
-        auto result  = JPH::RayCastResult();
-        const bool hit = Physics::GetNarrowPhaseQuery().CastRay(rayCast,
-          result,
-          Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD),
-          Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_WORLD));
-        if (!hit)
+        switch (behavior.state)
         {
-          behavior.lineOfSightDuration += dt;
-          if (behavior.accum >= 5.0f && behavior.lineOfSightDuration >= 1)
+        case PredatoryBirdBehavior::State::IDLE:
+        {
+          const auto target = behavior.idlePosition + glm::vec3(sin(behavior.accum * 1.2f) * 8, 2 + sin(behavior.accum * 4) * 2, cos(behavior.accum * 1.2f) * 8);
+          transform.rotation = glm::quatLookAtRH(glm::normalize(target - transform.position), {0, 1, 0});
+          input.forward      = 0.5f;
+          break;
+        }
+        case PredatoryBirdBehavior::State::CIRCLING:
+        {
+          const auto& pt    = registry_.get<GlobalTransform>(behavior.target);
+          const auto target = pt.position + glm::vec3(sin(behavior.accum * 1.2f) * 8, 4 + sin(behavior.accum * 4) * 2, cos(behavior.accum * 1.2f) * 8);
+
+          transform.rotation = glm::quatLookAtRH(glm::normalize(target - transform.position), {0, 1, 0});
+
+          auto rayCast   = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(target - transform.position));
+          auto result    = JPH::RayCastResult();
+          const bool hit = Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+            result,
+            Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD),
+            Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_WORLD));
+          if (!hit)
+          {
+            behavior.lineOfSightDuration += dt;
+            if (behavior.accum >= 5.0f && behavior.lineOfSightDuration >= 1)
+            {
+              behavior.accum = 0;
+              behavior.state = PredatoryBirdBehavior::State::SWOOPING;
+            }
+          }
+          else
+          {
+            behavior.lineOfSightDuration = 0;
+          }
+          break;
+        }
+        case PredatoryBirdBehavior::State::SWOOPING:
+        {
+          const auto& pt     = registry_.get<GlobalTransform>(behavior.target);
+          transform.rotation = glm::quatLookAtRH(glm::normalize(pt.position - transform.position), {0, 1, 0});
+
+          if (glm::distance(pt.position, transform.position) < 1.5f || behavior.accum > 5.0f)
           {
             behavior.accum = 0;
-            behavior.state = PredatoryBirdBehavior::State::SWOOPING;
+            behavior.state = PredatoryBirdBehavior::State::CIRCLING;
           }
-        }
-        else
-        {
-          behavior.lineOfSightDuration = 0;
-        }
-        break;
-      }
-      case PredatoryBirdBehavior::State::SWOOPING:
-      {
-        const auto& pt    = registry_.get<GlobalTransform>(behavior.target);
-        transform.rotation = glm::quatLookAtRH(glm::normalize(pt.position - transform.position), {0, 1, 0});
 
-        if (glm::distance(pt.position, transform.position) < 1.5f || behavior.accum > 5.0f)
-        {
-          behavior.accum = 0;
-          behavior.state = PredatoryBirdBehavior::State::CIRCLING;
+          break;
+        }
+        default:;
         }
 
-        break;
+        UpdateLocalTransform({registry_, entity});
       }
-      default:;
-      }
-
-      UpdateLocalTransform({registry_, entity});
     }
 
     // Reset AI targets if target is invalid or dead.
-    for (auto&& [entity, target] : registry_.view<AiTarget>().each())
+    if (IsServer())
     {
-      if (!registry_.valid(target.currentTarget) || registry_.all_of<GhostPlayer>(target.currentTarget))
+      for (auto&& [entity, target] : registry_.view<AiTarget>().each())
       {
-        target.currentTarget = entt::null;
+        if (!registry_.valid(target.currentTarget) || registry_.all_of<GhostPlayer>(target.currentTarget))
+        {
+          target.currentTarget = entt::null;
+        }
       }
     }
 
     // Generate input for enemies
+    if (IsServer())
     {
       ZoneScopedN("Pathfinding");
       // Won't work if entity is a child.
@@ -1461,334 +1475,364 @@ void World::FixedUpdate(float dt)
     }
 
     // Apply input (could be generated by players or NPCs!)
-    for (auto&& [entity, input, transform] : registry_.view<InputState, LocalTransform>(entt::exclude<GhostPlayer>).each())
+    if (IsServer())
     {
-      // Movement
-      if (registry_.all_of<NoclipCharacterController>(entity))
+      for (auto&& [entity, input, transform] : registry_.view<InputState, LocalTransform>(entt::exclude<GhostPlayer>).each())
       {
-        const auto right     = GetRight(transform.rotation);
-        const auto forward   = GetForward(transform.rotation);
-        auto tempCameraSpeed = 14.5f;
-        tempCameraSpeed *= input.sprint ? 4.0f : 1.0f;
-        tempCameraSpeed *= input.walk ? 0.25f : 1.0f;
-        auto velocity = glm::vec3(0);
-        velocity += input.forward * forward * tempCameraSpeed;
-        velocity += input.strafe * right * tempCameraSpeed;
-        velocity.y += input.elevate * tempCameraSpeed;
-        transform.position += velocity * dt;
-        UpdateLocalTransform({registry_, entity});
-        registry_.get_or_emplace<LinearVelocity>(entity).v = velocity;
-      }
-
-      if (auto* fc = registry_.try_get<FlyingCharacterController>(entity))
-      {
-        auto& velocity       = registry_.get<LinearVelocity>(entity).v;
-        const auto right     = GetRight(transform.rotation);
-        const auto forward   = GetForward(transform.rotation);
-        const auto dv = fc->acceleration * dt;
-
-        velocity += input.forward * forward * dv;
-        velocity += input.strafe * right * dv;
-        velocity += input.elevate * glm::vec3(0, 1, 0) * dv;
-
-        if (glm::length(velocity) > fc->maxSpeed)
+        // Movement
+        if (registry_.all_of<NoclipCharacterController>(entity))
         {
-          velocity = glm::normalize(velocity) * fc->maxSpeed;
+          const auto right     = GetRight(transform.rotation);
+          const auto forward   = GetForward(transform.rotation);
+          auto tempCameraSpeed = 14.5f;
+          tempCameraSpeed *= input.sprint ? 4.0f : 1.0f;
+          tempCameraSpeed *= input.walk ? 0.25f : 1.0f;
+          auto velocity = glm::vec3(0);
+          velocity += input.forward * forward * tempCameraSpeed;
+          velocity += input.strafe * right * tempCameraSpeed;
+          velocity.y += input.elevate * tempCameraSpeed;
+          transform.position += velocity * dt;
+          UpdateLocalTransform({registry_, entity});
+          registry_.get_or_emplace<LinearVelocity>(entity).v = velocity;
         }
 
-        transform.position += velocity * dt;
-
-        UpdateLocalTransform({registry_, entity});
-      }
-
-      if (auto* attribs = registry_.try_get<WalkingMovementAttributes>(entity);
-        attribs && registry_.any_of<Physics::CharacterController, Physics::CharacterControllerShrimple>(entity))
-      {
-        const auto rot   = glm::mat3_cast(transform.rotation);
-        const auto right = rot[0];
-        const auto gUp   = glm::vec3(0, 1, 0);
-        // right and up will never be collinear if roll doesn't change
-        const auto forward = glm::normalize(glm::cross(gUp, right));
-
-        // Physics engine factors in deltaTime already
-        float tempSpeed = attribs->runBaseSpeed;
-        //tempSpeed *= input.sprint ? 2.0f : 1.0f;
-        tempSpeed *= input.walk ? attribs->walkModifier : 1.0f;
-
-        auto deltaVelocity = glm::vec3(0);
-        deltaVelocity += input.forward * forward * tempSpeed;
-        deltaVelocity += input.strafe * right * tempSpeed;
-
-        if (auto* cc = registry_.try_get<Physics::CharacterController>(entity))
+        if (auto* fc = registry_.try_get<FlyingCharacterController>(entity))
         {
-          auto& velocity    = registry_.get<LinearVelocity>(entity).v;
-          auto prevVelocity = velocity;
-          if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround)
+          auto& velocity     = registry_.get<LinearVelocity>(entity).v;
+          const auto right   = GetRight(transform.rotation);
+          const auto forward = GetForward(transform.rotation);
+          const auto dv      = fc->acceleration * dt;
+
+          velocity += input.forward * forward * dv;
+          velocity += input.strafe * right * dv;
+          velocity += input.elevate * glm::vec3(0, 1, 0) * dv;
+
+          if (glm::length(velocity) > fc->maxSpeed)
           {
-            deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
-            prevVelocity.y = 0;
+            velocity = glm::normalize(velocity) * fc->maxSpeed;
           }
-          else // if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::InAir)
-          {
-            const auto prevY = velocity.y;
-            //const auto prevY = cc->character->GetPosition().GetY() - cc->previousPosition.y;
-            deltaVelocity += glm::vec3{0, prevY - 15 * dt, 0};
-            // velocity += glm::vec3{0, -15 * dt, 0};
-          }
-          
-          // cc->character->CheckCollision(cc->character->GetPosition(), cc->character->GetRotation(), Physics::ToJolt(velocity), 1e-4f, )
-          velocity = deltaVelocity;
-          // printf("ground state: %d. height = %f. velocity.y = %f\n", (int)cc->character->GetGroundState(), cc->character->GetPosition().GetY(), velocity.y);
-          // cc->character->AddLinearVelocity(Physics::ToJolt(velocity ));
-          // cc->character->AddImpulse(Physics::ToJolt(velocity));
+
+          transform.position += velocity * dt;
+
+          UpdateLocalTransform({registry_, entity});
         }
 
-        if (auto* cs = registry_.try_get<Physics::CharacterControllerShrimple>(entity))
+        if (auto* attribs = registry_.try_get<WalkingMovementAttributes>(entity);
+          attribs && registry_.any_of<Physics::CharacterController, Physics::CharacterControllerShrimple>(entity))
         {
-          auto velocity                  = registry_.get<LinearVelocity>(entity).v;
-          auto& friction                 = registry_.get_or_emplace<Friction>(entity).axes;
-          constexpr auto groundFriction = glm::vec3(6.0f);
-          friction                 = groundFriction;
-          if (cs->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround)
+          const auto rot   = glm::mat3_cast(transform.rotation);
+          const auto right = rot[0];
+          const auto gUp   = glm::vec3(0, 1, 0);
+          // right and up will never be collinear if roll doesn't change
+          const auto forward = glm::normalize(glm::cross(gUp, right));
+
+          // Physics engine factors in deltaTime already
+          float tempSpeed = attribs->runBaseSpeed;
+          // tempSpeed *= input.sprint ? 2.0f : 1.0f;
+          tempSpeed *= input.walk ? attribs->walkModifier : 1.0f;
+
+          auto deltaVelocity = glm::vec3(0);
+          deltaVelocity += input.forward * forward * tempSpeed;
+          deltaVelocity += input.strafe * right * tempSpeed;
+
+          if (auto* cc = registry_.try_get<Physics::CharacterController>(entity))
           {
-            deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
-            // Make it possible to launch entities up with an impulse
-            if (cs->previousGroundState == JPH::CharacterBase::EGroundState::OnGround)
+            auto& velocity    = registry_.get<LinearVelocity>(entity).v;
+            auto prevVelocity = velocity;
+            if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround)
             {
-              velocity.y = 0;
+              deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
+              prevVelocity.y = 0;
             }
+            else // if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::InAir)
+            {
+              const auto prevY = velocity.y;
+              // const auto prevY = cc->character->GetPosition().GetY() - cc->previousPosition.y;
+              deltaVelocity += glm::vec3{0, prevY - 15 * dt, 0};
+              // velocity += glm::vec3{0, -15 * dt, 0};
+            }
+
+            // cc->character->CheckCollision(cc->character->GetPosition(), cc->character->GetRotation(), Physics::ToJolt(velocity), 1e-4f, )
+            velocity = deltaVelocity;
+            // printf("ground state: %d. height = %f. velocity.y = %f\n", (int)cc->character->GetGroundState(), cc->character->GetPosition().GetY(),
+            // velocity.y); cc->character->AddLinearVelocity(Physics::ToJolt(velocity )); cc->character->AddImpulse(Physics::ToJolt(velocity));
           }
-          else
+
+          if (auto* cs = registry_.try_get<Physics::CharacterControllerShrimple>(entity))
           {
-            constexpr float airControl = 0.4f;
-            constexpr auto airFriction = glm::vec3(0.05f);
-            friction                    = airFriction;
-            deltaVelocity.x *= airControl;
-            deltaVelocity.z *= airControl;
-            //const auto prevY = cs->character->GetLinearVelocity().GetY();
-            //deltaVelocity += glm::vec3{0, prevY - 15 * dt, 0};
-            deltaVelocity += glm::vec3{0, -15 * dt, 0};
+            auto velocity                 = registry_.get<LinearVelocity>(entity).v;
+            auto& friction                = registry_.get_or_emplace<Friction>(entity).axes;
+            constexpr auto groundFriction = glm::vec3(6.0f);
+            friction                      = groundFriction;
+            if (cs->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround)
+            {
+              deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
+              // Make it possible to launch entities up with an impulse
+              if (cs->previousGroundState == JPH::CharacterBase::EGroundState::OnGround)
+              {
+                velocity.y = 0;
+              }
+            }
+            else
+            {
+              constexpr float airControl = 0.4f;
+              constexpr auto airFriction = glm::vec3(0.05f);
+              friction                   = airFriction;
+              deltaVelocity.x *= airControl;
+              deltaVelocity.z *= airControl;
+              // const auto prevY = cs->character->GetLinearVelocity().GetY();
+              // deltaVelocity += glm::vec3{0, prevY - 15 * dt, 0};
+              deltaVelocity += glm::vec3{0, -15 * dt, 0};
+            }
+            friction.y = 0;
+
+            // Apply friction
+            auto newVelocity = glm::vec3(velocity.x, 0, velocity.z);
+            // newVelocity -= friction * newVelocity * dt;
+
+            // Apply dv
+            newVelocity.x += deltaVelocity.x;
+            newVelocity.z += deltaVelocity.z;
+
+            // Clamp xz speed
+            const float speed = glm::length(newVelocity);
+            if (speed > attribs->runMaxSpeed)
+            {
+              newVelocity = glm::normalize(newVelocity) * attribs->runMaxSpeed;
+            }
+
+            // Y is not affected by speed clamp or friction
+            newVelocity.y = velocity.y + deltaVelocity.y;
+
+            registry_.get<LinearVelocity>(entity).v = newVelocity;
           }
-          friction.y               = 0;
-
-          // Apply friction
-          auto newVelocity = glm::vec3(velocity.x, 0, velocity.z);
-          //newVelocity -= friction * newVelocity * dt;
-
-          // Apply dv
-          newVelocity.x += deltaVelocity.x;
-          newVelocity.z += deltaVelocity.z;
-
-          // Clamp xz speed
-          const float speed = glm::length(newVelocity);
-          if (speed > attribs->runMaxSpeed)
-          {
-            newVelocity = glm::normalize(newVelocity) * attribs->runMaxSpeed;
-          }
-
-          // Y is not affected by speed clamp or friction
-          newVelocity.y = velocity.y + deltaVelocity.y;
-          
-          registry_.get<LinearVelocity>(entity).v = newVelocity;
         }
       }
     }
 
     // Close open containers if too far away.
-    for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>().each())
+    if (IsServer())
     {
-      if (registry_.valid(player.openContainerId))
+      for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>().each())
       {
-        player.showInteractPrompt = false;
-        if (!registry_.all_of<Inventory>(player.openContainerId))
+        if (registry_.valid(player.openContainerId))
         {
-          player.openContainerId = entt::null;
-          continue;
-        }
+          player.showInteractPrompt = false;
+          if (!registry_.all_of<Inventory>(player.openContainerId))
+          {
+            player.openContainerId = entt::null;
+            continue;
+          }
 
-        if (auto* ct = registry_.try_get<GlobalTransform>(player.openContainerId); ct && glm::distance(transform.position, ct->position) > 6)
+          if (auto* ct = registry_.try_get<GlobalTransform>(player.openContainerId); ct && glm::distance(transform.position, ct->position) > 6)
+          {
+            player.openContainerId = entt::null;
+            continue;
+          }
+        }
+        else
         {
           player.openContainerId = entt::null;
-          continue;
         }
-      }
-      else
-      {
-        player.openContainerId = entt::null;
       }
     }
 
     // Player interaction
-    for (auto&& [entity, player, transform, input, inventory] : registry_.view<Player, GlobalTransform, InputState, Inventory>(entt::exclude<GhostPlayer>).each())
+    if (IsServer())
     {
-      const auto forward = GetForward(transform.rotation);
-      constexpr float RAY_LENGTH = 4.0f;
-      auto rayCast       = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(forward * RAY_LENGTH));
-      entt::entity hitEntity = entt::null;
-      
-      auto result = JPH::RayCastResult();
-      if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
-            result,
-            Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
-            Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
-            *Physics::GetIgnoreEntityAndChildrenFilter({registry_, entity})))
+      for (auto&& [entity, player, transform, input, inventory] : registry_.view<Player, GlobalTransform, InputState, Inventory>(entt::exclude<GhostPlayer>).each())
       {
-        hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
-        if (registry_.valid(hitEntity))
+        const auto forward         = GetForward(transform.rotation);
+        constexpr float RAY_LENGTH = 4.0f;
+        auto rayCast               = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(forward * RAY_LENGTH));
+        entt::entity hitEntity     = entt::null;
+
+        auto result = JPH::RayCastResult();
+        if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+              result,
+              Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              *Physics::GetIgnoreEntityAndChildrenFilter({registry_, entity})))
         {
-          // Ray actually hit a voxel... see if it hit a voxel with a corresponding block entity.
-          if (registry_.all_of<Voxels>(hitEntity))
+          hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
+          if (registry_.valid(hitEntity))
           {
-            const auto hitPos = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
-            const auto voxelHitPos = glm::ivec3(hitPos);
-            if (auto e2 = GetBlockEntity(voxelHitPos); e2 != entt::null)
+            // Ray actually hit a voxel... see if it hit a voxel with a corresponding block entity.
+            if (registry_.all_of<Voxels>(hitEntity))
             {
-              hitEntity = e2;
+              const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
+              const auto voxelHitPos = glm::ivec3(hitPos);
+              if (auto e2 = GetBlockEntity(voxelHitPos); e2 != entt::null)
+              {
+                hitEntity = e2;
+              }
+            }
+
+            if (auto [e3, _] = GetComponentFromAncestorOrDescendant<Inventory>(hitEntity); e3 != entt::null)
+            {
+              hitEntity                 = e3;
+              player.showInteractPrompt = true;
+            }
+            else
+            {
+              player.showInteractPrompt = false;
             }
           }
+        }
+        else
+        {
+          player.showInteractPrompt = false;
+        }
 
-          if (auto [e3, _] = GetComponentFromAncestorOrDescendant<Inventory>(hitEntity); e3 != entt::null)
+        if (input.interact)
+        {
+          if (registry_.valid(hitEntity))
           {
-            hitEntity                 = e3;
-            player.showInteractPrompt = true;
-          }
-          else
-          {
-            player.showInteractPrompt = false;
+            if (auto [ent, inv] = GetComponentFromAncestor<Inventory>(hitEntity); inv)
+            {
+              player.openContainerId = ent;
+            }
           }
         }
-      }
-      else
-      {
-        player.showInteractPrompt = false;
-      }
 
-      if (input.interact)
-      {
-        if (registry_.valid(hitEntity))
+        if (input.usePrimary)
         {
-          if (auto [ent, inv] = GetComponentFromAncestor<Inventory>(hitEntity); inv)
+          if (inventory.ActiveSlot().id != nullItem)
           {
-            player.openContainerId = ent;
-          }
-        }
-      }
-
-      if (input.usePrimary)
-      {
-        if (inventory.ActiveSlot().id != nullItem)
-        {
-          const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
-          def.UsePrimary(dt, *this, inventory.activeSlotEntity, inventory.ActiveSlot());
-          if (inventory.ActiveSlot().count <= 0)
-          {
-            inventory.OverwriteSlot(*this, inventory.activeSlotCoord, {}, entt::null);
+            const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
+            def.UsePrimary(dt, *this, inventory.activeSlotEntity, inventory.ActiveSlot());
+            if (inventory.ActiveSlot().count <= 0)
+            {
+              inventory.OverwriteSlot(*this, inventory.activeSlotCoord, {}, entt::null);
+            }
           }
         }
       }
     }
 
     // Update items in inventories (important to ensure cooldowns, etc. reset even when items are put away).
-    for (auto&& [entity, player, inventory] : registry_.view<Player, Inventory>(entt::exclude<GhostPlayer>).each())
+    if (IsServer())
     {
-      for (size_t row = 0; row < inventory.height; row++)
+      for (auto&& [entity, player, inventory] : registry_.view<Player, Inventory>(entt::exclude<GhostPlayer>).each())
       {
-        for (size_t col = 0; col < inventory.width; col++)
+        for (size_t row = 0; row < inventory.height; row++)
         {
-          auto& slot = inventory.slots[row][col];
-          if (slot.id != nullItem)
+          for (size_t col = 0; col < inventory.width; col++)
           {
-            entt::entity self = entt::null;
-            if (inventory.activeSlotCoord == glm::ivec2{row, col})
+            auto& slot = inventory.slots[row][col];
+            if (slot.id != nullItem)
             {
-              self = inventory.activeSlotEntity;
+              entt::entity self = entt::null;
+              if (inventory.activeSlotCoord == glm::ivec2{row, col})
+              {
+                self = inventory.activeSlotEntity;
+              }
+              registry_.ctx().get<ItemRegistry>().Get(slot.id).Update(dt, *this, self, slot);
             }
-            registry_.ctx().get<ItemRegistry>().Get(slot.id).Update(dt, *this, self, slot);
           }
         }
       }
     }
 
-    for (auto&& [entity, cannotPickUp] : registry_.view<CannotBePickedUp>().each())
+    if (IsServer())
     {
-      cannotPickUp.remainingSeconds -= dt;
-      if (cannotPickUp.remainingSeconds <= 0)
+      for (auto&& [entity, cannotPickUp] : registry_.view<CannotBePickedUp>().each())
       {
-        registry_.remove<CannotBePickedUp>(entity);
+        cannotPickUp.remainingSeconds -= dt;
+        if (cannotPickUp.remainingSeconds <= 0)
+        {
+          registry_.remove<CannotBePickedUp>(entity);
+        }
       }
     }
 
     // Dropped items get sucked towards the player as if by magnetic attraction.
-    for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>(entt::exclude<GhostPlayer>).each())
+    if (IsServer())
     {
-      //for (auto nearEntity : this->GetEntitiesInSphere(transform.position, 2))
-      for (auto nearEntity : this->GetEntitiesInCapsule(transform.position - glm::vec3(0, 1.5f, 0), transform.position + glm::vec3(0, 1.5f, 0), 2))
+      for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
-        if (registry_.all_of<DroppedItem>(nearEntity) && !registry_.any_of<CannotBePickedUp>(nearEntity))
+        //for (auto nearEntity : this->GetEntitiesInSphere(transform.position, 2))
+        for (auto nearEntity : this->GetEntitiesInCapsule(transform.position - glm::vec3(0, 1.5f, 0), transform.position + glm::vec3(0, 1.5f, 0), 2))
         {
-          auto itemPos = registry_.get<GlobalTransform>(nearEntity).position;
-          auto dist         = glm::distance(transform.position, itemPos);
-          auto itemToPlayer = glm::normalize(transform.position - itemPos);
-
-          auto& velocity = registry_.get<LinearVelocity>(nearEntity).v;
-          velocity += 300 * dt * itemToPlayer / (dist * dist);
-          const auto speed = glm::length(velocity);
-          constexpr float maxSpeed = 10;
-          if (speed > maxSpeed)
+          if (registry_.all_of<DroppedItem>(nearEntity) && !registry_.any_of<CannotBePickedUp>(nearEntity))
           {
-            velocity = velocity / speed * maxSpeed;
+            auto itemPos = registry_.get<GlobalTransform>(nearEntity).position;
+            auto dist         = glm::distance(transform.position, itemPos);
+            auto itemToPlayer = glm::normalize(transform.position - itemPos);
+
+            auto& velocity = registry_.get<LinearVelocity>(nearEntity).v;
+            velocity += 300 * dt * itemToPlayer / (dist * dist);
+            const auto speed = glm::length(velocity);
+            constexpr float maxSpeed = 10;
+            if (speed > maxSpeed)
+            {
+              velocity = velocity / speed * maxSpeed;
+            }
           }
         }
       }
     }
 
     // Tick down ghost players
-    for (auto&& [entity, ghost, player] : registry_.view<GhostPlayer, Player>().each())
+    if (IsServer())
     {
-      ghost.remainingSeconds -= dt;
-
-      if (ghost.remainingSeconds <= 0)
+      for (auto&& [entity, ghost, player] : registry_.view<GhostPlayer, Player>().each())
       {
-        RespawnPlayer(entity);
+        ghost.remainingSeconds -= dt;
+
+        if (ghost.remainingSeconds <= 0)
+        {
+          RespawnPlayer(entity);
+        }
       }
     }
 
     // Tick down invulnerability
-    for (auto&& [entity, invulnerability] : registry_.view<Invulnerability>().each())
+    if (IsServer())
     {
-      invulnerability.remainingSeconds -= dt;
-      if (invulnerability.remainingSeconds <= 0)
+      for (auto&& [entity, invulnerability] : registry_.view<Invulnerability>().each())
       {
-        registry_.remove<Invulnerability>(entity);
-      }
-    }
-
-    for (auto&& [entity, cannotDamage] : registry_.view<CannotDamageEntities>().each())
-    {
-      for (auto it = cannotDamage.entities.begin(); it != cannotDamage.entities.end();)
-      {
-        auto& [e, time] = *it;
-        time -= dt;
-        if (time <= 0)
+        invulnerability.remainingSeconds -= dt;
+        if (invulnerability.remainingSeconds <= 0)
         {
-          cannotDamage.entities.erase(it++);
-        }
-        else
-        {
-          ++it;
+          registry_.remove<Invulnerability>(entity);
         }
       }
     }
 
-    // Reset despawn timer for entities 
-    for (auto&& [entity, transform, despawnInfo] : registry_.view<GlobalTransform, DespawnWhenFarFromPlayer>().each())
+    // Tick down per-entity immunity.
+    if (IsServer())
     {
-      const auto maxDist2 = despawnInfo.maxDistance * despawnInfo.maxDistance;
-      const auto nearestPlayer = GetNearestPlayer(transform.position);
-      [[maybe_unused]] auto _ = registry_.get_or_emplace<Lifetime>(entity, despawnInfo.gracePeriod);
-      if (nearestPlayer == entt::null || Math::Distance2(registry_.get<GlobalTransform>(nearestPlayer).position, transform.position) <= maxDist2)
+      for (auto&& [entity, cannotDamage] : registry_.view<CannotDamageEntities>().each())
       {
-        registry_.emplace_or_replace<Lifetime>(entity, despawnInfo.gracePeriod);
+        for (auto it = cannotDamage.entities.begin(); it != cannotDamage.entities.end();)
+        {
+          auto& [e, time] = *it;
+          time -= dt;
+          if (time <= 0)
+          {
+            cannotDamage.entities.erase(it++);
+          }
+          else
+          {
+            ++it;
+          }
+        }
+      }
+    }
+
+    // Reset despawn timer for entities
+    if (IsServer())
+    {
+      for (auto&& [entity, transform, despawnInfo] : registry_.view<GlobalTransform, DespawnWhenFarFromPlayer>().each())
+      {
+        const auto maxDist2      = despawnInfo.maxDistance * despawnInfo.maxDistance;
+        const auto nearestPlayer = GetNearestPlayer(transform.position);
+        [[maybe_unused]] auto _  = registry_.get_or_emplace<Lifetime>(entity, despawnInfo.gracePeriod);
+        if (nearestPlayer == entt::null || Math::Distance2(registry_.get<GlobalTransform>(nearestPlayer).position, transform.position) <= maxDist2)
+        {
+          registry_.emplace_or_replace<Lifetime>(entity, despawnInfo.gracePeriod);
+        }
       }
     }
 
@@ -1799,51 +1843,57 @@ void World::FixedUpdate(float dt)
     }
 
     // Tick down lifetimes
-    for (auto&& [entity, lifetime] : registry_.view<Lifetime>().each())
+    if (IsServer())
     {
-      lifetime.remainingSeconds -= dt;
-      if (lifetime.remainingSeconds <= 0)
+      for (auto&& [entity, lifetime] : registry_.view<Lifetime>().each())
       {
-        registry_.emplace<DeferredDelete>(entity);
+        lifetime.remainingSeconds -= dt;
+        if (lifetime.remainingSeconds <= 0)
+        {
+          registry_.emplace<DeferredDelete>(entity);
+        }
       }
     }
 
     // Process entities with Health
-    for (auto&& [entity, health, transform] : registry_.view<Health, GlobalTransform>(entt::exclude<GhostPlayer>).each())
+    if (IsServer())
     {
-      if (health.hp <= 0)
+      for (auto&& [entity, health, transform] : registry_.view<Health, GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
-        if (auto* loot = registry_.try_get<Loot>(entity))
+        if (health.hp <= 0)
         {
-          auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
-          ASSERT(table);
-          const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
-          for (auto drop : table->Collect(Rng()))
+          if (auto* loot = registry_.try_get<Loot>(entity))
           {
-            const auto& def = itemRegistry.Get(drop.item);
-            auto droppedEntity = def.Materialize(*this);
-            def.GiveCollider(*this, droppedEntity);
-            registry_.get<LocalTransform>(droppedEntity).position = transform.position;
-            UpdateLocalTransform({registry_, droppedEntity});
-            registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
-            auto velocity = glm::vec3(0);
-            if (auto* v = registry_.try_get<LinearVelocity>(entity))
+            auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
+            ASSERT(table);
+            const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
+            for (auto drop : table->Collect(Rng()))
             {
-              velocity = v->v;
+              const auto& def    = itemRegistry.Get(drop.item);
+              auto droppedEntity = def.Materialize(*this);
+              def.GiveCollider(*this, droppedEntity);
+              registry_.get<LocalTransform>(droppedEntity).position = transform.position;
+              UpdateLocalTransform({registry_, droppedEntity});
+              registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
+              auto velocity = glm::vec3(0);
+              if (auto* v = registry_.try_get<LinearVelocity>(entity))
+              {
+                velocity = v->v;
+              }
+              const auto newEntityVelocity =
+                velocity + Rng().RandFloat(1, 3) * Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
+              registry_.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
             }
-            const auto newEntityVelocity =
-              velocity + Rng().RandFloat(1, 3) * Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
-            registry_.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
           }
-        }
-        
-        if (registry_.all_of<Player>(entity))
-        {
-          KillPlayer(entity);
-        }
-        else
-        {
-          registry_.emplace<DeferredDelete>(entity);
+
+          if (registry_.all_of<Player>(entity))
+          {
+            KillPlayer(entity);
+          }
+          else
+          {
+            registry_.emplace<DeferredDelete>(entity);
+          }
         }
       }
     }
@@ -1872,29 +1922,32 @@ void World::FixedUpdate(float dt)
     // Here, we get a chance to perform game logic on any entity that is about to be deleted.
 
     // Non-player entities dump their inventory when they are destroyed.
-    for (auto&& [entity, transform, inventory] : registry_.view<GlobalTransform, Inventory, DeferredDelete>(entt::exclude<Player>).each())
+    if (IsServer())
     {
-      for (size_t row = 0; row < inventory.height; row++)
+      for (auto&& [entity, transform, inventory] : registry_.view<GlobalTransform, Inventory, DeferredDelete>(entt::exclude<Player>).each())
       {
-        for (size_t col = 0; col < inventory.width; col++)
+        for (size_t row = 0; row < inventory.height; row++)
         {
-          if (const auto droppedEntity = inventory.DropItem(*this, {row, col}); droppedEntity != entt::null)
+          for (size_t col = 0; col < inventory.width; col++)
           {
-            registry_.get<LocalTransform>(droppedEntity).position = transform.position;
-            UpdateLocalTransform({registry_, droppedEntity});
-            auto velocity = glm::vec3(0);
-            if (auto* v = registry_.try_get<LinearVelocity>(entity))
+            if (const auto droppedEntity = DropItemRPC(*this, entity, {row, col}); droppedEntity != entt::null)
             {
-              velocity = v->v;
+              registry_.get<LocalTransform>(droppedEntity).position = transform.position;
+              UpdateLocalTransform({registry_, droppedEntity});
+              auto velocity = glm::vec3(0);
+              if (auto* v = registry_.try_get<LinearVelocity>(entity))
+              {
+                velocity = v->v;
+              }
+              const auto newEntityVelocity =
+                velocity + Rng().RandFloat(1, 3) * Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
+              registry_.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
             }
-            const auto newEntityVelocity =
-              velocity + Rng().RandFloat(1, 3) * Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
-            registry_.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
           }
         }
       }
     }
-    
+
     // Actually destroy entities that were marked for deletion.
     for (auto entity : registry_.view<DeferredDelete>())
     {
@@ -3063,8 +3116,7 @@ bool World::IsClient() const
 
 bool World::IsServer() const
 {
-  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
-  return networking->get() && dynamic_cast<Networking::Server*>(networking->get());
+  return !IsClient();
 }
 
 glm::vec3 GetFootPosition(entt::handle handle)
@@ -3096,14 +3148,10 @@ static void RefreshGlobalTransform(entt::handle handle)
 {
   ASSERT(handle.valid());
   auto* h = handle.try_get<Hierarchy>();
-  if (!h)
-  {
-    return;
-  }
   auto& lt = handle.get<LocalTransform>(); // parent_local_from_local
   auto& gt = handle.get<GlobalTransform>(); // world_from_local
 
-  if (h->parent == entt::null)
+  if (!h || h->parent == entt::null)
   {
     gt = {lt.position, lt.rotation, lt.scale};
   }
@@ -3138,18 +3186,24 @@ static void RefreshGlobalTransform(entt::handle handle)
     handle.registry()->ctx().get<HashGrid>().set(gt.position, handle.entity());
   }
 
+  if (!h)
+  {
+    return;
+  }
+
   for (auto child : h->children)
   {
     RefreshGlobalTransform({*handle.registry(), child});
   }
 }
 
-bool SwapInventorySlots(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot)
+bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot)
 {
   auto* inventory1 = world.GetRegistry().try_get<Inventory>(parent1);
   auto* inventory2 = world.GetRegistry().try_get<Inventory>(parent2);
   if (!inventory1 || !inventory2)
   {
+    spdlog::warn("Failed to swap inventory slots.");
     return false;
   }
 
@@ -3241,52 +3295,53 @@ void Hierarchy::RemoveChild(entt::entity child)
   std::erase(children, child);
 }
 
-void Inventory::SetActiveSlot(World& world, glm::ivec2 rowCol, entt::entity parent)
+void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol)
 {
-  if (!canHaveActiveItem)
+  auto* inv = world.GetRegistry().try_get<Inventory>(parent);
+
+  if (!inv)
+  {
+    spdlog::warn("Failed to set active slot: missing inventory");
+    return;
+  }
+
+  if (!inv->canHaveActiveItem)
   {
     return;
   }
 
-  if (rowCol != activeSlotCoord)
+  if (rowCol != inv->activeSlotCoord)
   {
-    if (ActiveSlot().id != nullItem)
+    if (inv->ActiveSlot().id != nullItem)
     {
-      world.GetRegistry().ctx().get<ItemRegistry>().Get(ActiveSlot().id).Dematerialize(world, activeSlotEntity);
+      world.GetRegistry().ctx().get<ItemRegistry>().Get(inv->ActiveSlot().id).Dematerialize(world, inv->activeSlotEntity);
     }
-    activeSlotCoord = rowCol;
-    if (ActiveSlot().id != nullItem)
+    inv->activeSlotCoord = rowCol;
+    if (inv->ActiveSlot().id != nullItem)
     {
-      activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(ActiveSlot().id).Materialize(world);
-      SetParent({world.GetRegistry(), activeSlotEntity}, parent);
+      inv->activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(inv->ActiveSlot().id).Materialize(world);
+      SetParent({world.GetRegistry(), inv->activeSlotEntity}, parent);
     }
   }
 }
 
-void Inventory::SwapSlots(World& world, glm::ivec2 first, glm::ivec2 second, entt::entity parent)
+entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
 {
-  // Handle moving active item onto another slot or vice versa
-  if (canHaveActiveItem)
+  auto* inv = world.GetRegistry().try_get<Inventory>(parent);
+  if (!inv)
   {
-    const bool firstIsActive  = first == activeSlotCoord;
-    const bool secondIsActive = second == activeSlotCoord;
-    if (firstIsActive)
-    {
-      SetActiveSlot(world, second, parent);
-      activeSlotCoord = first;
-    }
-    else if (secondIsActive)
-    {
-      SetActiveSlot(world, first, parent);
-      activeSlotCoord = second;
-    }
+    spdlog::warn("Could not drop item: missing inventory");
+    return entt::null;
   }
-  std::swap(slots[second[0]][second[1]], slots[first[0]][first[1]]);
-}
 
-entt::entity Inventory::DropItem(World& world, glm::ivec2 slot)
-{
-  auto& item = slots[slot[0]][slot[1]];
+  if (slot.x < 0 || slot.y < 0 || slot.x >= inv->height || slot.y >= inv->width)
+  {
+    // TODO: Warn client who sent bad input.
+    spdlog::warn("Could not drop item: bad slot");
+    return entt::null;
+  }
+
+  auto& item = inv->slots[slot[0]][slot[1]];
   if (item.id == nullItem)
   {
     return entt::null;
@@ -3294,10 +3349,10 @@ entt::entity Inventory::DropItem(World& world, glm::ivec2 slot)
 
   const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
 
-  if (canHaveActiveItem && activeSlotCoord == slot)
+  if (inv->canHaveActiveItem && inv->activeSlotCoord == slot)
   {
-    def.Dematerialize(world, activeSlotEntity);
-    activeSlotEntity = entt::null;
+    def.Dematerialize(world, inv->activeSlotEntity);
+    inv->activeSlotEntity = entt::null;
   }
 
   auto entity = def.Materialize(world);
@@ -3305,6 +3360,28 @@ entt::entity Inventory::DropItem(World& world, glm::ivec2 slot)
   world.GetRegistry().emplace<DroppedItem>(entity).item = std::exchange(item, {});
   world.GetRegistry().emplace<CannotBePickedUp>(entity).remainingSeconds = 1.0f;
   return entity;
+}
+
+entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot)
+{
+  auto* userTransform = world.GetRegistry().try_get<GlobalTransform>(thrower);
+  if (!userTransform)
+  {
+    spdlog::warn("Failed to throw item: thrower does not have global transform");
+    return entt::null;
+  }
+
+  auto dropped = DropItemRPC(world, parent, slot);
+  if (dropped != entt::null)
+  {
+    const auto throwdir = GetForward(userTransform->rotation);
+    const auto pos = userTransform->position + throwdir * 1.0f;
+    world.GetRegistry().get<LocalTransform>(dropped).position = pos;
+    world.GetRegistry().get<LinearVelocity>(dropped).v = throwdir * 3.0f;
+    UpdateLocalTransform({world.GetRegistry(), dropped});
+  }
+
+  return dropped;
 }
 
 void Inventory::OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemState, entt::entity parent)
@@ -3388,14 +3465,27 @@ bool Inventory::CanCraftRecipe(Crafting::Recipe recipe) const
   return true;
 }
 
-void Inventory::CraftRecipe(World& world, Crafting::Recipe recipe, entt::entity parent) 
+void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recipe)
 {
+  auto* inv = world.GetRegistry().try_get<Inventory>(parent);
+  if (!inv)
+  {
+    spdlog::warn("Could not craft recipe: missing inventory");
+    return;
+  }
+
+  if (!inv->CanCraftRecipe(recipe))
+  {
+    spdlog::warn("Could not craft recipe: not enough resources");
+    return;
+  }
+
   // For every ingredient, look at entire inventory and eat the required items. It's assumed that the required items are available.
   for (auto& ingredient : recipe.ingredients)
   {
-    for (size_t rowIdx = 0; rowIdx < slots.size(); rowIdx++)
+    for (size_t rowIdx = 0; rowIdx < inv->slots.size(); rowIdx++)
     {
-      auto& row = slots[rowIdx];
+      auto& row = inv->slots[rowIdx];
       for (size_t colIdx = 0; colIdx < row.size(); colIdx++)
       {
         auto& slot = row[colIdx];
@@ -3406,7 +3496,7 @@ void Inventory::CraftRecipe(World& world, Crafting::Recipe recipe, entt::entity 
           slot.count -= consumed;
           if (slot.count <= 0)
           {
-            OverwriteSlot(world, {rowIdx, colIdx}, {});
+            inv->OverwriteSlot(world, {rowIdx, colIdx}, {});
           }
         }
       }
@@ -3417,12 +3507,12 @@ void Inventory::CraftRecipe(World& world, Crafting::Recipe recipe, entt::entity 
   for (auto& output : recipe.output)
   {
     auto item = ItemState{output.item, output.count};
-    TryStackItem(world, item);
+    inv->TryStackItem(world, item);
     if (item.count > 0)
     {
-      if (auto slot = GetFirstEmptySlot())
+      if (auto slot = inv->GetFirstEmptySlot())
       {
-        OverwriteSlot(world, *slot, item, parent);
+        inv->OverwriteSlot(world, *slot, item, parent);
       }
       else
       {

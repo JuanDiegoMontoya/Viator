@@ -14,6 +14,7 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
   args.emplace_back(entt::forward_as_meta(world));
   for (int i = 1; i < func.arity(); i++)
   {
+    // TODO: If client, remap entity IDs to local.
     args.emplace_back(Core::Serialization::DeserializeObjectStream(stream, func.arg(i)));
   }
   auto result = func.invoke({}, args.data(), args.size());

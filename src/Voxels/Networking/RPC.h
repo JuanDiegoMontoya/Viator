@@ -68,13 +68,9 @@ namespace Networking
     {
       return;
     }
-    
-    auto stream = std::stringstream();
 
-    Core::Serialization::SerializeObjectStream(stream, funcId);
-    (Core::Serialization::SerializeObjectStream(stream, entt::forward_as_meta(args)), ...);
-
-    networking->EnqueueRPC({traits, {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}}});
+    // Args are simply copied in to guard against use-after-free.
+    networking->EnqueueRPC({traits, funcId, {args...}});
   }
 
   namespace detail

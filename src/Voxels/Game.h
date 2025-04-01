@@ -872,12 +872,6 @@ struct Inventory
     return slots[activeSlotCoord.x][activeSlotCoord.y];
   }
 
-  void SetActiveSlot(World& world, glm::ivec2 rowCol, entt::entity parent);
-  
-  void SwapSlots(World& world, glm::ivec2 first, glm::ivec2 second, entt::entity parent);
-
-  // If necessary, materializes the item. Then, the item is given a RigidBody and is moved into the new entity.
-  entt::entity DropItem(World& world, glm::ivec2 slot);
 
   // Completely deletes the old item, replacing it with the new. New item can be null.
   void OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemState, entt::entity parent = entt::null);
@@ -886,11 +880,18 @@ struct Inventory
   std::optional<glm::ivec2> GetFirstEmptySlot() const;
 
   bool CanCraftRecipe(Crafting::Recipe recipe) const;
-  void CraftRecipe(World& world, Crafting::Recipe recipe, entt::entity parent);
 };
 
+void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol);
+
+// If necessary, materializes the item. Then, the item is given a RigidBody and is moved into the new entity.
+entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot);
+entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot);
+
+void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recipe);
+
 // If parent1 and parent2 both have an inventory, swaps items between them.
-bool SwapInventorySlots(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
+bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
 
 // Windowing, input polling, and rendering (if applicable)
 class Head

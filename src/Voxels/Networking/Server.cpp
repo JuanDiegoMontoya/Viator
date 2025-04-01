@@ -159,7 +159,11 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
     auto stream = std::stringstream();
 
     Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
-    stream.write(rpc.serializedRpc.data(), rpc.serializedRpc.size());
+    Core::Serialization::SerializeObjectStream(stream, rpc.funcId);
+    for (auto& arg : rpc.args)
+    {
+      Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
+    }
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
     auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
@@ -252,7 +256,10 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
   if (packetType == PacketType::InputState)
   {
     auto inputState = Core::Serialization::DeserializeObjectStream<InputState>(stream);
-    world.GetRegistry().emplace_or_replace<InputState>(peerIt->second.entity, inputState);
+    auto inputLookState = Core::Serialization::DeserializeObjectStream<InputLookState>(stream);
+    //world.GetRegistry().emplace_or_replace<InputState>(peerIt->second.entity, inputState);
+    world.GetRegistry().emplace_or_replace<InputState>(world.TryGetLocalPlayer(), inputState);
+    world.GetRegistry().emplace_or_replace<InputLookState>(world.TryGetLocalPlayer(), inputLookState);
   }
   else if (packetType == PacketType::Rpc)
   {

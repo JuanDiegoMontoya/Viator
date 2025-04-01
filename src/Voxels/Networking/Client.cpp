@@ -81,6 +81,8 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
         status_          = ClientStatus::Disconnected;
         event.peer->data = nullptr;
         remotePeer_      = nullptr;
+        remoteToLocalEntity_.clear();
+        localToRemoteEntity_.clear();
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
@@ -89,6 +91,8 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
         status_          = ClientStatus::Disconnected;
         event.peer->data = nullptr; // Placeholder: this code should be replaced by actual peer cleanup.
         remotePeer_      = nullptr;
+        remoteToLocalEntity_.clear();
+        localToRemoteEntity_.clear();
         break;
       }
       case ENET_EVENT_TYPE_NONE: [[fallthrough]];
@@ -123,7 +127,16 @@ void Networking::Client::SendMessages(World& world)
 
     auto stream = std::stringstream();
     Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
-    stream.write(rpc.serializedRpc.data(), rpc.serializedRpc.size());
+    Core::Serialization::SerializeObjectStream(stream, rpc.funcId);
+    for (auto& arg : rpc.args)
+    {
+      // Remap local entities to server entities.
+      if (arg.type().id() == entt::type_id<entt::entity>().hash())
+      {
+        arg.assign(localToRemoteEntity_.at(arg.cast<entt::entity>()));
+      }
+      Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
+    }
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
     auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
@@ -134,7 +147,12 @@ void Networking::Client::SendMessages(World& world)
   auto localPlayer = world.TryGetLocalPlayer();
   if (localPlayer != entt::null)
   {
-    // TODO
+    if (world.GetRegistry().all_of<InputState, InputLookState>(localPlayer))
+    {
+      auto [is, ils] = world.GetRegistry().get<InputState, InputLookState>(localPlayer);
+      auto stream = std::stringstream();
+      CallRPC("UpdatePlayerInput"_hs, world, localToRemoteEntity_.at(localPlayer), is, ils);
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 #include "Input.h"
+#include "Networking/RPC.h"
 
 #include "GLFW/glfw3.h"
 #include "glm/vec3.hpp"
@@ -74,7 +75,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
             const auto currentSlotCoord = glm::ivec2(0, j);
             if (glfwGetKey(window_, GLFW_KEY_1 + (int)j) == GLFW_PRESS && j < i->width)
             {
-              i->SetActiveSlot(world, currentSlotCoord, entity);
+              Networking::CallRPC("SetActiveSlotRPC"_hs, world, entity, currentSlotCoord);
               break;
             }
           }
@@ -83,7 +84,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
           {
             const auto offset = -(int)scrollOffset.y;
             const auto newCol = (int)glm::mod((float)i->activeSlotCoord.y + offset, (float)i->width);
-            i->SetActiveSlot(world, {0, newCol}, entity);
+            Networking::CallRPC("SetActiveSlotRPC"_hs, world, entity, glm::ivec2{0, newCol});
           }
         }
       }

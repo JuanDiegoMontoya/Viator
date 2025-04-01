@@ -520,10 +520,10 @@ namespace Core::Serialization
       ZoneText(meta.info().name().data(), meta.info().name().size());
       ASSERT(remoteEntity != entt::null);
 
+      auto* storage = registry.storage(typeId);
       if (traits & Traits::TRANSIENT)
       {
         // We don't want transient components to be overwritten by the default value if they already exist.
-        auto* storage = registry.storage(typeId);
         if (!storage || !storage->contains(localEntity))
         {
           auto emplaceFunc = meta.func("EmplaceDefault"_hs);
@@ -533,13 +533,27 @@ namespace Core::Serialization
       }
       else
       {
-        auto value = meta.construct();
-        ASSERT(value, "Type is missing default constructor");
+        auto value = entt::meta_any{};
+        const bool storageContainsEntity = storage && storage->contains(localEntity);
+        if (storageContainsEntity)
+        {
+          // Overwrite existing component if it exists.
+          value = meta.from_void(storage->value(localEntity));
+        }
+        else
+        {
+          value = meta.construct();
+          ASSERT(value, "Type does not have a default constructor");
+        }
+
         Serialize<false>(inputArchive, value.as_ref(), context);
 
-        auto emplaceFunc = meta.func("EmplaceMove"_hs);
-        ASSERT(emplaceFunc);
-        emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+        if (!storageContainsEntity)
+        {
+          auto emplaceFunc = meta.func("EmplaceMove"_hs);
+          ASSERT(emplaceFunc);
+          emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+        }
       }
     }
   }
