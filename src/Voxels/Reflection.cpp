@@ -444,7 +444,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
     DATA(RenderTransform, transform);
 
-  REFLECT_COMPONENT(Health)
+  REFLECT_COMPONENT(Health, REPLICATED)
     DATA(Health, hp, PROP_MIN(0.0f), PROP_MAX(100.0f))
     DATA(Health, maxHp, PROP_MIN(0.0f), PROP_MAX(100.0f));
 
@@ -466,7 +466,7 @@ void Core::Reflection::Initialize()
     DATA(Player, inventoryIsOpen)
     TRAITS(TRANSIENT);
 
-  REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
+  REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY)
     DATA(InputState, strafe)
     DATA(InputState, forward)
     DATA(InputState, elevate)
@@ -477,7 +477,7 @@ void Core::Reflection::Initialize()
     DATA(InputState, useSecondary)
     DATA(InputState, interact);
 
-  REFLECT_COMPONENT(InputLookState, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
+  REFLECT_COMPONENT(InputLookState, EDITOR_READ_ONLY)
     DATA(InputLookState, pitch)
     DATA(InputLookState, yaw);
 
@@ -750,9 +750,8 @@ void Core::Reflection::Initialize()
   REFLECT_ENUM(voxel_t)
     ENUMERATOR(voxel_t, Air)
     ENUMERATOR(voxel_t, Null);
-
-  // TODO: TEMP
-  REFLECT_COMPONENT(LocalPlayer, REPLICATED);
+  
+  REFLECT_COMPONENT(LocalPlayer);
 
   REFLECT_ENUM(Networking::ClientStatus)
     ENUMERATOR(Networking::ClientStatus, Resolving)
@@ -765,11 +764,25 @@ void Core::Reflection::Initialize()
 
   REFLECT_ENUM(Networking::PacketType);
 
-  entt::meta_factory<RpcTraits>().func<[](World& world, entt::entity entity, InputState is, InputLookState ils)
-  {
-    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
-    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
-  }>("UpdatePlayerInput"_hs).traits(RpcTraits::Server);
+  entt::meta_factory<RpcTraits>()
+    .func<[](World& world, entt::entity entity, InputState is, InputLookState ils)
+      {
+        world.GetRegistry().emplace_or_replace<InputState>(entity, is);
+        world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
+      }>("UpdatePlayerInput"_hs)
+    .traits(RpcTraits::Server);
+
+  entt::meta_factory<RpcTraits>()
+    .func<[](World& world, entt::entity entity)
+      {
+        if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState>(entity))
+        {
+          world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
+          world.GetRegistry().emplace_or_replace<InputState>(entity);
+          world.GetRegistry().emplace_or_replace<InputLookState>(entity);
+        }
+      }>("GiveLocalPlayerRPC"_hs)
+    .traits(RpcTraits::Client);
 
   REFLECT_TYPE(ItemIdAndCount)
     DATA(ItemIdAndCount, item)

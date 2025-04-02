@@ -26,7 +26,13 @@ namespace Networking
       return status_;
     }
 
+    [[nodiscard]] const auto& GetRemoteToLocalEntityMap() const
+    {
+      return remoteToLocalEntity_;
+    }
+
   private:
+    void FlushRPCs();
     void OnEntityDestroy(entt::registry&, entt::entity entity);
     void HandlePacket(World& world, const ENetPacket& packet);
 

@@ -38,6 +38,7 @@ Networking::Server::Server(World& world)
 
   localHost_->maximumPacketSize  = 200 * 1024 * 1024;
   localHost_->maximumWaitingData = 500 * 1024 * 1024;
+  localHost_->checksum           = &enet_crc32;
 
   world_->GetRegistry().on_destroy<entt::entity>().connect<&Server::OnEntityDestroy>(*this);
   spdlog::info("Created server bound to {}", address);
@@ -69,7 +70,9 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       case ENET_EVENT_TYPE_CONNECT:
       {
         spdlog::info("Connected to {}", event.peer->address);
-        auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = world.GetRegistry().create(), .status = ClientStatus::Joining}).first;
+        const auto clientEntity = world.CreatePlayer();
+        auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Joining}).first;
+        entityToConnection_.emplace(clientEntity, event.peer);
 
         // TODO: Send packet informing the client of their entity ID.
         auto stream = std::stringstream();
@@ -89,6 +92,9 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
           });
 
         enet_peer_send(event.peer, 0, packet);
+
+        // TODO: Make this work.
+        //CallRPC2("GiveLocalPlayerRPC"_hs, clientEntity, world, clientEntity);
         
         break;
       }
@@ -103,6 +109,9 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       {
         spdlog::info("Disconnected from {}", event.peer->address);
         event.peer->data = nullptr;
+        auto connection  = connections_.at(event.peer);
+        world.GetRegistry().emplace<DeferredDelete>(connection.entity);
+        entityToConnection_.erase(connection.entity);
         connections_.erase(event.peer);
         break;
       }
@@ -110,6 +119,9 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       {
         spdlog::info("Disconnected (timeout) from {}", event.peer->address);
         event.peer->data = nullptr; // Placeholder: this code should be replaced by actual peer cleanup.
+        auto connection  = connections_.at(event.peer);
+        world.GetRegistry().emplace<DeferredDelete>(connection.entity);
+        entityToConnection_.erase(connection.entity);
         connections_.erase(event.peer);
         break;
       }
@@ -149,35 +161,6 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
     return;
   }
 
-  // Flush RPCs
-  while (!rpcs_.empty())
-  {
-    auto rpc = rpcs_.pop_front();
-
-    using Core::Reflection::RpcTraits;
-
-    auto stream = std::stringstream();
-
-    Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
-    Core::Serialization::SerializeObjectStream(stream, rpc.funcId);
-    for (auto& arg : rpc.args)
-    {
-      Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
-    }
-
-    const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
-    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
-
-    for (auto& [peer, clientInfo] : connections_)
-    {
-      // TODO: Filter RPC based on connection type.
-      if (clientInfo.status == ClientStatus::Connected)
-      {
-        enet_peer_send(peer, 0, packet);
-      }
-    }
-  }
-
   // Set of entities that have no parent.
   auto rootEntities = std::unordered_set<entt::entity>();
 
@@ -214,11 +197,65 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
       }
     }
   }
+
+  // TODO: This is jank. GiveLocalPlayerRPC should only be called once per player, not every tick.
+  for (auto& [peer, clientInfo] : connections_)
+  {
+    if (clientInfo.status == ClientStatus::Connected)
+    {
+      CallRPC2("GiveLocalPlayerRPC"_hs, clientInfo.entity, world, clientInfo.entity);
+    }
+  }
+
+  FlushRPCs();
 }
 
 void Networking::Server::EnqueueRPC(RpcInfo rpc)
 {
   rpcs_.push_back(std::move(rpc));
+}
+
+void Networking::Server::FlushRPCs()
+{
+  while (!rpcs_.empty())
+  {
+    auto rpc = rpcs_.pop_front();
+
+    using Core::Reflection::RpcTraits;
+
+    auto stream = std::stringstream();
+
+    Core::Serialization::SerializeObjectStream(stream, PacketType::Rpc);
+    Core::Serialization::SerializeObjectStream(stream, rpc.funcId);
+    for (auto& arg : rpc.args)
+    {
+      Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
+    }
+
+    const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
+    auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
+
+    if (rpc.owningConnection && entityToConnection_.contains(*rpc.owningConnection) && bool(rpc.traits & (RpcTraits::Client | RpcTraits::Remote)))
+    {
+      // Send to single peer if client owns this entity.
+      auto peer = entityToConnection_.at(*rpc.owningConnection);
+      if (packetFlags & ENET_PACKET_FLAG_RELIABLE || connections_.at(peer).status == ClientStatus::Connected)
+      {
+        enet_peer_send(peer, 0, packet);
+      }
+    }
+    else
+    {
+      // Broadcast to all connected clients.
+      for (auto& [peer, clientInfo] : connections_)
+      {
+        if (packetFlags & ENET_PACKET_FLAG_RELIABLE || clientInfo.status == ClientStatus::Connected)
+        {
+          enet_peer_send(peer, 0, packet);
+        }
+      }
+    }
+  }
 }
 
 void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)

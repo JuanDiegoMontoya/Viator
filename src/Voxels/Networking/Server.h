@@ -23,7 +23,13 @@ namespace Networking
     void SendMessages(World& world) final;
     void EnqueueRPC(RpcInfo rpc) final;
 
+    auto GetNumberOfConnections() const
+    {
+      return connections_.size();
+    }
+
   private:
+    void FlushRPCs();
     void OnEntityDestroy(entt::registry&, entt::entity entity);
     void HandlePacket(World& world, ENetPeer* peer, const ENetPacket& packet);
 
@@ -35,6 +41,7 @@ namespace Networking
       ClientStatus status;
     };
     std::unordered_map<ENetPeer*, ClientInfo> connections_;
+    std::unordered_map<entt::entity, ENetPeer*> entityToConnection_;
     World* world_;
     ThreadSafeQueue<RpcInfo> rpcs_;
   };

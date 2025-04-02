@@ -2,9 +2,11 @@
 #include "../ClassImplMacros.h"
 #include "../Reflection.h"
 
+#include "entt/fwd.hpp"
 #include "entt/meta/meta.hpp"
 
 #include <vector>
+#include <optional>
 
 class World;
 
@@ -12,6 +14,7 @@ namespace Networking
 {
   struct RpcInfo
   {
+    std::optional<entt::entity> owningConnection = std::nullopt;
     Core::Reflection::RpcTraits traits;
     entt::id_type funcId;
     std::vector<entt::meta_any> args;
@@ -39,14 +42,19 @@ namespace Networking
 
   enum class PacketType : uint8_t
   {
-    // std::vector<entt::entity> + std::vector<char>
+    // std::vector<entt::entity> + serialized entities
     EntityBundle,
 
     // entt::id_type + serialized args
     Rpc,
 
+    // entt::entity
     RemovedEntity,
+
+    // InputState + InputLookState
     InputState,
+
+    // TwoLevelGrid
     TwoLevelGrid,
   };
 }

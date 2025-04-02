@@ -1,4 +1,5 @@
 #include "RPC.h"
+#include "Client.h"
 
 #include <sstream>
 
@@ -14,8 +15,15 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
   args.emplace_back(entt::forward_as_meta(world));
   for (int i = 1; i < func.arity(); i++)
   {
-    // TODO: If client, remap entity IDs to local.
-    args.emplace_back(Core::Serialization::DeserializeObjectStream(stream, func.arg(i)));
+    auto& arg = args.emplace_back(Core::Serialization::DeserializeObjectStream(stream, func.arg(i)));
+    // If client, remap remote entity IDs to local.
+    if (world.IsClient() && func.arg(i).id() == entt::type_id<entt::entity>().hash())
+    {
+      const auto* networking    = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+      const auto& remoteToLocal = static_cast<Networking::Client*>(networking->get())->GetRemoteToLocalEntityMap();
+      auto success = arg.assign(remoteToLocal.at(arg.cast<entt::entity>()));
+      ASSERT(success);
+    }
   }
   auto result = func.invoke({}, args.data(), args.size());
   ASSERT(result);

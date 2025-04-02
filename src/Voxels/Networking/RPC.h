@@ -18,7 +18,7 @@ namespace Networking
 {
   // Execute the RPC on the remote end of the connection only.
   template<typename... Args>
-  void CallRPC(entt::id_type funcId, World& world, Args&&... args)
+  void CallRPC2(entt::id_type funcId, std::optional<entt::entity> owningConnection, World& world, Args&&... args)
   {
     ZoneScoped;
     using Core::Reflection::RpcTraits;
@@ -28,19 +28,19 @@ namespace Networking
     ASSERT(func, "RPC does not exist.");
     const auto traits = func.traits<RpcTraits>();
     ASSERT(bool(traits & (RpcTraits::Client | RpcTraits::Server | RpcTraits::Broadcast | RpcTraits::Remote)));
+    ASSERT(!(world.IsClient() && owningConnection), "If the caller is a client, owningConnection must be null.");
 
     // TODO: Validate argument types.
 
     bool execLocally = false;
     execLocally |= world.IsServer() && bool(traits & RpcTraits::Server);
-    // TODO: Server should execute client RPCs when there isn't a client available.
-    //execLocally |= world.IsServer() && bool(traits & RpcTraits::Client);
+    execLocally |= world.IsServer() && bool(traits & RpcTraits::Client) && !owningConnection;
     execLocally |= world.IsClient() && bool(traits & RpcTraits::Client);
     execLocally |= world.IsClient() && bool(traits & RpcTraits::Broadcast);
 
     bool execRemotely = bool(traits & RpcTraits::Remote);
     execRemotely |= world.IsServer() && bool(traits & RpcTraits::Broadcast);
-    execRemotely |= world.IsServer() && bool(traits & RpcTraits::Client);
+    execRemotely |= world.IsServer() && bool(traits & RpcTraits::Client) && owningConnection;
     execRemotely |= world.IsClient() && bool(traits & RpcTraits::Server);
 
     if (!execLocally && !execRemotely)
@@ -70,7 +70,13 @@ namespace Networking
     }
 
     // Args are simply copied in to guard against use-after-free.
-    networking->EnqueueRPC({traits, funcId, {args...}});
+    networking->EnqueueRPC({owningConnection, traits, funcId, {args...}});
+  }
+
+  template<typename... Args>
+  void CallRPC(entt::id_type funcId, World& world, Args&&... args)
+  {
+    CallRPC2(funcId, std::nullopt, world, std::forward<Args>(args)...);
   }
 
   namespace detail

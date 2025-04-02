@@ -991,6 +991,15 @@ void Game::Run()
         head_->VariableUpdatePre(dt, *world_);
       }
 
+      if (world_->IsServer())
+      {
+        for (auto&& [entity, player, inputLook, transform, gtransform] : world_->GetRegistry().view<Player, InputLookState, LocalTransform, GlobalTransform>().each())
+        {
+          transform.rotation  = glm::angleAxis(inputLook.yaw, glm::vec3{0, 1, 0}) * glm::angleAxis(inputLook.pitch, glm::vec3{1, 0, 0});
+          gtransform.rotation = transform.rotation;
+        }
+      }
+
       if (networking_)
       {
         networking_->ProcessMessages(*world_);
@@ -2018,37 +2027,8 @@ void World::InitializeGameState()
   registry_.ctx().insert_or_assign<PCG::Rng>(1234);
 
   // Make player entity
-  auto p = registry_.create();
-  registry_.emplace<Name>(p).name = "Player";
-  registry_.emplace<Player>(p);
+  auto p = CreatePlayer();
   registry_.emplace<LocalPlayer>(p);
-  registry_.emplace<InputState>(p);
-  registry_.emplace<InputLookState>(p);
-  registry_.emplace<Hierarchy>(p);
-  registry_.emplace<Health>(p) = {100, 100};
-  registry_.emplace<TeamFlags>(p, TeamFlagBits::FRIENDLY);
-
-  auto& tp = registry_.emplace<LocalTransform>(p);
-  tp.position = {60, 270, 60};
-  tp.rotation = glm::identity<glm::quat>();
-  tp.scale    = 1;
-  registry_.emplace<GlobalTransform>(p) = {tp.position, tp.rotation, tp.scale};
-  registry_.emplace<PreviousGlobalTransform>(p);
-  registry_.emplace<RenderTransform>(p);
-  registry_.emplace<WalkingMovementAttributes>(p);
-  GivePlayerCharacterController(p);
-  //GivePlayerFlyingCharacterController(p);
-  //registry_.emplace<NoclipCharacterController>(p);
-  registry_.emplace_or_replace<LinearVelocity>(p);
-  //cc.character->SetMaxStrength(10000000);
-
-  auto& items     = registry_.ctx().get<ItemRegistry>();
-  auto& inventory = registry_.emplace<Inventory>(p);
-  inventory.OverwriteSlot(*this, {0, 0}, {items.GetId("Stone Spear")}, p);
-  inventory.OverwriteSlot(*this, {0, 1}, {items.GetId("Stone Pickaxe")}, p);
-  inventory.OverwriteSlot(*this, {0, 2}, {items.GetId("Stone Axe")}, p);
-
-  GivePlayerColliders(p);
 
   auto e = CreateRenderableEntity({0, 0, 0});
   registry_.emplace<Name>(e).name = "Test";
@@ -2763,6 +2743,44 @@ const TeamFlags* World::GetTeamFlags(entt::entity entity) const
   return nullptr;
 }
 
+entt::entity World::CreatePlayer()
+{
+  auto p = registry_.create();
+
+  registry_.emplace<Name>(p, "Player");
+  registry_.emplace<Player>(p);
+  registry_.emplace<InputState>(p);
+  registry_.emplace<InputLookState>(p);
+  registry_.emplace<Hierarchy>(p);
+  registry_.emplace<Health>(p) = {100, 100};
+  registry_.emplace<TeamFlags>(p, TeamFlagBits::FRIENDLY);
+
+  auto& tp    = registry_.emplace<LocalTransform>(p);
+  tp.position = {60, 270, 60};
+  tp.rotation = glm::identity<glm::quat>();
+  tp.scale    = 1;
+
+  registry_.emplace<GlobalTransform>(p) = {tp.position, tp.rotation, tp.scale};
+  registry_.emplace<PreviousGlobalTransform>(p);
+  registry_.emplace<RenderTransform>(p);
+  registry_.emplace<WalkingMovementAttributes>(p);
+  GivePlayerCharacterController(p);
+  // GivePlayerFlyingCharacterController(p);
+  // registry_.emplace<NoclipCharacterController>(p);
+  registry_.emplace_or_replace<LinearVelocity>(p);
+  // cc.character->SetMaxStrength(10000000);
+
+  auto& items     = registry_.ctx().get<ItemRegistry>();
+  auto& inventory = registry_.emplace<Inventory>(p);
+  inventory.OverwriteSlot(*this, {0, 0}, {items.GetId("Stone Spear")}, p);
+  inventory.OverwriteSlot(*this, {0, 1}, {items.GetId("Stone Pickaxe")}, p);
+  inventory.OverwriteSlot(*this, {0, 2}, {items.GetId("Stone Axe")}, p);
+
+  GivePlayerColliders(p);
+
+  return p;
+}
+
 Physics::CharacterController& World::GivePlayerCharacterController(entt::entity playerEntity)
 {
   constexpr float playerHalfHeight = 0.8f;
@@ -3117,6 +3135,13 @@ bool World::IsClient() const
 bool World::IsServer() const
 {
   return !IsClient();
+}
+
+bool World::IsHosting() const
+{
+  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
+  const auto* server     = dynamic_cast<const Networking::Server*>(networking->get());
+  return networking->get() && server && server->GetNumberOfConnections();
 }
 
 glm::vec3 GetFootPosition(entt::handle handle)

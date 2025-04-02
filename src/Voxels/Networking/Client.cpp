@@ -29,6 +29,7 @@ Networking::Client::Client(World& world, const char* hostName)
 
   localHost_->maximumPacketSize  = 200 * 1024 * 1024;
   localHost_->maximumWaitingData = 500 * 1024 * 1024;
+  localHost_->checksum           = &enet_crc32;
 
   auto address = ENetAddress{};
   ASSERT(enet_address_set_host(&address, hostName) == 0);
@@ -118,7 +119,27 @@ void Networking::Client::SendMessages(World& world)
     return;
   }
 
-  // Flush RPCs
+  auto localPlayer = world.TryGetLocalPlayer();
+  if (localPlayer != entt::null)
+  {
+    if (world.GetRegistry().all_of<InputState, InputLookState>(localPlayer))
+    {
+      auto [is, ils] = world.GetRegistry().get<InputState, InputLookState>(localPlayer);
+      auto stream = std::stringstream();
+      CallRPC("UpdatePlayerInput"_hs, world, localPlayer, is, ils);
+    }
+  }
+
+  FlushRPCs();
+}
+
+void Networking::Client::EnqueueRPC(RpcInfo rpc)
+{
+  rpcs_.push_back(std::move(rpc));
+}
+
+void Networking::Client::FlushRPCs()
+{
   while (!rpcs_.empty())
   {
     auto rpc = rpcs_.pop_front();
@@ -133,32 +154,17 @@ void Networking::Client::SendMessages(World& world)
       // Remap local entities to server entities.
       if (arg.type().id() == entt::type_id<entt::entity>().hash())
       {
-        arg.assign(localToRemoteEntity_.at(arg.cast<entt::entity>()));
+        auto success = arg.assign(localToRemoteEntity_.at(arg.cast<entt::entity>()));
+        ASSERT(success);
       }
       Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
     }
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
     auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
-    
+
     enet_peer_send(remotePeer_, 0, packet);
   }
-
-  auto localPlayer = world.TryGetLocalPlayer();
-  if (localPlayer != entt::null)
-  {
-    if (world.GetRegistry().all_of<InputState, InputLookState>(localPlayer))
-    {
-      auto [is, ils] = world.GetRegistry().get<InputState, InputLookState>(localPlayer);
-      auto stream = std::stringstream();
-      CallRPC("UpdatePlayerInput"_hs, world, localToRemoteEntity_.at(localPlayer), is, ils);
-    }
-  }
-}
-
-void Networking::Client::EnqueueRPC(RpcInfo rpc)
-{
-  rpcs_.push_back(std::move(rpc));
 }
 
 void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
@@ -179,7 +185,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
 
   if (packetType == PacketType::TwoLevelGrid)
   {
-    spdlog::info("Connected");
+    spdlog::info("Finished downloading world.");
     status_   = ClientStatus::Connected;
     auto grid = Core::Serialization::DeserializeObjectStream<TwoLevelGrid>(stream);
     world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));

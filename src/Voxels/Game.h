@@ -377,6 +377,7 @@ public:
     return GetComponentFromDescendant<T>(entity);
   }
 
+  entt::entity CreatePlayer();
   Physics::CharacterController& GivePlayerCharacterController(entt::entity playerEntity);
   Physics::CharacterControllerShrimple& GivePlayerCharacterControllerShrimple(entt::entity playerEntity);
   FlyingCharacterController& GivePlayerFlyingCharacterController(entt::entity playerEntity);
@@ -419,9 +420,16 @@ public:
     return ticks_;
   }
 
+  // True if this process has a networked client.
+  // Clients only simulate a limited set of the game.
   [[nodiscard]] bool IsClient() const;
 
+  // Equivalent to !IsClient. True if this process is running the master simulation.
   [[nodiscard]] bool IsServer() const;
+
+  // True if this process has a networked server. Implies that this process
+  // is running the master simulation AND there are one or more remote peers.
+  [[nodiscard]] bool IsHosting() const;
 
 private:
   uint64_t ticks_ = 0;
