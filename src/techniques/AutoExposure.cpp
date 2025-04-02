@@ -1,5 +1,4 @@
 #include "AutoExposure.h"
-#include "Application.h"
 
 #include "Fvog/Device.h"
 #include "Fvog/Rendering2.h"

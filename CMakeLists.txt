@@ -12,8 +12,6 @@ find_package(Vulkan REQUIRED)
 
 add_executable(frogRender
     src/main.cpp
-    src/Application.cpp
-    src/Application.h
     vendor/stb_image.cpp
     vendor/tiny_obj_loader.cpp
     src/PCG.h
@@ -23,8 +21,6 @@ add_executable(frogRender
     src/RendererUtilities.cpp
     src/techniques/AutoExposure.h
     src/techniques/AutoExposure.cpp
-    src/techniques/VirtualShadowMaps.h
-    src/techniques/VirtualShadowMaps.cpp
     src/Fvog/Shader2.h
     src/Fvog/Shader2.cpp
     src/Fvog/detail/Common.h

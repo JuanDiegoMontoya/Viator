@@ -1,7 +1,6 @@
 #include "Bloom.h"
 
 #include "shaders/bloom/BloomCommon.h.glsl"
-#include "Application.h"
 
 #include "Fvog/Rendering2.h"
 #include "Fvog/Shader2.h"

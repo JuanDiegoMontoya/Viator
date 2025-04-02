@@ -90,7 +90,6 @@
   #include "Fvog/Buffer2.h"
   #include "Fvog/Texture2.h"
   #include "Fvog/detail/ApiToEnum2.h"
-  #include "Application.h"
   #include "PipelineManager.h"
   #include "RendererUtilities.h"
   #include <optional>

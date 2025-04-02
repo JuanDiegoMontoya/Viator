@@ -1,5 +1,4 @@
 #include "RayTracedAO.h"
-#include "Application.h"
 #include "Fvog/Rendering2.h"
 #include "../../RendererUtilities.h"
 #include "Fvog/AccelerationStructure.h"
