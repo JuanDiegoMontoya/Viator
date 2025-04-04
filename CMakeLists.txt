@@ -14,6 +14,7 @@ add_executable(frogRender
     src/main.cpp
     vendor/stb_image.cpp
     vendor/tiny_obj_loader.cpp
+    vendor/zstd.cpp
     src/PCG.h
     src/techniques/Bloom.h
     src/techniques/Bloom.cpp
@@ -113,6 +114,7 @@ add_executable(frogRender
     src/Voxels/Networking/Client.cpp
     src/Voxels/Networking/RPC.h
     src/Voxels/Networking/RPC.cpp
+    src/Voxels/Networking/Interface.cpp
 )
 
 # Precompiled headers for standard library

@@ -9,6 +9,7 @@
 #include "enet/enet.h"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
+#include "zstd.h"
 
 static std::string format_as(const ENetAddress& addr)
 {
@@ -23,19 +24,22 @@ Networking::Client::Client(World& world, const char* hostName)
   spdlog::info("Creating client that will attempt to connect to {}", hostName);
   ASSERT(enet_initialize() == 0);
 
-  localHost_ = enet_host_create(nullptr, 1, 2, 0, 0);
+  localHost_ = enet_host_create(nullptr, 1, int(Channel::NumChannels), 0, 0);
   
   ASSERT(localHost_);
-
+  
   localHost_->maximumPacketSize  = 200 * 1024 * 1024;
   localHost_->maximumWaitingData = 500 * 1024 * 1024;
   localHost_->checksum           = &enet_crc32;
+
+  auto compressor = detail::GetCompressor();
+  enet_host_compress(localHost_, &compressor);
 
   auto address = ENetAddress{};
   ASSERT(enet_address_set_host(&address, hostName) == 0);
   address.port = 1234; // TODO: TEMP
 
-  remotePeer_ = enet_host_connect(localHost_, &address, 1, 0);
+  remotePeer_ = enet_host_connect(localHost_, &address, int(Channel::NumChannels), 0);
 
   ASSERT(remotePeer_);
 
@@ -159,11 +163,11 @@ void Networking::Client::FlushRPCs()
       }
       Core::Serialization::SerializeObjectStream(stream, arg.as_ref());
     }
-
+    
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
     auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
 
-    enet_peer_send(remotePeer_, 0, packet);
+    enet_peer_send(remotePeer_, enet_uint8(bool(rpc.traits & RpcTraits::Unreliable) ? Channel::UnreliableRpc : Channel::Replicate), packet);
   }
 }
 
@@ -180,10 +184,29 @@ void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
 void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket)
 {
   ZoneScoped;
-  auto stream = std::stringstream(std::string(reinterpret_cast<const char*>(enetPacket.data), enetPacket.dataLength));
+  const char* const pData = reinterpret_cast<const char*>(enetPacket.data);
+  auto stream = std::stringstream(std::string(pData, enetPacket.dataLength));
   auto packetType = Core::Serialization::DeserializeObjectStream<PacketType>(stream);
 
-  if (packetType == PacketType::TwoLevelGrid)
+  if (bool(packetType & PacketType::Compressed))
+  {
+    auto outSize = ZSTD_getFrameContentSize(pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
+    ASSERT(outSize != ZSTD_CONTENTSIZE_UNKNOWN);
+    ASSERT(outSize != ZSTD_CONTENTSIZE_ERROR);
+    auto outStr  = std::string();
+    outStr.resize(outSize);
+    auto ret = ZSTD_decompress(outStr.data(), outSize, pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
+    if (ZSTD_isError(ret))
+    {
+      spdlog::warn("Failed to decompress packet: {}", ZSTD_getErrorName(ret));
+      return;
+    }
+    ASSERT(ret == outSize);
+    // Reset the stream with the uncompressed data.
+    stream = std::stringstream(std::move(outStr));
+  }
+
+  if ((packetType & PacketType::TypeMask) == PacketType::TwoLevelGrid)
   {
     spdlog::info("Finished downloading world.");
     status_   = ClientStatus::Connected;
@@ -191,7 +214,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
     world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));
     world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
   }
-  else if (packetType == PacketType::EntityBundle)
+  else if ((packetType & PacketType::TypeMask) == PacketType::EntityBundle)
   {
     auto entities = Core::Serialization::DeserializeObjectStream<std::vector<entt::entity>>(stream);
 
@@ -219,7 +242,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       }
     }
   }
-  else if (packetType == PacketType::RemovedEntity)
+  else if ((packetType & PacketType::TypeMask) == PacketType::RemovedEntity)
   {
     // Delete entity.
     auto remoteEntity = Core::Serialization::DeserializeObjectStream<entt::entity>(stream);
@@ -232,7 +255,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       remoteToLocalEntity_.erase(it);
     }
   }
-  else if (packetType == PacketType::Rpc)
+  else if ((packetType & PacketType::TypeMask) == PacketType::Rpc)
   {
     detail::InvokeSerializedRPC(world, stream);
   }

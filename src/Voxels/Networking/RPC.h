@@ -32,11 +32,10 @@ namespace Networking
 
     // TODO: Validate argument types.
 
-    bool execLocally = false;
+    bool execLocally = bool(traits & RpcTraits::Broadcast);
     execLocally |= world.IsServer() && bool(traits & RpcTraits::Server);
     execLocally |= world.IsServer() && bool(traits & RpcTraits::Client) && !owningConnection;
     execLocally |= world.IsClient() && bool(traits & RpcTraits::Client);
-    execLocally |= world.IsClient() && bool(traits & RpcTraits::Broadcast);
 
     bool execRemotely = bool(traits & RpcTraits::Remote);
     execRemotely |= world.IsServer() && bool(traits & RpcTraits::Broadcast);

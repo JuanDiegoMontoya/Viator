@@ -585,21 +585,19 @@ namespace Core::Serialization
     
     {
       auto outputArchive = cereal::BinaryOutputArchive(stream);
-      Serialize<true>(outputArchive, object.type().info().hash());
       Serialize<true>(outputArchive, object.as_ref());
     }
 
     return {std::istreambuf_iterator{stream}, std::istreambuf_iterator<char>{}};
   }
 
-  entt::meta_any DeserializeObject(std::span<const char> objectBytes)
+  entt::meta_any DeserializeObject(std::span<const char> objectBytes, const entt::meta_type& type)
   {
     ZoneScoped;
     auto stream       = std::stringstream(std::string(objectBytes.data(), objectBytes.size()));
     auto inputArchive = cereal::BinaryInputArchive(stream);
     auto typeHash     = uint32_t{};
     Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
-    auto type = entt::resolve(typeHash);
     ASSERT(type);
     auto object = type.construct();
     Serialize<false>(inputArchive, object.as_ref());

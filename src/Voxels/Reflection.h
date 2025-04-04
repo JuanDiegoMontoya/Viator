@@ -58,6 +58,8 @@ namespace Core::Reflection
 
     // Low latency, but RPC may be dropped. RPCs are otherwise reliable.
     Unreliable = 1 << 4,
+
+    UseVoxelChannel = 1 << 5,
   };
 
   inline RpcTraits operator|(RpcTraits a, RpcTraits b)

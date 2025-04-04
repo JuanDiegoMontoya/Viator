@@ -386,6 +386,12 @@ void CreateContextVariablesAndObservers(World& world)
   world.InitializeGameDefinitions();
 }
 
+void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel)
+{
+  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  grid.SetVoxelAt(voxelPosition, voxel);
+}
+
 Game::~Game()
 {
   Physics::Terminate();
@@ -3956,7 +3962,7 @@ bool BlockDefinition::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition) co
   auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
   if (grid.IsPositionInGrid(voxelPosition))
   {
-    grid.SetVoxelAt(voxelPosition, GetBlockId());
+    Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, GetBlockId());
     return true;
   }
   return false;
@@ -3964,8 +3970,7 @@ bool BlockDefinition::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition) co
 
 void BlockDefinition::OnDestroyBlock(World& world, glm::ivec3 voxelPosition) const
 {
-  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
-  grid.SetVoxelAt(voxelPosition, voxel_t::Air);
+  Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, voxel_t::Air);
 }
 
 const BlockDefinition& BlockRegistry::Get(const std::string& name) const

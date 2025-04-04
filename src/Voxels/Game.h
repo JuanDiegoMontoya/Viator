@@ -438,6 +438,8 @@ private:
 
 void CreateContextVariablesAndObservers(World& world);
 
+void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel);
+
 class EntityPrefabDefinition
 {
 public:

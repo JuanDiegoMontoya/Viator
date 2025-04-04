@@ -9,6 +9,7 @@
 #include <optional>
 
 class World;
+typedef struct _ENetCompressor ENetCompressor;
 
 namespace Networking
 {
@@ -56,5 +57,42 @@ namespace Networking
 
     // TwoLevelGrid
     TwoLevelGrid,
+
+    // Bitwise AND this mask with a PacketType to extract the underlying packet type (one of the above enumerators).
+    TypeMask = 0b0111'1111,
+
+    // Indicates that the packet is compressed. Bitwise OR'd with another packet type.
+    // Compressed packets contain a uint32 after the packet type to indicate their uncompressed size.
+    Compressed = 0b1000'0000,
   };
+
+  inline PacketType operator|(PacketType a, PacketType b)
+  {
+    return static_cast<PacketType>((uint32_t)a | (uint32_t)b);
+  }
+
+  inline PacketType operator&(PacketType a, PacketType b)
+  {
+    return static_cast<PacketType>((uint32_t)a & (uint32_t)b);
+  }
+
+  enum class Channel
+  {
+    // Modifications to the voxel world.
+    Voxels,
+
+    // Ordered (not necessarily reliable) entity state sent by the server.
+    // Also includes reliable RPCs as it's likely these need to be sequenced with replicated state.
+    Replicate,
+
+    // Unimportant one-shot events.
+    UnreliableRpc,
+
+    NumChannels,
+  };
+
+  namespace detail
+  {
+    ENetCompressor GetCompressor();
+  }
 }

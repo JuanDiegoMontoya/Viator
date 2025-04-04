@@ -800,4 +800,5 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(TryCraftRecipeRPC, RpcTraits::Server);
   REGISTER_RPC(SwapInventorySlotsRPC, RpcTraits::Server);
   REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
+  REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
 }

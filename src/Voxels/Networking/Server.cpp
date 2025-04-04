@@ -9,9 +9,11 @@
 #include "enet/enet.h"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
+#include "zstd.h"
 
 #include <unordered_set>
 #include <span>
+#include <memory>
 
 static std::string format_as(const ENetAddress& addr)
 {
@@ -32,13 +34,16 @@ Networking::Server::Server(World& world)
     .sin6_scope_id = 0,
   };
 
-  localHost_ = enet_host_create(&address, 32, 2, 0, 0);
+  localHost_ = enet_host_create(&address, 32, int(Channel::NumChannels), 0, 0);
 
   ASSERT(localHost_);
 
   localHost_->maximumPacketSize  = 200 * 1024 * 1024;
   localHost_->maximumWaitingData = 500 * 1024 * 1024;
   localHost_->checksum           = &enet_crc32;
+  
+  auto compressor = detail::GetCompressor();
+  enet_host_compress(localHost_, &compressor);
 
   world_->GetRegistry().on_destroy<entt::entity>().connect<&Server::OnEntityDestroy>(*this);
   spdlog::info("Created server bound to {}", address);
@@ -71,14 +76,19 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       {
         spdlog::info("Connected to {}", event.peer->address);
         const auto clientEntity = world.CreatePlayer();
-        auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Joining}).first;
+        auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Connected}).first;
         entityToConnection_.emplace(clientEntity, event.peer);
-
-        // TODO: Send packet informing the client of their entity ID.
+        
         auto stream = std::stringstream();
+        Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid | PacketType::Compressed);
+        const auto bytes = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
+        const auto maxCompressedSize = ZSTD_compressBound(bytes.size());
 
-        Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid);
-        Core::Serialization::SerializeObjectStream(stream, entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
+        auto tempBuffer = std::make_unique<char[]>(maxCompressedSize);
+        auto zret       = ZSTD_compress(tempBuffer.get(), maxCompressedSize, bytes.data(), bytes.size(), ZSTD_CLEVEL_DEFAULT);
+        ASSERT(!ZSTD_isError(zret), "Failed to compress TwoLevelGrid.");
+        stream.write(tempBuffer.get(), zret);
+        spdlog::info("Compressed world from {} bytes to {} bytes.", bytes.size(), zret);
 
         auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
         packet->userData = &pair;
@@ -87,11 +97,11 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
           [](ENetPacket* packet)
           {
             auto* ppair = static_cast<std::remove_reference_t<decltype(pair)>*>(packet->userData);
-            ppair->second.status = ClientStatus::Connected;
+            //ppair->second.status = ClientStatus::Connected;
             spdlog::info("World transmitted to {}", ppair->first->address);
           });
 
-        enet_peer_send(event.peer, 0, packet);
+        enet_peer_send(event.peer, uint8_t(Channel::Voxels), packet);
 
         // TODO: Make this work.
         //CallRPC2("GiveLocalPlayerRPC"_hs, clientEntity, world, clientEntity);
@@ -187,13 +197,14 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
     }
     //spdlog::info("Sending entities: {}", string);
 
+    // TODO: These packets should be unreliable, but currently they are the only way to register new entities on clients.
     auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
 
     for (auto& [peer, clientInfo] : connections_)
     {
       if (clientInfo.status == ClientStatus::Connected)
       {
-        enet_peer_send(peer, 0, packet);
+        enet_peer_send(peer, uint8_t(Channel::Replicate), packet);
       }
     }
   }
@@ -234,6 +245,7 @@ void Networking::Server::FlushRPCs()
 
     const auto packetFlags = bool(rpc.traits & RpcTraits::Unreliable) ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
     auto* packet           = enet_packet_create(stream.view().data(), stream.view().size(), packetFlags);
+    const auto channel     = enet_uint8(bool(rpc.traits & RpcTraits::Unreliable) ? Channel::UnreliableRpc : Channel::Replicate);
 
     if (rpc.owningConnection && entityToConnection_.contains(*rpc.owningConnection) && bool(rpc.traits & (RpcTraits::Client | RpcTraits::Remote)))
     {
@@ -241,7 +253,7 @@ void Networking::Server::FlushRPCs()
       auto peer = entityToConnection_.at(*rpc.owningConnection);
       if (packetFlags & ENET_PACKET_FLAG_RELIABLE || connections_.at(peer).status == ClientStatus::Connected)
       {
-        enet_peer_send(peer, 0, packet);
+        enet_peer_send(peer, channel, packet);
       }
     }
     else
@@ -251,7 +263,7 @@ void Networking::Server::FlushRPCs()
       {
         if (packetFlags & ENET_PACKET_FLAG_RELIABLE || clientInfo.status == ClientStatus::Connected)
         {
-          enet_peer_send(peer, 0, packet);
+          enet_peer_send(peer, channel, packet);
         }
       }
     }
@@ -275,7 +287,7 @@ void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
   {
     if (clientInfo.status == ClientStatus::Connected)
     {
-      enet_peer_send(peer, 0, packet);
+      enet_peer_send(peer, enet_uint8(Channel::Replicate), packet);
     }
   }
 }
@@ -286,11 +298,29 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
   auto peerIt = connections_.find(peer);
   ASSERT(peerIt != connections_.end());
 
+  const char* const pData = reinterpret_cast<const char*>(enetPacket.data);
   auto stream = std::stringstream(std::string(reinterpret_cast<const char*>(enetPacket.data), enetPacket.dataLength));
-
   auto packetType = Core::Serialization::DeserializeObjectStream<PacketType>(stream);
 
-  if (packetType == PacketType::InputState)
+  if (bool(packetType & PacketType::Compressed))
+  {
+    auto outSize = ZSTD_getFrameContentSize(pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
+    ASSERT(outSize != ZSTD_CONTENTSIZE_UNKNOWN);
+    ASSERT(outSize != ZSTD_CONTENTSIZE_ERROR);
+    auto outStr = std::string();
+    outStr.resize(outSize);
+    auto ret = ZSTD_decompress(outStr.data(), outSize, pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
+    if (ZSTD_isError(ret))
+    {
+      spdlog::warn("Failed to decompress packet: {}", ZSTD_getErrorName(ret));
+      return;
+    }
+    ASSERT(ret == outSize);
+    // Reset the stream with the uncompressed data.
+    stream = std::stringstream(std::move(outStr));
+  }
+
+  if ((packetType & PacketType::TypeMask) == PacketType::InputState)
   {
     auto inputState = Core::Serialization::DeserializeObjectStream<InputState>(stream);
     auto inputLookState = Core::Serialization::DeserializeObjectStream<InputLookState>(stream);
@@ -298,7 +328,7 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
     world.GetRegistry().emplace_or_replace<InputState>(world.TryGetLocalPlayer(), inputState);
     world.GetRegistry().emplace_or_replace<InputLookState>(world.TryGetLocalPlayer(), inputLookState);
   }
-  else if (packetType == PacketType::Rpc)
+  else if (bool(packetType & PacketType::Rpc))
   {
     detail::InvokeSerializedRPC(world, stream);
   }

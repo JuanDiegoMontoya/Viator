@@ -39,5 +39,5 @@ namespace Core::Serialization
   }
 
   std::vector<char> SerializeObject(entt::meta_any object);
-  entt::meta_any DeserializeObject(std::span<const char> objectBytes);
+  entt::meta_any DeserializeObject(std::span<const char> objectBytes, const entt::meta_type& type);
 }
