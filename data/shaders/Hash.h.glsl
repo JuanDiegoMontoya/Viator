@@ -25,7 +25,7 @@ uint PCG_RandU32(inout uint rng_state)
 float PCG_RandFloat(inout uint state, float min_, float max_)
 {
   state = PCG_RandU32(state);
-  float f = float(state) * uintBitsToFloat(0x2f800004u);
+  float f = float(state) * uintBitsToFloat(0x2f800000u);
   return f * (max_ - min_) + min_;
 }
 

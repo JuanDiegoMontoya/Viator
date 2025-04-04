@@ -32,12 +32,12 @@ namespace PCG
 #ifdef PCG_USE_UB_OPT
     union
     {
-      std::uint32_t uu = 0x2f800004u;
+      std::uint32_t uu = 0x2f800000u;
       float uf;
     }a;
     float f = float(state) * a.uf;
 #else
-    float f = float(state) * std::bit_cast<float>(0x2f800004u);
+    float f = float(state) * std::bit_cast<float>(0x2f800000u);
 #endif
     return f * (max - min) + min;
   }
