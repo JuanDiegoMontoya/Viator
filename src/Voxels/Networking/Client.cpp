@@ -68,6 +68,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       {
       case ENET_EVENT_TYPE_CONNECT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_CONNECT");
         spdlog::info("Connected to {}", event.peer->address);
         status_     = ClientStatus::Joining;
         remotePeer_ = event.peer;
@@ -75,6 +76,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
         spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, *event.packet);
         enet_packet_destroy(event.packet);
@@ -82,6 +84,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_DISCONNECT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_DISCONNECT");
         spdlog::info("Disconnected from {}", event.peer->address);
         status_          = ClientStatus::Disconnected;
         event.peer->data = nullptr;
@@ -92,6 +95,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_DISCONNECT_TIMEOUT");
         spdlog::info("Disconnected (timeout) from {}", event.peer->address);
         status_          = ClientStatus::Disconnected;
         event.peer->data = nullptr; // Placeholder: this code should be replaced by actual peer cleanup.
@@ -144,6 +148,7 @@ void Networking::Client::EnqueueRPC(RpcInfo rpc)
 
 void Networking::Client::FlushRPCs()
 {
+  ZoneScoped;
   while (!rpcs_.empty())
   {
     auto rpc = rpcs_.pop_front();
@@ -173,6 +178,7 @@ void Networking::Client::FlushRPCs()
 
 void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
 {
+  ZoneScoped;
   if (auto it = localToRemoteEntity_.find(entity); it != localToRemoteEntity_.end())
   {
     ASSERT(remoteToLocalEntity_.contains(it->second));
@@ -190,6 +196,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
 
   if (bool(packetType & PacketType::Compressed))
   {
+    ZoneScopedN("PacketType::Compressed");
     auto outSize = ZSTD_getFrameContentSize(pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
     ASSERT(outSize != ZSTD_CONTENTSIZE_UNKNOWN);
     ASSERT(outSize != ZSTD_CONTENTSIZE_ERROR);
@@ -208,6 +215,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
 
   if ((packetType & PacketType::TypeMask) == PacketType::TwoLevelGrid)
   {
+    ZoneScopedN("PacketType::TwoLevelGrid");
     spdlog::info("Finished downloading world.");
     status_   = ClientStatus::Connected;
     auto grid = Core::Serialization::DeserializeObjectStream<TwoLevelGrid>(stream);
@@ -216,6 +224,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
   }
   else if ((packetType & PacketType::TypeMask) == PacketType::EntityBundle)
   {
+    ZoneScopedN("PacketType::EntityBundle");
     auto entities = Core::Serialization::DeserializeObjectStream<std::vector<entt::entity>>(stream);
 
     for (auto remoteEntity : entities)
@@ -244,12 +253,12 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
   }
   else if ((packetType & PacketType::TypeMask) == PacketType::RemovedEntity)
   {
+    ZoneScopedN("PacketType::RemovedEntity");
     // Delete entity.
     auto remoteEntity = Core::Serialization::DeserializeObjectStream<entt::entity>(stream);
     if (auto it = remoteToLocalEntity_.find(remoteEntity); it != remoteToLocalEntity_.end())
     {
       auto localEntity = it->second;
-      //world.GetRegistry().destroy(localEntity);
       world.GetRegistry().emplace<DeferredDelete>(localEntity);
       localToRemoteEntity_.erase(localEntity);
       remoteToLocalEntity_.erase(it);

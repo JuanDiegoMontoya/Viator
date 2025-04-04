@@ -64,6 +64,7 @@ Networking::Server::~Server()
 
 void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
 {
+  ZoneScoped;
   // TODO: "TEMP": Put host service here until it's moved to another thread.
   auto event = ENetEvent{};
   while (true)
@@ -74,6 +75,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       {
       case ENET_EVENT_TYPE_CONNECT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_CONNECT");
         spdlog::info("Connected to {}", event.peer->address);
         const auto clientEntity = world.CreatePlayer();
         auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Connected}).first;
@@ -110,6 +112,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
         spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, event.peer, *event.packet);
         enet_packet_destroy(event.packet);
@@ -117,6 +120,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_DISCONNECT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_DISCONNECT");
         spdlog::info("Disconnected from {}", event.peer->address);
         event.peer->data = nullptr;
         auto connection  = connections_.at(event.peer);
@@ -127,6 +131,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       }
       case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
       {
+        ZoneScopedN("ENET_EVENT_TYPE_DISCONNECT_TIMEOUT");
         spdlog::info("Disconnected (timeout) from {}", event.peer->address);
         event.peer->data = nullptr; // Placeholder: this code should be replaced by actual peer cleanup.
         auto connection  = connections_.at(event.peer);
@@ -228,6 +233,7 @@ void Networking::Server::EnqueueRPC(RpcInfo rpc)
 
 void Networking::Server::FlushRPCs()
 {
+  ZoneScoped;
   while (!rpcs_.empty())
   {
     auto rpc = rpcs_.pop_front();
@@ -272,6 +278,7 @@ void Networking::Server::FlushRPCs()
 
 void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
 {
+  ZoneScoped;
   if (connections_.empty())
   {
     return;
@@ -304,6 +311,7 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
 
   if (bool(packetType & PacketType::Compressed))
   {
+    ZoneScopedN("PacketType::Compressed");
     auto outSize = ZSTD_getFrameContentSize(pData + stream.tellg(), enetPacket.dataLength - stream.tellg());
     ASSERT(outSize != ZSTD_CONTENTSIZE_UNKNOWN);
     ASSERT(outSize != ZSTD_CONTENTSIZE_ERROR);
@@ -322,6 +330,7 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
 
   if ((packetType & PacketType::TypeMask) == PacketType::InputState)
   {
+    ZoneScopedN("PacketType::InputState");
     auto inputState = Core::Serialization::DeserializeObjectStream<InputState>(stream);
     auto inputLookState = Core::Serialization::DeserializeObjectStream<InputLookState>(stream);
     //world.GetRegistry().emplace_or_replace<InputState>(peerIt->second.entity, inputState);

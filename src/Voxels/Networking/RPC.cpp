@@ -1,10 +1,13 @@
 #include "RPC.h"
 #include "Client.h"
 
+#include "tracy/Tracy.hpp"
+
 #include <sstream>
 
 void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& stream)
 {
+  ZoneScoped;
   auto id = Core::Serialization::DeserializeObjectStream<entt::id_type>(stream);
   ASSERT(id);
   auto meta = entt::resolve<Core::Reflection::RpcTraits>();
