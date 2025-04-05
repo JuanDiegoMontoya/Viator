@@ -33,10 +33,11 @@ namespace Core::Reflection
     REPLICATED = 1 << 5,
 
     // The type can be trivially copied (e.g. by memcpy) instead of member-wise copied.
+    // Takes precedence over specific serialize functions.
     TRIVIAL = 1 << 6,
   };
 
-  inline Traits operator|(Traits a, Traits b)
+  constexpr Traits operator|(Traits a, Traits b)
   {
     return static_cast<Traits>((uint32_t)a | (uint32_t)b);
   }
@@ -62,12 +63,12 @@ namespace Core::Reflection
     UseVoxelChannel = 1 << 5,
   };
 
-  inline RpcTraits operator|(RpcTraits a, RpcTraits b)
+  constexpr RpcTraits operator|(RpcTraits a, RpcTraits b)
   {
     return static_cast<RpcTraits>((uint32_t)a | (uint32_t)b);
   }
 
-  inline RpcTraits operator&(RpcTraits a, RpcTraits b)
+  constexpr RpcTraits operator&(RpcTraits a, RpcTraits b)
   {
     return static_cast<RpcTraits>((uint32_t)a & (uint32_t)b);
   }

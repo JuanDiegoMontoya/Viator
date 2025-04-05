@@ -66,12 +66,12 @@ namespace Networking
     Compressed = 0b1000'0000,
   };
 
-  inline PacketType operator|(PacketType a, PacketType b)
+  constexpr PacketType operator|(PacketType a, PacketType b)
   {
     return static_cast<PacketType>((uint32_t)a | (uint32_t)b);
   }
 
-  inline PacketType operator&(PacketType a, PacketType b)
+  constexpr PacketType operator&(PacketType a, PacketType b)
   {
     return static_cast<PacketType>((uint32_t)a & (uint32_t)b);
   }

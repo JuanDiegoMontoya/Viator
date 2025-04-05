@@ -64,6 +64,15 @@ namespace Core::Serialization
   {
     ZoneScoped;
 
+    if (value.type().traits<Traits>() & Traits::TRIVIAL)
+    {
+      // Spooky const_cast! Technically only needed when loading, and should be well-defined as the underlying data is mutable...
+      auto* vp = const_cast<void*>(value.base().data());
+      auto binary = cereal::binary_data(vp, value.type().size_of());
+      ar(binary);
+      return;
+    }
+
     // First, check if the type already has a bespoke serialization function.
     const auto archiveHash = entt::type_id<Archive>();
     for (auto [id, func] : value.type().func())
@@ -91,22 +100,15 @@ namespace Core::Serialization
         Serialize<Save>(ar, entt::forward_as_meta(size), context);
         sequence.resize(size); // Returns false for un-resizable containers such as std::array.
       }
-
-      // TODO
-      //if (sequence.size() > 0 && sequence.value_type().traits<Traits>() & Traits::TRIVIAL)
-      //{
-      //  // memcpy time
-      //  //auto front = sequence.begin()->try_cast<void*>();
-      //  if constexpr (Save)
-      //  {
-      //    
-      //  }
-      //  else
-      //  {
-      //    
-      //  }
-      //}
-      //else
+      
+      if (sequence.size() > 0 && sequence.value_type().traits<Traits>() & Traits::TRIVIAL)
+      {
+        // Note: we are assuming here that the sequence container is contiguous (e.g. vector or array) so it can be treated as a binary blob.
+        auto* vp = const_cast<void*>(sequence.begin().base().data());
+        auto binary = cereal::binary_data(vp, sequence.size() * sequence.value_type().size_of());
+        ar(binary);
+      }
+      else
       {
         for (auto element : sequence)
         {

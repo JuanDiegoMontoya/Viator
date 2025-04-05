@@ -360,6 +360,7 @@ void Core::Reflection::Initialize()
   .traits(COMPONENT)
 #define REFLECT_COMPONENT(T, ...)                                                                                   \
   MAKE_IDENTIFIER(T);                                                                                               \
+  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                 \
   entt::meta_factory<T>{}                                                                                           \
     .traits(COMPONENT __VA_OPT__(| __VA_ARGS__))                                                                    \
     .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \
@@ -400,38 +401,42 @@ void Core::Reflection::Initialize()
     entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
     .traits<RpcTraits>(Traits)
 
-  entt::meta_factory<int>().func<&EditorWriteScalar<int>>("EditorWrite"_hs).func<&EditorReadScalar<int>>("EditorRead"_hs);
-  entt::meta_factory<uint32_t>().func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint32_t>>("EditorRead"_hs);
-  entt::meta_factory<uint16_t>().func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint16_t>>("EditorRead"_hs);
-  entt::meta_factory<uint8_t>().func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint8_t>>("EditorRead"_hs);
-  entt::meta_factory<float>().func<&EditorWriteScalar<float>>("EditorWrite"_hs).func<&EditorReadScalar<float>>("EditorRead"_hs);
+  entt::meta_factory<int>().func<&EditorWriteScalar<int>>("EditorWrite"_hs).func<&EditorReadScalar<int>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<uint32_t>().func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint32_t>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<uint16_t>().func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint16_t>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<uint8_t>().func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint8_t>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<float>().func<&EditorWriteScalar<float>>("EditorWrite"_hs).func<&EditorReadScalar<float>>("EditorRead"_hs).traits(TRIVIAL);
   entt::meta_factory<glm::vec3>().func<&EditorWriteVec3>("EditorWrite"_hs).func<&EditorReadVec3>("EditorRead"_hs)
+    TRAITS(TRIVIAL)
     DATA(glm::vec3, x)
     DATA(glm::vec3, y)
     DATA(glm::vec3, z);
   entt::meta_factory<glm::ivec3>()
+    TRAITS(TRIVIAL)
     DATA(glm::ivec3, x)
     DATA(glm::ivec3, y)
     DATA(glm::ivec3, z);
   entt::meta_factory<glm::ivec2>()
+    TRAITS(TRIVIAL)
     DATA(glm::ivec2, x)
     DATA(glm::ivec2, y);
   entt::meta_factory<glm::quat>().func<&EditorWriteQuat>("EditorWrite"_hs).func<&EditorReadQuat>("EditorRead"_hs)
+    TRAITS(TRIVIAL)
     DATA(glm::quat, w)
     DATA(glm::quat, x)
     DATA(glm::quat, y)
     DATA(glm::quat, z);
   entt::meta_factory<std::string>().func<&EditorWriteString>("EditorWrite"_hs).func<&EditorReadString>("EditorRead"_hs);
-  entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs);
-  entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs);
+  entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs).traits(TRIVIAL);
   
-  REFLECT_COMPONENT(LocalTransform, REPLICATED)
+  REFLECT_COMPONENT(LocalTransform, REPLICATED | TRIVIAL)
     .func<&EditorUpdateTransform>("OnUpdate"_hs)
     DATA(LocalTransform, position, PROP_SPEED(0.20f))
     DATA(LocalTransform, rotation)
     DATA(LocalTransform, scale, PROP_SPEED(0.0125f));
   
-  REFLECT_COMPONENT(GlobalTransform, EDITOR_READ_ONLY | REPLICATED)
+  REFLECT_COMPONENT(GlobalTransform, EDITOR_READ_ONLY | REPLICATED | TRIVIAL)
     DATA(GlobalTransform, position)
     DATA(GlobalTransform, rotation)
     DATA(GlobalTransform, scale);
@@ -444,7 +449,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
     DATA(RenderTransform, transform);
 
-  REFLECT_COMPONENT(Health, REPLICATED)
+  REFLECT_COMPONENT(Health, REPLICATED | TRIVIAL)
     DATA(Health, hp, PROP_MIN(0.0f), PROP_MAX(100.0f))
     DATA(Health, maxHp, PROP_MIN(0.0f), PROP_MAX(100.0f));
 
@@ -508,7 +513,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(CharacterControllerShrimpleSettings, EDITOR_READ_ONLY)
     DATA(CharacterControllerShrimpleSettings, shape);
 
-  REFLECT_COMPONENT(RigidBodySettings, EDITOR_READ_ONLY)
+  REFLECT_COMPONENT(RigidBodySettings, EDITOR_READ_ONLY | TRIVIAL)
     DATA(RigidBodySettings, shape)
     DATA(RigidBodySettings, activate)
     DATA(RigidBodySettings, isSensor)
@@ -635,6 +640,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Hierarchy, EDITOR_READ_ONLY /* | REPLICATED */)
     DATA(Hierarchy, parent)
     DATA(Hierarchy, children)
+    TRAITS(TRIVIAL)
     DATA(Hierarchy, useLocalPositionAsGlobal)
     DATA(Hierarchy, useLocalRotationAsGlobal);
 
@@ -655,7 +661,7 @@ void Core::Reflection::Initialize()
     DATA(Projectile, drag)
     DATA(Projectile, restitution);
 
-  REFLECT_COMPONENT(Inventory, EDITOR_READ_ONLY | REPLICATED)
+  REFLECT_COMPONENT(Inventory, EDITOR_READ_ONLY | REPLICATED | TRIVIAL)
     DATA(Inventory, activeSlotCoord)
     DATA(Inventory, canHaveActiveItem)
     DATA(Inventory, activeSlotEntity)
@@ -664,7 +670,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Billboard, REPLICATED)
     DATA(Billboard, name);
 
-  REFLECT_COMPONENT(GpuLight, REPLICATED)
+  REFLECT_COMPONENT(GpuLight, REPLICATED | TRIVIAL)
     DATA(GpuLight, color)
     DATA(GpuLight, type)
     DATA(GpuLight, direction, PROP_MIN(-1.0f))
@@ -676,7 +682,7 @@ void Core::Reflection::Initialize()
     DATA(GpuLight, outerConeAngle, PROP_MAX(6.28f))
     DATA(GpuLight, colorSpace);
 
-  REFLECT_COMPONENT(BlockEntity, REPLICATED);
+  REFLECT_COMPONENT(BlockEntity, REPLICATED | TRANSIENT);
 
   REFLECT_COMPONENT(DespawnWhenFarFromPlayer)
     DATA(DespawnWhenFarFromPlayer, maxDistance)
@@ -710,7 +716,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(KnockbackMultiplier)
     DATA(KnockbackMultiplier, factor, PROP_MAX(10.0f));
 
-  REFLECT_COMPONENT(Tint, REPLICATED)
+  REFLECT_COMPONENT(Tint, REPLICATED | TRIVIAL)
     DATA(Tint, color);
 
   REFLECT_COMPONENT(WalkingMovementAttributes)
