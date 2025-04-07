@@ -624,7 +624,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   for (auto&& [entity, transform, health] : world.GetRegistry().view<RenderTransform, Health>(entt::exclude<LocalPlayer>).each())
   {
     billboards.emplace_back(Temp::BillboardInstance{
-      .position   = transform.transform.position + glm::vec3(0, GetHeight({world.GetRegistry(), entity}) / 2.0f + 0.25f, 0),
+      .position   = transform.transform.position + glm::vec3(0, world.GetHeight(entity) / 2.0f + 0.25f, 0),
       .scale      = {0.5f, 0.1f},
       .leftColor  = {0, 1, 0, 1},
       .rightColor = {1, 0, 0, 1},
@@ -865,7 +865,7 @@ static std::string FixupTypeString(std::string_view str)
   return std::string(str);
 }
 
-static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId)
+static bool DrawComponentHelper(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId)
 {
   using namespace Core::Reflection;
   auto meta = instance.type();
@@ -905,7 +905,7 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
       {
         auto eType = element.type();
         ImGui::PushID(guiId++);
-        changed |= DrawComponentHelper(handle, element.as_ref(), eType.custom(), readonly, guiId);
+        changed |= DrawComponentHelper(world, entity, element.as_ref(), eType.custom(), readonly, guiId);
         ImGui::PopID();
       }
       ImGui::TreePop();
@@ -973,7 +973,7 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
       {
         ImGui::PushID(guiId++);
         ImGui::Indent();
-        changed |= DrawComponentHelper(handle, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
+        changed |= DrawComponentHelper(world, entity, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
         ImGui::Unindent();
         ImGui::PopID();
       }
@@ -982,7 +982,7 @@ static bool DrawComponentHelper(entt::handle handle, entt::meta_any instance, en
 
   if (auto onUpdateFunc = meta.func("OnUpdate"_hs); onUpdateFunc && changed)
   {
-    onUpdateFunc.invoke({}, handle);
+    onUpdateFunc.invoke({}, entt::forward_as_meta(world), entity);
   }
 
   return changed;
@@ -1328,8 +1328,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (ImGui::Button("Exit to main menu"))
       {
         networking->reset();
-        world.GetRegistry().clear();
-        world.GetRegistry() = {};
+        world.GetRegistryRaw().clear();
+        world.GetRegistryRaw() = {};
         CreateContextVariablesAndObservers(world);
         gameState = GameState::MENU;
       }
@@ -1387,7 +1387,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
   {
-    auto& registry = world.GetRegistry();
+    auto& registry = world.GetRegistryRaw();
     if (ImGui::Begin("Entities"))
     {
       ZoneScopedN("Entities");
@@ -1469,7 +1469,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
               auto addFunc            = meta.func("add"_hs);
               auto emplaceDefaultFunc = meta.func("EmplaceDefault"_hs);
               int flags               = 0;
-              if (!addFunc && !emplaceDefaultFunc)
+              if ((!addFunc && !emplaceDefaultFunc) || meta.traits<Core::Reflection::Traits>() & Core::Reflection::EDITOR_READ_ONLY)
               {
                 flags |= ImGuiSelectableFlags_Disabled;
               }
@@ -1506,7 +1506,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         if (!isInitialized)
         {
           isInitialized = true;
-          for (auto pair : registry.storage())
+          for (auto pair : world.GetRegistryRaw().storage())
           {
             auto meta = entt::resolve(pair.first);
             storages.emplace_back(meta, &pair.second, meta ? FixupTypeString(meta.info().name()) : std::string());
@@ -1540,7 +1540,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
           if (storage->contains(e) && meta)
           {
-            DrawComponentHelper({registry, e},
+            DrawComponentHelper(world, e,
               meta.from_void(storage->value(e)),
               meta.custom(),
               meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ_ONLY,

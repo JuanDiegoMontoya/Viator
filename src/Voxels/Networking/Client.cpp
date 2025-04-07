@@ -43,12 +43,12 @@ Networking::Client::Client(World& world, const char* hostName)
 
   ASSERT(remotePeer_);
 
-  world.GetRegistry().on_destroy<entt::entity>().connect<&Client::OnEntityDestroy>(*this);
+  world.GetRegistryRaw().on_destroy<entt::entity>().connect<&Client::OnEntityDestroy>(*this);
 }
 
 Networking::Client::~Client()
 {
-  world_->GetRegistry().on_destroy<entt::entity>().disconnect<&Client::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&Client::OnEntityDestroy>(*this);
   if (remotePeer_)
   {
     enet_peer_disconnect_now(remotePeer_, 0);
@@ -247,7 +247,7 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       auto localEntity = remoteToLocalEntity_.at(remoteEntity);
       if (world.GetRegistry().all_of<LocalTransform, Hierarchy>(localEntity))
       {
-        UpdateLocalTransform({world.GetRegistry(), localEntity});
+        world.UpdateLocalTransform(localEntity);
       }
     }
   }

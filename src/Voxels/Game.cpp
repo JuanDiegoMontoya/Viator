@@ -51,9 +51,10 @@
 #define GAME_CATCH_EXCEPTIONS 0
 
 // We don't want this to happen when the component/entity is actually deleted, as we care about having a valid parent.
-static void OnDeferredDeleteConstruct(entt::registry& registry, entt::entity entity)
+static void OnDeferredDeleteConstruct(entt::registry& registryRaw, entt::entity entity)
 {
   ZoneScoped;
+  auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   ASSERT(registry.valid(entity));
   auto* h = registry.try_get<Hierarchy>(entity);
   if (h && h->parent != entt::null)
@@ -276,30 +277,34 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
     });
 }
 
-void OnNoclipCharacterControllerConstruct(entt::registry& registry, entt::entity entity)
+void OnNoclipCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
 {
+  auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   registry.remove<FlyingCharacterController>(entity);
   registry.remove<Physics::CharacterController>(entity);
   registry.remove<Physics::CharacterControllerShrimple>(entity);
 }
 
-void OnFlyingCharacterControllerConstruct(entt::registry& registry, entt::entity entity)
+void OnFlyingCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
 {
+  auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   registry.remove<NoclipCharacterController>(entity);
   registry.remove<Physics::CharacterController>(entity);
   registry.remove<Physics::CharacterControllerShrimple>(entity);
 }
 
-void OnCharacterControllerConstruct(entt::registry& registry, entt::entity entity)
+void OnCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
 {
+  auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   registry.remove<NoclipCharacterController>(entity);
   registry.remove<FlyingCharacterController>(entity);
   registry.remove<Physics::CharacterControllerShrimple>(entity);
   registry.remove<Friction>(entity); // TODO: temporary until CC has inertia
 }
 
-void OnCharacterControllerShrimpleConstruct(entt::registry& registry, entt::entity entity)
+void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity)
 {
+  auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   registry.remove<NoclipCharacterController>(entity);
   registry.remove<FlyingCharacterController>(entity);
   registry.remove<Physics::CharacterController>(entity);
@@ -310,13 +315,15 @@ void OnGlobalTransformRemove(entt::registry& registry, entt::entity entity)
   registry.ctx().get<HashGrid>().erase(entity);
 }
 
-void OnLinearPathRemove(entt::registry& registry, entt::entity entity)
+void OnLinearPathRemove(entt::registry& registryRaw, entt::entity entity)
 {
+  auto& world = registryRaw.ctx().get<World&>();
+  auto& registry = world.GetRegistry();
   if (!registry.all_of<DeferredDelete>(entity))
   {
-    auto& path = registry.get<LinearPath>(entity);
+    auto& path = registry.get<const LinearPath>(entity);
     registry.emplace_or_replace<LocalTransform>(entity, path.originalLocalTransform);
-    UpdateLocalTransform({registry, entity});
+    world.UpdateLocalTransform(entity);
   }
 }
 
@@ -356,12 +363,13 @@ Game::Game(uint32_t)
 void CreateContextVariablesAndObservers(World& world)
 {
   ZoneScoped;
-  auto& registry = world.GetRegistry();
+  auto& registry = world.GetRegistryRaw();
 #ifndef GAME_HEADLESS
   registry.ctx().emplace<GameState>() = GameState::MENU;
   registry.ctx().emplace<std::vector<Debug::Line>>();
 #endif
 
+  registry.ctx().emplace<World&>(world); // Observers only see a registry, so this is needed for flexibility and correctness.
   registry.ctx().emplace<PCG::Rng>();
   registry.ctx().emplace<Debugging>();
   registry.ctx().emplace<TimeScale>();
@@ -486,7 +494,7 @@ public:
     auto e2                         = world.CreateRenderableEntity({1.0f, 0.3f, -0.8f}, {1, 0, 0, 0}, 1.5f);
     registry.emplace<Name>(e2).name = "Child";
     registry.emplace<Mesh>(e2).name = "ar15";
-    SetParent({registry, e2}, e);
+    world.SetParent(e2, e);
 
     // Make hitbox/hurtbox collider.
     auto eHitbox                         = registry.create();
@@ -507,7 +515,7 @@ public:
         .motionType = JPH::EMotionType::Kinematic,
         .layer      = Physics::Layers::HITBOX_AND_HURTBOX,
       });
-    SetParent({registry, eHitbox}, e);
+    world.SetParent(eHitbox, e);
 
     return e;
   }
@@ -566,7 +574,7 @@ public:
         .motionType = JPH::EMotionType::Kinematic,
         .layer      = Physics::Layers::HITBOX_AND_HURTBOX,
       });
-    SetParent({registry, eHitbox}, e);
+    world.SetParent(eHitbox, e);
 
     return e;
   }
@@ -662,7 +670,7 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
       auto& h                    = registry.get<Hierarchy>(a);
       h.useLocalPositionAsGlobal = true;
       h.useLocalRotationAsGlobal = true;
-      SetParent({registry, a}, prevEntity);
+      world.SetParent(a, prevEntity);
       
       auto eHitbox                         = registry.create();
       registry.emplace<Name>(eHitbox).name = "Worm hitbox";
@@ -681,7 +689,7 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
           .motionType = JPH::EMotionType::Kinematic,
           .layer      = Physics::Layers::HITBOX_AND_HURTBOX,
         });
-      SetParent({registry, eHitbox}, a);
+      world.SetParent(eHitbox, a);
     }
     prevBody2  = body;
     prevEntity = a;
@@ -770,7 +778,7 @@ public:
         auto& h                    = registry.get<Hierarchy>(a);
         h.useLocalPositionAsGlobal = true;
         h.useLocalRotationAsGlobal = true;
-        SetParent({registry, a}, prevEntity);
+        world.SetParent(a, prevEntity);
 
         //auto hitboxShape                     = JPH::Ref(new JPH::SphereShape(WORM_SCALE));
         //auto eHitbox                         = registry.create();
@@ -1068,12 +1076,12 @@ void World::FixedUpdate(float dt)
 
     for (auto entity : registry_.view<LocalPlayer>())
     {
-      UpdateLocalTransform({registry_, entity});
+      UpdateLocalTransform(entity);
     }
 
     if (IsServer())
     {
-      registry_.ctx().get<NpcSpawnDirector>().Update(dt);
+      //registry_.ctx().get<NpcSpawnDirector>().Update(dt);
     }
     
     Physics::FixedUpdate(dt, *this);
@@ -1140,7 +1148,7 @@ void World::FixedUpdate(float dt)
         transform.rotation = linearPath.originalLocalTransform.rotation * newRelativeRotation;
         transform.scale    = linearPath.originalLocalTransform.scale * newRelativeScale;
 
-        UpdateLocalTransform({registry_, entity});
+        UpdateLocalTransform(entity);
       }
     }
 
@@ -1234,7 +1242,7 @@ void World::FixedUpdate(float dt)
         default:;
         }
 
-        UpdateLocalTransform({registry_, entity});
+        UpdateLocalTransform(entity);
       }
     }
 
@@ -1363,8 +1371,8 @@ void World::FixedUpdate(float dt)
         }
 
         Pathfinding::Path path;
-        const auto myFootPos = glm::ivec3(glm::floor(GetFootPosition({registry_, entity})));
-        const auto myHeight  = (int)std::ceil(GetHeight({registry_, entity}));
+        const auto myFootPos = glm::ivec3(glm::floor(GetFootPosition(entity)));
+        const auto myHeight  = (int)std::ceil(GetHeight(entity));
 
         // Get cached path.
         if (cp)
@@ -1485,7 +1493,7 @@ void World::FixedUpdate(float dt)
           input.forward        = 1;
         }
 
-        UpdateLocalTransform({registry_, entity});
+        UpdateLocalTransform(entity);
       }
     }
 
@@ -1507,7 +1515,7 @@ void World::FixedUpdate(float dt)
           velocity += input.strafe * right * tempCameraSpeed;
           velocity.y += input.elevate * tempCameraSpeed;
           transform.position += velocity * dt;
-          UpdateLocalTransform({registry_, entity});
+          UpdateLocalTransform(entity);
           registry_.get_or_emplace<LinearVelocity>(entity).v = velocity;
         }
 
@@ -1529,7 +1537,7 @@ void World::FixedUpdate(float dt)
 
           transform.position += velocity * dt;
 
-          UpdateLocalTransform({registry_, entity});
+          UpdateLocalTransform(entity);
         }
 
         if (auto* attribs = registry_.try_get<WalkingMovementAttributes>(entity);
@@ -1667,7 +1675,7 @@ void World::FixedUpdate(float dt)
               result,
               Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
               Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
-              *Physics::GetIgnoreEntityAndChildrenFilter({registry_, entity})))
+              *Physics::GetIgnoreEntityAndChildrenFilter({registryOld_, entity})))
         {
           hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
           if (registry_.valid(hitEntity))
@@ -1888,7 +1896,7 @@ void World::FixedUpdate(float dt)
               auto droppedEntity = def.Materialize(*this);
               def.GiveCollider(*this, droppedEntity);
               registry_.get<LocalTransform>(droppedEntity).position = transform.position;
-              UpdateLocalTransform({registry_, droppedEntity});
+              UpdateLocalTransform(droppedEntity);
               registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
               auto velocity = glm::vec3(0);
               if (auto* v = registry_.try_get<LinearVelocity>(entity))
@@ -1948,7 +1956,7 @@ void World::FixedUpdate(float dt)
             if (const auto droppedEntity = DropItemRPC(*this, entity, {row, col}); droppedEntity != entt::null)
             {
               registry_.get<LocalTransform>(droppedEntity).position = transform.position;
-              UpdateLocalTransform({registry_, droppedEntity});
+              UpdateLocalTransform(droppedEntity);
               auto velocity = glm::vec3(0);
               if (auto* v = registry_.try_get<LinearVelocity>(entity))
               {
@@ -2600,6 +2608,7 @@ void World::GenerateMap()
   //}
 
   constexpr int MAX_MUSHROOMS = 50'000;
+  //constexpr int MAX_MUSHROOMS = 1;
 #ifndef GAME_HEADLESS
   progressText.store("MUSHROOM");
   progress.store(0);
@@ -2674,7 +2683,7 @@ entt::entity World::CreateDroppedItem(ItemState item, glm::vec3 position, glm::q
   t.position = position;
   t.rotation = rotation;
   t.scale    = scale;
-  UpdateLocalTransform({registry_, entity});
+  UpdateLocalTransform(entity);
   itemDef.GiveCollider(*this, entity);
   registry_.emplace<DroppedItem>(entity).item = ItemState{item.id};
   return entity;
@@ -2706,7 +2715,7 @@ void World::SetLocalScale(entt::entity entity, float scale)
 {
   auto& lt = registry_.get<LocalTransform>(entity);
   lt.scale = scale;
-  UpdateLocalTransform({registry_, entity});
+  UpdateLocalTransform(entity);
 }
 
 entt::entity World::GetChildNamed(entt::entity entity, std::string_view name) const
@@ -2845,7 +2854,7 @@ void World::GivePlayerColliders(entt::entity playerEntity)
       .motionType = JPH::EMotionType::Kinematic,
       .layer      = Physics::Layers::HITBOX,
     });
-  SetParent({registry_, pHitbox}, playerEntity);
+  SetParent(pHitbox, playerEntity);
 }
 
 void World::KillPlayer(entt::entity playerEntity)
@@ -2874,7 +2883,7 @@ void World::RespawnPlayer(entt::entity playerEntity)
   tp.position = {60, 278, 60};
   tp.rotation = glm::identity<glm::quat>();
   tp.scale    = 1;
-  UpdateLocalTransform({registry_, playerEntity});
+  UpdateLocalTransform(playerEntity);
 
   registry_.get_or_emplace<Health>(playerEntity) = {100, 100};
   registry_.get_or_emplace<Invulnerability>(playerEntity).remainingSeconds = 5;
@@ -2887,7 +2896,7 @@ void World::RespawnPlayer(entt::entity playerEntity)
   {
     const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
     inventory.activeSlotEntity = def.Materialize(*this);
-    SetParent({registry_, inventory.activeSlotEntity}, playerEntity);
+    SetParent(inventory.activeSlotEntity, playerEntity);
   }
 }
 
@@ -3073,7 +3082,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
         auto itemSelf       = itemDef.Materialize(*this);
 
         registry_.get<LocalTransform>(itemSelf).position = worldPos;
-        UpdateLocalTransform({registry_, itemSelf});
+        UpdateLocalTransform(itemSelf);
         itemDef.GiveCollider(*this, itemSelf);
         registry_.emplace<DroppedItem>(itemSelf).item = *ip;
 
@@ -3091,7 +3100,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
           auto droppedEntity = def.Materialize(*this);
           def.GiveCollider(*this, droppedEntity);
           registry_.get<LocalTransform>(droppedEntity).position = worldPos;
-          UpdateLocalTransform({registry_, droppedEntity});
+          UpdateLocalTransform(droppedEntity);
           registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
           auto velocity = glm::vec3(0);
           const auto newEntityVelocity =
@@ -3150,12 +3159,12 @@ bool World::IsHosting() const
   return networking->get() && server && server->GetNumberOfConnections();
 }
 
-glm::vec3 GetFootPosition(entt::handle handle)
+glm::vec3 World::GetFootPosition(entt::entity entity)
 {
-  const auto* t = handle.try_get<GlobalTransform>();
+  const auto* t = registry_.try_get<GlobalTransform>(entity);
   ASSERT(t);
 
-  if (const auto* s = handle.try_get<Physics::Shape>())
+  if (const auto* s = registry_.try_get<Physics::Shape>(entity))
   {
     const auto floorOffsetY = -s->shape->GetLocalBounds().GetExtent().GetY();
     return t->position + glm::vec3(0, floorOffsetY + 1e-1f, 0); // Needs fairly large epsilon because feet can penetrate ground in physics sim.
@@ -3164,23 +3173,23 @@ glm::vec3 GetFootPosition(entt::handle handle)
   return t->position - glm::vec3(0, t->scale, 0);
 }
 
-float GetHeight(entt::handle handle)
+float World::GetHeight(entt::entity entity)
 {
-  if (const auto* s = handle.try_get<Physics::Shape>())
+  if (const auto* s = registry_.try_get<Physics::Shape>(entity))
   {
     return s->shape->GetLocalBounds().GetExtent().GetY() * 2.0f;
   }
 
-  const auto& t = handle.get<GlobalTransform>();
+  const auto& t = registry_.get<GlobalTransform>(entity);
   return t.scale * 2.0f;
 }
 
-static void RefreshGlobalTransform(entt::handle handle)
+void World::UpdateLocalTransform(entt::entity entity)
 {
-  ASSERT(handle.valid());
-  auto* h = handle.try_get<Hierarchy>();
-  auto& lt = handle.get<LocalTransform>(); // parent_local_from_local
-  auto& gt = handle.get<GlobalTransform>(); // world_from_local
+  ASSERT(registry_.valid(entity));
+  auto* h  = registry_.try_get<Hierarchy>(entity);
+  auto& lt = registry_.get<LocalTransform>(entity); // parent_local_from_local
+  auto& gt = registry_.get<GlobalTransform>(entity); // world_from_local
 
   if (!h || h->parent == entt::null)
   {
@@ -3188,7 +3197,7 @@ static void RefreshGlobalTransform(entt::handle handle)
   }
   else
   {
-    const auto& pt = handle.registry()->get<GlobalTransform>(h->parent);
+    const auto& pt = registry_.get<GlobalTransform>(h->parent);
     gt.position    = pt.position + lt.position * pt.scale;
 
     gt.scale = lt.scale * pt.scale;
@@ -3212,9 +3221,9 @@ static void RefreshGlobalTransform(entt::handle handle)
     }
   }
 
-  if (!handle.any_of<NoHashGrid>())
+  if (!registry_.any_of<NoHashGrid>(entity))
   {
-    handle.registry()->ctx().get<HashGrid>().set(gt.position, handle.entity());
+    registry_.ctx().get<HashGrid>().set(gt.position, entity);
   }
 
   if (!h)
@@ -3224,7 +3233,7 @@ static void RefreshGlobalTransform(entt::handle handle)
 
   for (auto child : h->children)
   {
-    RefreshGlobalTransform({*handle.registry(), child});
+    UpdateLocalTransform(child);
   }
 }
 
@@ -3247,13 +3256,6 @@ bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent
   return true;
 }
 
-void UpdateLocalTransform(entt::handle handle)
-{
-  ZoneScoped;
-  ASSERT(handle.valid());
-  RefreshGlobalTransform(handle);
-}
-
 glm::vec3 GetForward(glm::quat rotation)
 {
   return -glm::mat3_cast(rotation)[2];
@@ -3269,20 +3271,20 @@ glm::vec3 GetRight(glm::quat rotation)
   return glm::mat3_cast(rotation)[0];
 }
 
-void SetParent(entt::handle handle, entt::entity parent)
+void World::SetParent(entt::entity child, entt::entity parent)
 {
-  ASSERT(handle.valid());
-  ASSERT(handle.entity() != parent);
-
-  auto& registry = *handle.registry();
-  auto& h        = handle.get<Hierarchy>();
+  ASSERT(registry_.valid(child));
+  ASSERT(registry_.valid(parent));
+  ASSERT(child != parent);
+  
+  auto& h        = registry_.get<Hierarchy>(child);
   auto oldParent = h.parent;
 
   // Remove self from old parent
   if (h.parent != entt::null)
   {
-    auto& ph = registry.get<Hierarchy>(h.parent);
-    ph.RemoveChild(handle.entity());
+    auto& ph = registry_.get<Hierarchy>(h.parent);
+    ph.RemoveChild(child);
   }
 
   // Handle case of removing parent
@@ -3291,27 +3293,27 @@ void SetParent(entt::handle handle, entt::entity parent)
     h.parent = entt::null;
     if (parent != oldParent)
     {
-      auto&& [gt, lt] = handle.get<GlobalTransform, LocalTransform>();
+      auto&& [gt, lt] = registry_.get<GlobalTransform, LocalTransform>(child);
       lt.position     = gt.position;
       lt.rotation     = gt.rotation;
       lt.scale        = gt.scale;
-      UpdateLocalTransform(handle);
+      UpdateLocalTransform(child);
     }
     return;
   }
 
   // Add self to new parent
   h.parent = parent;
-  auto& ph = registry.get<Hierarchy>(parent);
-  ph.AddChild(handle.entity());
+  auto& ph = registry_.get<Hierarchy>(parent);
+  ph.AddChild(child);
 
   // Detect cycles in debug mode
-  for ([[maybe_unused]] entt::entity cParent = parent; cParent != entt::null; cParent = registry.get<Hierarchy>(cParent).parent)
+  for ([[maybe_unused]] entt::entity cParent = parent; cParent != entt::null; cParent = registry_.get<Hierarchy>(cParent).parent)
   {
-    ASSERT(cParent != handle.entity());
+    ASSERT(cParent != child);
   }
 
-  UpdateLocalTransform(handle);
+  UpdateLocalTransform(child);
 }
 
 void Hierarchy::AddChild(entt::entity child)
@@ -3351,7 +3353,7 @@ void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol)
     if (inv->ActiveSlot().id != nullItem)
     {
       inv->activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(inv->ActiveSlot().id).Materialize(world);
-      SetParent({world.GetRegistry(), inv->activeSlotEntity}, parent);
+      world.SetParent(inv->activeSlotEntity, parent);
     }
   }
 }
@@ -3409,7 +3411,7 @@ entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity throwe
     const auto pos = userTransform->position + throwdir * 1.0f;
     world.GetRegistry().get<LocalTransform>(dropped).position = pos;
     world.GetRegistry().get<LinearVelocity>(dropped).v = throwdir * 3.0f;
-    UpdateLocalTransform({world.GetRegistry(), dropped});
+    world.UpdateLocalTransform(dropped);
   }
 
   return dropped;
@@ -3426,7 +3428,7 @@ void Inventory::OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemSta
   if (canHaveActiveItem && dstIsActive && itemState.id != nullItem)
   {
     activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(ActiveSlot().id).Materialize(world);
-    SetParent({world.GetRegistry(), activeSlotEntity}, parent);
+    world.SetParent(activeSlotEntity, parent);
   }
 }
 
@@ -3633,7 +3635,7 @@ void Gun::UsePrimary(float dt, World& world, entt::entity self, ItemState& state
       {
         is->pitch += vr;
         is->yaw += hr;
-        UpdateLocalTransform({registry, h->parent});
+        world.UpdateLocalTransform(h->parent);
       }
     }
   }
@@ -3933,7 +3935,7 @@ void Spear::UsePrimary([[maybe_unused]] float dt, World& world, entt::entity sel
   reg.emplace<Lifetime>(child).remainingSeconds = GetUseDt();
   reg.emplace<Hierarchy>(child);
   reg.emplace<ContactDamage>(child) = {createInfo_.damage, createInfo_.knockback};
-  SetParent({reg, child}, self);
+  world.SetParent(child, self);
 
   reg.emplace<Physics::RigidBodySettings>(child,
     Physics::RigidBodySettings{
@@ -4067,8 +4069,8 @@ bool BlockEntityDefinition::OnTryPlaceBlock(World& world, glm::ivec3 voxelPositi
     registry.emplace<LocalTransform>(parent, LocalTransform{worldPosition, glm::identity<glm::quat>(), 1});
     registry.emplace<GlobalTransform>(parent);
     registry.emplace<Name>(parent, "Block Entity");
-    SetParent({registry, spawnedEntity}, parent);
-    UpdateLocalTransform({registry, parent});
+    world.SetParent(spawnedEntity, parent);
+    world.UpdateLocalTransform(parent);
     return true;
   }
   return false;

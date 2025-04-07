@@ -45,14 +45,14 @@ Networking::Server::Server(World& world)
   auto compressor = detail::GetCompressor();
   enet_host_compress(localHost_, &compressor);
 
-  world_->GetRegistry().on_destroy<entt::entity>().connect<&Server::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().connect<&Server::OnEntityDestroy>(*this);
   spdlog::info("Created server bound to {}", address);
 }
 
 Networking::Server::~Server()
 {
   spdlog::info("Shutting down server");
-  world_->GetRegistry().on_destroy<entt::entity>().disconnect<&Server::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&Server::OnEntityDestroy>(*this);
   for (auto& [peer, entity] : connections_)
   {
     // TODO: Destroy entity.
@@ -192,7 +192,7 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
     Core::Serialization::SerializeObjectStream(stream, PacketType::EntityBundle);
 
     auto entities = std::vector<entt::entity>();
-    AddEntityAndChildrenToVector(world.GetRegistry(), rootEntity, entities);
+    AddEntityAndChildrenToVector(world.GetRegistryRaw(), rootEntity, entities);
     Core::Serialization::SerializeObjectStream(stream, entities);
     //auto string = std::string();
     for (auto entity : entities)

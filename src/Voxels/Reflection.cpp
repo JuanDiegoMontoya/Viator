@@ -304,9 +304,9 @@ namespace Core::Reflection
   }
 
   // Tentative, unsure if something like this is necessary.
-  static void EditorUpdateTransform(entt::handle handle)
+  static void EditorUpdateTransform(World& world, entt::entity entity)
   {
-    UpdateLocalTransform(handle);
+    world.UpdateLocalTransform(entity);
   }
 
   static void EditorUpdateLinearPath(entt::handle handle)
@@ -497,10 +497,10 @@ void Core::Reflection::Initialize()
     DATA(FlyingCharacterController, acceleration, PROP_MAX(50.0f));
 
   using namespace Physics;
-  entt::meta_factory<CharacterController>{}
+  REFLECT_COMPONENT(CharacterController)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterController(e); }>("add"_hs);
   
-  entt::meta_factory<CharacterControllerShrimple>{}
+  REFLECT_COMPONENT(CharacterControllerShrimple)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterControllerShrimple(e); }>("add"_hs);
 
   REFLECT_COMPONENT(Name, REPLICATED)

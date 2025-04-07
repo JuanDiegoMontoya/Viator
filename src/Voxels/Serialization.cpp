@@ -337,7 +337,7 @@ namespace Core::Serialization
   {
     ZoneScoped;
     spdlog::info("Saving world {}", path);
-    const auto& registry = world.GetRegistry();
+    const auto& registry = world.GetRegistryRaw();
     auto file            = std::ofstream(path, std::ios::binary | std::ios::out | std::ios::trunc);
     auto outputArchive   = cereal::BinaryOutputArchive(file);
 
@@ -378,7 +378,7 @@ namespace Core::Serialization
   {
     ZoneScoped;
     spdlog::info("Loading world {}", path);
-    auto& registry     = world.GetRegistry();
+    auto& registry     = world.GetRegistryRaw();
     auto remoteToLocal = std::unordered_map<entt::entity, entt::entity>();
     {
       ZoneScopedN("registry.clear()");
@@ -449,7 +449,7 @@ namespace Core::Serialization
 
     for (auto entity : registry.view<LocalTransform>())
     {
-      UpdateLocalTransform({registry, entity});
+      world.UpdateLocalTransform(entity);
     }
     spdlog::info("Loading complete");
   }
@@ -459,7 +459,7 @@ namespace Core::Serialization
     ZoneScoped;
     
     auto outputArchive = cereal::BinaryOutputArchive(stream);
-    auto& registry = world.GetRegistry();
+    auto& registry = world.GetRegistryRaw();
 
     Serialize<true>(outputArchive, entity);
     const auto numComponents = (uint32_t)std::ranges::count_if(registry.storage(),
@@ -522,7 +522,7 @@ namespace Core::Serialization
       ZoneText(meta.info().name().data(), meta.info().name().size());
       ASSERT(remoteEntity != entt::null);
 
-      auto* storage = registry.storage(typeId);
+      auto* storage = world.GetRegistryRaw().storage(typeId);
       if (traits & Traits::TRANSIENT)
       {
         // We don't want transient components to be overwritten by the default value if they already exist.

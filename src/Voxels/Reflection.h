@@ -17,6 +17,7 @@ namespace Core::Reflection
     NO_EDITOR = 1 << 1,
 
     // The component or member will appear in the editor, but cannot be modified.
+    // Component with this trait cannot be directly added from the "Add Component" dropdown.
     EDITOR_READ_ONLY = 1 << 2,
 
     // The type is a variant and has registered the following functions (see the VARIANT_FUNCS macro in Reflection.cpp):
@@ -60,6 +61,7 @@ namespace Core::Reflection
     // Low latency, but RPC may be dropped. RPCs are otherwise reliable.
     Unreliable = 1 << 4,
 
+    // Intended for RPCs that interact with the voxel world. These go on another channel to not block other gameplay events.
     UseVoxelChannel = 1 << 5,
   };
 

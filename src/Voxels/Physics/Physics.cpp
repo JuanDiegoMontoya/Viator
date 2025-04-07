@@ -222,7 +222,7 @@ namespace Physics
   template<class... Ts>
   struct Overloads : Ts... { using Ts::operator()...; };
 
-  static JPH::Ref<JPH::Shape> GetShapeFromVariant(const ShapeSettings& shape, entt::registry& registry)
+  static JPH::Ref<JPH::Shape> GetShapeFromVariant(const ShapeSettings& shape, const RegistryProxy& registry)
   {
     auto refShape = JPH::Ref<JPH::Shape>();
     std::visit(
@@ -263,8 +263,9 @@ namespace Physics
     return finalShape;
   }
 
-  static void OnRigidBodyConstruct(entt::registry& registry, entt::entity entity)
+  static void OnRigidBodyConstruct(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
     auto rotation = glm::quat(1, 0, 0, 0);
     if (auto* t = registry.try_get<GlobalTransform>(entity))
@@ -291,8 +292,9 @@ namespace Physics
     registry.emplace_or_replace<RigidBody>(entity, bodyId);
   }
 
-  static void OnCharacterControllerConstruct(entt::registry& registry, entt::entity entity)
+  static void OnCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
     auto rotation = glm::quat(1, 0, 0, 0);
     if (auto* t = registry.try_get<GlobalTransform>(entity))
@@ -323,8 +325,9 @@ namespace Physics
     registry.emplace_or_replace<CharacterController>(entity, character);
   }
 
-  static void OnCharacterControllerShrimpleConstruct(entt::registry& registry, entt::entity entity)
+  static void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
     auto rotation = glm::quat(1, 0, 0, 0);
     if (auto* t = registry.try_get<GlobalTransform>(entity))
@@ -426,16 +429,20 @@ namespace Physics
     }
   }
 
-  static void OnRigidBodyDestroy(entt::registry& registry, entt::entity entity)
+  static void OnRigidBodyDestroy(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& p = registry.get<RigidBody>(entity);
     RemoveConstraintsFromBody(p.body);
     s->bodyInterface->RemoveBody(p.body);
     s->bodyInterface->DestroyBody(p.body);
+    registry.remove<Shape>(entity);
+    registry.remove<RigidBodySettings>(entity);
   }
 
-  static void OnCharacterControllerDestroy(entt::registry& registry, entt::entity entity)
+  static void OnCharacterControllerDestroy(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& c = registry.get<CharacterController>(entity);
     if (!c.character->GetInnerBodyID().IsInvalid())
     {
@@ -444,21 +451,26 @@ namespace Physics
     s->characterCollisionInterface->Remove(c.character);
     std::erase(s->allCharacters, c.character);
     delete c.character;
+    registry.remove<Shape>(entity);
+    registry.remove<CharacterControllerSettings>(entity);
   }
 
-  static void OnCharacterControllerShrimpleDestroy(entt::registry& registry, entt::entity entity)
+  static void OnCharacterControllerShrimpleDestroy(entt::registry& registryRaw, entt::entity entity)
   {
+    auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& c = registry.get<CharacterControllerShrimple>(entity);
     RemoveConstraintsFromBody(c.character->GetBodyID());
     c.character->RemoveFromPhysicsSystem();
     std::erase(s->allCharactersShrimple, c.character);
     delete c.character;
+    registry.remove<Shape>(entity);
+    registry.remove<CharacterControllerShrimpleSettings>(entity);
   }
 
-  static void OnCharacterControllerUpdate(entt::registry& registry, entt::entity entity)
+  static void OnCharacterControllerUpdate(entt::registry& registryRaw, entt::entity entity)
   {
-    OnCharacterControllerDestroy(registry, entity);
-    OnCharacterControllerConstruct(registry, entity);
+    OnCharacterControllerDestroy(registryRaw, entity);
+    OnCharacterControllerConstruct(registryRaw, entity);
   }
 
   const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery()
@@ -481,21 +493,17 @@ namespace Physics
     return s->dispatcher;
   }
 
+
   void CreateObservers(entt::registry& registry)
   {
+    // TODO: Use RegistryProxy-aware observers for these.
     registry.on_construct<RigidBodySettings>().connect<&OnRigidBodyConstruct>();
     registry.on_construct<CharacterControllerSettings>().connect<&OnCharacterControllerConstruct>();
     registry.on_update<CharacterControllerSettings>().connect<&OnCharacterControllerUpdate>();
     registry.on_construct<CharacterControllerShrimpleSettings>().connect<&OnCharacterControllerShrimpleConstruct>();
     registry.on_destroy<RigidBody>().connect<&OnRigidBodyDestroy>();
-    registry.on_destroy<RigidBody>().connect<&entt::registry::remove<Shape>>();
-    registry.on_destroy<RigidBody>().connect<&entt::registry::remove<RigidBodySettings>>();
     registry.on_destroy<CharacterController>().connect<&OnCharacterControllerDestroy>();
-    registry.on_destroy<CharacterController>().connect<&entt::registry::remove<Shape>>();
-    registry.on_destroy<CharacterController>().connect<&entt::registry::remove<CharacterControllerSettings>>();
     registry.on_destroy<CharacterControllerShrimple>().connect<&OnCharacterControllerShrimpleDestroy>();
-    registry.on_destroy<CharacterControllerShrimple>().connect<&entt::registry::remove<Shape>>();
-    registry.on_destroy<CharacterControllerShrimple>().connect<&entt::registry::remove<CharacterControllerShrimpleSettings>>();
   }
 
   void Initialize(World&)
@@ -612,7 +620,7 @@ namespace Physics
       if (auto* t = world.GetRegistry().try_get<LocalTransform>(entity))
       {
         t->position = ToGlm(character->GetPosition());
-        UpdateLocalTransform({world.GetRegistry(), entity});
+        world.UpdateLocalTransform(entity);
       }
       world.GetRegistry().get<LinearVelocity>(entity).v = ToGlm(character->GetLinearVelocity());
     }
@@ -634,7 +642,7 @@ namespace Physics
       if (auto* t = world.GetRegistry().try_get<LocalTransform>(entity))
       {
         t->position = ToGlm(character->GetPosition());
-        UpdateLocalTransform({world.GetRegistry(), entity});
+        world.UpdateLocalTransform(entity);
       }
 
       auto& velocity = world.GetRegistry().get<LinearVelocity>(entity).v;
@@ -650,7 +658,7 @@ namespace Physics
         transform.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
         transform.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
         linearVelocity.v   = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
-        UpdateLocalTransform({world.GetRegistry(), entity});
+        world.UpdateLocalTransform(entity);
       }
     }
 
@@ -712,7 +720,7 @@ namespace Physics
         }
       }
 
-      UpdateLocalTransform({world.GetRegistry(), entity});
+      world.UpdateLocalTransform(entity);
     }
 
     // Dispatch events for newly-added contacts

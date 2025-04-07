@@ -286,21 +286,216 @@ private:
   BlockEntityCreateInfo blockEntityInfo_;
 };
 
-class World
+// Proxy that wraps common entt::registry operations for the purpose of tracking component changes.
+// This allows us to replicate component state with essentially no change to gameplay code.
+// However, this tracking comes with some overhead when getting or viewing mutable components.
+// Note: this tracking is currently only necessary in multiplayer sessions.
+class RegistryProxy
 {
 public:
-  NO_COPY_NO_MOVE(World);
-  explicit World() = default;
-  void FixedUpdate(float dt);
+  explicit RegistryProxy(entt::registry& registry) : registry_(&registry) {}
 
-  entt::registry& GetRegistry()
+  [[nodiscard]] auto create()
+  {
+    return registry_->create();
+  }
+
+  [[nodiscard]] decltype(auto) ctx() noexcept
+  {
+    return registry_->ctx();
+  }
+
+  [[nodiscard]] decltype(auto) ctx() const noexcept
+  {
+    return ConstRegistry()->ctx();
+  }
+
+  template<typename... Type>
+  [[nodiscard]] auto try_get(entt::entity entity)
+  {
+    if constexpr (sizeof...(Type) == 1)
+    {
+      MarkIfNotConst<Type...>(entity, ActionType::MODIFY);
+      return registry_->try_get<Type...>(entity);
+    }
+    else
+    {
+      return std::make_tuple(try_get<Type...>(entity)...);
+    }
+  }
+
+  template<typename... Type>
+  [[nodiscard]] auto try_get(entt::entity entity) const
+  {
+    if constexpr (sizeof...(Type) == 1)
+    {
+      return ConstRegistry()->try_get<Type...>(entity);
+    }
+    else
+    {
+      return std::make_tuple(try_get<Type...>(entity)...);
+    }
+  }
+
+  template<typename... Type>
+  [[nodiscard]] decltype(auto) get(entt::entity entity) const
+  {
+    if constexpr (sizeof...(Type) == 1)
+    {
+      return ConstRegistry()->get<Type...>(entity);
+    }
+    else
+    {
+      return std::make_tuple(get<Type>(entity)...);
+    }
+  }
+
+  template<typename... Type>
+  [[nodiscard]] decltype(auto) get(entt::entity entity)
+  {
+    if constexpr (sizeof...(Type) == 1)
+    {
+      MarkIfNotConst<Type...>(entity, ActionType::MODIFY);
+      return registry_->get<Type...>(entity);
+    }
+    else
+    {
+      return std::make_tuple(get<Type>(entity)...);
+    }
+  }
+
+  template<typename... Types, typename... Exclude>
+  [[nodiscard]] auto view(entt::exclude_t<Exclude...> exclude = entt::exclude_t{}) const
+  {
+    return ConstRegistry()->view<Types>(exclude);
+  }
+
+  template<typename... Types, typename... Exclude>
+  [[nodiscard]] auto view(entt::exclude_t<Exclude...> exclude = entt::exclude_t{})
+  {
+    auto v = registry_->view<Types...>(exclude);
+    for (auto entity : v)
+    {
+      (MarkIfNotConst<Types>(entity, ActionType::MODIFY), ...);
+    }
+    return v;
+  }
+
+  template<typename... Type>
+  [[nodiscard]] bool all_of(entt::entity entity) const
+  {
+    return registry_->all_of<Type...>(entity);
+  }
+
+  template<typename... Type>
+  [[nodiscard]] bool any_of(entt::entity entity) const
+  {
+    return registry_->any_of<Type...>(entity);
+  }
+
+  template<typename Type, typename... Args>
+  decltype(auto) emplace(entt::entity entity, Args&&... args)
+  {
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD;
+    return registry_->emplace<Type>(entity, std::forward<Args>(args)...);
+  }
+
+  template<typename Type, typename... Args>
+  decltype(auto) emplace_or_replace(entt::entity entity, Args&&... args)
+  {
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD | MODIFY;
+    return registry_->emplace_or_replace<Type, Args...>(entity, std::forward<Args>(args)...);
+  }
+
+  template<typename Type, typename... Args>
+  [[nodiscard]] decltype(auto) get_or_emplace(const entt::entity entity, Args&&... args)
+  {
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD | MODIFY;
+    return registry_->get_or_emplace<Type>(entity, std::forward<Args>(args)...);
+  }
+
+  template<typename... Types>
+  auto remove(const entt::entity entity)
+  {
+    ((modifiedComponents_[entt::type_id<Types>().hash()][entity] |= ActionType::REMOVE), ...);
+    return registry_->remove<Types...>(entity);
+  }
+
+  [[nodiscard]] auto valid(entt::entity entity) const
+  {
+    return registry_->valid(entity);
+  }
+
+  auto destroy(entt::entity entity)
+  {
+    return registry_->destroy(entity);
+  }
+
+  const auto& GetModifiedComponents() const
+  {
+    return modifiedComponents_;
+  }
+
+  void ClearModifiedComponents()
+  {
+    for (auto& [id, map] : modifiedComponents_)
+    {
+      map.clear();
+    }
+  }
+
+private:
+  entt::registry* registry_{};
+  World* world_{};
+
+  enum ActionType : uint32_t
+  {
+    ADD    = 1 << 0,
+    MODIFY = 1 << 1,
+    REMOVE = 1 << 2
+  };
+  std::unordered_map<entt::id_type, std::unordered_map<entt::entity, ActionType>> modifiedComponents_;
+
+  const entt::registry* ConstRegistry() const
   {
     return registry_;
   }
 
-  const entt::registry& GetRegistry() const
+  template<typename T>
+  void MarkIfNotConst(entt::entity entity, ActionType actionType)
+  {
+    if constexpr (!std::is_const_v<T>)
+    {
+      modifiedComponents_[entt::type_id<T>().hash()][entity] |= actionType;
+    }
+  }
+};
+
+class World
+{
+public:
+  NO_COPY_NO_MOVE(World);
+  explicit World() : registry_(registryOld_) {}
+  void FixedUpdate(float dt);
+
+  RegistryProxy& GetRegistry()
   {
     return registry_;
+  }
+
+  const RegistryProxy& GetRegistry() const
+  {
+    return registry_;
+  }
+
+  entt::registry& GetRegistryRaw()
+  {
+    return registryOld_;
+  }
+
+  const entt::registry& GetRegistryRaw() const
+  {
+    return registryOld_;
   }
 
   PCG::Rng& Rng()
@@ -415,6 +610,13 @@ public:
   // The returned entity could be the same as the one passed in.
   [[nodiscard]] entt::entity GetRootEntityOfHierarchy(entt::entity entity) const;
 
+  [[nodiscard]] glm::vec3 GetFootPosition(entt::entity entity);
+  [[nodiscard]] float GetHeight(entt::entity entity);
+
+  // Call to propagate local transform updates to global transform and children.
+  void UpdateLocalTransform(entt::entity entity);
+  void SetParent(entt::entity child, entt::entity parent);
+
   [[nodiscard]] uint64_t GetTicks() const
   {
     return ticks_;
@@ -433,7 +635,8 @@ public:
 
 private:
   uint64_t ticks_ = 0;
-  entt::registry registry_;
+  entt::registry registryOld_;
+  RegistryProxy registry_;
 };
 
 void CreateContextVariablesAndObservers(World& world);
@@ -538,9 +741,6 @@ private:
   std::unordered_map<std::string, BlockId> nameToId_;
   std::vector<std::unique_ptr<BlockDefinition>> idToDefinition_;
 };
-
-glm::vec3 GetFootPosition(entt::handle handle);
-float GetHeight(entt::handle handle);
 
 class ItemDefinition
 {
@@ -1015,14 +1215,9 @@ struct Lifetime
   float remainingSeconds = 0;
 };
 
-// Call to propagate local transform updates to global transform and children.
-void UpdateLocalTransform(entt::handle handle);
-
 glm::vec3 GetForward(glm::quat rotation);
 glm::vec3 GetUp(glm::quat rotation);
 glm::vec3 GetRight(glm::quat rotation);
-
-void SetParent(entt::handle handle, entt::entity parent);
 
 // Use with GlobalTransform and RenderTransform for smooth object movement.
 struct PreviousGlobalTransform
