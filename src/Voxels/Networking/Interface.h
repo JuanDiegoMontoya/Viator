@@ -58,6 +58,15 @@ namespace Networking
     // TwoLevelGrid
     TwoLevelGrid,
 
+    // Stream of modified components.
+    ModifiedComponents,
+
+    // Stream of components.
+    InitialEntityState,
+
+    // Server tick identifier. Used to synchronize events on the client and server in traces.
+    TickNumber,
+
     // Bitwise AND this mask with a PacketType to extract the underlying packet type (one of the above enumerators).
     TypeMask = 0b0111'1111,
 

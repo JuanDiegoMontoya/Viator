@@ -562,13 +562,13 @@ namespace Physics
   {
     ZoneScoped;
 
-    for (auto&& [entity, linearVelocity, friction] : world.GetRegistry().view<LinearVelocity, Friction>().each())
+    for (auto&& [entity, linearVelocity, friction] : world.GetRegistry().view<LinearVelocity, const Friction>().each())
     {
       linearVelocity.v -= friction.axes * linearVelocity.v * dt;
     }
 
     // Pre-update: synchronize physics and ECS representations
-    for (auto&& [entity, transform, rigidBody, rigidBodySettings, linearVelocity] : world.GetRegistry().view<GlobalTransform, RigidBody, RigidBodySettings, LinearVelocity>().each())
+    for (auto&& [entity, transform, rigidBody, rigidBodySettings, linearVelocity] : world.GetRegistry().view<const GlobalTransform, const RigidBody, const RigidBodySettings, const LinearVelocity>().each())
     {
       s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
         ToJolt(transform.position),
@@ -577,7 +577,7 @@ namespace Physics
       s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
     }
     
-    for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, GlobalTransform, LinearVelocity>().each())
+    for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, const GlobalTransform, const LinearVelocity>().each())
     {
       cc.previousGroundState = cc.character->GetGroundState();
 
@@ -586,7 +586,7 @@ namespace Physics
       cc.character->SetLinearVelocity(ToJolt(linearVelocity.v));
     }
 
-    for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterControllerShrimple, GlobalTransform, LinearVelocity>().each())
+    for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterControllerShrimple, const GlobalTransform, const LinearVelocity>().each())
     {
       cc.previousGroundState = cc.character->GetGroundState();
       
@@ -651,19 +651,21 @@ namespace Physics
 
     // Update transform of each entity with a RigidBody component. If we don't exclude character controllers from being updated here, we get funny behavior.
     for (auto&& [entity, rigidBody, rigidBodySettings, transform, linearVelocity] :
-      world.GetRegistry().view<RigidBody, RigidBodySettings, LocalTransform, LinearVelocity>(/*entt::exclude<CharacterControllerShrimple>*/).each())
+      world.GetRegistry().view<const RigidBody, const RigidBodySettings, const LocalTransform, const LinearVelocity>(/*entt::exclude<CharacterControllerShrimple>*/).each())
     {
       if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && s->bodyInterfaceNoLock->IsActive(rigidBody.body))
       {
-        transform.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
-        transform.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
-        linearVelocity.v   = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
+        auto&& [transformMut, linearVelocityMut] = world.GetRegistry().get<LocalTransform, LinearVelocity>(entity);
+
+        transformMut.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
+        transformMut.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
+        linearVelocityMut.v   = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
         world.UpdateLocalTransform(entity);
       }
     }
 
     // Simulate projectiles
-    for (auto&& [entity, gt, lt, projectile, linearVelocity] : world.GetRegistry().view<GlobalTransform, LocalTransform, Projectile, LinearVelocity>().each())
+    for (auto&& [entity, gt, lt, projectile, linearVelocity] : world.GetRegistry().view<const GlobalTransform, LocalTransform, Projectile, LinearVelocity>().each())
     {
       // Calculate updated velocity
       const auto acceleration = -9.81f * glm::vec3(0, 1, 0) + -linearVelocity.v * projectile.drag;
@@ -742,7 +744,7 @@ namespace Physics
 #ifdef JPH_DEBUG_RENDERER
     const auto debug = world.GetRegistry().ctx().get<Debugging>();
     s->debugRenderer->ClearPrimitives();
-    for (auto&& [entity, transform] : world.GetRegistry().view<LocalPlayer, GlobalTransform>().each())
+    for (auto&& [entity, transform] : world.GetRegistry().view<const LocalPlayer, const GlobalTransform>().each())
     {
       s->debugRenderer->SetCameraPos(ToJolt(transform.position));
       

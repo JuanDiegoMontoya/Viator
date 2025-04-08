@@ -379,7 +379,8 @@ namespace Core::Serialization
     ZoneScoped;
     spdlog::info("Loading world {}", path);
     auto& registry     = world.GetRegistryRaw();
-    auto remoteToLocal = std::unordered_map<entt::entity, entt::entity>();
+    auto remoteToLocalTemp = std::unordered_map<entt::entity, entt::entity>();
+    auto localToRemoteTemp = std::unordered_map<entt::entity, entt::entity>();
     {
       ZoneScopedN("registry.clear()");
       registry.clear(); // Required to invoke on_destroy observers. In particular, for cleaning up physics objects.
@@ -388,23 +389,146 @@ namespace Core::Serialization
     CreateContextVariablesAndObservers(world);
     registry.ctx().get<GameState>() = GameState::PAUSED;
 
-    auto file         = std::ifstream(path, std::ios::binary | std::ios::in);
-    auto inputArchive = cereal::BinaryInputArchive(file);
+    auto file = std::ifstream(path, std::ios::binary | std::ios::in);
 
-    // Load relevant context variables.
-    auto grid = TwoLevelGrid();
-    SerializeGrid<false>(inputArchive, grid);
-    grid.CoalesceBricksSLOW();
-    grid.MarkAllBricksDirty();
-    registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
+    {
+      auto inputArchive = cereal::BinaryInputArchive(file);
+
+      // Load relevant context variables.
+      auto grid = TwoLevelGrid();
+      SerializeGrid<false>(inputArchive, grid);
+      grid.CoalesceBricksSLOW();
+      grid.MarkAllBricksDirty();
+      registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
+    }
+
+    DeserializeComponentStream(world, file, remoteToLocalTemp, localToRemoteTemp, false, false);
+
+    for (auto entity : registry.view<LocalTransform>())
+    {
+      world.UpdateLocalTransform(entity);
+    }
+    spdlog::info("Loading complete");
+  }
+
+  void SerializeAllEntitiesForNetwork(const World& world, std::ostream& stream)
+  {
+    ZoneScoped;
+    const auto& registry = world.GetRegistryRaw();
+    auto outputArchive   = cereal::BinaryOutputArchive(stream);
+
+    const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(),
+      [](const auto& p)
+      {
+        const auto traits = entt::resolve(p.first).traits<Traits>();
+        return traits & Traits::COMPONENT && traits & Traits::REPLICATED;
+      });
+    Serialize<true>(outputArchive, numSets);
+    for (auto [id, set] : registry.storage())
+    {
+      if (auto meta = entt::resolve(id))
+      {
+        const auto traits = meta.traits<Traits>();
+        if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
+        {
+          ZoneScopedN("Component");
+          ZoneText(meta.info().name().data(), meta.info().name().size());
+          Serialize<true>(outputArchive, id);
+          Serialize<true>(outputArchive, (uint32_t)set.size());
+          for (auto entity : set)
+          {
+            Serialize<true>(outputArchive, entity);
+            if (!(traits & Traits::TRANSIENT))
+            {
+              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void SerializeModifiedComponents(const World& world,
+    std::ostream& ostream,
+    const std::unordered_map<entt::id_type, std::unordered_map<entt::entity, ActionType>>& modifiedComponents)
+  {
+    ZoneScoped;
+    const auto& registry = world.GetRegistryRaw();
+    auto outputArchive   = cereal::BinaryOutputArchive(ostream);
+
+    // Only send non-empty sets.
+    const auto numSets = (uint32_t)std::ranges::count_if(modifiedComponents,
+      [](const auto& p)
+      {
+        if (p.second.empty())
+        {
+          return false;
+        }
+        const auto traits = entt::resolve(p.first).traits<Traits>();
+        return traits & Traits::COMPONENT && traits & Traits::REPLICATED;
+      });
+    Serialize<true>(outputArchive, numSets);
+    ZoneTextF("Serializing %u sets", numSets);
+    for (auto [id, map] : modifiedComponents)
+    {
+      if (map.empty()) 
+      {
+        continue;
+      }
+      auto& set = *registry.storage(id);
+      if (auto meta = entt::resolve(id))
+      {
+        const auto traits = meta.traits<Traits>();
+        if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
+        {
+          ZoneScopedN("Component");
+          ZoneText(meta.info().name().data(), meta.info().name().size());
+          Serialize<true>(outputArchive, id);
+          const auto mapSize = (uint32_t)std::ranges::count_if(map,
+            [&](const auto& p) { return !(bool(p.second & (ActionType::Add | ActionType::Modify)) && !set.contains(p.first)); });
+          Serialize<true>(outputArchive, mapSize);
+          ZoneTextF("Set elements: %u", mapSize);
+          for (const auto& [entity, action] : map)
+          {
+            {
+              if (bool(action & (ActionType::Add | ActionType::Modify)) && !set.contains(entity))
+              {
+                continue;
+              }
+              Serialize<true>(outputArchive, entity);
+              Serialize<true>(outputArchive, action);
+              if (!bool(action & ActionType::Remove) && !(traits & Traits::TRANSIENT))
+              {
+                Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void DeserializeComponentStream(World& world,
+    std::istream& stream,
+    std::unordered_map<entt::entity, entt::entity>& remoteToLocal,
+    std::unordered_map<entt::entity, entt::entity>& localToRemote,
+    bool readActionType,
+    bool doRemap)
+  {
+    ZoneScoped;
+    auto& registry    = world.GetRegistryRaw();
+    auto inputArchive = cereal::BinaryInputArchive(stream);
+
+    auto context = SerializationContext{.remapRemoteEntities = doRemap, .remoteToLocalEntity = &remoteToLocal};
 
     auto numSets = uint32_t();
     Serialize<false>(inputArchive, entt::forward_as_meta(numSets));
+    ZoneTextF("Deserializing %u sets", numSets);
     for (uint32_t i = 0; i < numSets; i++)
     {
       ZoneScopedN("Component");
       auto typeId = entt::id_type();
-      auto size = uint32_t();
+      auto size   = uint32_t();
       Serialize<false>(inputArchive, entt::forward_as_meta(typeId));
       Serialize<false>(inputArchive, entt::forward_as_meta(size));
       auto meta = entt::resolve(typeId);
@@ -412,11 +536,18 @@ namespace Core::Serialization
       const auto traits = meta.traits<Traits>();
       ASSERT(traits & Traits::COMPONENT);
       ZoneText(meta.info().name().data(), meta.info().name().size());
+      ZoneTextF("Elements: %u", size);
       for (uint32_t j = 0; j < size; j++)
       {
         auto remoteEntity = entt::entity();
         Serialize<false>(inputArchive, entt::forward_as_meta(remoteEntity));
+        auto action       = ActionType{};
         ASSERT(remoteEntity != entt::null);
+        if (readActionType)
+        {
+          Serialize<false>(inputArchive, entt::forward_as_meta(action));
+        }
+        // Get or create the mapped remote->local entity.
         auto localEntity = entt::entity();
         if (auto it = remoteToLocal.find(remoteEntity); it != remoteToLocal.end())
         {
@@ -425,33 +556,57 @@ namespace Core::Serialization
         else
         {
           localEntity = registry.create(remoteEntity);
-          ASSERT(localEntity == remoteEntity, "Local and remote must be the same until deep entity remapping is supported.");
+          //ASSERT(localEntity == remoteEntity, "Local and remote must be the same until deep entity remapping is supported.");
           remoteToLocal.emplace(remoteEntity, localEntity);
+          localToRemote.emplace(localEntity, remoteEntity);
         }
 
-        if (traits & Traits::TRANSIENT)
+        auto* storage = registry.storage(typeId);
+        if (readActionType && bool(action & ActionType::Remove))
         {
-          auto emplaceFunc = meta.func("EmplaceDefault"_hs);
-          ASSERT(emplaceFunc);
-          emplaceFunc.invoke({}, &registry, localEntity);
+          if (storage)
+          {
+            storage->remove(localEntity);
+          }
         }
         else
         {
-          auto value = meta.construct();
-          ASSERT(value, "Type is missing default constructor");
-          Serialize<false>(inputArchive, value.as_ref());
-          auto emplaceFunc = meta.func("EmplaceMove"_hs);
-          ASSERT(emplaceFunc);
-          emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+          if (traits & Traits::TRANSIENT)
+          {
+            if (!storage || !storage->contains(localEntity))
+            {
+              auto emplaceFunc = meta.func("EmplaceDefault"_hs);
+              ASSERT(emplaceFunc);
+              emplaceFunc.invoke({}, &registry, localEntity);
+            }
+          }
+          else
+          {
+            auto value = entt::meta_any{};
+            const bool storageContainsEntity = storage && storage->contains(localEntity);
+            if (storageContainsEntity)
+            {
+              // Overwrite existing component if it exists.
+              value = meta.from_void(storage->value(localEntity));
+            }
+            else
+            {
+              value = meta.construct();
+              ASSERT(value, "Type does not have a default constructor");
+            }
+
+            Serialize<false>(inputArchive, value.as_ref(), context);
+
+            if (!storageContainsEntity)
+            {
+              auto emplaceFunc = meta.func("EmplaceMove"_hs);
+              ASSERT(emplaceFunc);
+              emplaceFunc.invoke({}, &registry, localEntity, value.as_ref());
+            }
+          }
         }
       }
     }
-
-    for (auto entity : registry.view<LocalTransform>())
-    {
-      world.UpdateLocalTransform(entity);
-    }
-    spdlog::info("Loading complete");
   }
 
   void SerializeEntity(std::stringstream& stream, const World& world, entt::entity entity)

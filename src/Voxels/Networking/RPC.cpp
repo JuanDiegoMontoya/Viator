@@ -14,6 +14,16 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
   ASSERT(meta);
   auto func = meta.func(id);
   ASSERT(func);
+  if (auto* props = static_cast<const Core::Reflection::PropertiesMap*>(func.custom()))
+  {
+    if (auto it = props->find("name"_hs); it != props->end())
+    {
+      if (auto* name = it->second.try_cast<const char*>())
+      {
+        ZoneText(*name, std::strlen(*name));
+      }
+    }
+  }
   auto args = std::vector<entt::meta_any>();
   args.emplace_back(entt::forward_as_meta(world));
   for (int i = 1; i < func.arity(); i++)

@@ -558,12 +558,12 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   auto viewMat  = glm::mat4(1);
   auto position = glm::vec3();
-  for (auto&& [entity, inputLook, transform] : world.GetRegistry().view<const InputLookState, const GlobalTransform, LocalPlayer>().each())
+  for (auto&& [entity, inputLook, transform] : world.GetRegistry().view<const InputLookState, const GlobalTransform, const LocalPlayer>().each())
   {
     position = transform.position;
     // Flip z axis to correspond with Vulkan's NDC space.
     auto rotationQuat = transform.rotation;
-    if (const auto* renderTransform = world.GetRegistry().try_get<RenderTransform>(entity))
+    if (const auto* renderTransform = world.GetRegistry().try_get<const RenderTransform>(entity))
     {
       // Because the player has its own variable delta pitch and yaw updates, we only care about smoothing positions here
       position = renderTransform->transform.position;
@@ -601,10 +601,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   auto drawCalls       = std::vector<GpuMesh*>();
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();
-  for (auto&& [entity, transform, mesh] : world.GetRegistry().view<GlobalTransform, Mesh>().each())
+  for (auto&& [entity, transform, mesh] : world.GetRegistry().view<const GlobalTransform, const Mesh>().each())
   {
     GlobalTransform actualTransform = transform;
-    if (auto* renderTransform = world.GetRegistry().try_get<RenderTransform>(entity))
+    if (auto* renderTransform = world.GetRegistry().try_get<const RenderTransform>(entity))
     {
       actualTransform = renderTransform->transform;
     }
@@ -612,7 +612,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
                            glm::scale(glm::mat4(1), glm::vec3(actualTransform.scale));
     auto& gpuMesh = g_meshes[mesh.name];
     auto tint     = glm::vec3(1);
-    if (auto* tp = world.GetRegistry().try_get<Tint>(entity))
+    if (auto* tp = world.GetRegistry().try_get<const Tint>(entity))
     {
       tint = tp->color;
     }
@@ -621,7 +621,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   }
 
   auto billboards = std::vector<Temp::BillboardInstance>();
-  for (auto&& [entity, transform, health] : world.GetRegistry().view<RenderTransform, Health>(entt::exclude<LocalPlayer>).each())
+  for (auto&& [entity, transform, health] : world.GetRegistry().view<const RenderTransform, const Health>(entt::exclude<LocalPlayer>).each())
   {
     billboards.emplace_back(Temp::BillboardInstance{
       .position   = transform.transform.position + glm::vec3(0, world.GetHeight(entity) / 2.0f + 0.25f, 0),
@@ -633,10 +633,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   }
 
   auto billboardSprites = std::vector<Temp::BillboardSpriteInstance>();
-  for (auto&& [entity, transform, billboardSprite] : world.GetRegistry().view<RenderTransform, Billboard>().each())
+  for (auto&& [entity, transform, billboardSprite] : world.GetRegistry().view<const RenderTransform, const Billboard>().each())
   {
     auto tint = glm::vec3(1);
-    if (auto* tp = world.GetRegistry().try_get<Tint>(entity))
+    if (auto* tp = world.GetRegistry().try_get<const Tint>(entity))
     {
       tint = tp->color;
     }
@@ -647,11 +647,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   }
 
   auto lights = std::vector<GpuLight>();
-  for (auto&& [entity, light, transform] : world.GetRegistry().view<GpuLight, GlobalTransform>().each())
+  for (auto&& [entity, light, transform] : world.GetRegistryRaw().view<GpuLight, const GlobalTransform>().each())
   {
     light.position  = transform.position;
     light.direction = GetForward(transform.rotation);
-    if (const auto* rt = world.GetRegistry().try_get<RenderTransform>(entity))
+    if (const auto* rt = world.GetRegistry().try_get<const RenderTransform>(entity))
     {
       light.position  = rt->transform.position;
       light.direction = GetForward(rt->transform.rotation);
@@ -1134,7 +1134,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     auto localPlayer = world.TryGetLocalPlayer();
     if (localPlayer != entt::null)
     {
-      if (auto* gp = world.GetRegistry().try_get<GhostPlayer>(localPlayer))
+      if (auto* gp = world.GetRegistry().try_get<const GhostPlayer>(localPlayer))
       {
         ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
@@ -1165,7 +1165,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     ImGui::End();
 
     // Get information about the local player
-    auto range = world.GetRegistry().view<Player, LocalPlayer, Inventory, GlobalTransform>(entt::exclude<GhostPlayer>).each();
+    auto range = world.GetRegistry().view<Player, const LocalPlayer, Inventory, const GlobalTransform>(entt::exclude<GhostPlayer>).each();
 
     if (range.begin() == range.end())
     {
@@ -1185,19 +1185,19 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_CHARACTER));
     if (ImGui::Begin("Target"))
     {
-      if (auto* h = world.GetRegistry().try_get<Health>(playerEntity))
+      if (auto* h = world.GetRegistry().try_get<const Health>(playerEntity))
       {
         ImGui::Text("Player HP: %.2f", h->hp);
       }
       if (collector.nearest)
       {
         auto entity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(collector.nearest->mBodyID));
-        if (auto* n = world.GetRegistry().try_get<Name>(entity))
+        if (auto* n = world.GetRegistry().try_get<const Name>(entity))
         {
           ImGui::Text("%s", n->name.c_str());
         }
 
-        if (auto* h = world.GetRegistry().try_get<Health>(entity))
+        if (auto* h = world.GetRegistry().try_get<const Health>(entity))
         {
           ImGui::Text("Health: %.2f", h->hp);
         }
@@ -1408,7 +1408,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           flags |= ImGuiTreeNodeFlags_Selected;
         }
 
-        if (auto* s = registry.try_get<Name>(e))
+        if (auto* s = registry.try_get<const Name>(e))
         {
           opened = ImGui::TreeNodeEx("entity", flags, "%u (%s) (v%u)", entt::to_entity(e), s->name.c_str(), entt::to_version(e));
         }
@@ -1605,7 +1605,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       for (auto entity : entities)
       {
         auto name = std::string();
-        if (const auto* n = world.GetRegistry().try_get<Name>(entity))
+        if (const auto* n = world.GetRegistry().try_get<const Name>(entity))
         {
           name = n->name;
         }
@@ -1614,7 +1614,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    auto range = world.GetRegistry().view<Player, LocalPlayer, Inventory, GlobalTransform>().each();
+    auto range = world.GetRegistry().view<const Player, const LocalPlayer, Inventory, const GlobalTransform>().each();
 
     if (range.begin() == range.end())
     {

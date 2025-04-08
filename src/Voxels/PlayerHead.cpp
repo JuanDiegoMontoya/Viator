@@ -186,26 +186,46 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
 
   if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME)
   {
-    for (auto&& [entity, transform, renderTransform] : world.GetRegistry().view<GlobalTransform, RenderTransform>().each())
+    for (auto&& [entity, transform, rtransform] : world.GetRegistry().view<const GlobalTransform, const RenderTransform>().each())
     {
-      if (auto* previousGlobalTransform = world.GetRegistry().try_get<PreviousGlobalTransform>(entity))
+      if (!world.GetRegistry().all_of<RenderTransform>(entity))
+      {
+        continue;
+      }
+
+      if (const auto* previousGlobalTransform = world.GetRegistry().try_get<const PreviousGlobalTransform>(entity))
       {
         const auto alpha = dt.fraction;
         // Improve numerical stability when motionless.
-        if (previousGlobalTransform->position != transform.position)
+        if (previousGlobalTransform->teleported)
         {
-          renderTransform.transform.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
+          world.GetRegistry().get<RenderTransform>(entity).transform = transform;
+
+          auto& prevGlobalTransformMut = world.GetRegistry().get<PreviousGlobalTransform>(entity);
+          prevGlobalTransformMut.teleported = false;
+          prevGlobalTransformMut.position = transform.position;
+          prevGlobalTransformMut.rotation = transform.rotation;
+          prevGlobalTransformMut.scale = transform.scale;
         }
-        else
+        else if (previousGlobalTransform->position != transform.position || previousGlobalTransform->rotation != transform.rotation ||
+                 previousGlobalTransform->scale != transform.scale || rtransform.transform.position != transform.position)
         {
-          renderTransform.transform.position = transform.position;
+          auto& renderTransformMut = world.GetRegistry().get<RenderTransform>(entity).transform;
+          if (previousGlobalTransform->position == transform.position)
+          {
+            renderTransformMut.position = transform.position;
+          }
+          else
+          {
+            renderTransformMut.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
+          }
+          renderTransformMut.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
+          renderTransformMut.scale = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
         }
-        renderTransform.transform.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
-        renderTransform.transform.scale    = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
       }
       else
       {
-        renderTransform.transform = transform;
+        world.GetRegistry().get<RenderTransform>(entity).transform = transform;
       }
     }
   }

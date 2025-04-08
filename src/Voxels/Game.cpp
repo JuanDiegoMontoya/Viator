@@ -56,7 +56,7 @@ static void OnDeferredDeleteConstruct(entt::registry& registryRaw, entt::entity 
   ZoneScoped;
   auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
   ASSERT(registry.valid(entity));
-  auto* h = registry.try_get<Hierarchy>(entity);
+  auto* h = registry.try_get<const Hierarchy>(entity);
   if (h && h->parent != entt::null)
   {
     auto& ph = registry.get<Hierarchy>(h->parent);
@@ -86,7 +86,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity1))
   {
-    auto& h = world.GetRegistry().get<Hierarchy>(pair.entity1);
+    auto& h = world.GetRegistry().get<const Hierarchy>(pair.entity1);
     if (h.parent != entt::null)
     {
       pair.entity1 = h.parent;
@@ -97,7 +97,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity2))
   {
-    auto& h = world.GetRegistry().get<Hierarchy>(pair.entity2);
+    auto& h = world.GetRegistry().get<const Hierarchy>(pair.entity2);
     if (h.parent != entt::null)
     {
       pair.entity2 = h.parent;
@@ -116,9 +116,9 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         {
           if (auto* h = world.GetRegistry().try_get<Health>(entity1); h && h->hp > 0)
           {
-            const auto& projectile = world.GetRegistry().get<Projectile>(entity2);
-            const auto& damage     = world.GetRegistry().get<ContactDamage>(entity2);
-            auto& projVelocity     = world.GetRegistry().get<LinearVelocity>(entity2);
+            const auto& projectile = world.GetRegistry().get<const Projectile>(entity2);
+            const auto& damage     = world.GetRegistry().get<const ContactDamage>(entity2);
+            auto& projVelocity     = world.GetRegistry().get<const LinearVelocity>(entity2);
 
             //const auto currentSpeed2  = glm::dot(projectile.velocity, projectile.velocity);
             //const auto energyFraction = (currentSpeed2) / (projectile.initialSpeed * projectile.initialSpeed);
@@ -137,7 +137,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
             //world.SetLinearVelocity(entity1, pushDir);
             auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
             pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
-            if (auto* m = world.GetRegistry().try_get<KnockbackMultiplier>(entity1))
+            if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
             {
               pushDir *= m->factor;
             }
@@ -197,7 +197,7 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity1))
   {
-    auto& h = world.GetRegistry().get<Hierarchy>(pair.entity1);
+    auto& h = world.GetRegistry().get<const Hierarchy>(pair.entity1);
     if (h.parent != entt::null)
     {
       pair.entity1 = h.parent;
@@ -208,7 +208,7 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity2))
   {
-    auto& h = world.GetRegistry().get<Hierarchy>(pair.entity2);
+    auto& h = world.GetRegistry().get<const Hierarchy>(pair.entity2);
     if (h.parent != entt::null)
     {
       pair.entity2 = h.parent;
@@ -225,7 +225,7 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
       {
         if (world.AreEntitiesEnemies(entity1, entity2))
         {
-          const auto& contactDamage = world.GetRegistry().get<ContactDamage>(entity2);
+          const auto& contactDamage = world.GetRegistry().get<const ContactDamage>(entity2);
 
           if (world.DamageEntity(entity1, contactDamage.damage) > 0)
           {
@@ -246,9 +246,9 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
       {
         if (world.AreEntitiesEnemies(entity1, entity2) && world.CanEntityDamageEntity(entity2, entity1))
         {
-          auto& pos1         = world.GetRegistry().get<GlobalTransform>(entity1).position;
-          auto& pos2         = world.GetRegistry().get<GlobalTransform>(entity2).position;
-          const auto& damage = world.GetRegistry().get<ContactDamage>(entity2);
+          auto& pos1         = world.GetRegistry().get<const GlobalTransform>(entity1).position;
+          auto& pos2         = world.GetRegistry().get<const GlobalTransform>(entity2).position;
+          const auto& damage = world.GetRegistry().get<const ContactDamage>(entity2);
           world.DamageEntity(entity1, damage.damage);
           auto pushDir = pos1 - pos2;
           pushDir.y    = 0;
@@ -260,7 +260,7 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
           pushDir.y               = damage.knockback;
           auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
           pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
-          if (auto* m = world.GetRegistry().try_get<KnockbackMultiplier>(entity1))
+          if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
           {
             pushDir *= m->factor;
           }
@@ -1007,7 +1007,7 @@ void Game::Run()
 
       if (world_->IsServer())
       {
-        for (auto&& [entity, player, inputLook, transform, gtransform] : world_->GetRegistry().view<Player, InputLookState, LocalTransform, GlobalTransform>().each())
+        for (auto&& [entity, player, inputLook, transform, gtransform] : world_->GetRegistry().view<const Player, const InputLookState, LocalTransform, GlobalTransform>().each())
         {
           transform.rotation  = glm::angleAxis(inputLook.yaw, glm::vec3{0, 1, 0}) * glm::angleAxis(inputLook.pitch, glm::vec3{1, 0, 0});
           gtransform.rotation = transform.rotation;
@@ -1064,24 +1064,30 @@ void World::FixedUpdate(float dt)
     registry_.ctx().get<std::vector<Debug::Line>>().clear();
 #endif
 
-    ASSERT(registry_.view<LocalPlayer>().size() <= 1);
+    registry_.ClearModifiedComponents();
+
+    ASSERT(registry_.view<const LocalPlayer>().size() <= 1);
 
     // Update previous transforms before updating it (this should be done after updating the game state from networking)
-    for (auto&& [entity, transform, interpolatedTransform] : registry_.view<GlobalTransform, PreviousGlobalTransform>().each())
+    for (auto&& [entity, transform, previousTransform] : registry_.view<const GlobalTransform, const PreviousGlobalTransform>().each())
     {
-      interpolatedTransform.position = transform.position;
-      interpolatedTransform.rotation = transform.rotation;
-      interpolatedTransform.scale    = transform.scale;
+      if (transform.position != previousTransform.position || transform.rotation != previousTransform.rotation || transform.scale != previousTransform.scale)
+      {
+        auto& previousTransformMut    = registry_.get<PreviousGlobalTransform>(entity);
+        previousTransformMut.position = transform.position;
+        previousTransformMut.rotation = transform.rotation;
+        previousTransformMut.scale    = transform.scale;
+      }
     }
 
-    for (auto entity : registry_.view<LocalPlayer>())
+    for (auto entity : registry_.view<const LocalPlayer>())
     {
       UpdateLocalTransform(entity);
     }
 
     if (IsServer())
     {
-      //registry_.ctx().get<NpcSpawnDirector>().Update(dt);
+      registry_.ctx().get<NpcSpawnDirector>().Update(dt);
     }
     
     Physics::FixedUpdate(dt, *this);
@@ -1163,7 +1169,7 @@ void World::FixedUpdate(float dt)
 
         if (nearestPlayer != entt::null)
         {
-          const auto& pt = registry_.get<GlobalTransform>(nearestPlayer);
+          const auto& pt = registry_.get<const GlobalTransform>(nearestPlayer);
           if (glm::distance(pt.position, transform.position) < 20)
           {
             behavior.target = nearestPlayer;
@@ -1200,7 +1206,7 @@ void World::FixedUpdate(float dt)
         }
         case PredatoryBirdBehavior::State::CIRCLING:
         {
-          const auto& pt    = registry_.get<GlobalTransform>(behavior.target);
+          const auto& pt    = registry_.get<const GlobalTransform>(behavior.target);
           const auto target = pt.position + glm::vec3(sin(behavior.accum * 1.2f) * 8, 4 + sin(behavior.accum * 4) * 2, cos(behavior.accum * 1.2f) * 8);
 
           transform.rotation = glm::quatLookAtRH(glm::normalize(target - transform.position), {0, 1, 0});
@@ -1228,7 +1234,7 @@ void World::FixedUpdate(float dt)
         }
         case PredatoryBirdBehavior::State::SWOOPING:
         {
-          const auto& pt     = registry_.get<GlobalTransform>(behavior.target);
+          const auto& pt     = registry_.get<const GlobalTransform>(behavior.target);
           transform.rotation = glm::quatLookAtRH(glm::normalize(pt.position - transform.position), {0, 1, 0});
 
           if (glm::distance(pt.position, transform.position) < 1.5f || behavior.accum > 5.0f)
@@ -1266,12 +1272,12 @@ void World::FixedUpdate(float dt)
       for (auto&& [entity, input, aiTransform] : registry_.view<InputState, LocalTransform>(entt::exclude<Player>).each())
       {
         entt::entity pe = entt::null;
-        GlobalTransform* pt = nullptr;
+        const GlobalTransform* pt = nullptr;
         float nearestDist2  = INFINITY;
 
         // Try to find the nearest player that satisfies target conditions.
         bool sawSomething = false;
-        for (auto&& [pEntity, player, playerTransform] : registry_.view<Player, GlobalTransform>(entt::exclude<GhostPlayer>).each())
+        for (auto&& [pEntity, player, playerTransform] : registry_.view<const Player, const GlobalTransform>(entt::exclude<GhostPlayer>).each())
         {
           bool isCandidate = false;
           if (!registry_.any_of<AiVision, AiHearing>(entity))
@@ -1329,7 +1335,7 @@ void World::FixedUpdate(float dt)
         if (aiTarget && registry_.valid(aiTarget->currentTarget))
         {
           pe = aiTarget->currentTarget;
-          pt = registry_.try_get<GlobalTransform>(pe);
+          pt = registry_.try_get<const GlobalTransform>(pe);
         }
 
         if (hasValidTarget && registry_.all_of<SimpleEnemyBehavior>(entity))
@@ -1344,7 +1350,7 @@ void World::FixedUpdate(float dt)
           input.forward = 1;
         }
 
-        if (auto* w = registry_.try_get<WormEnemyBehavior>(entity); w && hasValidTarget)
+        if (auto* w = registry_.try_get<const WormEnemyBehavior>(entity); w && hasValidTarget)
         {
           const auto desiredRotation = glm::quatLookAtRH(glm::normalize(pt->position - aiTransform.position), {0, 1, 0});
           const auto angle           = glm::acos(glm::dot(GetForward(desiredRotation), GetForward(aiTransform.rotation)));
@@ -1386,7 +1392,7 @@ void World::FixedUpdate(float dt)
           {
             // For ground characters, cast the player down. That way, if the player is in the air, the character will at least try to get under them instead of giving up.
             auto targetFootPos = glm::ivec3(pt->position);
-            if (const auto* pc = registry_.try_get<Physics::CharacterController>(pe))
+            if (const auto* pc = registry_.try_get<const Physics::CharacterController>(pe))
             {
               const auto& playerCharacter = pc->character;
               const auto* playerShape     = playerCharacter->GetShape();
@@ -1500,10 +1506,10 @@ void World::FixedUpdate(float dt)
     // Apply input (could be generated by players or NPCs!)
     if (IsServer())
     {
-      for (auto&& [entity, input, transform] : registry_.view<InputState, LocalTransform>(entt::exclude<GhostPlayer>).each())
+      for (auto&& [entity, input, transform] : registry_.view<const InputState, LocalTransform>(entt::exclude<GhostPlayer>).each())
       {
         // Movement
-        if (registry_.all_of<NoclipCharacterController>(entity))
+        if (registry_.all_of<const NoclipCharacterController>(entity))
         {
           const auto right     = GetRight(transform.rotation);
           const auto forward   = GetForward(transform.rotation);
@@ -1519,7 +1525,7 @@ void World::FixedUpdate(float dt)
           registry_.get_or_emplace<LinearVelocity>(entity).v = velocity;
         }
 
-        if (auto* fc = registry_.try_get<FlyingCharacterController>(entity))
+        if (auto* fc = registry_.try_get<const FlyingCharacterController>(entity))
         {
           auto& velocity     = registry_.get<LinearVelocity>(entity).v;
           const auto right   = GetRight(transform.rotation);
@@ -1540,7 +1546,7 @@ void World::FixedUpdate(float dt)
           UpdateLocalTransform(entity);
         }
 
-        if (auto* attribs = registry_.try_get<WalkingMovementAttributes>(entity);
+        if (auto* attribs = registry_.try_get<const WalkingMovementAttributes>(entity);
           attribs && registry_.any_of<Physics::CharacterController, Physics::CharacterControllerShrimple>(entity))
         {
           const auto rot   = glm::mat3_cast(transform.rotation);
@@ -1558,7 +1564,7 @@ void World::FixedUpdate(float dt)
           deltaVelocity += input.forward * forward * tempSpeed;
           deltaVelocity += input.strafe * right * tempSpeed;
 
-          if (auto* cc = registry_.try_get<Physics::CharacterController>(entity))
+          if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))
           {
             auto& velocity    = registry_.get<LinearVelocity>(entity).v;
             auto prevVelocity = velocity;
@@ -1581,7 +1587,7 @@ void World::FixedUpdate(float dt)
             // velocity.y); cc->character->AddLinearVelocity(Physics::ToJolt(velocity )); cc->character->AddImpulse(Physics::ToJolt(velocity));
           }
 
-          if (auto* cs = registry_.try_get<Physics::CharacterControllerShrimple>(entity))
+          if (auto* cs = registry_.try_get<const Physics::CharacterControllerShrimple>(entity))
           {
             auto velocity                 = registry_.get<LinearVelocity>(entity).v;
             auto& friction                = registry_.get_or_emplace<Friction>(entity).axes;
@@ -1636,7 +1642,7 @@ void World::FixedUpdate(float dt)
     // Close open containers if too far away.
     if (IsServer())
     {
-      for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>().each())
+      for (auto&& [entity, player, transform] : registry_.view<Player, const GlobalTransform>().each())
       {
         if (registry_.valid(player.openContainerId))
         {
@@ -1647,7 +1653,7 @@ void World::FixedUpdate(float dt)
             continue;
           }
 
-          if (auto* ct = registry_.try_get<GlobalTransform>(player.openContainerId); ct && glm::distance(transform.position, ct->position) > 6)
+          if (auto* ct = registry_.try_get<const GlobalTransform>(player.openContainerId); ct && glm::distance(transform.position, ct->position) > 6)
           {
             player.openContainerId = entt::null;
             continue;
@@ -1663,7 +1669,7 @@ void World::FixedUpdate(float dt)
     // Player interaction
     if (IsServer())
     {
-      for (auto&& [entity, player, transform, input, inventory] : registry_.view<Player, GlobalTransform, InputState, Inventory>(entt::exclude<GhostPlayer>).each())
+      for (auto&& [entity, player, transform, input, inventory] : registry_.view<Player, const GlobalTransform, const InputState, Inventory>(entt::exclude<GhostPlayer>).each())
       {
         const auto forward         = GetForward(transform.rotation);
         constexpr float RAY_LENGTH = 4.0f;
@@ -1736,7 +1742,7 @@ void World::FixedUpdate(float dt)
     // Update items in inventories (important to ensure cooldowns, etc. reset even when items are put away).
     if (IsServer())
     {
-      for (auto&& [entity, player, inventory] : registry_.view<Player, Inventory>(entt::exclude<GhostPlayer>).each())
+      for (auto&& [entity, player, inventory] : registry_.view<const Player, Inventory>(entt::exclude<GhostPlayer>).each())
       {
         for (size_t row = 0; row < inventory.height; row++)
         {
@@ -1772,14 +1778,14 @@ void World::FixedUpdate(float dt)
     // Dropped items get sucked towards the player as if by magnetic attraction.
     if (IsServer())
     {
-      for (auto&& [entity, player, transform] : registry_.view<Player, GlobalTransform>(entt::exclude<GhostPlayer>).each())
+      for (auto&& [entity, player, transform] : registry_.view<const Player, const GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
         //for (auto nearEntity : this->GetEntitiesInSphere(transform.position, 2))
         for (auto nearEntity : this->GetEntitiesInCapsule(transform.position - glm::vec3(0, 1.5f, 0), transform.position + glm::vec3(0, 1.5f, 0), 2))
         {
           if (registry_.all_of<DroppedItem>(nearEntity) && !registry_.any_of<CannotBePickedUp>(nearEntity))
           {
-            auto itemPos = registry_.get<GlobalTransform>(nearEntity).position;
+            auto itemPos = registry_.get<const GlobalTransform>(nearEntity).position;
             auto dist         = glm::distance(transform.position, itemPos);
             auto itemToPlayer = glm::normalize(transform.position - itemPos);
 
@@ -1799,7 +1805,7 @@ void World::FixedUpdate(float dt)
     // Tick down ghost players
     if (IsServer())
     {
-      for (auto&& [entity, ghost, player] : registry_.view<GhostPlayer, Player>().each())
+      for (auto&& [entity, ghost, player] : registry_.view<GhostPlayer, const Player>().each())
       {
         ghost.remainingSeconds -= dt;
 
@@ -1847,12 +1853,12 @@ void World::FixedUpdate(float dt)
     // Reset despawn timer for entities
     if (IsServer())
     {
-      for (auto&& [entity, transform, despawnInfo] : registry_.view<GlobalTransform, DespawnWhenFarFromPlayer>().each())
+      for (auto&& [entity, transform, despawnInfo] : registry_.view<const GlobalTransform, DespawnWhenFarFromPlayer>().each())
       {
         const auto maxDist2      = despawnInfo.maxDistance * despawnInfo.maxDistance;
         const auto nearestPlayer = GetNearestPlayer(transform.position);
         [[maybe_unused]] auto _  = registry_.get_or_emplace<Lifetime>(entity, despawnInfo.gracePeriod);
-        if (nearestPlayer == entt::null || Math::Distance2(registry_.get<GlobalTransform>(nearestPlayer).position, transform.position) <= maxDist2)
+        if (nearestPlayer == entt::null || Math::Distance2(registry_.get<const GlobalTransform>(nearestPlayer).position, transform.position) <= maxDist2)
         {
           registry_.emplace_or_replace<Lifetime>(entity, despawnInfo.gracePeriod);
         }
@@ -1881,11 +1887,11 @@ void World::FixedUpdate(float dt)
     // Process entities with Health
     if (IsServer())
     {
-      for (auto&& [entity, health, transform] : registry_.view<Health, GlobalTransform>(entt::exclude<GhostPlayer>).each())
+      for (auto&& [entity, health, transform] : registry_.view<Health, const GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
         if (health.hp <= 0)
         {
-          if (auto* loot = registry_.try_get<Loot>(entity))
+          if (auto* loot = registry_.try_get<const Loot>(entity))
           {
             auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
             ASSERT(table);
@@ -1899,7 +1905,7 @@ void World::FixedUpdate(float dt)
               UpdateLocalTransform(droppedEntity);
               registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
               auto velocity = glm::vec3(0);
-              if (auto* v = registry_.try_get<LinearVelocity>(entity))
+              if (auto* v = registry_.try_get<const LinearVelocity>(entity))
               {
                 velocity = v->v;
               }
@@ -1947,7 +1953,7 @@ void World::FixedUpdate(float dt)
     // Non-player entities dump their inventory when they are destroyed.
     if (IsServer())
     {
-      for (auto&& [entity, transform, inventory] : registry_.view<GlobalTransform, Inventory, DeferredDelete>(entt::exclude<Player>).each())
+      for (auto&& [entity, transform, inventory] : registry_.view<const GlobalTransform, Inventory, const DeferredDelete>(entt::exclude<Player>).each())
       {
         for (size_t row = 0; row < inventory.height; row++)
         {
@@ -1958,7 +1964,7 @@ void World::FixedUpdate(float dt)
               registry_.get<LocalTransform>(droppedEntity).position = transform.position;
               UpdateLocalTransform(droppedEntity);
               auto velocity = glm::vec3(0);
-              if (auto* v = registry_.try_get<LinearVelocity>(entity))
+              if (auto* v = registry_.try_get<const LinearVelocity>(entity))
               {
                 velocity = v->v;
               }
@@ -1972,7 +1978,7 @@ void World::FixedUpdate(float dt)
     }
 
     // Actually destroy entities that were marked for deletion.
-    for (auto entity : registry_.view<DeferredDelete>())
+    for (auto entity : registry_.view<const DeferredDelete>())
     {
       spdlog::debug("Destroyed entity {}", entt::to_integral(entity));
       registry_.destroy(entity);
@@ -2607,8 +2613,8 @@ void World::GenerateMap()
     });
   //}
 
-  constexpr int MAX_MUSHROOMS = 50'000;
-  //constexpr int MAX_MUSHROOMS = 1;
+  //constexpr int MAX_MUSHROOMS = 50'000;
+  constexpr int MAX_MUSHROOMS = 1;
 #ifndef GAME_HEADLESS
   progressText.store("MUSHROOM");
   progress.store(0);
@@ -2691,7 +2697,7 @@ entt::entity World::CreateDroppedItem(ItemState item, glm::vec3 position, glm::q
 
 entt::entity World::TryGetLocalPlayer()
 {
-  auto view = registry_.view<GlobalTransform, LocalPlayer>();
+  auto view = registry_.view<const GlobalTransform, const LocalPlayer>();
   auto e    = view.front();
   if (e != entt::null)
   {
@@ -2700,13 +2706,13 @@ entt::entity World::TryGetLocalPlayer()
   return entt::null;
 }
 
-GlobalTransform* World::TryGetLocalPlayerTransform()
+const GlobalTransform* World::TryGetLocalPlayerTransform()
 {
-  auto view = registry_.view<GlobalTransform, LocalPlayer>();
+  auto view = registry_.view<const GlobalTransform, const LocalPlayer>();
   auto e = view.front();
   if (e != entt::null)
   {
-    return &view.get<GlobalTransform>(e);
+    return &view.get<const GlobalTransform>(e);
   }
   return nullptr;
 }
@@ -2720,7 +2726,7 @@ void World::SetLocalScale(entt::entity entity, float scale)
 
 entt::entity World::GetChildNamed(entt::entity entity, std::string_view name) const
 {
-  for (auto child : registry_.get<Hierarchy>(entity).children)
+  for (auto child : registry_.get<const Hierarchy>(entity).children)
   {
     if (auto* n = registry_.try_get<Name>(child); n && n->name == name)
     {
@@ -2737,7 +2743,7 @@ glm::vec3 World::GetInheritedLinearVelocity(entt::entity entity)
   {
     return vel->v;
   }
-  if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+  if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
   {
     return GetInheritedLinearVelocity(h->parent);
   }
@@ -2747,11 +2753,11 @@ glm::vec3 World::GetInheritedLinearVelocity(entt::entity entity)
 const TeamFlags* World::GetTeamFlags(entt::entity entity) const
 {
   ASSERT(registry_.valid(entity));
-  if (auto* teamFlags = registry_.try_get<TeamFlags>(entity))
+  if (auto* teamFlags = registry_.try_get<const TeamFlags>(entity))
   {
     return teamFlags;
   }
-  if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+  if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
   {
     return GetTeamFlags(h->parent);
   }
@@ -2868,7 +2874,7 @@ void World::KillPlayer(entt::entity playerEntity)
     registry_.get<Hierarchy>(playerEntity).RemoveChild(e);
   }
 
-  auto& inventory = registry_.get<Inventory>(playerEntity);
+  auto& inventory = registry_.get<const Inventory>(playerEntity);
   if (inventory.ActiveSlot().id != nullItem)
   {
     const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
@@ -2914,7 +2920,7 @@ float World::DamageEntity(entt::entity entity, float damage)
 
 bool World::CanEntityDamageEntity(entt::entity entitySource, entt::entity entityTarget) const
 {
-  if (const auto* cd = registry_.try_get<CannotDamageEntities>(entitySource))
+  if (const auto* cd = registry_.try_get<const CannotDamageEntities>(entitySource))
   {
     if (cd->entities.contains(entityTarget))
     {
@@ -2959,7 +2965,7 @@ std::vector<entt::entity> World::GetEntitiesInSphere(glm::vec3 center, float rad
         {
           // Narrowphase: distance check.
           const auto entity = it->second;
-          const auto& position = registry_.get<GlobalTransform>(entity).position;
+          const auto& position = registry_.get<const GlobalTransform>(entity).position;
 
           const auto vec = position - center;
           const auto distance2 = glm::dot(vec, vec);
@@ -2996,7 +3002,7 @@ std::vector<entt::entity> World::GetEntitiesInCapsule(glm::vec3 start, glm::vec3
         {
           // Narrowphase: distance check.
           const auto entity    = it->second;
-          const auto& position = registry_.get<GlobalTransform>(entity).position;
+          const auto& position = registry_.get<const GlobalTransform>(entity).position;
           
           if (Math::PointLineSegmentDistance(position, start, end) <= radius)
           {
@@ -3015,7 +3021,7 @@ entt::entity World::GetNearestPlayer(glm::vec3 position)
   entt::entity nearestPlayer = entt::null;
   float nearestDistance2     = HUGE_VALF;
 
-  for (auto [entity, transform, player] : registry_.view<GlobalTransform, Player>(entt::exclude<GhostPlayer>).each())
+  for (auto [entity, transform, player] : registry_.view<const GlobalTransform, const Player>(entt::exclude<GhostPlayer>).each())
   {
     if (const auto dist2 = Math::Distance2(position, transform.position); dist2 < nearestDistance2)
     {
@@ -3134,7 +3140,7 @@ entt::entity World::GetBlockEntity(glm::ivec3 voxelPosition)
 
 entt::entity World::GetRootEntityOfHierarchy(entt::entity entity) const
 {
-  if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+  if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
   {
     return GetRootEntityOfHierarchy(entity);
   }
@@ -3161,10 +3167,10 @@ bool World::IsHosting() const
 
 glm::vec3 World::GetFootPosition(entt::entity entity)
 {
-  const auto* t = registry_.try_get<GlobalTransform>(entity);
+  const auto* t = registry_.try_get<const GlobalTransform>(entity);
   ASSERT(t);
 
-  if (const auto* s = registry_.try_get<Physics::Shape>(entity))
+  if (const auto* s = registry_.try_get<const Physics::Shape>(entity))
   {
     const auto floorOffsetY = -s->shape->GetLocalBounds().GetExtent().GetY();
     return t->position + glm::vec3(0, floorOffsetY + 1e-1f, 0); // Needs fairly large epsilon because feet can penetrate ground in physics sim.
@@ -3175,20 +3181,20 @@ glm::vec3 World::GetFootPosition(entt::entity entity)
 
 float World::GetHeight(entt::entity entity)
 {
-  if (const auto* s = registry_.try_get<Physics::Shape>(entity))
+  if (const auto* s = registry_.try_get<const Physics::Shape>(entity))
   {
     return s->shape->GetLocalBounds().GetExtent().GetY() * 2.0f;
   }
 
-  const auto& t = registry_.get<GlobalTransform>(entity);
+  const auto& t = registry_.get<const GlobalTransform>(entity);
   return t.scale * 2.0f;
 }
 
 void World::UpdateLocalTransform(entt::entity entity)
 {
   ASSERT(registry_.valid(entity));
-  auto* h  = registry_.try_get<Hierarchy>(entity);
-  auto& lt = registry_.get<LocalTransform>(entity); // parent_local_from_local
+  auto* h  = registry_.try_get<const Hierarchy>(entity);
+  auto& lt = registry_.get<const LocalTransform>(entity); // parent_local_from_local
   auto& gt = registry_.get<GlobalTransform>(entity); // world_from_local
 
   if (!h || h->parent == entt::null)
@@ -3293,7 +3299,7 @@ void World::SetParent(entt::entity child, entt::entity parent)
     h.parent = entt::null;
     if (parent != oldParent)
     {
-      auto&& [gt, lt] = registry_.get<GlobalTransform, LocalTransform>(child);
+      auto&& [gt, lt] = registry_.get<const GlobalTransform, LocalTransform>(child);
       lt.position     = gt.position;
       lt.rotation     = gt.rotation;
       lt.scale        = gt.scale;
@@ -3308,7 +3314,7 @@ void World::SetParent(entt::entity child, entt::entity parent)
   ph.AddChild(child);
 
   // Detect cycles in debug mode
-  for ([[maybe_unused]] entt::entity cParent = parent; cParent != entt::null; cParent = registry_.get<Hierarchy>(cParent).parent)
+  for ([[maybe_unused]] entt::entity cParent = parent; cParent != entt::null; cParent = registry_.get<const Hierarchy>(cParent).parent)
   {
     ASSERT(cParent != child);
   }
@@ -3397,7 +3403,7 @@ entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
 
 entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot)
 {
-  auto* userTransform = world.GetRegistry().try_get<GlobalTransform>(thrower);
+  auto* userTransform = world.GetRegistry().try_get<const GlobalTransform>(thrower);
   if (!userTransform)
   {
     spdlog::warn("Failed to throw item: thrower does not have global transform");
@@ -3549,7 +3555,7 @@ void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recip
       }
       else
       {
-        const auto& t = world.GetRegistry().get<GlobalTransform>(parent);
+        const auto& t = world.GetRegistry().get<const GlobalTransform>(parent);
         world.CreateDroppedItem(item, t.position, t.rotation, t.scale);
       }
     }
@@ -3576,7 +3582,7 @@ void Gun::UsePrimary(float dt, World& world, entt::entity self, ItemState& state
     return;
   }
 
-  const auto& transform = registry.get<GlobalTransform>(self);
+  const auto& transform = registry.get<const GlobalTransform>(self);
   const auto shootDt    = GetUseDt();
   if (state.useAccum >= shootDt)
   {
@@ -3627,7 +3633,7 @@ void Gun::UsePrimary(float dt, World& world, entt::entity self, ItemState& state
     }
 
     // If parent is player, apply recoil
-    if (auto* h = registry.try_get<Hierarchy>(self); h && h->parent != entt::null)
+    if (auto* h = registry.try_get<const Hierarchy>(self); h && h->parent != entt::null)
     {
       const auto vr = glm::radians(createInfo_.vrecoil + world.Rng().RandFloat(-createInfo_.vrecoilDev, createInfo_.vrecoilDev));
       const auto hr = glm::radians(createInfo_.hrecoil + world.Rng().RandFloat(-createInfo_.hrecoilDev, createInfo_.hrecoilDev));
@@ -3672,9 +3678,9 @@ void ToolDefinition::UsePrimary(float dt, World& world, entt::entity self, ItemS
 
   state.useAccum = glm::clamp(state.useAccum - dt, 0.0f, dt);
   auto& reg      = world.GetRegistry();
-  const auto& h  = reg.get<Hierarchy>(self);
+  const auto& h  = reg.get<const Hierarchy>(self);
   const auto p   = h.parent;
-  const auto& pt = reg.get<GlobalTransform>(p);
+  const auto& pt = reg.get<const GlobalTransform>(p);
   const auto pos = pt.position;
   const auto dir = GetForward(pt.rotation);
 
@@ -3745,9 +3751,9 @@ void Block::UsePrimary(float dt, World& world, entt::entity self, ItemState& sta
 
   state.useAccum = glm::clamp(state.useAccum - dt, 0.0f, dt);
   auto& reg      = world.GetRegistry();
-  const auto& h  = reg.get<Hierarchy>(self);
+  const auto& h  = reg.get<const Hierarchy>(self);
   const auto p   = h.parent;
-  const auto& pt = reg.get<GlobalTransform>(p);
+  const auto& pt = reg.get<const GlobalTransform>(p);
   const auto pos = pt.position;
   const auto dir = GetForward(pt.rotation);
 
@@ -4026,7 +4032,7 @@ void ExplodeyBlockDefinition::OnDestroyBlock(World& world, glm::ivec3 voxelPosit
   {
     if (auto* v = world.GetRegistry().try_get<LinearVelocity>(entity))
     {
-      const auto& t = world.GetRegistry().get<GlobalTransform>(entity);
+      const auto& t = world.GetRegistry().get<const GlobalTransform>(entity);
       
       const auto force = explodeyInfo_.pushForce;
       v->v += force * glm::normalize(t.position - center);
@@ -4098,7 +4104,7 @@ void NpcSpawnDirector::Update(float dt)
 
     constexpr size_t MAX_ENEMIES = 20;
 
-    for (auto&& [entity, player, transform] : registry.view<Player, GlobalTransform>().each())
+    for (auto&& [entity, player, transform] : registry.view<const Player, const GlobalTransform>().each())
     {
       for (const auto& pDefinition : registry.ctx().get<EntityPrefabRegistry>().GetAllPrefabs())
       {

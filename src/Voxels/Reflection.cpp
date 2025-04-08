@@ -399,6 +399,7 @@ void Core::Reflection::Initialize()
 
   #define REGISTER_RPC(Function, Traits) \
     entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
+    .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Function}}) \
     .traits<RpcTraits>(Traits)
 
   entt::meta_factory<int>().func<&EditorWriteScalar<int>>("EditorWrite"_hs).func<&EditorReadScalar<int>>("EditorRead"_hs).traits(TRIVIAL);
@@ -661,11 +662,12 @@ void Core::Reflection::Initialize()
     DATA(Projectile, drag)
     DATA(Projectile, restitution);
 
-  REFLECT_COMPONENT(Inventory, EDITOR_READ_ONLY | REPLICATED | TRIVIAL)
+  REFLECT_COMPONENT(Inventory, EDITOR_READ_ONLY | REPLICATED)
     DATA(Inventory, activeSlotCoord)
     DATA(Inventory, canHaveActiveItem)
     DATA(Inventory, activeSlotEntity)
-    DATA(Inventory, slots);
+    DATA(Inventory, slots)
+    TRAITS(TRIVIAL);
 
   REFLECT_COMPONENT(Billboard, REPLICATED)
     DATA(Billboard, name);
@@ -807,4 +809,6 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(SwapInventorySlotsRPC, RpcTraits::Server);
   REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
   REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
+
+  REFLECT_ENUM(ActionType);
 }

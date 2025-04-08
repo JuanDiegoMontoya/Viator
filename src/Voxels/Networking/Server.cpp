@@ -78,41 +78,65 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
         ZoneScopedN("ENET_EVENT_TYPE_CONNECT");
         spdlog::info("Connected to {}", event.peer->address);
         const auto clientEntity = world.CreatePlayer();
-        auto& pair = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Connected}).first;
+        auto& pair              = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Connected}).first;
         entityToConnection_.emplace(clientEntity, event.peer);
-        
-        auto stream = std::stringstream();
-        Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid | PacketType::Compressed);
-        const auto bytes = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
-        const auto maxCompressedSize = ZSTD_compressBound(bytes.size());
 
-        auto tempBuffer = std::make_unique<char[]>(maxCompressedSize);
-        auto zret       = ZSTD_compress(tempBuffer.get(), maxCompressedSize, bytes.data(), bytes.size(), ZSTD_CLEVEL_DEFAULT);
-        ASSERT(!ZSTD_isError(zret), "Failed to compress TwoLevelGrid.");
-        stream.write(tempBuffer.get(), zret);
-        spdlog::info("Compressed world from {} bytes to {} bytes.", bytes.size(), zret);
+        // 1. Send TwoLevelGrid.
+        {
+          auto stream = std::stringstream();
+          Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid | PacketType::Compressed);
+          const auto bytes             = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
+          const auto maxCompressedSize = ZSTD_compressBound(bytes.size());
 
-        auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
-        packet->userData = &pair;
+          auto tempBuffer = std::make_unique<char[]>(maxCompressedSize);
+          auto zret       = ZSTD_compress(tempBuffer.get(), maxCompressedSize, bytes.data(), bytes.size(), ZSTD_CLEVEL_DEFAULT);
+          ASSERT(!ZSTD_isError(zret), "Failed to compress TwoLevelGrid.");
+          stream.write(tempBuffer.get(), zret);
+          spdlog::info("Compressed world from {} bytes to {} bytes.", bytes.size(), zret);
 
-        enet_packet_set_free_callback(packet,
-          [](ENetPacket* packet)
-          {
-            auto* ppair = static_cast<std::remove_reference_t<decltype(pair)>*>(packet->userData);
-            //ppair->second.status = ClientStatus::Connected;
-            spdlog::info("World transmitted to {}", ppair->first->address);
-          });
+          auto* packet     = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
+          auto* ppair      = new auto(pair);
+          packet->userData = ppair;
+          
+          enet_packet_set_free_callback(packet,
+            [](ENetPacket* packet)
+            {
+              auto* ppair2 = static_cast<decltype(ppair)>(packet->userData);
+              // ppair->second.status = ClientStatus::Connected;
+              spdlog::info("World transmitted to {}", ppair2->first->address);
+              delete ppair2;
+            });
 
-        enet_peer_send(event.peer, uint8_t(Channel::Voxels), packet);
+          enet_peer_send(event.peer, uint8_t(Channel::Voxels), packet);
+        }
 
-        // TODO: Make this work.
-        //CallRPC2("GiveLocalPlayerRPC"_hs, clientEntity, world, clientEntity);
+        // 2. Send entities.
+        {
+          auto stream = std::stringstream();
+          Core::Serialization::SerializeObjectStream(stream, PacketType::InitialEntityState);
+          Core::Serialization::SerializeAllEntitiesForNetwork(world, stream);
+          auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
+          auto ppair = new auto(std::make_pair(&world, clientEntity));
+          packet->userData = ppair;
+
+          enet_packet_set_free_callback(packet,
+            [](ENetPacket* packet)
+            {
+              // 3. Inform client which entity it owns.
+              auto& [world, clientEntity] = *static_cast<decltype(ppair)>(packet->userData);
+              CallRPC2("GiveLocalPlayerRPC"_hs, clientEntity, *world, clientEntity);
+              delete static_cast<decltype(ppair)>(packet->userData);
+            });
+
+          enet_peer_send(event.peer, uint8_t(Channel::Replicate), packet);
+        }
         
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
         ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
+        ZoneTextF("Packet number %u: %zu bytes", enet_host_get_packets_received(localHost_), event.packet->dataLength);
         spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, event.peer, *event.packet);
         enet_packet_destroy(event.packet);
@@ -176,6 +200,27 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
     return;
   }
 
+  {
+    ZoneScopedN("Send current tick");
+    ZoneTextF("Sending server tick %llu", world.GetTicks());
+    spdlog::debug("Sending server tick {}", world.GetTicks());
+    auto stream = std::stringstream();
+    Core::Serialization::SerializeObjectStream(stream, PacketType::TickNumber);
+    Core::Serialization::SerializeObjectStream(stream, world.GetTicks());
+    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
+    enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
+  }
+
+  {
+    ZoneScopedN("Replicate modified state");
+    auto stream = std::stringstream();
+    Core::Serialization::SerializeObjectStream(stream, PacketType::ModifiedComponents);
+    Core::Serialization::SerializeModifiedComponents(world, stream, world.GetRegistry().GetModifiedComponents());
+    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
+    enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
+  }
+
+#if 0
   // Set of entities that have no parent.
   auto rootEntities = std::unordered_set<entt::entity>();
 
@@ -183,7 +228,7 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   {
     rootEntities.emplace(world.GetRootEntityOfHierarchy(entity));
   }
-
+  
   // For each root entity, create a serialized "bundle" containing it and all descendants, then send it.
   for (auto rootEntity : rootEntities)
   {
@@ -213,15 +258,7 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
       }
     }
   }
-
-  // TODO: This is jank. GiveLocalPlayerRPC should only be called once per player, not every tick.
-  for (auto& [peer, clientInfo] : connections_)
-  {
-    if (clientInfo.status == ClientStatus::Connected)
-    {
-      CallRPC2("GiveLocalPlayerRPC"_hs, clientInfo.entity, world, clientInfo.entity);
-    }
-  }
+#endif
 
   FlushRPCs();
 }

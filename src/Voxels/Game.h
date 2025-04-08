@@ -286,6 +286,28 @@ private:
   BlockEntityCreateInfo blockEntityInfo_;
 };
 
+enum class ActionType : uint8_t
+{
+  Add    = 1 << 0,
+  Modify = 1 << 1,
+  Remove = 1 << 2
+};
+
+constexpr ActionType operator|(ActionType a, ActionType b)
+{
+  return static_cast<ActionType>((uint32_t)a | (uint32_t)b);
+}
+
+constexpr ActionType operator|=(ActionType& a, ActionType b)
+{
+  return a = a | b;
+}
+
+constexpr ActionType operator&(ActionType a, ActionType b)
+{
+  return static_cast<ActionType>((uint32_t)a & (uint32_t)b);
+}
+
 // Proxy that wraps common entt::registry operations for the purpose of tracking component changes.
 // This allows us to replicate component state with essentially no change to gameplay code.
 // However, this tracking comes with some overhead when getting or viewing mutable components.
@@ -315,12 +337,12 @@ public:
   {
     if constexpr (sizeof...(Type) == 1)
     {
-      MarkIfNotConst<Type...>(entity, ActionType::MODIFY);
+      MarkIfNotConst<Type...>(entity, ActionType::Modify);
       return registry_->try_get<Type...>(entity);
     }
     else
     {
-      return std::make_tuple(try_get<Type...>(entity)...);
+      return std::forward_as_tuple(try_get<Type...>(entity)...);
     }
   }
 
@@ -333,7 +355,7 @@ public:
     }
     else
     {
-      return std::make_tuple(try_get<Type...>(entity)...);
+      return std::forward_as_tuple(try_get<Type...>(entity)...);
     }
   }
 
@@ -346,7 +368,7 @@ public:
     }
     else
     {
-      return std::make_tuple(get<Type>(entity)...);
+      return std::forward_as_tuple(get<Type>(entity)...);
     }
   }
 
@@ -355,12 +377,12 @@ public:
   {
     if constexpr (sizeof...(Type) == 1)
     {
-      MarkIfNotConst<Type...>(entity, ActionType::MODIFY);
+      MarkIfNotConst<Type...>(entity, ActionType::Modify);
       return registry_->get<Type...>(entity);
     }
     else
     {
-      return std::make_tuple(get<Type>(entity)...);
+      return std::forward_as_tuple(get<Type>(entity)...);
     }
   }
 
@@ -376,7 +398,7 @@ public:
     auto v = registry_->view<Types...>(exclude);
     for (auto entity : v)
     {
-      (MarkIfNotConst<Types>(entity, ActionType::MODIFY), ...);
+      (MarkIfNotConst<Types>(entity, ActionType::Modify), ...);
     }
     return v;
   }
@@ -396,28 +418,28 @@ public:
   template<typename Type, typename... Args>
   decltype(auto) emplace(entt::entity entity, Args&&... args)
   {
-    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD;
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::Add;
     return registry_->emplace<Type>(entity, std::forward<Args>(args)...);
   }
 
   template<typename Type, typename... Args>
   decltype(auto) emplace_or_replace(entt::entity entity, Args&&... args)
   {
-    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD | MODIFY;
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::Add | ActionType::Modify;
     return registry_->emplace_or_replace<Type, Args...>(entity, std::forward<Args>(args)...);
   }
 
   template<typename Type, typename... Args>
   [[nodiscard]] decltype(auto) get_or_emplace(const entt::entity entity, Args&&... args)
   {
-    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::ADD | MODIFY;
+    modifiedComponents_[entt::type_id<Type>().hash()][entity] |= ActionType::Add | ActionType::Modify;
     return registry_->get_or_emplace<Type>(entity, std::forward<Args>(args)...);
   }
 
   template<typename... Types>
   auto remove(const entt::entity entity)
   {
-    ((modifiedComponents_[entt::type_id<Types>().hash()][entity] |= ActionType::REMOVE), ...);
+    ((modifiedComponents_[entt::type_id<Types>().hash()][entity] |= ActionType::Remove), ...);
     return registry_->remove<Types...>(entity);
   }
 
@@ -447,13 +469,6 @@ public:
 private:
   entt::registry* registry_{};
   World* world_{};
-
-  enum ActionType : uint32_t
-  {
-    ADD    = 1 << 0,
-    MODIFY = 1 << 1,
-    REMOVE = 1 << 2
-  };
   std::unordered_map<entt::id_type, std::unordered_map<entt::entity, ActionType>> modifiedComponents_;
 
   const entt::registry* ConstRegistry() const
@@ -515,7 +530,7 @@ public:
   entt::entity CreateDroppedItem(ItemState item, glm::vec3 position, glm::quat rotation = {1, 0, 0, 0}, float scale = 1);
 
   [[nodiscard]] entt::entity TryGetLocalPlayer();
-  [[nodiscard]] GlobalTransform* TryGetLocalPlayerTransform();
+  [[nodiscard]] const GlobalTransform* TryGetLocalPlayerTransform();
   
   void SetLocalScale(entt::entity entity, float scale);
   [[nodiscard]] entt::entity GetChildNamed(entt::entity entity, std::string_view name) const;
@@ -1082,6 +1097,11 @@ struct Inventory
     return slots[activeSlotCoord.x][activeSlotCoord.y];
   }
 
+  const auto& ActiveSlot() const
+  {
+    return slots[activeSlotCoord.x][activeSlotCoord.y];
+  }
+
 
   // Completely deletes the old item, replacing it with the new. New item can be null.
   void OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemState, entt::entity parent = entt::null);
@@ -1225,6 +1245,7 @@ struct PreviousGlobalTransform
   glm::vec3 position{};
   glm::quat rotation{};
   float scale{};
+  bool teleported = true;
 };
 
 struct Health

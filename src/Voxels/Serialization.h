@@ -1,5 +1,6 @@
 #pragma once
 #include "Assert2.h"
+#include "Game.h" // TODO: Remove
 
 #include "entt/fwd.hpp"
 #include "entt/meta/resolve.hpp"
@@ -21,6 +22,19 @@ namespace Core::Serialization
 
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path);
   void LoadRegistryFromFile(World& world, const std::filesystem::path& path);
+
+  // Produces a component stream.
+  void SerializeAllEntitiesForNetwork(const World& world, std::ostream& stream);
+
+  // Produces a component stream.
+  void SerializeModifiedComponents(const World& world, std::ostream& ostream,
+    const std::unordered_map<entt::id_type, std::unordered_map<entt::entity, ActionType>>& modifiedComponents);
+  void DeserializeComponentStream(World& world,
+    std::istream& istream,
+    std::unordered_map<entt::entity, entt::entity>& remoteToLocal,
+    std::unordered_map<entt::entity, entt::entity>& localToRemote,
+    bool readActionType,
+    bool doRemap);
 
   void SerializeEntity(std::stringstream& stream, const World& world, entt::entity entity);
   void DeserializeEntity(std::stringstream& stream, World& world, std::unordered_map<entt::entity, entt::entity>& remoteToLocal);

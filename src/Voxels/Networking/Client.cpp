@@ -59,6 +59,7 @@ Networking::Client::~Client()
 
 void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
 {
+  ZoneScoped;
   auto event = ENetEvent{};
   while (true)
   {
@@ -77,6 +78,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       case ENET_EVENT_TYPE_RECEIVE:
       {
         ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
+        ZoneTextF("Packet number %u: %zu bytes", enet_host_get_packets_received(localHost_), event.packet->dataLength);
         spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, *event.packet);
         enet_packet_destroy(event.packet);
@@ -222,6 +224,13 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
     world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));
     world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
   }
+  else if ((packetType & PacketType::TypeMask) == PacketType::TickNumber)
+  {
+    ZoneScopedN("PacketType::TickNumber");
+    [[maybe_unused]] auto tick = Core::Serialization::DeserializeObjectStream<decltype(world.GetTicks())>(stream);
+    ZoneTextF("Server tick: %llu", tick);
+    spdlog::debug("Received server tick {}", tick);
+  }
   else if ((packetType & PacketType::TypeMask) == PacketType::EntityBundle)
   {
     ZoneScopedN("PacketType::EntityBundle");
@@ -267,6 +276,16 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
   else if ((packetType & PacketType::TypeMask) == PacketType::Rpc)
   {
     detail::InvokeSerializedRPC(world, stream);
+  }
+  else if ((packetType & PacketType::TypeMask) == PacketType::ModifiedComponents)
+  {
+    ZoneScopedN("PacketType::ModifiedComponents");
+    Core::Serialization::DeserializeComponentStream(world, stream, remoteToLocalEntity_, localToRemoteEntity_, true, true);
+  }
+  else if ((packetType & PacketType::TypeMask) == PacketType::InitialEntityState)
+  {
+    ZoneScopedN("PacketType::InitialEntityState");
+    Core::Serialization::DeserializeComponentStream(world, stream, remoteToLocalEntity_, localToRemoteEntity_, false, true);
   }
   else
   {
