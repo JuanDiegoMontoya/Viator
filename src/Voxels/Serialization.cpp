@@ -485,13 +485,13 @@ namespace Core::Serialization
           ZoneText(meta.info().name().data(), meta.info().name().size());
           Serialize<true>(outputArchive, id);
           const auto mapSize = (uint32_t)std::ranges::count_if(map,
-            [&](const auto& p) { return !(bool(p.second & (ActionType::Add | ActionType::Modify)) && !set.contains(p.first)); });
+            [&](const auto& p) { return !(!bool(p.second & ActionType::Remove) && !set.contains(p.first)); });
           Serialize<true>(outputArchive, mapSize);
           ZoneTextF("Set elements: %u", mapSize);
           for (const auto& [entity, action] : map)
           {
             {
-              if (bool(action & (ActionType::Add | ActionType::Modify)) && !set.contains(entity))
+              if (!bool(action & ActionType::Remove) && !set.contains(entity))
               {
                 continue;
               }
