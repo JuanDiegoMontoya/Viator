@@ -3434,6 +3434,19 @@ void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol)
   }
 }
 
+void ScrollHotbarRPC(World& world, entt::entity parent, int32_t offset)
+{
+  auto* inv = world.GetRegistry().try_get<Inventory>(parent);
+  if (!inv)
+  {
+    spdlog::warn("Could not scroll in hotbar: missing inventory");
+    return;
+  }
+
+  const auto newCol = (int)glm::mod((float)inv->activeSlotCoord.y + offset, (float)inv->width);
+  SetActiveSlotRPC(world, parent, glm::ivec2{0, newCol});
+}
+
 entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
 {
   auto* inv = world.GetRegistry().try_get<Inventory>(parent);

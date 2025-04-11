@@ -82,8 +82,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
           if (scrollOffset.y != 0)
           {
             const auto offset = -(int)scrollOffset.y;
-            const auto newCol = (int)glm::mod((float)i->activeSlotCoord.y + offset, (float)i->width);
-            Networking::CallRPC("SetActiveSlotRPC"_hs, world, entity, glm::ivec2{0, newCol});
+            Networking::CallRPC("ScrollHotbarRPC"_hs, world, entity, offset);
           }
         }
       }

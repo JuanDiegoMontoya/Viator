@@ -843,6 +843,7 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
   REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
   REGISTER_RPC(TeleportPlayerRPC, RpcTraits::Client);
+  REGISTER_RPC(ScrollHotbarRPC, RpcTraits::Server);
 
   REFLECT_ENUM(ActionType);
 }

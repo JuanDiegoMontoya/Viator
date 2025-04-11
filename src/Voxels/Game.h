@@ -1129,6 +1129,8 @@ struct Inventory
 
 void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol);
 
+void ScrollHotbarRPC(World& world, entt::entity parent, int32_t offset);
+
 // If necessary, materializes the item. Then, the item is given a RigidBody and is moved into the new entity.
 entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot);
 entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot);
