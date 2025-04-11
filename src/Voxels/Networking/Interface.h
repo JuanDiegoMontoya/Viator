@@ -49,8 +49,8 @@ namespace Networking
     // entt::id_type + serialized args
     Rpc,
 
-    // entt::entity
-    RemovedEntity,
+    // std::vector<entt::entity>
+    RemovedEntities,
 
     // InputState + InputLookState
     InputState,
@@ -66,6 +66,9 @@ namespace Networking
 
     // Server tick identifier. Used to synchronize events on the client and server in traces.
     TickNumber,
+
+    // Stream of packets. Used for data that must arrive simultaneously (such as modified components and removed enitties).
+    MultiPacket,
 
     // Bitwise AND this mask with a PacketType to extract the underlying packet type (one of the above enumerators).
     TypeMask = 0b0111'1111,

@@ -156,7 +156,10 @@ target_compile_options(frogRender
     -Wno-old-style-cast
     -Wno-unused-result
     -ftime-trace
+    $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     -DFROG_DEBUG
+    -DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
+    >
     >
     $<$<CXX_COMPILER_ID:MSVC>:
     /W4
@@ -172,6 +175,7 @@ target_compile_options(frogRender
     /ZI          # Program Database for Edit and Continue
     /INCREMENTAL # Incremental linking is required for Edit and Continue
     /DFROG_DEBUG
+    /DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
     >
     >
 )

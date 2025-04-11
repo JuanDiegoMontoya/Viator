@@ -7,6 +7,7 @@
 #include "entt/fwd.hpp"
 
 #include <unordered_map>
+#include <vector>
 
 class World;
 
@@ -31,7 +32,7 @@ namespace Networking
   private:
     void FlushRPCs();
     void OnEntityDestroy(entt::registry&, entt::entity entity);
-    void HandlePacket(World& world, ENetPeer* peer, const ENetPacket& packet);
+    int32_t HandlePacket(World& world, ENetPeer* peer, const ENetPacket& packet);
 
     ENetHost* localHost_;
 
@@ -42,6 +43,7 @@ namespace Networking
     };
     std::unordered_map<ENetPeer*, ClientInfo> connections_;
     std::unordered_map<entt::entity, ENetPeer*> entityToConnection_;
+    std::vector<entt::entity> removedEntities_;
     World* world_;
     ThreadSafeQueue<RpcInfo> rpcs_;
   };

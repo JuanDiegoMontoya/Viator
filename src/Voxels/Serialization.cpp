@@ -46,15 +46,21 @@ namespace Core::Serialization
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, entt::entity& value, const SerializationContext& context)
+    void Serialize3(Archive& ar, entt::entity& value, const SerializationContext& context)
     {
       ar(value);
-      if (context.remapRemoteEntities)
+      if (context.remapRemoteEntities && value != entt::null)
       {
         DEBUG_ASSERT(context.remoteToLocalEntity);
-        auto it = context.remoteToLocalEntity->find(value);
-        ASSERT(it != context.remoteToLocalEntity->end());
-        value = it->second;
+        if (auto it = context.remoteToLocalEntity->find(value); it != context.remoteToLocalEntity->end())
+        {
+          value = it->second;
+        }
+        else
+        {
+          spdlog::warn("Failed to map remote entity {} to a local entity. Mapping to null instead.");
+          value = entt::null;
+        }
       }
     }
   }
@@ -167,7 +173,16 @@ namespace Core::Serialization
     {
       if (!(data.traits<Traits>() & Traits::TRANSIENT))
       {
-        Serialize<Save>(ar, data.get(value).as_ref(), context);
+        if (data.traits<Traits>() & Traits::TRIVIAL)
+        {
+          auto* vp    = const_cast<void*>(data.get(value.as_ref()).base().data());
+          auto binary = cereal::binary_data(vp, data.type().size_of());
+          ar(binary);
+        }
+        else
+        {
+          Serialize<Save>(ar, data.get(value).as_ref(), context);
+        }
       }
     }
   }
@@ -319,9 +334,11 @@ namespace Core::Serialization
     MAKE_SERIALIZERS(uint64_t);
     MAKE_SERIALIZERS(float);
     MAKE_SERIALIZERS(double);
-    MAKE_SERIALIZERS(entt::entity);
     MAKE_SERIALIZERS(entt::id_type);
     MAKE_SERIALIZERS(std::string);
+    entt::meta_factory<entt::entity>()
+      .func<Serialize3<cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
+      .func<Serialize2<cereal::BinaryOutputArchive, const entt::entity>>("BinaryOutputArchive"_hs);
 
     entt::meta_factory<TwoLevelGrid>()
       .func<SerializeGrid<false, cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
@@ -487,20 +504,20 @@ namespace Core::Serialization
           const auto mapSize = (uint32_t)std::ranges::count_if(map,
             [&](const auto& p) { return !(!bool(p.second & ActionType::Remove) && !set.contains(p.first)); });
           Serialize<true>(outputArchive, mapSize);
+          SPDLOG_TRACE("Serializing {}x {}", mapSize, meta.info().name());
           ZoneTextF("Set elements: %u", mapSize);
           for (const auto& [entity, action] : map)
           {
+            if (!bool(action & ActionType::Remove) && !set.contains(entity))
             {
-              if (!bool(action & ActionType::Remove) && !set.contains(entity))
-              {
-                continue;
-              }
-              Serialize<true>(outputArchive, entity);
-              Serialize<true>(outputArchive, action);
-              if (!bool(action & ActionType::Remove) && !(traits & Traits::TRANSIENT))
-              {
-                Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
-              }
+              continue;
+            }
+            Serialize<true>(outputArchive, entity);
+            Serialize<true>(outputArchive, action);
+            SPDLOG_TRACE("Entity {}, action: {}", entt::to_integral(entity), (uint32_t)action);
+            if (!bool(action & ActionType::Remove) && !(traits & Traits::TRANSIENT))
+            {
+              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
             }
           }
         }
@@ -533,6 +550,7 @@ namespace Core::Serialization
       Serialize<false>(inputArchive, entt::forward_as_meta(size));
       auto meta = entt::resolve(typeId);
       ASSERT(meta);
+      SPDLOG_TRACE("Deserializing {}x {}", size, meta.info().name());
       const auto traits = meta.traits<Traits>();
       ASSERT(traits & Traits::COMPONENT);
       ZoneText(meta.info().name().data(), meta.info().name().size());
@@ -555,10 +573,10 @@ namespace Core::Serialization
         }
         else
         {
-          localEntity = registry.create(remoteEntity);
-          //ASSERT(localEntity == remoteEntity, "Local and remote must be the same until deep entity remapping is supported.");
+          localEntity = registry.create();
           remoteToLocal.emplace(remoteEntity, localEntity);
           localToRemote.emplace(localEntity, remoteEntity);
+          SPDLOG_TRACE("Created new entity mapping: {} (local) to {} (remote)", entt::to_integral(localEntity), entt::to_integral(remoteEntity));
         }
 
         auto* storage = registry.storage(typeId);
@@ -584,7 +602,9 @@ namespace Core::Serialization
           {
             auto value = entt::meta_any{};
             const bool storageContainsEntity = storage && storage->contains(localEntity);
-            if (storageContainsEntity)
+            const bool clientOwnsThisComponent = (meta.id() == entt::type_hash<LocalTransform>().value() || meta.id() == entt::type_hash<GlobalTransform>().value()) &&
+                                           world.AncestorHasComponent<LocalAuthoritative>(localEntity);
+            if (storageContainsEntity && !clientOwnsThisComponent)
             {
               // Overwrite existing component if it exists.
               value = meta.from_void(storage->value(localEntity));
@@ -594,8 +614,19 @@ namespace Core::Serialization
               value = meta.construct();
               ASSERT(value, "Type does not have a default constructor");
             }
-
+            
             Serialize<false>(inputArchive, value.as_ref(), context);
+
+            //if (storageContainsEntity && meta.id() == entt::type_hash<LocalTransform>().value() && world.AncestorHasComponent<LocalAuthoritative>(localEntity))
+            //{
+            //  auto realValue   = meta.from_void(storage->value(localEntity));
+            //  const auto& copy = value.cast<LocalTransform&>();
+            //  auto& xform      = realValue.cast<LocalTransform&>();
+            //  if (glm::distance(copy.position, xform.position) > 5.0f)
+            //  {
+            //    xform = copy;
+            //  }
+            //}
 
             if (!storageContainsEntity)
             {

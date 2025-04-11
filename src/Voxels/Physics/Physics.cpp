@@ -622,31 +622,35 @@ namespace Physics
         t->position = ToGlm(character->GetPosition());
         world.UpdateLocalTransform(entity);
       }
-      world.GetRegistry().get<LinearVelocity>(entity).v = ToGlm(character->GetLinearVelocity());
+      world.GetRegistry().emplace_or_replace<LinearVelocity>(entity, ToGlm(character->GetLinearVelocity()));
     }
 
     // Update world
+    if (world.IsServer())
     {
       ZoneScopedN("PhysicsSystem::Update");
       const auto substeps = static_cast<int>(std::ceil(dt / s->targetRate));
       ZoneTextF("%s%d", "Substeps: ", substeps);
       s->engine->Update(dt, substeps, s->tempAllocator.get(), s->jobSystem.get());
     }
-    
-    for (auto& character : s->allCharactersShrimple)
+
+    if (world.IsServer())
     {
-      ZoneScopedN("Character->PostSimulation");
-      character->PostSimulation(1e-4f);
-
-      auto entity = static_cast<entt::entity>(s->bodyInterface->GetUserData(character->GetBodyID()));
-      if (auto* t = world.GetRegistry().try_get<LocalTransform>(entity))
+      for (auto& character : s->allCharactersShrimple)
       {
-        t->position = ToGlm(character->GetPosition());
-        world.UpdateLocalTransform(entity);
-      }
+        ZoneScopedN("Character->PostSimulation");
+        character->PostSimulation(1e-4f);
 
-      auto& velocity = world.GetRegistry().get<LinearVelocity>(entity).v;
-      velocity = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(character->GetBodyID()));
+        auto entity = static_cast<entt::entity>(s->bodyInterface->GetUserData(character->GetBodyID()));
+        if (auto* t = world.GetRegistry().try_get<LocalTransform>(entity))
+        {
+          t->position = ToGlm(character->GetPosition());
+          world.UpdateLocalTransform(entity);
+        }
+
+        auto& velocity = world.GetRegistry().get<LinearVelocity>(entity).v;
+        velocity       = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(character->GetBodyID()));
+      }
     }
 
     // Update transform of each entity with a RigidBody component. If we don't exclude character controllers from being updated here, we get funny behavior.
@@ -726,18 +730,24 @@ namespace Physics
     }
 
     // Dispatch events for newly-added contacts
-    for (auto& contactPair : s->contactAddedPairs)
+    if (world.IsServer())
     {
-      auto ppair = &contactPair;
-      s->dispatcher.trigger(ppair);
+      for (auto& contactPair : s->contactAddedPairs)
+      {
+        auto ppair = &contactPair;
+        s->dispatcher.trigger(ppair);
+      }
     }
     s->contactAddedPairs.clear();
 
     // Dispatch events for persisted contacts
-    for (auto& contactPair : s->contactPersistedPairs)
+    if (world.IsServer())
     {
-      auto ppair = &contactPair;
-      s->dispatcher.trigger(ppair);
+      for (auto& contactPair : s->contactPersistedPairs)
+      {
+        auto ppair = &contactPair;
+        s->dispatcher.trigger(ppair);
+      }
     }
     s->contactPersistedPairs.clear();
 

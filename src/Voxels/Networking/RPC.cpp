@@ -21,6 +21,7 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
       if (auto* name = it->second.try_cast<const char*>())
       {
         ZoneText(*name, std::strlen(*name));
+        SPDLOG_TRACE("Executing serialized RPC {}", *name);
       }
     }
   }

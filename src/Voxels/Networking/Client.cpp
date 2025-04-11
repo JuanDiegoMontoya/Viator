@@ -63,7 +63,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
   auto event = ENetEvent{};
   while (true)
   {
-    if (int ret = enet_host_service(localHost_, &event, 5) > 0) // TODO: remove stinky 5ms wait
+    if (int ret = enet_host_service(localHost_, &event, 0) > 0)
     {
       switch (event.type)
       {
@@ -79,7 +79,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
       {
         ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
         ZoneTextF("Packet number %u: %zu bytes", enet_host_get_packets_received(localHost_), event.packet->dataLength);
-        spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
+        SPDLOG_TRACE("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, *event.packet);
         enet_packet_destroy(event.packet);
         break;
@@ -183,13 +183,13 @@ void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
   ZoneScoped;
   if (auto it = localToRemoteEntity_.find(entity); it != localToRemoteEntity_.end())
   {
-    ASSERT(remoteToLocalEntity_.contains(it->second));
+    DEBUG_ASSERT(remoteToLocalEntity_.contains(it->second));
     remoteToLocalEntity_.erase(it->second);
     localToRemoteEntity_.erase(it);
   }
 }
 
-void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket)
+int32_t Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket)
 {
   ZoneScoped;
   const char* const pData = reinterpret_cast<const char*>(enetPacket.data);
@@ -208,14 +208,23 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
     if (ZSTD_isError(ret))
     {
       spdlog::warn("Failed to decompress packet: {}", ZSTD_getErrorName(ret));
-      return;
+      return static_cast<int32_t>(stream.tellg());
     }
     ASSERT(ret == outSize);
     // Reset the stream with the uncompressed data.
     stream = std::stringstream(std::move(outStr));
   }
 
-  if ((packetType & PacketType::TypeMask) == PacketType::TwoLevelGrid)
+  if ((packetType & PacketType::TypeMask) == PacketType::MultiPacket)
+  {
+    ZoneScopedN("PacketType::MultiPacket");
+    auto readBytes = static_cast<int32_t>(stream.tellg());
+    while (enetPacket.dataLength - readBytes > 0)
+    {
+      readBytes += HandlePacket(world, {.data = enetPacket.data + readBytes, .dataLength = enetPacket.dataLength - readBytes});
+    }
+  }
+  else if ((packetType & PacketType::TypeMask) == PacketType::TwoLevelGrid)
   {
     ZoneScopedN("PacketType::TwoLevelGrid");
     spdlog::info("Finished downloading world.");
@@ -260,17 +269,22 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
       }
     }
   }
-  else if ((packetType & PacketType::TypeMask) == PacketType::RemovedEntity)
+  else if ((packetType & PacketType::TypeMask) == PacketType::RemovedEntities)
   {
     ZoneScopedN("PacketType::RemovedEntity");
-    // Delete entity.
-    auto remoteEntity = Core::Serialization::DeserializeObjectStream<entt::entity>(stream);
-    if (auto it = remoteToLocalEntity_.find(remoteEntity); it != remoteToLocalEntity_.end())
+    // Delete entities.
+    auto remoteEntities = Core::Serialization::DeserializeObjectStream<std::vector<entt::entity>>(stream);
+    for (auto remoteEntity : remoteEntities)
     {
-      auto localEntity = it->second;
-      world.GetRegistry().emplace<DeferredDelete>(localEntity);
-      localToRemoteEntity_.erase(localEntity);
-      remoteToLocalEntity_.erase(it);
+      if (auto it = remoteToLocalEntity_.find(remoteEntity); it != remoteToLocalEntity_.end())
+      {
+        auto localEntity = it->second;
+        SPDLOG_TRACE("Received request to remove entity {} (remote: {})", entt::to_integral(localEntity), entt::to_integral(remoteEntity));
+        // Do NOT add DeferredDelete here. Adding it will attempt to remove the entity from its parent,
+        // but the server will have handled that already in the ModifiedComponents packet for this frame.
+        // Therefore, all we need to do is immediately delete the entity.
+        world.GetRegistry().destroy(localEntity);
+      }
     }
   }
   else if ((packetType & PacketType::TypeMask) == PacketType::Rpc)
@@ -291,4 +305,6 @@ void Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket
   {
     PANIC;
   }
+
+  return static_cast<int32_t>(stream.tellg());
 }

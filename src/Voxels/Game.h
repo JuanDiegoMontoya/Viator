@@ -342,7 +342,7 @@ public:
     }
     else
     {
-      return std::forward_as_tuple(try_get<Type...>(entity)...);
+      return std::make_tuple(try_get<Type>(entity)...);
     }
   }
 
@@ -355,7 +355,7 @@ public:
     }
     else
     {
-      return std::forward_as_tuple(try_get<Type...>(entity)...);
+      return std::make_tuple(try_get<Type>(entity)...);
     }
   }
 
@@ -557,6 +557,21 @@ public:
   }
 
   template<typename T>
+  [[nodiscard]] bool AncestorHasComponent(entt::entity entity)
+  {
+    assert(registry_.valid(entity));
+    if (registry_.all_of<T>(entity))
+    {
+      return true;
+    }
+    if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+    {
+      return AncestorHasComponent<T>(h->parent);
+    }
+    return false;
+  }
+
+  template<typename T>
   [[nodiscard]] std::pair<entt::entity, T*> GetComponentFromDescendant(entt::entity entity)
   {
     assert(registry_.valid(entity));
@@ -629,7 +644,7 @@ public:
   [[nodiscard]] float GetHeight(entt::entity entity);
 
   // Call to propagate local transform updates to global transform and children.
-  void UpdateLocalTransform(entt::entity entity);
+  void UpdateLocalTransform(entt::entity entity, int depth = 0);
   void SetParent(entt::entity child, entt::entity parent);
 
   [[nodiscard]] uint64_t GetTicks() const
@@ -1123,6 +1138,8 @@ void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recip
 // If parent1 and parent2 both have an inventory, swaps items between them.
 bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
 
+void TeleportPlayerRPC(World& world, entt::entity player, LocalTransform transform);
+
 // Windowing, input polling, and rendering (if applicable)
 class Head
 {
@@ -1451,6 +1468,10 @@ struct Enemy {};
 
 // This component exists solely to check if a physics ray hit the voxel world.
 struct Voxels {};
+
+struct LocalAuthoritative {};
+
+struct NetworkNeedUpdateLocalTransform {};
 
 // Game class used for client and server
 class Game

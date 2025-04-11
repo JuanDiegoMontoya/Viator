@@ -21,7 +21,7 @@ namespace Core::Logging
     auto filename = fmt::format("logs/Log {:%Y-%m-%d %H-%M-%S}.txt", time);
 
     fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(filename, true);
-    fileSink->set_level(spdlog::level::debug);
+    fileSink->set_level(spdlog::level::trace);
     stdoutSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     stdoutSink->set_level(spdlog::level::info);
 
@@ -31,7 +31,7 @@ namespace Core::Logging
     defaultLogger = std::make_shared<spdlog::logger>("default", sinks);
     defaultLogger->flush_on(spdlog::level::err);
     defaultLogger->set_pattern("[%H:%M:%S:%e] [%^%l%$] %v");
-    defaultLogger->set_level(spdlog::level::debug);
+    defaultLogger->set_level(spdlog::level::trace);
     
     spdlog::set_default_logger(defaultLogger);
   }

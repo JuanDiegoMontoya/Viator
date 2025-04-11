@@ -354,10 +354,11 @@ void Core::Reflection::Initialize()
 //#define MAKE_IDENTIFIER(T) [[maybe_unused]] bool reflection_for_ ## T
 #define MAKE_IDENTIFIER(T)
 #define REFLECT_TYPE(T) MAKE_IDENTIFIER(T); entt::meta_factory<T>{}
-#define REFLECT_COMPONENT_NO_DEFAULT(T) \
-  MAKE_IDENTIFIER(T);                   \
-  entt::meta_factory<T>{}\
-  .traits(COMPONENT)
+#define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
+  MAKE_IDENTIFIER(T);                                                                               \
+  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
+  entt::meta_factory<T>{}                                                                           \
+  .traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
 #define REFLECT_COMPONENT(T, ...)                                                                                   \
   MAKE_IDENTIFIER(T);                                                                                               \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                 \
@@ -429,25 +430,42 @@ void Core::Reflection::Initialize()
     DATA(glm::quat, z);
   entt::meta_factory<std::string>().func<&EditorWriteString>("EditorWrite"_hs).func<&EditorReadString>("EditorRead"_hs);
   entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs); // NOT trivial, because they need to be remapped for networking.
   
-  REFLECT_COMPONENT(LocalTransform, REPLICATED | TRIVIAL)
+  REFLECT_COMPONENT_NO_DEFAULT(LocalTransform, REPLICATED | TRIVIAL)
     .func<&EditorUpdateTransform>("OnUpdate"_hs)
+    .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<LocalTransform>(entity); }>("EmplaceDefault"_hs)
+    .func<[](entt::registry* registry, entt::entity entity, LocalTransform& transform)
+      {
+        registry->emplace_or_replace<LocalTransform>(entity, std::move(transform));
+        registry->emplace_or_replace<NetworkNeedUpdateLocalTransform>(entity);
+      }>("EmplaceMove"_hs)
     DATA(LocalTransform, position, PROP_SPEED(0.20f))
     DATA(LocalTransform, rotation)
     DATA(LocalTransform, scale, PROP_SPEED(0.0125f));
+
+  REFLECT_COMPONENT(NetworkNeedUpdateLocalTransform, NO_EDITOR);
   
   REFLECT_COMPONENT(GlobalTransform, EDITOR_READ_ONLY | REPLICATED | TRIVIAL)
+    //.func<[](entt::registry* registry, entt::entity entity) { registry->emplace<GlobalTransform>(entity); }>("EmplaceDefault"_hs)
+    //.func<[](entt::registry* registry, entt::entity entity, GlobalTransform& transform)
+    //  {
+    //    if (auto* prevTransform = registry->try_get<const GlobalTransform>(entity))
+    //    {
+    //      registry->emplace_or_replace<PreviousGlobalTransform>(entity, prevTransform->position, prevTransform->rotation, prevTransform->scale, false);
+    //    }
+    //    registry->emplace_or_replace<GlobalTransform>(entity, std::move(transform));
+    //  }>("EmplaceMove"_hs)
     DATA(GlobalTransform, position)
     DATA(GlobalTransform, rotation)
     DATA(GlobalTransform, scale);
 
-  REFLECT_COMPONENT(PreviousGlobalTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
+  REFLECT_COMPONENT(PreviousGlobalTransform, EDITOR_READ_ONLY | REPLICATED | TRIVIAL | TRANSIENT)
     DATA(PreviousGlobalTransform, position)
     DATA(PreviousGlobalTransform, rotation)
     DATA(PreviousGlobalTransform, scale);
 
-  REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRANSIENT)
+  REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRIVIAL | TRANSIENT)
     DATA(RenderTransform, transform);
 
   REFLECT_COMPONENT(Health, REPLICATED | TRIVIAL)
@@ -458,7 +476,7 @@ void Core::Reflection::Initialize()
     DATA(ContactDamage, damage, PROP_MIN(0.125f), PROP_MAX(100.0f))
     DATA(ContactDamage, knockback, PROP_MIN(0.125f), PROP_MAX(100.0f));
 
-  REFLECT_COMPONENT(LinearVelocity)
+  REFLECT_COMPONENT(LinearVelocity, TRIVIAL)
     DATA(LinearVelocity, v, PROP_SPEED(0.0125f));
 
   REFLECT_COMPONENT(TeamFlags)
@@ -470,6 +488,10 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Player, EDITOR_READ_ONLY | REPLICATED)
     DATA(Player, id)
     DATA(Player, inventoryIsOpen)
+    TRAITS(TRANSIENT)
+    DATA(Player, openContainerId)
+    TRAITS(TRANSIENT)
+    DATA(Player, showInteractPrompt)
     TRAITS(TRANSIENT);
 
   REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY)
@@ -508,13 +530,13 @@ void Core::Reflection::Initialize()
     DATA(Name, name);
 
   //REFLECT_COMPONENT(RigidBody);
-  REFLECT_COMPONENT(CharacterControllerSettings, EDITOR_READ_ONLY)
+  REFLECT_COMPONENT(CharacterControllerSettings, EDITOR_READ_ONLY | REPLICATED)
     DATA(CharacterControllerSettings, shape);
   
   REFLECT_COMPONENT(CharacterControllerShrimpleSettings, EDITOR_READ_ONLY)
     DATA(CharacterControllerShrimpleSettings, shape);
 
-  REFLECT_COMPONENT(RigidBodySettings, EDITOR_READ_ONLY | TRIVIAL)
+  REFLECT_COMPONENT(RigidBodySettings, EDITOR_READ_ONLY | TRIVIAL | REPLICATED)
     DATA(RigidBodySettings, shape)
     DATA(RigidBodySettings, activate)
     DATA(RigidBodySettings, isSensor)
@@ -615,12 +637,12 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(SimplePathfindingEnemyBehavior);
 
-  REFLECT_COMPONENT(NoHashGrid);
+  REFLECT_COMPONENT(NoHashGrid, REPLICATED);
 
   REFLECT_COMPONENT(WormEnemyBehavior)
     DATA(WormEnemyBehavior, maxTurnSpeedDegPerSec);
 
-  REFLECT_COMPONENT(LinearPath)
+  REFLECT_COMPONENT(LinearPath, REPLICATED)
     .func<&EditorUpdateLinearPath>("OnUpdate"_hs)
     DATA(LinearPath, frames)
     DATA(LinearPath, secondsElapsed)
@@ -638,10 +660,9 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(BlockHealth)
     DATA(BlockHealth, health, PROP_MIN(0.0f), PROP_MAX(100.0f));
     
-  REFLECT_COMPONENT(Hierarchy, EDITOR_READ_ONLY /* | REPLICATED */)
+  REFLECT_COMPONENT(Hierarchy, EDITOR_READ_ONLY | REPLICATED)
     DATA(Hierarchy, parent)
     DATA(Hierarchy, children)
-    TRAITS(TRIVIAL)
     DATA(Hierarchy, useLocalPositionAsGlobal)
     DATA(Hierarchy, useLocalRotationAsGlobal);
 
@@ -721,12 +742,12 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Tint, REPLICATED | TRIVIAL)
     DATA(Tint, color);
 
-  REFLECT_COMPONENT(WalkingMovementAttributes)
+  REFLECT_COMPONENT(WalkingMovementAttributes, REPLICATED | TRIVIAL)
     DATA(WalkingMovementAttributes, runBaseSpeed, PROP_MAX(20.0f))
     DATA(WalkingMovementAttributes, walkModifier)
     DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f));
 
-  REFLECT_COMPONENT(Voxels);
+  REFLECT_COMPONENT(Voxels, REPLICATED);
 
   REFLECT_ENUM(Math::Easing)
     ENUMERATOR(Math::Easing, LINEAR)
@@ -772,25 +793,37 @@ void Core::Reflection::Initialize()
 
   REFLECT_ENUM(Networking::PacketType);
 
-  entt::meta_factory<RpcTraits>()
-    .func<[](World& world, entt::entity entity, InputState is, InputLookState ils)
-      {
-        world.GetRegistry().emplace_or_replace<InputState>(entity, is);
-        world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
-      }>("UpdatePlayerInput"_hs)
-    .traits(RpcTraits::Server);
+  REFLECT_COMPONENT(LocalAuthoritative, NO_EDITOR);
 
-  entt::meta_factory<RpcTraits>()
-    .func<[](World& world, entt::entity entity)
-      {
-        if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState>(entity))
-        {
-          world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
-          world.GetRegistry().emplace_or_replace<InputState>(entity);
-          world.GetRegistry().emplace_or_replace<InputLookState>(entity);
-        }
-      }>("GiveLocalPlayerRPC"_hs)
-    .traits(RpcTraits::Client);
+  auto UpdatePlayerInput = [](World& world, entt::entity entity, InputState is, InputLookState ils)
+  {
+    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
+    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
+  };
+  REGISTER_RPC(UpdatePlayerInput, RpcTraits::Server);
+
+  auto GiveLocalPlayerRPC = [](World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState, LocalAuthoritative>(entity))
+    {
+      world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
+      world.GetRegistry().emplace_or_replace<InputState>(entity);
+      world.GetRegistry().emplace_or_replace<InputLookState>(entity);
+      world.GetRegistry().emplace_or_replace<LocalAuthoritative>(entity);
+    }
+  };
+  REGISTER_RPC(GiveLocalPlayerRPC, RpcTraits::Client);
+
+  auto UpdateTransformRPC = [](World& world, entt::entity entity, LocalTransform transform)
+  {
+    // TODO: Verify that the entity is owned by the client.
+    if (world.GetRegistry().valid(entity))
+    {
+      world.GetRegistry().emplace_or_replace<LocalTransform>(entity, transform);
+      world.UpdateLocalTransform(entity);
+    }
+  };
+  REGISTER_RPC(UpdateTransformRPC, RpcTraits::Server);
 
   REFLECT_TYPE(ItemIdAndCount)
     DATA(ItemIdAndCount, item)
@@ -809,6 +842,7 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(SwapInventorySlotsRPC, RpcTraits::Server);
   REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
   REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
+  REGISTER_RPC(TeleportPlayerRPC, RpcTraits::Client);
 
   REFLECT_ENUM(ActionType);
 }

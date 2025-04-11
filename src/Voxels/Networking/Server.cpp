@@ -65,11 +65,10 @@ Networking::Server::~Server()
 void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
 {
   ZoneScoped;
-  // TODO: "TEMP": Put host service here until it's moved to another thread.
   auto event = ENetEvent{};
   while (true)
   {
-    if (int ret = enet_host_service(localHost_, &event, 5) > 0) // TODO: remove stinky 5ms wait
+    if (int ret = enet_host_service(localHost_, &event, 0) > 0)
     {
       switch (event.type)
       {
@@ -137,7 +136,7 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
       {
         ZoneScopedN("ENET_EVENT_TYPE_RECEIVE");
         ZoneTextF("Packet number %u: %zu bytes", enet_host_get_packets_received(localHost_), event.packet->dataLength);
-        spdlog::trace("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
+        SPDLOG_TRACE("Message received from {} with {} bytes", event.peer->address, event.packet->dataLength);
         HandlePacket(world, event.peer, *event.packet);
         enet_packet_destroy(event.packet);
         break;
@@ -197,68 +196,39 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   if (connections_.empty())
   {
     rpcs_.clear();
+    removedEntities_.clear();
     return;
   }
+
+  auto stream = std::stringstream();
+  Core::Serialization::SerializeObjectStream(stream, PacketType::MultiPacket);
 
   {
     ZoneScopedN("Send current tick");
     ZoneTextF("Sending server tick %llu", world.GetTicks());
     spdlog::debug("Sending server tick {}", world.GetTicks());
-    auto stream = std::stringstream();
     Core::Serialization::SerializeObjectStream(stream, PacketType::TickNumber);
     Core::Serialization::SerializeObjectStream(stream, world.GetTicks());
-    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
-    enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
   }
 
   {
     ZoneScopedN("Replicate modified state");
-    auto stream = std::stringstream();
     Core::Serialization::SerializeObjectStream(stream, PacketType::ModifiedComponents);
     Core::Serialization::SerializeModifiedComponents(world, stream, world.GetRegistry().GetModifiedComponents());
-    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
-    enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
   }
 
-#if 0
-  // Set of entities that have no parent.
-  auto rootEntities = std::unordered_set<entt::entity>();
-
-  for (auto entity : world.GetRegistry().view<LocalTransform, Player>())
   {
-    rootEntities.emplace(world.GetRootEntityOfHierarchy(entity));
-  }
-  
-  // For each root entity, create a serialized "bundle" containing it and all descendants, then send it.
-  for (auto rootEntity : rootEntities)
-  {
-    auto stream = std::stringstream();
-
-    Core::Serialization::SerializeObjectStream(stream, PacketType::EntityBundle);
-
-    auto entities = std::vector<entt::entity>();
-    AddEntityAndChildrenToVector(world.GetRegistryRaw(), rootEntity, entities);
-    Core::Serialization::SerializeObjectStream(stream, entities);
-    //auto string = std::string();
-    for (auto entity : entities)
+    ZoneScopedN("Send removed entities");
+    if (!removedEntities_.empty())
     {
-      Core::Serialization::SerializeEntity(stream, world, entity);
-      //string += fmt::format("{}, ", entt::to_integral(entity));
-    }
-    //spdlog::info("Sending entities: {}", string);
-
-    // TODO: These packets should be unreliable, but currently they are the only way to register new entities on clients.
-    auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
-
-    for (auto& [peer, clientInfo] : connections_)
-    {
-      if (clientInfo.status == ClientStatus::Connected)
-      {
-        enet_peer_send(peer, uint8_t(Channel::Replicate), packet);
-      }
+      Core::Serialization::SerializeObjectStream(stream, PacketType::RemovedEntities);
+      Core::Serialization::SerializeObjectStream(stream, removedEntities_);
+      removedEntities_.clear();
     }
   }
-#endif
+
+  auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
+  enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
 
   FlushRPCs();
 }
@@ -320,23 +290,10 @@ void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
   {
     return;
   }
-
-  auto stream = std::stringstream();
-  Core::Serialization::SerializeObjectStream(stream, PacketType::RemovedEntity);
-  Core::Serialization::SerializeObjectStream(stream, entity);
-
-  auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
-
-  for (auto& [peer, clientInfo] : connections_)
-  {
-    if (clientInfo.status == ClientStatus::Connected)
-    {
-      enet_peer_send(peer, enet_uint8(Channel::Replicate), packet);
-    }
-  }
+  removedEntities_.emplace_back(entity);
 }
 
-void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPacket& enetPacket)
+int32_t Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPacket& enetPacket)
 {
   ZoneScoped;
   auto peerIt = connections_.find(peer);
@@ -358,14 +315,23 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
     if (ZSTD_isError(ret))
     {
       spdlog::warn("Failed to decompress packet: {}", ZSTD_getErrorName(ret));
-      return;
+      return static_cast<int32_t>(stream.tellg());
     }
     ASSERT(ret == outSize);
     // Reset the stream with the uncompressed data.
     stream = std::stringstream(std::move(outStr));
   }
 
-  if ((packetType & PacketType::TypeMask) == PacketType::InputState)
+  if ((packetType & PacketType::TypeMask) == PacketType::MultiPacket)
+  {
+    ZoneScopedN("PacketType::MultiPacket");
+    auto readBytes = static_cast<int32_t>(stream.tellg());
+    while (enetPacket.dataLength - readBytes > 0)
+    {
+      readBytes += HandlePacket(world, peer, {.data = enetPacket.data + readBytes, .dataLength = enetPacket.dataLength - readBytes});
+    }
+  }
+  else if ((packetType & PacketType::TypeMask) == PacketType::InputState)
   {
     ZoneScopedN("PacketType::InputState");
     auto inputState = Core::Serialization::DeserializeObjectStream<InputState>(stream);
@@ -378,4 +344,5 @@ void Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPa
   {
     detail::InvokeSerializedRPC(world, stream);
   }
+  return static_cast<int32_t>(stream.tellg());
 }

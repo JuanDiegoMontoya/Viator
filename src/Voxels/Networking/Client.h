@@ -34,7 +34,7 @@ namespace Networking
   private:
     void FlushRPCs();
     void OnEntityDestroy(entt::registry&, entt::entity entity);
-    void HandlePacket(World& world, const ENetPacket& packet);
+    int32_t HandlePacket(World& world, const ENetPacket& packet);
 
     World* world_{};
     ENetHost* localHost_{};
