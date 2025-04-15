@@ -185,6 +185,15 @@ namespace Fvog
       })
       .select();
 
+#ifdef FROG_DEBUG
+    supportsRelaxedExtendedInstruction = physicalDevice_.enable_extension_if_present(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME);
+
+    if (!supportsRelaxedExtendedInstruction)
+    {
+      spdlog::warn("VK_KHR_shader_relaxed_extended_instruction is not supported. Shaders will not have non-semantic debug info.");
+    }
+#endif
+
     if (!maybePhysicalDevice)
     {
       spdlog::critical("Failed to find suitable physical device.");
