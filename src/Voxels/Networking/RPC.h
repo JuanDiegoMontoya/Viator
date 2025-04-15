@@ -16,7 +16,8 @@
 
 namespace Networking
 {
-  // Execute the RPC on the remote end of the connection only.
+  // If an owning connection (entity that is owned by a peer) is provided and it is
+  // owned by a remote, then the RPC will be executed on only that remote for certain RPC types.
   template<typename... Args>
   void CallRPC2(entt::id_type funcId, std::optional<entt::entity> owningConnection, World& world, Args&&... args)
   {
@@ -31,6 +32,13 @@ namespace Networking
     ASSERT(!(world.IsClient() && owningConnection), "If the caller is a client, owningConnection must be null.");
 
     // TODO: Validate argument types.
+
+    auto& networking = *world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+
+    if (owningConnection && (!networking || !networking->IsEntityOwnedByRemote(*owningConnection)))
+    {
+      owningConnection = std::nullopt;
+    }
 
     bool execLocally = bool(traits & RpcTraits::Broadcast);
     execLocally |= world.IsServer() && bool(traits & RpcTraits::Server);
@@ -62,7 +70,6 @@ namespace Networking
       }
     }
 
-    auto& networking = *world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
     if (!networking)
     {
       return;

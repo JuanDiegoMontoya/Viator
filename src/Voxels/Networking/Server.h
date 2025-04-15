@@ -33,6 +33,7 @@ namespace Networking
     void FlushRPCs();
     void OnEntityDestroy(entt::registry&, entt::entity entity);
     int32_t HandlePacket(World& world, ENetPeer* peer, const ENetPacket& packet);
+    bool IsEntityOwnedByRemote(entt::entity entity) override;
 
     ENetHost* localHost_;
 

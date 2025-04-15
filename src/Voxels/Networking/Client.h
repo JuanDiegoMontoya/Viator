@@ -20,6 +20,7 @@ namespace Networking
     void ProcessMessages(World& world) final;
     void SendMessages(World& world) final;
     void EnqueueRPC(RpcInfo rpc) final;
+    bool IsEntityOwnedByRemote(entt::entity entity) override;
 
     [[nodiscard]] ClientStatus GetStatus() const
     {

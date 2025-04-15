@@ -346,3 +346,8 @@ int32_t Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENe
   }
   return static_cast<int32_t>(stream.tellg());
 }
+
+bool Networking::Server::IsEntityOwnedByRemote(entt::entity entity)
+{
+  return entityToConnection_.contains(entity);
+}

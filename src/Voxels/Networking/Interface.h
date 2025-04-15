@@ -31,6 +31,7 @@ namespace Networking
     virtual void ProcessMessages(World&) = 0;
     virtual void SendMessages(World&)    = 0;
     virtual void EnqueueRPC(RpcInfo rpc) = 0;
+    virtual bool IsEntityOwnedByRemote(entt::entity entity) = 0;
   };
 
   enum class ClientStatus

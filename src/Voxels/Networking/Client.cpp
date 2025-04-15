@@ -148,6 +148,11 @@ void Networking::Client::EnqueueRPC(RpcInfo rpc)
   rpcs_.push_back(std::move(rpc));
 }
 
+bool Networking::Client::IsEntityOwnedByRemote(entt::entity entity)
+{
+  return !world_->AncestorHasComponent<LocalAuthoritative>(entity);
+}
+
 void Networking::Client::FlushRPCs()
 {
   ZoneScoped;
