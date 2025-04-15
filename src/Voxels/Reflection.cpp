@@ -26,6 +26,36 @@
 #include <iterator>
 #include <unordered_map>
 
+namespace
+{
+  void UpdatePlayerInput(World& world, entt::entity entity, InputState is, InputLookState ils)
+  {
+    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
+    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
+  }
+
+  void GiveLocalPlayerRPC(World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState, LocalAuthoritative>(entity))
+    {
+      world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
+      world.GetRegistry().emplace_or_replace<InputState>(entity);
+      world.GetRegistry().emplace_or_replace<InputLookState>(entity);
+      world.GetRegistry().emplace_or_replace<LocalAuthoritative>(entity);
+    }
+  }
+
+  void UpdateTransformRPC(World& world, entt::entity entity, LocalTransform transform)
+  {
+    // TODO: Verify that the entity is owned by the client.
+    if (world.GetRegistry().valid(entity))
+    {
+      world.GetRegistry().emplace_or_replace<LocalTransform>(entity, transform);
+      world.UpdateLocalTransform(entity);
+    }
+  }
+}
+
 namespace Core::Reflection
 {
   using namespace entt::literals;
@@ -794,35 +824,12 @@ void Core::Reflection::Initialize()
   REFLECT_ENUM(Networking::PacketType);
 
   REFLECT_COMPONENT(LocalAuthoritative, NO_EDITOR);
-
-  auto UpdatePlayerInput = [](World& world, entt::entity entity, InputState is, InputLookState ils)
-  {
-    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
-    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
-  };
+  
   REGISTER_RPC(UpdatePlayerInput, RpcTraits::Server);
-
-  auto GiveLocalPlayerRPC = [](World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState, LocalAuthoritative>(entity))
-    {
-      world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
-      world.GetRegistry().emplace_or_replace<InputState>(entity);
-      world.GetRegistry().emplace_or_replace<InputLookState>(entity);
-      world.GetRegistry().emplace_or_replace<LocalAuthoritative>(entity);
-    }
-  };
+  
   REGISTER_RPC(GiveLocalPlayerRPC, RpcTraits::Client);
-
-  auto UpdateTransformRPC = [](World& world, entt::entity entity, LocalTransform transform)
-  {
-    // TODO: Verify that the entity is owned by the client.
-    if (world.GetRegistry().valid(entity))
-    {
-      world.GetRegistry().emplace_or_replace<LocalTransform>(entity, transform);
-      world.UpdateLocalTransform(entity);
-    }
-  };
+  entt::meta_factory<RpcTraits>().func<[]() {}>("peni"_hs);
+  
   REGISTER_RPC(UpdateTransformRPC, RpcTraits::Server);
 
   REFLECT_TYPE(ItemIdAndCount)

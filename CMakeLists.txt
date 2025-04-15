@@ -168,6 +168,7 @@ target_compile_options(frogRender
     /Zc:preprocessor # Enable preprocessor compliance
     /wd4324 # structure was padded
     /wd4127 # constant expression in conditional
+    /wd4459 # declaration of 'foo' hides global declaration (from spdlog)
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     /bigobj
     #/JMC # Has a non-negligible perf impact.
