@@ -1651,6 +1651,35 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
   }
+
+  if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+  {
+    if (ImGui::Begin("Networking"))
+    {
+      if (ImGui::BeginTable("Clients", 4))
+      {
+        ImGui::TableSetupColumn("Client ID");
+        ImGui::TableSetupColumn("Status");
+        ImGui::TableSetupColumn("Ping (variance)");
+        ImGui::TableSetupColumn("Packet loss");
+        ImGui::TableHeadersRow();
+        for (const auto& info : networking->get()->GetClientNetworkInfos())
+        {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::Text("%u", info.entity);
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", Core::Reflection::EnumToString(info.status));
+          ImGui::TableNextColumn();
+          ImGui::Text("%u (%u)", info.roundTripTime, info.roundTripTimeVariance);
+          ImGui::TableNextColumn();
+          ImGui::Text("%.1f%%", 100 * info.packetLoss);
+        }
+        ImGui::EndTable();
+      }
+    }
+    ImGui::End();
+  }
 }
 
 Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name)

@@ -13,6 +13,23 @@ typedef struct _ENetCompressor ENetCompressor;
 
 namespace Networking
 {
+  enum class ClientStatus
+  {
+    Resolving,
+    Joining,
+    Connected,
+    Disconnected,
+  };
+
+  struct ClientNetworkInfo
+  {
+    entt::entity entity;
+    ClientStatus status;
+    uint32_t roundTripTime;
+    uint32_t roundTripTimeVariance;
+    float packetLoss;
+  };
+
   struct RpcInfo
   {
     std::optional<entt::entity> owningConnection = std::nullopt;
@@ -32,14 +49,13 @@ namespace Networking
     virtual void SendMessages(World&)    = 0;
     virtual void EnqueueRPC(RpcInfo rpc) = 0;
     virtual bool IsEntityOwnedByRemote(entt::entity entity) = 0;
-  };
+    const std::vector<ClientNetworkInfo>& GetClientNetworkInfos() const
+    {
+      return clientNetworkInfos_;
+    }
 
-  enum class ClientStatus
-  {
-    Resolving,
-    Joining,
-    Connected,
-    Disconnected,
+  protected:
+    std::vector<ClientNetworkInfo> clientNetworkInfos_;
   };
 
   enum class PacketType : uint8_t
@@ -70,6 +86,9 @@ namespace Networking
 
     // Stream of packets. Used for data that must arrive simultaneously (such as modified components and removed enitties).
     MultiPacket,
+
+    // std::vector<ClientNetworkInfo>
+    NetworkInfo,
 
     // Bitwise AND this mask with a PacketType to extract the underlying packet type (one of the above enumerators).
     TypeMask = 0b0111'1111,

@@ -47,5 +47,9 @@ namespace Networking
     std::vector<entt::entity> removedEntities_;
     World* world_;
     ThreadSafeQueue<RpcInfo> rpcs_;
+
+    // Number of ticks before broadcasting client network info.
+    uint32_t networkInfoFlushInterval = 50;
+    uint32_t networkInfoAccumulator   = 0;
   };
 } // namespace Networking

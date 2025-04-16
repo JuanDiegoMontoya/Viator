@@ -10,6 +10,7 @@
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
 #include "zstd.h"
+#include "entt/meta/container.hpp"
 
 #include <unordered_set>
 #include <span>
@@ -229,6 +230,28 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
 
   auto* packet = enet_packet_create(stream.view().data(), stream.view().size(), ENET_PACKET_FLAG_RELIABLE);
   enet_host_broadcast(localHost_, uint8_t(Channel::Replicate), packet);
+
+  if (++networkInfoAccumulator >= networkInfoFlushInterval)
+  {
+    networkInfoAccumulator = 0;
+    clientNetworkInfos_.clear();
+    for (const auto& [peer, info] : connections_)
+    {
+      clientNetworkInfos_.emplace_back(ClientNetworkInfo{
+        .entity = info.entity,
+        .status = info.status,
+        .roundTripTime = peer->roundTripTime,
+        .roundTripTimeVariance = peer->roundTripTimeVariance,
+        .packetLoss = peer->packetLoss / (float)ENET_PEER_PACKET_LOSS_SCALE,
+      });
+    }
+
+    auto dataStream = std::stringstream();
+    Core::Serialization::SerializeObjectStream(dataStream, PacketType::NetworkInfo);
+    Core::Serialization::SerializeObjectStream(dataStream, clientNetworkInfos_);
+    auto* netInfoPacket = enet_packet_create(dataStream.view().data(), dataStream.view().size(), ENET_PACKET_FLAG_UNSEQUENCED);
+    enet_host_broadcast(localHost_, uint8_t(Channel::UnreliableRpc), netInfoPacket);
+  }
 
   FlushRPCs();
 }

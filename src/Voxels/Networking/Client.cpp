@@ -306,6 +306,11 @@ int32_t Networking::Client::HandlePacket(World& world, const ENetPacket& enetPac
     ZoneScopedN("PacketType::InitialEntityState");
     Core::Serialization::DeserializeComponentStream(world, stream, remoteToLocalEntity_, localToRemoteEntity_, false, true);
   }
+  else if ((packetType & PacketType::TypeMask) == PacketType::NetworkInfo)
+  {
+    ZoneScopedN("PacketType::NetworkInfo");
+    clientNetworkInfos_ = Core::Serialization::DeserializeObjectStream<std::vector<ClientNetworkInfo>>(stream);
+  }
   else
   {
     PANIC;

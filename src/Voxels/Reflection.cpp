@@ -853,4 +853,11 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(ScrollHotbarRPC, RpcTraits::Server);
 
   REFLECT_ENUM(ActionType);
+
+  REFLECT_TYPE(Networking::ClientNetworkInfo)
+    DATA(Networking::ClientNetworkInfo, entity)
+    DATA(Networking::ClientNetworkInfo, status)
+    DATA(Networking::ClientNetworkInfo, roundTripTime)
+    DATA(Networking::ClientNetworkInfo, roundTripTimeVariance)
+    DATA(Networking::ClientNetworkInfo, packetLoss);
 }
