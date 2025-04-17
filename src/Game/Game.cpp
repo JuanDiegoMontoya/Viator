@@ -1069,7 +1069,7 @@ void Game::Run()
 void World::FixedUpdate(float dt)
 {
   ZoneScoped;
-  if (registry_.ctx().get<GameState>() == GameState::GAME)
+  if (registry_.ctx().get<GameState>() == GameState::GAME || IsClient())
   {
     registry_.ctx().get<float>("time"_hs) += dt;
 #ifndef GAME_HEADLESS

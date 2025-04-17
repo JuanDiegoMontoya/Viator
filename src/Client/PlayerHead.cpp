@@ -184,7 +184,7 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
 {
   ZoneScopedN("PlayerHead::VariableUpdatePost");
 
-  if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME)
+  if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME || world.IsClient())
   {
     for (auto&& [entity, transform, rtransform] : world.GetRegistry().view<const GlobalTransform, const RenderTransform>().each())
     {

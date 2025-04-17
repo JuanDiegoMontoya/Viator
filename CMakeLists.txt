@@ -66,6 +66,7 @@ set(viator_client_files
     src/Client/Fvog/Descriptor.cpp
     src/Client/Fvog/detail/VmaFwd.h
     src/Client/Fvog/detail/VkFwd.h
+    src/Client/Gui.cpp
 )
 
 add_executable(frogRender
