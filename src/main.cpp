@@ -5,7 +5,7 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-#include "Voxels/Game.h"
+#include "Game/Game.h"
 
 int main()
 {
