@@ -777,7 +777,7 @@ void Core::Reflection::Initialize()
     DATA(WalkingMovementAttributes, walkModifier)
     DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f));
 
-  REFLECT_COMPONENT(Voxels, REPLICATED);
+  REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
   REFLECT_ENUM(Math::Easing)
     ENUMERATOR(Math::Easing, LINEAR)

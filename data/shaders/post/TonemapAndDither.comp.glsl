@@ -64,7 +64,7 @@ vec3 AgX_DS(vec3 color_srgb, AgXMapperSettings agx, float maxDisplayNits)
 // Tony McMapface from https://github.com/h3r2tic/tony-mc-mapface/blob/main/shader/tony_mc_mapface.hlsl
 vec3 TonyMcMapface(vec3 color_srgb)
 {
-  vec3 workingColor = max(color_srgb, 0.0f);
+  vec3 workingColor = max(color_srgb, 0.0);
   vec3 encoded = workingColor / (1.0 + workingColor);
 
   vec3 dims = vec3(textureSize(tonyMcMapface, 0));

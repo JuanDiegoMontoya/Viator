@@ -22,6 +22,8 @@ FVOG_DECLARE_STORAGE_BUFFERS(restrict readonly PerFrameUniformsBuffer)
   mat4 invViewProj;
   mat4 proj;
   mat4 invProj;
+  mat4 view;
+  mat4 invView;
   vec4 cameraPos;
   uint meshletCount;
   uint maxIndices;

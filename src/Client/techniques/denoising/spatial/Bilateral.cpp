@@ -19,9 +19,7 @@ namespace Techniques
     FVOG_DECLARE_ARGUMENTS(ModulateArgs)
     {
       shared::Texture2D albedo;
-      shared::Texture2D illuminance;
-      shared::Texture2D radiance;
-      shared::Image2D sceneColor;
+      shared::Image2D illuminance;
     };
   }
 
@@ -92,18 +90,16 @@ namespace Techniques
       }
     }
 
-    ctx.ImageBarrierDiscard(*args.sceneColor, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.Barrier();
 
     {
       auto marker2 = ctx.MakeScopedDebugMarker("Modulate albedo");
       ctx.BindComputePipeline(modulatePipeline.GetPipeline());
       ctx.SetPushConstants(ModulateArgs{
         .albedo      = args.sceneAlbedo->ImageView().GetTexture2D(),
-        .illuminance = args.sceneIlluminance->ImageView().GetTexture2D(),
-        .radiance    = args.sceneRadiance->ImageView().GetTexture2D(),
-        .sceneColor  = args.sceneColor->ImageView().GetImage2D(),
+        .illuminance = args.sceneIlluminance->ImageView().GetImage2D(),
       });
-      ctx.DispatchInvocations(args.sceneColor->GetCreateInfo().extent);
+      ctx.DispatchInvocations(args.sceneIlluminance->GetCreateInfo().extent);
     }
   }
 } // namespace Techniques

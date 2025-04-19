@@ -1,11 +1,29 @@
 #ifndef VOXEL_H_GLSL
 #define VOXEL_H_GLSL
+
+#include "../Resources.h.glsl"
+
+struct Voxels
+{
+  FVOG_IVEC3 topLevelBricksDims;
+  FVOG_UINT32 topLevelBrickPtrsBaseIndex;
+  FVOG_IVEC3 dimensions;
+  FVOG_UINT32 bufferIdx;
+  FVOG_UINT32 materialBufferIdx;
+#ifdef __cplusplus
+  shared::
+#endif
+  Sampler voxelSampler;
+  FVOG_UINT32 numLights;
+  FVOG_UINT32 lightBufferIdx;
+};
+
+#ifndef __cplusplus
 #include "../GlobalUniforms.h.glsl"
 #include "../Hash.h.glsl"
 #include "../Light.h.glsl"
 #include "../Math.h.glsl"
 #include "../Pbr.h.glsl"
-#include "../Resources.h.glsl"
 #include "../Utility.h.glsl"
 
 
@@ -91,18 +109,6 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(Lights)
   GpuLight lights[];
 }
 lightsBuffers[];
-
-struct Voxels
-{
-  FVOG_IVEC3 topLevelBricksDims;
-  FVOG_UINT32 topLevelBrickPtrsBaseIndex;
-  FVOG_IVEC3 dimensions;
-  FVOG_UINT32 bufferIdx;
-  FVOG_UINT32 materialBufferIdx;
-  Sampler voxelSampler;
-  FVOG_UINT32 numLights;
-  FVOG_UINT32 lightBufferIdx;
-};
 
 Voxels g_voxels;
 
@@ -693,7 +699,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
                                 //(curSurface.albedo / M_PI) *
                                 (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, sunDir), 0.0, 1.0) * sunShadow * 10000 /
                                 // sunShadow /
-                                solid_angle_mapping_PDF(radians(0.5));
+                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf;
         }
         else
         {
@@ -733,4 +739,5 @@ void vx_Init(Voxels voxels)
   g_voxels = voxels;
 }
 
+#endif // __cplusplus
 #endif // VOXEL_H_GLSL

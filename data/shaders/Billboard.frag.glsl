@@ -5,15 +5,19 @@ layout(location = 1) in vec4 v_leftColor;
 layout(location = 2) in vec4 v_rightColor;
 layout(location = 3) in float v_middle;
 
-layout(location = 3) out vec4 o_color;
+layout(location = 0) out vec4 o_albedo;
+layout(location = 1) out vec4 o_normal;
+layout(location = 2) out vec4 o_radiance;
 
 // FSR 2 reactive mask. Unused when FSR 2 is disabled
 //layout(location = 1) out float o_reactiveMask;
 
 void main()
 {
-  o_color = mix(v_leftColor, v_rightColor, step(v_middle, v_uv.x));
-  
+  o_albedo = mix(v_leftColor, v_rightColor, step(v_middle, v_uv.x));
+  o_normal = vec4(0, 0, 0, 1);
+  o_radiance = vec4(0, 0, 0, 1);
+
   // Values above 0.9 are not recommended for use, as they are "unlikely [...] to ever produce good results"
   //o_reactiveMask = min(o_color.a, 0.9);
 }

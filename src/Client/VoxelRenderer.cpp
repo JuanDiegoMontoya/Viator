@@ -6,8 +6,11 @@
 #include "Fvog/Device.h"
 #include "Fvog/Rendering2.h"
 #include "Fvog/detail/Common.h"
-#include "shaders/Config.shared.h"
 #include "Core/Assert2.h"
+
+#include "shaders/Config.shared.h"
+#include "shaders/voxels/PerPixelPathtracer.shared.h"
+#include "shaders/voxels/ShadeDeferred.shared.h"
 
 #ifdef JPH_DEBUG_RENDERER
 #include "Game/Physics/DebugRenderer.h"
@@ -142,20 +145,62 @@ namespace
     return mesh;
   }
 
-  [[nodiscard]] Fvog::Texture LoadImageFile(const std::filesystem::path& path)
+  [[nodiscard]] Fvog::Texture LoadImageFile(const std::filesystem::path& path, bool srgb)
   {
-    stbi_set_flip_vertically_on_load(1);
+    stbi_set_flip_vertically_on_load(true);
     int x            = 0;
     int y            = 0;
     const auto pixels = stbi_load((GetTextureDirectory() / path).string().c_str(), &x, &y, nullptr, 4);
     assert(pixels);
-    auto texture = Fvog::CreateTexture2D({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}, Fvog::Format::R8G8B8A8_UNORM, Fvog::TextureUsage::READ_ONLY, path.string());
+    const auto format = srgb ? Fvog::Format::R8G8B8A8_SRGB : Fvog::Format::R8G8B8A8_UNORM;
+    auto texture = Fvog::CreateTexture2D({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}, format, Fvog::TextureUsage::READ_ONLY, path.string());
     texture.UpdateImageSLOW({
       .extent = {static_cast<uint32_t>(x), static_cast<uint32_t>(y)},
       .data   = pixels,
     });
     stbi_image_free(pixels);
 
+    return texture;
+  }
+
+  [[nodiscard]] Fvog::Texture LoadTonyMcMapfaceTexture()
+  {
+    stbi_set_flip_vertically_on_load(false);
+    int x{};
+    int y{};
+    auto* pixels = stbi_load((GetTextureDirectory() / "tony_mcmapface/lut.png").string().c_str(), &x, &y, nullptr, 4);
+    if (!pixels)
+    {
+      throw std::runtime_error("Texture not found");
+    }
+
+    constexpr uint32_t dim = 48;
+    if (x != dim || y != dim * dim) // Image should be a column of 48x48 images
+    {
+      throw std::runtime_error("Texture had invalid dimensions");
+    }
+    auto texture = Fvog::Texture(
+      {
+        .viewType = VK_IMAGE_VIEW_TYPE_3D,
+        .format   = Fvog::Format::R8G8B8A8_UNORM,
+        .extent   = {dim, dim, dim},
+        .usage    = Fvog::TextureUsage::READ_ONLY,
+      },
+      "Tony McMapface LUT");
+
+    for (uint32_t i = 0; i < dim; i++)
+    {
+      texture.UpdateImageSLOW({
+        .level       = 0,
+        .offset      = {0, 0, i},
+        .extent      = {dim, dim, 1},
+        .data        = pixels + (i * 4 * dim * dim),
+        .rowLength   = 0,
+        .imageHeight = 0,
+      });
+    }
+
+    stbi_image_free(pixels);
     return texture;
   }
 
@@ -196,7 +241,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };
   head_->guiCallback_ = [this](DeltaTime dt, World& world, VkCommandBuffer cmd) { OnGui(dt, world, cmd); };
 
-  testPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
+  voxelsPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Render voxels",
     .vertexModuleInfo =
       PipelineManager::ShaderModuleCreateInfo{
@@ -214,7 +259,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
             .depthAttachmentFormat = Frame::sceneDepthFormat,
           },
       },
@@ -238,7 +283,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER},
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -296,7 +341,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -329,7 +374,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -362,13 +407,46 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
   });
 
-  noiseTexture = LoadImageFile("bluenoise256.png");
+  shadeDeferredPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Shade Deferred",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "voxels/ShadeDeferred.comp.glsl",
+      },
+  });
+
+  perPixelPathtracerPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Per-Pixel Pathtracer",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "voxels/PerPixelPathtracer.comp.glsl",
+      },
+  });
+
+  tonemapPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Tonemap and Dither",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "post/TonemapAndDither.comp.glsl",
+      },
+  });
+
+  noiseTexture = LoadImageFile("bluenoise256.png", false);
+  tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
+  tonemapUniforms.tonemapper                = 1;
+  tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
+
+  // TEMP: hardcoded exposure of 0
+  Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
@@ -408,12 +486,12 @@ void VoxelRenderer::CreateRenderingMaterials(std::span<const std::unique_ptr<Blo
     if (desc.baseColorTexture)
     {
       gpuMat.materialFlags |= MaterialFlagBit::HAS_BASE_COLOR_TEXTURE;
-      gpuMat.baseColorTexture = GetOrEmplaceCachedTexture(*desc.baseColorTexture).ImageView().GetTexture2D();
+      gpuMat.baseColorTexture = GetOrEmplaceCachedTexture(*desc.baseColorTexture, true).ImageView().GetTexture2D();
     }
     if (desc.emissionTexture)
     {
       gpuMat.materialFlags |= MaterialFlagBit::HAS_EMISSION_TEXTURE;
-      gpuMat.emissionTexture = GetOrEmplaceCachedTexture(*desc.emissionTexture).ImageView().GetTexture2D();
+      gpuMat.emissionTexture = GetOrEmplaceCachedTexture(*desc.emissionTexture, true).ImageView().GetTexture2D();
     }
     if (desc.isInvisible)
     {
@@ -439,6 +517,8 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneIlluminancePingPong = Fvog::CreateTexture2D(extent, Frame::sceneIlluminanceFormat, Fvog::TextureUsage::GENERAL, "Scene illuminance 2");
   frame.sceneDepth       = Fvog::CreateTexture2D(extent, Frame::sceneDepthFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene depth");
   frame.sceneColor       = Fvog::CreateTexture2D(extent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color");
+
+  frame.sceneColorTonemapped = Fvog::CreateTexture2D(extent, Frame::sceneColorTonemappedFormat, Fvog::TextureUsage::GENERAL, "Scene color tonemapped");
 }
 
 void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)
@@ -512,7 +592,7 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
   vkCmdSetScissor(commandBuffer, 0, 1, &renderArea);
   ctx.BindGraphicsPipeline(debugTexturePipeline.GetPipeline());
   auto pushConstants = Temp::DebugTextureArguments{
-    .textureIndex = frame.sceneColor->ImageView().GetSampledResourceHandle().index,
+    .textureIndex = frame.sceneColorTonemapped->ImageView().GetSampledResourceHandle().index,
     .samplerIndex = nearestSampler.GetResourceHandle().index,
   };
 
@@ -534,6 +614,27 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     grid.buffer.FlushWritesToGPU(commandBuffer);
   }
 
+  tonemapUniformBuffer.UpdateData(commandBuffer, tonemapUniforms);
+
+  const auto nearestSampler = Fvog::Sampler({
+    .magFilter     = VK_FILTER_NEAREST,
+    .minFilter     = VK_FILTER_NEAREST,
+    .mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+    .addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .maxAnisotropy = 0,
+  });
+
+  const auto linearClampSampler = Fvog::Sampler({
+    .magFilter    = VK_FILTER_LINEAR,
+    .minFilter    = VK_FILTER_LINEAR,
+    .mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+  });
+
   ctx.Barrier();
 
   auto viewMat  = glm::mat4(1);
@@ -541,7 +642,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   for (auto&& [entity, inputLook, transform] : world.GetRegistry().view<const InputLookState, const GlobalTransform, const LocalPlayer>().each())
   {
     position = transform.position;
-    // Flip z axis to correspond with Vulkan's NDC space.
     auto rotationQuat = transform.rotation;
     if (const auto* renderTransform = world.GetRegistry().try_get<const RenderTransform>(entity))
     {
@@ -569,8 +669,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .oldViewProjUnjittered  = glm::mat4{},
       .viewProjUnjittered     = glm::mat4{},
       .invViewProj            = glm::inverse(clip_from_world),
-      .proj                   = glm::mat4{},
-      .invProj                = glm::mat4{},
+      .proj                   = clip_from_view,
+      .invProj                = glm::inverse(clip_from_view),
+      .view                   = view_from_world,
+      .invView                = glm::inverse(view_from_world),
       .cameraPos              = glm::vec4(position, 0),
       .meshletCount           = 0,
       .maxIndices             = 0,
@@ -623,7 +725,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     billboardSprites.emplace_back(transform.transform.position,
       glm::vec2(transform.transform.scale),
       tint,
-      GetOrEmplaceCachedTexture(billboardSprite.name).ImageView().GetTexture2D());
+      GetOrEmplaceCachedTexture(billboardSprite.name, true).ImageView().GetTexture2D());
   }
 
   auto lights = std::vector<GpuLight>();
@@ -716,15 +818,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .texture = frame.sceneNormal.value().ImageView(),
       .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
     };
-    auto illuminanceAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.sceneIlluminance.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
     auto radianceAttachment = Fvog::RenderColorAttachment{
       .texture = frame.sceneRadiance.value().ImageView(),
       .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
     };
-    Fvog::RenderColorAttachment colorAttachments[] = {albedoAttachment, normalAttachment, illuminanceAttachment, radianceAttachment};
+    Fvog::RenderColorAttachment colorAttachments[] = {albedoAttachment, normalAttachment, radianceAttachment};
     auto depthAttachment = Fvog::RenderDepthStencilAttachment{
       .texture = frame.sceneDepth.value().ImageView(),
       .loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -735,7 +833,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .colorAttachments = colorAttachments,
       .depthAttachment  = depthAttachment,
     });
-    const auto voxels = Temp::Voxels{
+    const auto voxels = Voxels{
       .topLevelBricksDims         = grid.topLevelBricksDims_,
       .topLevelBrickPtrsBaseIndex = grid.topLevelBrickPtrsBaseIndex,
       .dimensions                 = grid.dimensions_,
@@ -748,11 +846,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     {
       // Voxels
       TracyVkZone(head_->tracyVkContext_, commandBuffer, "Voxels");
-      ctx.BindGraphicsPipeline(testPipeline.GetPipeline());
+      ctx.BindGraphicsPipeline(voxelsPipeline.GetPipeline());
       ctx.SetPushConstants(Temp::PushConstants{
         .voxels = voxels,
-        .uniformBufferIndex         = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .noiseTexture = noiseTexture->ImageView().GetTexture2D(),
+        .uniformBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
       });
       ctx.Draw(3, 1, 0, 0);
     }
@@ -763,8 +860,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.SetPushConstants(Temp::MeshArgs{
         .objects      = meshUniformz->GetDeviceBuffer().GetDeviceAddress(),
         .frame        = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-        .voxels       = voxels,
-        .noiseTexture = noiseTexture->ImageView().GetTexture2D(),
       });
 
       for (size_t i = 0; i < drawCalls.size(); i++)
@@ -812,25 +907,84 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       }
     }
     ctx.EndRendering();
+
+    ctx.ImageBarrier(*frame.sceneAlbedo, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    ctx.ImageBarrier(*frame.sceneNormal, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    ctx.ImageBarrier(*frame.sceneRadiance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    ctx.ImageBarrier(*frame.sceneDepth, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+    ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_GENERAL);
+
+    // Indirect illuminance
+    {
+      ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
+      ctx.SetPushConstants(PerPixelPathtracerArguments{
+        .voxels              = voxels,
+        .gDepth              = frame.sceneDepth->ImageView().GetTexture2D(),
+        .gNormal             = frame.sceneNormal->ImageView().GetTexture2D(),
+        .gIndirectIrradiance = frame.sceneIlluminance->ImageView().GetImage2D(),
+        .internalColorSpace  = COLOR_SPACE_sRGB_LINEAR,
+        .uniformBufferIndex  = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .noiseTexture        = noiseTexture->ImageView().GetTexture2D(),
+      });
+      ctx.DispatchInvocations(frame.sceneIlluminance->GetCreateInfo().extent);
+    }
+
+    // Denoise. Issues barriers internally.
+    bilateral_.DenoiseIlluminance(
+      {
+        .sceneAlbedo              = &frame.sceneAlbedo.value(),
+        .sceneNormal              = &frame.sceneNormal.value(),
+        .sceneDepth               = &frame.sceneDepth.value(),
+        .sceneIlluminance         = &frame.sceneIlluminance.value(),
+        .sceneIlluminancePingPong = &frame.sceneIlluminancePingPong.value(),
+        .clip_from_view           = clip_from_view,
+        .world_from_clip          = glm::inverse(clip_from_world),
+        .cameraPos                = position,
+      },
+      commandBuffer);
+    
+    ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+
+    // Shade image.
+    {
+      ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
+      ctx.SetPushConstants(ShadingPushConstants{
+        .voxels               = voxels,
+        .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
+        .gDepth               = frame.sceneDepth->ImageView().GetTexture2D(),
+        .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
+        .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
+        .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
+        .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
+        .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
+        .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+      });
+      ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
+    }
   }
 
-  bilateral_.DenoiseIlluminance(
-    {
-      .sceneAlbedo              = &frame.sceneAlbedo.value(),
-      .sceneNormal              = &frame.sceneNormal.value(),
-      .sceneDepth               = &frame.sceneDepth.value(),
-      .sceneRadiance            = &frame.sceneRadiance.value(),
-      .sceneIlluminance         = &frame.sceneIlluminance.value(),
-      .sceneIlluminancePingPong = &frame.sceneIlluminancePingPong.value(),
-      .sceneColor               = &frame.sceneColor.value(),
-      .clip_from_view           = clip_from_view,
-      .world_from_clip          = glm::inverse(clip_from_world),
-      .cameraPos                = position,
-    },
-    commandBuffer);
+  ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(frame.sceneColorTonemapped.value(), VK_IMAGE_LAYOUT_GENERAL);
+
+  // Tonemap
+  {
+    ZoneScopedN("Tonemap");
+    ctx.BindComputePipeline(tonemapPipeline.GetPipeline());
+    ctx.SetPushConstants(shared::TonemapArguments{
+      .sceneColor = frame.sceneColor->ImageView().GetTexture2D(),
+      .noise = noiseTexture->ImageView().GetTexture2D(),
+      .nearestSampler = nearestSampler,
+      .linearClampSampler = linearClampSampler,
+      .exposure = exposureBuffer,
+      .tonemapUniforms = tonemapUniformBuffer.GetDeviceBuffer(),
+      .outputImage = frame.sceneColorTonemapped->ImageView().GetImage2D(),
+      .tonyMcMapface = tonyMcMapfaceLut->ImageView().GetTexture3D(),
+    });
+    ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
+  }
 }
 
-Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name)
+Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name, bool srgb)
 {
   if (auto it = stringToTexture.find(name); it != stringToTexture.end())
   {
@@ -838,7 +992,7 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name)
   }
 
   // Make a very sketchy and unscalable assumption about the path.
-  auto texture = LoadImageFile(std::filesystem::path("voxels") / (name + ".png"));
+  auto texture = LoadImageFile(std::filesystem::path("voxels") / (name + ".png"), srgb);
 
   return stringToTexture.emplace(name, std::move(texture)).first->second;
 }

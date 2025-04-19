@@ -293,6 +293,11 @@ void imageStore(Image2D img, ivec2 coord, vec4 data)
   imageStore(Fvog_image2D(img.imgIdx), coord, data);
 }
 
+vec4 imageLoad(Image2D img, ivec2 coord)
+{
+  return imageLoad(Fvog_image2D(img.imgIdx), coord);
+}
+
 #endif // !__cplusplus
 
 #endif // RESOURCES_H_GLSL

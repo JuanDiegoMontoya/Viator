@@ -1469,7 +1469,7 @@ private:
 struct Enemy {};
 
 // This component exists solely to check if a physics ray hit the voxel world.
-struct Voxels {};
+struct VoxelsComponent {};
 
 struct LocalAuthoritative {};
 

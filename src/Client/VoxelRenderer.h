@@ -7,11 +7,13 @@
 #include "debug/Shapes.h"
 #include "techniques/denoising/spatial/Bilateral.h"
 #include "shaders/Light.h.glsl"
+#include "shaders/voxels/Voxels.h.glsl"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
+#include "shaders/post/TonemapAndDither.shared.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +30,8 @@ namespace Temp
     glm::mat4 invViewProj;
     glm::mat4 proj;
     glm::mat4 invProj;
+    glm::mat4 view;
+    glm::mat4 invView;
     glm::vec4 cameraPos;
     glm::uint meshletCount;
     glm::uint maxIndices;
@@ -36,23 +40,10 @@ namespace Temp
     float alphaHashScale;
   };
 
-  struct Voxels
-  {
-    FVOG_IVEC3 topLevelBricksDims;
-    FVOG_UINT32 topLevelBrickPtrsBaseIndex;
-    FVOG_IVEC3 dimensions;
-    FVOG_UINT32 bufferIdx;
-    FVOG_UINT32 materialBufferIdx;
-    shared::Sampler voxelSampler;
-    FVOG_UINT32 numLights;
-    FVOG_UINT32 lightBufferIdx;
-  };
-
   FVOG_DECLARE_ARGUMENTS(PushConstants)
   {
     Voxels voxels;
     FVOG_UINT32 uniformBufferIndex;
-    shared::Texture2D noiseTexture;
   };
 
   FVOG_DECLARE_ARGUMENTS(DebugTextureArguments)
@@ -65,8 +56,6 @@ namespace Temp
   {
     VkDeviceAddress objects;
     VkDeviceAddress frame;
-    Voxels voxels;
-    shared::Texture2D noiseTexture;
   };
 
   struct BillboardInstance
@@ -110,20 +99,27 @@ private:
   void RenderGame(double dt, World& world, VkCommandBuffer commandBuffer);
   void OnGui(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
 
-  Fvog::Texture& GetOrEmplaceCachedTexture(const std::string& name);
+  Fvog::Texture& GetOrEmplaceCachedTexture(const std::string& name, bool srgb);
 
   struct Frame
   {
+    // G-buffer
     std::optional<Fvog::Texture> sceneAlbedo;
     constexpr static Fvog::Format sceneAlbedoFormat = Fvog::Format::R8G8B8A8_SRGB;
     std::optional<Fvog::Texture> sceneNormal;
     constexpr static Fvog::Format sceneNormalFormat = Fvog::Format::R16G16B16A16_SNORM; // TODO: should be oct
     std::optional<Fvog::Texture> sceneRadiance;
     std::optional<Fvog::Texture> sceneIlluminance;
-    std::optional<Fvog::Texture> sceneIlluminancePingPong;
+    std::optional<Fvog::Texture> sceneIlluminancePingPong; // Used in denoising.
     constexpr static Fvog::Format sceneIlluminanceFormat = Fvog::Format::R16G16B16A16_SFLOAT;
+
+    // Pre-tonemap
     std::optional<Fvog::Texture> sceneColor;
-    constexpr static Fvog::Format sceneColorFormat = Fvog::Format::R8G8B8A8_UNORM;
+    constexpr static Fvog::Format sceneColorFormat = Fvog::Format::R16G16B16A16_SFLOAT;
+
+    // Post-tonemap. Format allows for HDR display support.
+    std::optional<Fvog::Texture> sceneColorTonemapped;
+    constexpr static Fvog::Format sceneColorTonemappedFormat = Fvog::Format::R16G16B16A16_SFLOAT;
     std::optional<Fvog::Texture> sceneDepth;
     constexpr static Fvog::Format sceneDepthFormat = Fvog::Format::D32_SFLOAT;
   };
@@ -131,12 +127,17 @@ private:
 
   Techniques::Bilateral bilateral_;
   Fvog::NDeviceBuffer<Temp::Uniforms> perFrameUniforms;
-  PipelineManager::GraphicsPipelineKey testPipeline;
+  PipelineManager::GraphicsPipelineKey voxelsPipeline;
   PipelineManager::GraphicsPipelineKey meshPipeline;
   PipelineManager::GraphicsPipelineKey debugTexturePipeline;
   PipelineManager::GraphicsPipelineKey debugLinesPipeline;
   PipelineManager::GraphicsPipelineKey billboardsPipeline;
   PipelineManager::GraphicsPipelineKey billboardSpritesPipeline;
+
+  PipelineManager::ComputePipelineKey shadeDeferredPipeline;
+  PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
+  PipelineManager::ComputePipelineKey tonemapPipeline;
+
   std::optional<Fvog::NDeviceBuffer<Temp::ObjectUniforms>> meshUniformz;
   std::optional<Fvog::NDeviceBuffer<Debug::Line>> lineVertexBuffer;
   std::optional<Fvog::NDeviceBuffer<GpuLight>> lightBuffer;
@@ -144,6 +145,10 @@ private:
   std::optional<Fvog::NDeviceBuffer<Temp::BillboardSpriteInstance>> billboardSpriteInstanceBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBuffer;
   std::optional<Fvog::Texture> noiseTexture;
+  std::optional<Fvog::Texture> tonyMcMapfaceLut;
+  Fvog::TypedBuffer<float> exposureBuffer;
+  Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
+  shared::TonemapUniforms tonemapUniforms{};
   std::unordered_map<std::string, Fvog::Texture> stringToTexture;
   PlayerHead* head_;
   entt::entity selectedEntity = entt::null;

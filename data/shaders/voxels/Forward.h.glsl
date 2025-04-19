@@ -40,8 +40,6 @@ FVOG_DECLARE_ARGUMENTS(Args)
 {
   ObjectUniformsBuffer objects;
   FrameUniformsBuffer frame;
-  Voxels voxels;
-  Texture2D noiseTexture;
 }pc;
 
 #endif // FORWARD_H_GLSL

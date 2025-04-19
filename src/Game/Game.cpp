@@ -1708,7 +1708,7 @@ void World::FixedUpdate(float dt)
           if (registry_.valid(hitEntity))
           {
             // Ray actually hit a voxel... see if it hit a voxel with a corresponding block entity.
-            if (registry_.all_of<Voxels>(hitEntity))
+            if (registry_.all_of<VoxelsComponent>(hitEntity))
             {
               const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
               const auto voxelHitPos = glm::ivec3(hitPos);
@@ -2133,7 +2133,7 @@ void World::InitializeGameState()
 
   auto ve                          = registry_.create();
   registry_.emplace<Name>(ve).name = "Voxels";
-  registry_.emplace<Voxels>(ve);
+  registry_.emplace<VoxelsComponent>(ve);
   registry_.emplace<Physics::RigidBodySettings>(ve,
     Physics::RigidBodySettings{
       .shape      = Physics::UseTwoLevelGrid{},
