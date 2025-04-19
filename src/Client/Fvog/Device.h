@@ -69,6 +69,7 @@ namespace Fvog
 
     bool supportsRayTracing = false;
     bool supportsRelaxedExtendedInstruction = false;
+    bool supportsRobustness2 = false;
 
     void FreeUnusedResources();
 

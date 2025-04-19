@@ -185,6 +185,14 @@ namespace Fvog
       })
       .select();
 
+    if (!maybePhysicalDevice)
+    {
+      spdlog::critical("Failed to find suitable physical device.");
+      std::abort();
+    }
+
+    physicalDevice_ = maybePhysicalDevice.value();
+
 #ifdef FROG_DEBUG
     supportsRelaxedExtendedInstruction = physicalDevice_.enable_extension_if_present(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME);
 
@@ -194,13 +202,22 @@ namespace Fvog
     }
 #endif
 
-    if (!maybePhysicalDevice)
+    supportsRobustness2 = physicalDevice_.enable_extension_if_present(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+
+    if (supportsRobustness2)
     {
-      spdlog::critical("Failed to find suitable physical device.");
-      std::abort();
+      supportsRobustness2 = physicalDevice_.enable_extension_features_if_present(VkPhysicalDeviceRobustness2FeaturesEXT{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+        .robustBufferAccess2 = VK_FALSE,
+        .robustImageAccess2 = VK_FALSE,
+        .nullDescriptor = VK_TRUE, 
+      });
     }
 
-    physicalDevice_ = maybePhysicalDevice.value();
+    if (!supportsRobustness2)
+    {
+      spdlog::warn("VK_EXT_robustness_2 is not supported. Null handles will not be written upon resource destruction.");
+    }
 
     [[maybe_unused]] auto driverVersionString = DriverVersonToString(physicalDevice_.properties.driverVersion, physicalDevice_.properties.vendorID);
     spdlog::info("Selected device: {}. Driver version {}", physicalDevice_.properties.deviceName, driverVersionString);
@@ -564,11 +581,100 @@ namespace Fvog
           {
             switch (descriptorAlloc.handle.type)
             {
-            case ResourceType::STORAGE_BUFFER: storageBufferDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
+            case ResourceType::STORAGE_BUFFER:
+            {
+              if (supportsRobustness2)
+              {
+                vkUpdateDescriptorSets(device_,
+                  1,
+                  Fvog::detail::Address(VkWriteDescriptorSet{
+                    .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet          = descriptorSet_,
+                    .dstBinding      = storageBufferBinding,
+                    .dstArrayElement = descriptorAlloc.handle.index,
+                    .descriptorCount = 1,
+                    .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    .pBufferInfo     = Fvog::detail::Address(VkDescriptorBufferInfo{
+                          .buffer = VK_NULL_HANDLE,
+                          .range  = VK_WHOLE_SIZE,
+                    }),
+                  }),
+                  0,
+                  nullptr);
+              }
+              storageBufferDescriptorAllocator.Free(descriptorAlloc.handle.index);
+              return true;
+            }
             case ResourceType::COMBINED_IMAGE_SAMPLER: combinedImageSamplerDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
-            case ResourceType::STORAGE_IMAGE: storageImageDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
-            case ResourceType::SAMPLED_IMAGE: sampledImageDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
-            case ResourceType::SAMPLER: samplerDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
+            case ResourceType::STORAGE_IMAGE:
+            {
+              if (supportsRobustness2)
+              {
+                vkUpdateDescriptorSets(device_,
+                  1,
+                  Fvog::detail::Address(VkWriteDescriptorSet{
+                    .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet          = descriptorSet_,
+                    .dstBinding      = storageImageBinding,
+                    .dstArrayElement = descriptorAlloc.handle.index,
+                    .descriptorCount = 1,
+                    .descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                    .pImageInfo      = Fvog::detail::Address(VkDescriptorImageInfo{
+                           .imageView = VK_NULL_HANDLE,
+                    }),
+                  }),
+                  0,
+                  nullptr);
+              }
+              storageImageDescriptorAllocator.Free(descriptorAlloc.handle.index);
+              return true;
+            }
+            case ResourceType::SAMPLED_IMAGE:
+            {
+              if (supportsRobustness2)
+              {
+                vkUpdateDescriptorSets(device_,
+                  1,
+                  Fvog::detail::Address(VkWriteDescriptorSet{
+                    .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet          = descriptorSet_,
+                    .dstBinding      = sampledImageBinding,
+                    .dstArrayElement = descriptorAlloc.handle.index,
+                    .descriptorCount = 1,
+                    .descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                    .pImageInfo      = Fvog::detail::Address(VkDescriptorImageInfo{
+                           .imageView = VK_NULL_HANDLE,
+                    }),
+                  }),
+                  0,
+                  nullptr);
+              }
+              sampledImageDescriptorAllocator.Free(descriptorAlloc.handle.index);
+              return true;
+            }
+            case ResourceType::SAMPLER:
+            {
+              if (supportsRobustness2)
+              {
+                vkUpdateDescriptorSets(device_,
+                  1,
+                  Fvog::detail::Address(VkWriteDescriptorSet{
+                    .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet          = descriptorSet_,
+                    .dstBinding      = samplerBinding,
+                    .dstArrayElement = descriptorAlloc.handle.index,
+                    .descriptorCount = 1,
+                    .descriptorType  = VK_DESCRIPTOR_TYPE_SAMPLER,
+                    .pImageInfo      = Fvog::detail::Address(VkDescriptorImageInfo{
+                           .sampler = VK_NULL_HANDLE,
+                    }),
+                  }),
+                  0,
+                  nullptr);
+              }
+              samplerDescriptorAllocator.Free(descriptorAlloc.handle.index);
+              return true;
+            }
             case ResourceType::ACCELERATION_STRUCTURE: accelerationStructureDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
             case ResourceType::INVALID:
             default: assert(0); return true;
