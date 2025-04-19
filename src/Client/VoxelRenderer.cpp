@@ -518,6 +518,8 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneDepth       = Fvog::CreateTexture2D(extent, Frame::sceneDepthFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene depth");
   frame.sceneColor       = Fvog::CreateTexture2D(extent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color");
 
+  frame.sceneColorBloomScratch = Fvog::CreateTexture2DMip({extent.width / 2, extent.height / 2}, Frame::sceneColorFormat, 8, Fvog::TextureUsage::GENERAL, "Scene color (bloom scratch buffer)");
+
   frame.sceneColorTonemapped = Fvog::CreateTexture2D(extent, Frame::sceneColorTonemappedFormat, Fvog::TextureUsage::GENERAL, "Scene color tonemapped");
 }
 
@@ -961,6 +963,37 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       });
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }
+  }
+
+  ctx.Barrier();
+
+  {
+    ZoneScopedN("Auto Exposure");
+    autoExposure_.Apply(commandBuffer,
+      {
+        .image           = frame.sceneColor.value(),
+        .exposureBuffer  = exposureBuffer,
+        .deltaTime       = float(dt),
+        .adjustmentSpeed = 1,
+        .targetLuminance = 0.2140f,
+        .logMinLuminance = -15.0f,
+        .logMaxLuminance = 15.0f,
+      });
+  }
+
+  ctx.Barrier();
+
+  {
+    ZoneScopedN("Bloom");
+    bloom_.Apply(commandBuffer,
+      {
+        .target                      = frame.sceneColor.value(),
+        .scratchTexture              = frame.sceneColorBloomScratch.value(),
+        .passes                      = 6,
+        .strength                    = 1.0f / 16.0f,
+        .width                       = 1,
+        .useLowPassFilterOnFirstPass = true,
+      });
   }
 
   ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);

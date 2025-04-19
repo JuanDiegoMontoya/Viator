@@ -6,6 +6,8 @@
 #include "Game/TwoLevelGrid.h"
 #include "debug/Shapes.h"
 #include "techniques/denoising/spatial/Bilateral.h"
+#include "techniques/Bloom.h"
+#include "techniques/AutoExposure.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 
@@ -115,6 +117,7 @@ private:
 
     // Pre-tonemap
     std::optional<Fvog::Texture> sceneColor;
+    std::optional<Fvog::Texture> sceneColorBloomScratch;
     constexpr static Fvog::Format sceneColorFormat = Fvog::Format::R16G16B16A16_SFLOAT;
 
     // Post-tonemap. Format allows for HDR display support.
@@ -126,6 +129,8 @@ private:
   Frame frame;
 
   Techniques::Bilateral bilateral_;
+  Techniques::AutoExposure autoExposure_;
+  Techniques::Bloom bloom_;
   Fvog::NDeviceBuffer<Temp::Uniforms> perFrameUniforms;
   PipelineManager::GraphicsPipelineKey voxelsPipeline;
   PipelineManager::GraphicsPipelineKey meshPipeline;
