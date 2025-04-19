@@ -444,6 +444,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
   tonemapUniforms.tonemapper                = 1;
   tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
+  tonemapUniforms.enableDithering           = 1;
 
   // TEMP: hardcoded exposure of 0
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
@@ -622,9 +623,9 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     .magFilter     = VK_FILTER_NEAREST,
     .minFilter     = VK_FILTER_NEAREST,
     .mipmapMode    = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-    .addressModeU  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    .addressModeV  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    .addressModeW  = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    .addressModeU  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    .addressModeV  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    .addressModeW  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
     .maxAnisotropy = 0,
   });
 
