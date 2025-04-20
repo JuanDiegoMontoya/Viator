@@ -446,6 +446,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
   tonemapUniforms.enableDithering           = 1;
 
+  InitGui();
+
   // TEMP: hardcoded exposure of 0
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 

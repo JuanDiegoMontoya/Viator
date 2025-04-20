@@ -12,6 +12,7 @@
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
 #include "entt/core/hashed_string.hpp"
+#include "spdlog/spdlog.h"
 
 #include "Jolt/Physics/Body/AllowedDOFs.h"
 #include "Jolt/Physics/Body/MotionQuality.h"
@@ -379,6 +380,7 @@ const char* Core::Reflection::EnumToString(entt::meta_any value)
 void Core::Reflection::Initialize()
 {
   ZoneScoped;
+  spdlog::info("Initializing type reflection.");
   entt::meta_reset();
 
 //#define MAKE_IDENTIFIER(T) [[maybe_unused]] bool reflection_for_ ## T

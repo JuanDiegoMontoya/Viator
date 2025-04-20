@@ -311,6 +311,8 @@ namespace Core::Serialization
 
   void Initialize()
   {
+    ZoneScoped;
+    spdlog::info("Initializing serialization.");
 #define MAKE_SERIALIZERS(T)                                                     \
   entt::meta_factory<T>()                                                       \
     .func<Serialize2<cereal::BinaryInputArchive, T>>("BinaryInputArchive"_hs)   \

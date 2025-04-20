@@ -8,6 +8,7 @@
 #include "Game/Networking/Client.h"
 #include "Game/Networking/Server.h"
 #include "Core/Assert2.h"
+#include "GuiHelpers.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -18,12 +19,16 @@
 #include "Game/Networking/RPC.h"
 
 #include "vk_mem_alloc.h"
+#include "GLFW/glfw3.h"
+#include "ImGui/imgui_impl_fvog.h"
 #include "tracy/Tracy.hpp"
 #include "Jolt/Physics/Collision/CastResult.h"
 #include "Jolt/Physics/Collision/RayCast.h"
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
 #include "entt/meta/container.hpp"
+#include "IconsFontAwesome6.h"
+#include "IconsMaterialDesign.h"
 
 #include <memory>
 #include <numeric>
@@ -33,143 +38,7 @@
 
 namespace
 {
-  std::string FixupTypeString(std::string_view str)
-  {
-    if (auto pos = str.find("::"); pos != std::string_view::npos)
-    {
-      return std::string(str.substr(pos + 2));
-    }
-
-    if (auto pos = str.find_first_of(' '); pos != std::string_view::npos)
-    {
-      return std::string(str.substr(pos + 1));
-    }
-
-    return std::string(str);
-  }
-
-  bool DrawComponentHelper(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId)
-  {
-    using namespace Core::Reflection;
-    auto meta = instance.type();
-    readonly  = readonly || meta.traits<Traits>() & Traits::EDITOR_READ_ONLY;
-
-    // If the type has a bespoke EditorWrite or EditorRead function, use that. Otherwise, recurse over data members.
-    PropertiesMap properties = {};
-    if (auto* mp = static_cast<const PropertiesMap*>(custom))
-    {
-      properties = *mp;
-    }
-
-    bool changed = false;
-    if (auto writeFunc = meta.func("EditorWrite"_hs); writeFunc && !readonly)
-    {
-      changed |= writeFunc.invoke(instance, properties).cast<bool>();
-    }
-    else if (auto readFunc = meta.func("EditorRead"_hs))
-    {
-      readFunc.invoke(instance, properties);
-    }
-    else if (meta.is_sequence_container())
-    {
-      bool isOpen = false;
-      if (auto it = properties.find("name"_hs); it != properties.end())
-      {
-        isOpen = ImGui::TreeNodeEx(instance.try_cast<void>(), 0, "%s: %d", it->second.cast<const char*>(), (int)instance.as_sequence_container().size());
-      }
-      else
-      {
-        auto name = FixupTypeString(meta.info().name());
-        isOpen    = ImGui::TreeNodeEx(instance.try_cast<void>(), 0, "%s: %d", name.c_str(), (int)instance.as_sequence_container().size());
-      }
-      if (isOpen)
-      {
-        for (auto element : instance.as_sequence_container())
-        {
-          auto eType = element.type();
-          ImGui::PushID(guiId++);
-          changed |= DrawComponentHelper(world, entity, element.as_ref(), eType.custom(), readonly, guiId);
-          ImGui::PopID();
-        }
-        ImGui::TreePop();
-      }
-    }
-    else if (meta.is_associative_container())
-    {
-      ImGui::Text("TODO: associative containers");
-      // TODO: Make two-column table.
-      for (auto element : instance.as_associative_container())
-      {
-        // auto eType = element.second.type();
-        // if (auto traits = eType.traits<Traits>(); traits & Traits::EDITOR || traits & Traits::EDITOR_READ)
-        //{
-        //   ImGui::PushID(guiId++);
-        //   ImGui::Indent();
-        //   DrawComponentHelper(element.second.get(eType.id()), eType.custom(), readonly || traits & Traits::EDITOR_READ, guiId);
-        //   ImGui::Unindent();
-        //   ImGui::PopID();
-        // }
-      }
-    }
-    else if (meta.is_enum())
-    {
-      bool isOpen = false;
-      if (auto it = properties.find("name"_hs); it != properties.end())
-      {
-        isOpen = ImGui::TreeNodeEx(instance.try_cast<void>(), 0, "%s", it->second.cast<const char*>());
-      }
-      else
-      {
-        auto name = FixupTypeString(meta.info().name());
-        isOpen    = ImGui::TreeNodeEx(instance.try_cast<void>(), 0, "%s", name.c_str());
-      }
-      if (isOpen)
-      {
-        for (auto [id, data] : meta.data())
-        {
-          PropertiesMap dataProps = {};
-          if (auto* mp = static_cast<const PropertiesMap*>(data.custom()))
-          {
-            dataProps = *mp;
-          }
-
-          if (auto it = dataProps.find("name"_hs); it != dataProps.end())
-          {
-            ImGui::PushID(guiId++);
-            auto name = it->second.cast<const char*>();
-            if (ImGui::Selectable(name, instance == data.get({}), readonly ? ImGuiSelectableFlags_Disabled : 0))
-            {
-              instance.assign(data.get({}));
-              changed = true;
-            }
-            ImGui::PopID();
-          }
-        }
-        ImGui::TreePop();
-      }
-    }
-    else
-    {
-      for (auto [id, data] : meta.data())
-      {
-        if (const auto traits = data.traits<Traits>(); !(traits & Traits::NO_EDITOR))
-        {
-          ImGui::PushID(guiId++);
-          ImGui::Indent();
-          changed |= DrawComponentHelper(world, entity, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
-          ImGui::Unindent();
-          ImGui::PopID();
-        }
-      }
-    }
-
-    if (auto onUpdateFunc = meta.func("OnUpdate"_hs); onUpdateFunc && changed)
-    {
-      onUpdateFunc.invoke({}, entt::forward_as_meta(world), entity);
-    }
-
-    return changed;
-  }
+  const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
 
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
@@ -267,6 +136,60 @@ namespace
   }
 } // namespace
 
+void VoxelRenderer::InitGui()
+{
+  // Attempt to load default layout, if it exists
+  if (std::filesystem::exists(g_defaultIniPath) && !std::filesystem::is_directory(g_defaultIniPath))
+  {
+    ImGui::LoadIniSettingsFromDisk(g_defaultIniPath.c_str());
+  }
+
+  // Settings are only saved when the user explicitly requests it
+  ImGui::GetIO().IniFilename = nullptr;
+
+  float xscale, yscale;
+  glfwGetWindowContentScale(head_->window, &xscale, &yscale);
+  const auto contentScale = std::max(xscale, yscale); // I don't know how to properly handle the case where xdpi != ydpi. Hopefully that never happens
+  const float fontSize    = std::floor(18 * contentScale);
+  ImGui::GetIO().Fonts->AddFontFromFileTTF((GetTextureDirectory() / "RobotoCondensed-Regular.ttf").string().c_str(), fontSize);
+  // constexpr float iconFontSize = fontSize * 2.0f / 3.0f; // if GlyphOffset.y is not biased, uncomment this
+
+  // These fonts appear to interfere, possibly due to having overlapping ranges.
+  // Loading FA first appears to cause less breakage
+  {
+    const float iconFontSize            = fontSize * 4.0f / 5.0f * contentScale;
+    static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_16_FA, 0};
+    ImFontConfig icons_config;
+    icons_config.MergeMode        = true;
+    icons_config.PixelSnapH       = true;
+    icons_config.GlyphMinAdvanceX = iconFontSize;
+    icons_config.GlyphOffset.y    = 0; // Hack to realign the icons
+    ImGui::GetIO().Fonts->AddFontFromFileTTF((GetTextureDirectory() / FONT_ICON_FILE_NAME_FAS).string().c_str(), iconFontSize, &icons_config, icons_ranges);
+  }
+
+  {
+    const float iconFontSize            = fontSize;
+    static const ImWchar icons_ranges[] = {ICON_MIN_MD, ICON_MAX_16_MD, 0};
+    ImFontConfig icons_config;
+    icons_config.MergeMode        = true;
+    icons_config.PixelSnapH       = true;
+    icons_config.GlyphMinAdvanceX = iconFontSize;
+    icons_config.GlyphOffset.y    = 4; // Hack to realign the icons
+    ImGui::GetIO().Fonts->AddFontFromFileTTF((GetTextureDirectory() / FONT_ICON_FILE_NAME_MD).string().c_str(), iconFontSize, &icons_config, icons_ranges);
+  }
+
+  ImGui_ImplFvog_CreateFontsTexture();
+
+  //Gui::ApplySteamImGuiStyle();
+  Gui::ApplyFrogImGuiStyle();
+
+  auto& style = ImGui::GetStyle();
+  style.ScaleAllSizes(contentScale);
+  style.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0, 0, 0, 0);
+  style.WindowMenuButtonPosition        = ImGuiDir_None;
+  style.IndentSpacing                   = 15;
+}
+
 void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_unused]] VkCommandBuffer commandBuffer)
 {
   ZoneScoped;
@@ -275,7 +198,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   case GameState::MENU:
     if (ImGui::Begin("Menu"))
     {
-      if (ImGui::Button("Play"))
+      if (ImGui::Selectable("Play"))
       {
         gameState = GameState::LOADING;
         world.InitializeGameState();
@@ -294,14 +217,14 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       static char hostName[256] = "localhost";
       ImGui::InputText("##Host", hostName, 256);
       ImGui::BeginDisabled(networking->get() != nullptr);
-      if (ImGui::Button("Connect (WIP)"))
+      if (ImGui::Selectable("Connect (WIP)"))
       {
         *networking = std::make_unique<Networking::Client>(world, hostName);
         gameState   = GameState::LOADING;
       }
       ImGui::EndDisabled();
 
-      if (ImGui::Button("Exit to desktop"))
+      if (ImGui::Selectable("Exit to desktop"))
       {
         world.GetRegistry().ctx().emplace<CloseApplication>();
       }
@@ -478,7 +401,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   case GameState::PAUSED:
     if (ImGui::Begin("Paused"))
     {
-      if (ImGui::Button("Unpause"))
+      if (ImGui::Selectable("Resume"))
       {
         gameState = GameState::GAME;
       }
@@ -486,30 +409,30 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
 
       ImGui::BeginDisabled(networking->get());
-      if (ImGui::Button("Open Server (WIP)"))
+      if (ImGui::Selectable("Open Server (WIP)"))
       {
         *networking = std::make_unique<Networking::Server>(world);
       }
       ImGui::EndDisabled();
 
       ImGui::BeginDisabled(!networking->get() || !world.IsServer());
-      if (ImGui::Button("Close Server (WIP)"))
+      if (ImGui::Selectable("Close Server (WIP)"))
       {
         networking->reset();
       }
       ImGui::EndDisabled();
 
-      if (ImGui::Button("Save (WIP)"))
+      if (ImGui::Selectable("Save (WIP)"))
       {
         Core::Serialization::SaveRegistryToFile(world, "TEST.bin");
       }
 
-      if (ImGui::Button("Load (WIP)"))
+      if (ImGui::Selectable("Load (WIP)"))
       {
         Core::Serialization::LoadRegistryFromFile(world, "TEST.bin");
       }
 
-      if (ImGui::Button("Exit to main menu"))
+      if (ImGui::Selectable("Exit to main menu"))
       {
         networking->reset();
         world.GetRegistryRaw().clear();
@@ -518,7 +441,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::MENU;
       }
 
-      if (ImGui::Button("Exit to desktop"))
+      if (ImGui::Selectable("Exit to desktop"))
       {
         world.GetRegistry().ctx().emplace<CloseApplication>();
       }
@@ -535,7 +458,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         ImGui::Text("%s", Core::Reflection::EnumToString(client->GetStatus()));
 
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Selectable("Cancel"))
         {
           networking->reset();
           gameState = GameState::MENU;
@@ -571,175 +494,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
   {
-    auto& registry = world.GetRegistryRaw();
-    if (ImGui::Begin("Entities"))
-    {
-      ZoneScopedN("Entities");
-      if (!ImGui::IsAnyItemHovered() && ImGui::IsWindowHovered() && ImGui::GetIO().MouseClicked[ImGuiMouseButton_Left])
-      {
-        selectedEntity = entt::null;
-      }
-
-      // Show entity hierarchy.
-      for (auto e : registry.view<entt::entity>())
-      {
-        ImGui::PushID((int)e);
-        bool opened = false;
-
-        int flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
-        if (selectedEntity == e)
-        {
-          flags |= ImGuiTreeNodeFlags_Selected;
-        }
-
-        if (auto* s = registry.try_get<const Name>(e))
-        {
-          opened = ImGui::TreeNodeEx("entity", flags, "%u (%s) (v%u)", entt::to_entity(e), s->name.c_str(), entt::to_version(e));
-        }
-        else
-        {
-          opened = ImGui::TreeNodeEx("entity", flags, "%u (v%u)", entt::to_entity(e), entt::to_version(e));
-        }
-
-        // Single-clicking anywhere should select the node
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-        {
-          selectedEntity = e;
-        }
-
-        if (opened)
-        {
-          ImGui::TextUnformatted("TODO lol");
-          ImGui::TreePop();
-        }
-        ImGui::Separator();
-        ImGui::PopID();
-      }
-    }
-    ImGui::End();
-
-    if (ImGui::Begin("Components"))
-    {
-      ZoneScopedN("Components");
-      if (registry.valid(selectedEntity))
-      {
-        auto e = selectedEntity;
-
-        if (ImGui::Button("Delete Entity"))
-        {
-          registry.emplace_or_replace<DeferredDelete>(e);
-        }
-        ImGui::SameLine();
-        if (ImGui::BeginCombo("##add", "Add Component"))
-        {
-          using MetaPair = decltype(*entt::resolve().begin());
-          auto metas     = std::vector<MetaPair>();
-          for (auto pair : entt::resolve())
-          {
-            if ((registry.storage(pair.first) && !registry.storage(pair.first)->contains(e)))
-            {
-              metas.emplace_back(pair);
-            }
-          }
-          std::sort(metas.begin(),
-            metas.end(),
-            [](const MetaPair& p1, const MetaPair& p2) { return FixupTypeString(p1.second.info().name()) < FixupTypeString(p2.second.info().name()); });
-
-          for (auto [id, meta] : metas)
-          {
-            if (meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::COMPONENT)
-            {
-              const auto label        = FixupTypeString(meta.info().name());
-              auto addFunc            = meta.func("add"_hs);
-              auto emplaceDefaultFunc = meta.func("EmplaceDefault"_hs);
-              int flags               = 0;
-              if ((!addFunc && !emplaceDefaultFunc) || meta.traits<Core::Reflection::Traits>() & Core::Reflection::EDITOR_READ_ONLY)
-              {
-                flags |= ImGuiSelectableFlags_Disabled;
-              }
-              if (ImGui::Selectable(label.c_str(), false, flags))
-              {
-                if (addFunc)
-                {
-                  addFunc.invoke({}, &world, e); // Can't figure out how to invoke with a reference (std::ref doesn't work), so pointers it is.
-                }
-                else if (emplaceDefaultFunc)
-                {
-                  emplaceDefaultFunc.invoke({}, &registry, e);
-                }
-                else
-                {
-                  // Sad face :(
-                  assert(false);
-                }
-              }
-            }
-          }
-          ImGui::EndCombo();
-        }
-
-        // Sort component types by name.
-        struct TypeInfo
-        {
-          entt::meta_type meta;
-          entt::sparse_set* set;
-          std::string fixupString;
-        };
-        static bool isInitialized = false; // Naughty hack to make this sorting only happen once.
-        static auto storages      = std::vector<TypeInfo>();
-        if (!isInitialized)
-        {
-          isInitialized = true;
-          for (auto pair : world.GetRegistryRaw().storage())
-          {
-            auto meta = entt::resolve(pair.first);
-            storages.emplace_back(meta, &pair.second, meta ? FixupTypeString(meta.info().name()) : std::string());
-          }
-          std::sort(storages.begin(),
-            storages.end(),
-            [](const TypeInfo& p1, const TypeInfo& p2)
-            {
-              if (p1.meta && p2.meta)
-              {
-                return p1.fixupString < p2.fixupString;
-              }
-              return p1.meta.id() < p2.meta.id();
-            });
-        }
-
-        for (int i = 0; auto&& [meta, storage, _] : storages)
-        {
-          if (!storage->contains(e))
-          {
-            continue;
-          }
-
-          ImGui::PushID(i++);
-          if (ImGui::Button("X"))
-          {
-            storage->remove(e);
-          }
-          ImGui::SameLine();
-          ImGui::SeparatorText(FixupTypeString(storage->type().name()).c_str());
-
-          if (storage->contains(e) && meta)
-          {
-            DrawComponentHelper(world,
-              e,
-              meta.from_void(storage->value(e)),
-              meta.custom(),
-              meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ_ONLY,
-              i);
-          }
-          else
-          {
-            ImGui::Text("Reflection is unavailable for this type.");
-          }
-          ImGui::PopID();
-        }
-      }
-    }
-    ImGui::End();
+    ShowEditor(dt, world);
 
     if (ImGui::Begin("Context"))
     {
