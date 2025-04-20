@@ -248,6 +248,7 @@ target_link_libraries(frogRender
     choc
     cereal
     spdlog
+    tomlplusplus::tomlplusplus
 )
 
 target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE VK_NO_PROTOTYPES GLFW_INCLUDE_NONE ImTextureID=ImU64)

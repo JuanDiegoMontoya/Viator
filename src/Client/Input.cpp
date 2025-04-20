@@ -151,20 +151,6 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     debug.forceShowCursor = !debug.forceShowCursor;
   }
 
-  // Close the app if the user presses Escape.
-  if (ImGui::GetKeyPressedAmount(ImGuiKey_Escape, 10000, 1))
-  {
-    auto& state = world.GetRegistry().ctx().get<GameState>();
-    if (state == GameState::PAUSED)
-    {
-      state = GameState::GAME;
-    }
-    else if (state == GameState::GAME)
-    {
-      state = GameState::PAUSED;
-    }
-  }
-
   // Sleep for a bit if the window is not focused
   if (!glfwGetWindowAttrib(window_, GLFW_FOCUSED) && !world.IsHosting())
   {

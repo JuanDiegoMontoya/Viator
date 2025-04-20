@@ -555,7 +555,8 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
       nullptr);
   }
 
-  if (auto gameState = world.GetRegistry().ctx().get<GameState>(); gameState == GameState::GAME || gameState == GameState::PAUSED)
+  if (auto gameState = world.GetRegistry().ctx().get<GameState>();
+    gameState == GameState::GAME || gameState == GameState::PAUSED || gameState == GameState::PAUSED_SETTINGS)
   {
     ctx.Barrier();
     RenderGame(dt, world, commandBuffer);
@@ -930,6 +931,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .internalColorSpace  = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex  = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         .noiseTexture        = noiseTexture->ImageView().GetTexture2D(),
+        .samples             = uint32_t(pathTracerSamples),
+        .bounces             = uint32_t(pathTracerBounces),
       });
       ctx.DispatchInvocations(frame.sceneIlluminance->GetCreateInfo().extent);
     }
@@ -986,6 +989,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   ctx.Barrier();
 
+  if (enableBloom)
   {
     ZoneScopedN("Bloom");
     bloom_.Apply(commandBuffer,

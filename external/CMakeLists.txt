@@ -137,6 +137,12 @@ FetchContent_Declare(
     GIT_TAG        0bddff3717d0df95810779821d5bc0b9fea775b2
 )
 
+FetchContent_Declare(
+    tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG        v3.4.0
+)
+
 set(DOUBLE_PRECISION OFF)
 #set(GENERATE_DEBUG_SYMBOLS ON)
 #set(OVERRIDE_CXX_FLAGS ON)
@@ -191,6 +197,7 @@ FetchContent_MakeAvailable(
     cereal
     spdlog
     enet
+    tomlplusplus
 )
 
 set(FSR2_SOURCE ${fsr2_SOURCE_DIR} PARENT_SCOPE)

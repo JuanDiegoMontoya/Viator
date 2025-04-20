@@ -29,16 +29,39 @@
 #include "entt/meta/container.hpp"
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
+#include "toml++/toml.hpp"
 
 #include <memory>
 #include <numeric>
 #include <type_traits>
 #include <future>
 #include <atomic>
+#include <fstream>
+#include <filesystem>
 
 namespace
 {
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
+  const auto sRendererSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
+  toml::parse_result sRendererConfig;
+  bool sConfigModified = false;
+
+  void SaveRendererConfig()
+  {
+    ZoneScoped;
+    spdlog::debug("Save renderer config.");
+    auto tempPath = sRendererSettingsPath;
+    tempPath += ".temp";
+    {
+      auto file = std::ofstream(tempPath, std::ios::out | std::ios::binary | std::ios::trunc);
+      if (!file)
+      {
+        throw std::runtime_error("Could not open file for writing");
+      }
+      file << sRendererConfig;
+    }
+    std::filesystem::rename(tempPath, sRendererSettingsPath);
+  }
 
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
@@ -136,8 +159,25 @@ namespace
   }
 } // namespace
 
+// Also used to discard unsaved changes to the config when exiting the options menu.
+void VoxelRenderer::LoadRendererConfig()
+{
+  ZoneScoped;
+  spdlog::debug("Load renderer config.");
+
+  sConfigModified = false;
+  auto _ = std::ofstream(sRendererSettingsPath, std::ios::in);
+  sRendererConfig   = toml::parse_file(sRendererSettingsPath.string());
+  pathTracerSamples = sRendererConfig["pathtracer"]["samples"].value_or(pathTracerSamples);
+  pathTracerBounces = sRendererConfig["pathtracer"]["bounces"].value_or(pathTracerBounces);
+  enableBloom       = sRendererConfig["bloom"]["enable"].value_or(enableBloom);
+}
+
 void VoxelRenderer::InitGui()
 {
+  ZoneScoped;
+  spdlog::info("Initializing GUI.");
+  LoadRendererConfig();
   // Attempt to load default layout, if it exists
   if (std::filesystem::exists(g_defaultIniPath) && !std::filesystem::is_directory(g_defaultIniPath))
   {
@@ -190,9 +230,56 @@ void VoxelRenderer::InitGui()
   style.IndentSpacing                   = 15;
 }
 
+bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
+{
+  if (ImGui::Begin("Settings"))
+  {
+    sConfigModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
+    sConfigModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
+    sConfigModified |= ImGui::Checkbox("Bloom", &enableBloom);
+
+    ImGui::BeginDisabled(!sConfigModified);
+    if (ImGui::Selectable(sConfigModified ? ICON_MD_PENDING "Apply###apply" : ICON_MD_CHECK "Apply###apply"))
+    {
+      auto pathtracer = toml::table();
+      pathtracer.insert_or_assign("samples", pathTracerSamples);
+      pathtracer.insert_or_assign("bounces", pathTracerBounces);
+      sRendererConfig.insert_or_assign("pathtracer", pathtracer);
+      auto bloom = toml::table();
+      bloom.insert_or_assign("enable", enableBloom);
+      sRendererConfig.insert_or_assign("bloom", bloom);
+      SaveRendererConfig();
+      sConfigModified = false;
+    }
+    ImGui::EndDisabled();
+    return true;
+  }
+  return false;
+}
+
 void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_unused]] VkCommandBuffer commandBuffer)
 {
   ZoneScoped;
+
+  // Toggle pause state if the user presses Escape.
+  if (ImGui::GetKeyPressedAmount(ImGuiKey_Escape, 10000, 1))
+  {
+    auto& state = world.GetRegistry().ctx().get<GameState>();
+    if (state == GameState::PAUSED)
+    {
+      state = GameState::GAME;
+    }
+    else if (state == GameState::PAUSED_SETTINGS)
+    {
+      LoadRendererConfig();
+      state = GameState::GAME;
+    }
+    else if (state == GameState::GAME)
+    {
+      state = GameState::PAUSED;
+    }
+  }
+
   switch (auto& gameState = world.GetRegistry().ctx().get<GameState>())
   {
   case GameState::MENU:
@@ -211,6 +298,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
         world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
         world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
+      }
+
+      if (ImGui::Selectable("Settings"))
+      {
+        gameState = GameState::MENU_SETTINGS;
       }
 
       auto& networking          = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
@@ -406,6 +498,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::GAME;
       }
 
+      if (ImGui::Selectable("Settings"))
+      {
+        gameState = GameState::PAUSED_SETTINGS;
+      }
+
       auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
 
       ImGui::BeginDisabled(networking->get());
@@ -489,7 +586,40 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     break;
   }
-  default: assert(0);
+  case GameState::MENU_SETTINGS:
+  {
+    if (ShowSettingsWindow(world) && ImGui::Selectable("Back"))
+    {
+      LoadRendererConfig();
+      gameState = GameState::MENU;
+    }
+    ImGui::End();
+    break;
+  }
+  case GameState::PAUSED_SETTINGS:
+  {
+    if (ShowSettingsWindow(world) && ImGui::Selectable("Back"))
+    {
+      LoadRendererConfig();
+      gameState = GameState::PAUSED;
+    }
+    ImGui::End();
+    break;
+  }
+  case GameState::SERVER_SELECT:
+  {
+    if (ImGui::Begin(""))
+    {
+      ImGui::Text("Server select");
+      if (ImGui::Selectable("Back"))
+      {
+        gameState = GameState::MENU;
+      }
+    }
+    ImGui::End();
+    break;
+  }
+  default: DEBUG_ASSERT(0);
   }
 
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
@@ -506,13 +636,18 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
 
-      ImGui::Text("Game state: %s", GameStateToStr(ctx.get<GameState>()));
+      ImGui::Text("Game state: %s", Core::Reflection::EnumToString(ctx.get<GameState>()));
       ImGui::Text("Time: %f", ctx.get<float>("time"_hs));
 
       ImGui::SliderFloat("Time Scale", &ctx.get<TimeScale>().scale, 0, 4, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
       auto min = uint32_t(5);
       auto max = uint32_t(120);
       ImGui::SliderScalar("Tick Rate", ImGuiDataType_U32, &world.GetRegistry().ctx().get<TickRate>().hz, &min, &max, "%u", ImGuiSliderFlags_AlwaysClamp);
+
+      if (ImGui::Selectable("Save UI layout"))
+      {
+        ImGui::SaveIniSettingsToDisk(g_defaultIniPath.c_str());
+      }
     }
     ImGui::End();
 

@@ -1178,18 +1178,10 @@ enum class GameState
   GAME,
   PAUSED,
   LOADING,
+  MENU_SETTINGS,
+  PAUSED_SETTINGS,
+  SERVER_SELECT,
 };
-
-inline const char* GameStateToStr(GameState g)
-{
-  if (g == GameState::MENU)
-    return "MENU";
-  if (g == GameState::GAME)
-    return "GAME";
-  if (g == GameState::PAUSED)
-    return "PAUSED";
-  return "UNKNOWN";
-}
 
 enum class InputAxis
 {

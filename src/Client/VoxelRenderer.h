@@ -97,7 +97,9 @@ public:
 private:
 
   void InitGui();
+  void LoadRendererConfig();
   void ShowEditor(DeltaTime dt, World& world);
+  bool ShowSettingsWindow(World& world);
   void OnFramebufferResize(uint32_t newWidth, uint32_t newHeight);
   void OnRender(double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex);
   void RenderGame(double dt, World& world, VkCommandBuffer commandBuffer);
@@ -159,4 +161,8 @@ private:
   std::unordered_map<std::string, Fvog::Texture> stringToTexture;
   PlayerHead* head_;
   entt::entity selectedEntity = entt::null;
+
+  int32_t pathTracerSamples = 1;
+  int32_t pathTracerBounces = 2;
+  bool enableBloom          = true;
 };

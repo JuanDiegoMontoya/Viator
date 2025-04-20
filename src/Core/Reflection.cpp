@@ -862,4 +862,13 @@ void Core::Reflection::Initialize()
     DATA(Networking::ClientNetworkInfo, roundTripTime)
     DATA(Networking::ClientNetworkInfo, roundTripTimeVariance)
     DATA(Networking::ClientNetworkInfo, packetLoss);
+
+  REFLECT_ENUM(GameState)
+    ENUMERATOR(GameState, MENU)
+    ENUMERATOR(GameState, GAME)
+    ENUMERATOR(GameState, PAUSED)
+    ENUMERATOR(GameState, LOADING)
+    ENUMERATOR(GameState, MENU_SETTINGS)
+    ENUMERATOR(GameState, PAUSED_SETTINGS)
+    ENUMERATOR(GameState, SERVER_SELECT);
 }

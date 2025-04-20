@@ -1,0 +1,6 @@
+[bloom]
+enable = true
+
+[pathtracer]
+bounces = 2
+samples = 1

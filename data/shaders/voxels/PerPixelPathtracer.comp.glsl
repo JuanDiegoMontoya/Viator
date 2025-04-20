@@ -28,8 +28,6 @@ void main()
     return;
   }
 
-  const uint samples = 1;
-  const uint bounces = 2;
   indirectIlluminance += TraceIndirectLighting(gid, positionWorld + normal * 1e-3, normal, samples, bounces, noiseTexture);
 
   // Technically direct lighting, but since it's noisy it'll be lumped in with the indirect.

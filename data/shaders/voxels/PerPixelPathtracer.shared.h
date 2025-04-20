@@ -17,6 +17,8 @@ FVOG_DECLARE_ARGUMENTS(PerPixelPathtracerArguments)
   FVOG_UINT32 internalColorSpace;
   FVOG_UINT32 uniformBufferIndex;
   Texture2D noiseTexture;
+  FVOG_UINT32 samples;
+  FVOG_UINT32 bounces;
 };
 
 #endif // PER_PIXEL_PATH_TRACER_H
