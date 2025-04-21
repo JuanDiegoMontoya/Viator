@@ -1,5 +1,6 @@
 #include "TonemapAndDither.shared.h"
 #include "../Color.h.glsl"
+#include "Grain.h.glsl"
 
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -208,6 +209,12 @@ void main()
     tonemappedColor = GTMapper(hdrColor, uniforms.gt, uniforms.maxDisplayNits);
   }
 
+  // Experimental film curve + film grain by sam_izdat.
+  if (uniforms.tonemapper == 4)
+  {
+    tonemappedColor = grain_ColorPass(1, 0, 1, 0.0, 0.5, 0.5, 0, 0, targetDim, vec2(gid) + 0.5, hdrColor);
+  }
+
   vec3 outputColor = ConvertShadingToTonemapOutputColorSpace(tonemappedColor, uniforms.shadingInternalColorSpace, uniforms.tonemapOutputColorSpace);
 
   vec3 ditheredColor = outputColor;
@@ -216,6 +223,6 @@ void main()
   {
     ditheredColor = apply_dither(outputColor, uv, uniforms.quantizeBits);
   }
-
+  
   imageStore(outputImage, gid, vec4(ditheredColor, 1.0));
 }
