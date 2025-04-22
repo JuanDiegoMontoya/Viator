@@ -51,7 +51,6 @@ namespace Techniques
     assert(args.sceneDepth);
     assert(args.sceneIlluminance);
     assert(args.sceneIlluminancePingPong);
-    assert(args.sceneColor);
     auto ctx = Fvog::Context(commandBuffer);
 
     ctx.Barrier();

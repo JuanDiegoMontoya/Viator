@@ -4524,7 +4524,7 @@ static void* POOL_thread(void* opaque) {
             ZSTD_pthread_mutex_unlock(&ctx->queueMutex);
         }
     }  /* for (;;) */
-    assert(0);  /* Unreachable */
+    //assert(0);  /* Unreachable */
 }
 
 /* ZSTD_createThreadPool() : public access point */

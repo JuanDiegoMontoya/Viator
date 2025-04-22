@@ -745,6 +745,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::SERVER_SELECT;
       }
     }
+    ImGui::End();
     break;
   }
   default: DEBUG_ASSERT(0);
