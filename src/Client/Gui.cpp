@@ -43,8 +43,18 @@ namespace
 {
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
   const auto sRendererSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
+  const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
+
+  // Rendering
   toml::parse_result sRendererConfig;
-  bool sConfigModified = false;
+  bool sRendererConfigModified = false;
+
+  // Networking
+  toml::parse_result sServerList;
+  std::string sSelectedServerName;
+  std::string sHostName    = std::string(256, '\0');
+  std::string sHostAddress = std::string(256, '\0');
+  uint16_t sHostPort       = 1234;
 
   void SaveRendererConfig()
   {
@@ -61,6 +71,32 @@ namespace
       file << sRendererConfig;
     }
     std::filesystem::rename(tempPath, sRendererSettingsPath);
+  }
+
+  void LoadServerList()
+  {
+    ZoneScoped;
+    spdlog::debug("Load server list.");
+    // Ensure file exists before attempting to parse it.
+    auto file = std::fstream(sServerListPath, std::fstream::in | std::fstream::out | std::fstream::app);
+    sServerList = toml::parse(file);
+  }
+
+  void SaveServerList()
+  {
+    ZoneScoped;
+    spdlog::debug("Save server list.");
+    auto tempPath = sServerListPath;
+    tempPath += ".temp";
+    {
+      auto file = std::ofstream(tempPath, std::ios::out | std::ios::binary | std::ios::trunc);
+      if (!file)
+      {
+        throw std::runtime_error("Could not open file for writing");
+      }
+      file << sServerList;
+    }
+    std::filesystem::rename(tempPath, sServerListPath);
   }
 
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
@@ -165,9 +201,9 @@ void VoxelRenderer::LoadRendererConfig()
   ZoneScoped;
   spdlog::debug("Load renderer config.");
 
-  sConfigModified = false;
-  auto _ = std::ofstream(sRendererSettingsPath, std::ios::in);
-  sRendererConfig   = toml::parse_file(sRendererSettingsPath.string());
+  sRendererConfigModified = false;
+  auto file = std::fstream(sRendererSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
+  sRendererConfig   = toml::parse(file);
   pathTracerSamples = sRendererConfig["pathtracer"]["samples"].value_or(pathTracerSamples);
   pathTracerBounces = sRendererConfig["pathtracer"]["bounces"].value_or(pathTracerBounces);
   enableBloom       = sRendererConfig["bloom"]["enable"].value_or(enableBloom);
@@ -234,12 +270,13 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 {
   if (ImGui::Begin("Settings"))
   {
-    sConfigModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
-    sConfigModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
-    sConfigModified |= ImGui::Checkbox("Bloom", &enableBloom);
+    sRendererConfigModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
+    sRendererConfigModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
+    sRendererConfigModified |= ImGui::Checkbox("Bloom", &enableBloom);
 
-    ImGui::BeginDisabled(!sConfigModified);
-    if (ImGui::Selectable(sConfigModified ? ICON_MD_PENDING "Apply###apply" : ICON_MD_CHECK "Apply###apply"))
+    ImGui::Separator();
+    ImGui::BeginDisabled(!sRendererConfigModified);
+    if (ImGui::Button("Apply###apply"))
     {
       auto pathtracer = toml::table();
       pathtracer.insert_or_assign("samples", pathTracerSamples);
@@ -249,7 +286,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       bloom.insert_or_assign("enable", enableBloom);
       sRendererConfig.insert_or_assign("bloom", bloom);
       SaveRendererConfig();
-      sConfigModified = false;
+      sRendererConfigModified = false;
     }
     ImGui::EndDisabled();
     return true;
@@ -285,7 +322,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   case GameState::MENU:
     if (ImGui::Begin("Menu"))
     {
-      if (ImGui::Selectable("Play"))
+      if (ImGui::Selectable("Singleplayer"))
       {
         gameState = GameState::LOADING;
         world.InitializeGameState();
@@ -300,21 +337,17 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
       }
 
+      if (ImGui::Selectable("Multiplayer"))
+      {
+        LoadServerList();
+        sSelectedServerName = std::string();
+        gameState = GameState::SERVER_SELECT;
+      }
+
       if (ImGui::Selectable("Settings"))
       {
         gameState = GameState::MENU_SETTINGS;
       }
-
-      auto& networking          = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
-      static char hostName[256] = "localhost";
-      ImGui::InputText("##Host", hostName, 256);
-      ImGui::BeginDisabled(networking->get() != nullptr);
-      if (ImGui::Selectable("Connect (WIP)"))
-      {
-        *networking = std::make_unique<Networking::Client>(world, hostName);
-        gameState   = GameState::LOADING;
-      }
-      ImGui::EndDisabled();
 
       if (ImGui::Selectable("Exit to desktop"))
       {
@@ -588,35 +621,130 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   }
   case GameState::MENU_SETTINGS:
   {
-    if (ShowSettingsWindow(world) && ImGui::Selectable("Back"))
+    if (ShowSettingsWindow(world))
     {
-      LoadRendererConfig();
-      gameState = GameState::MENU;
+      ImGui::SameLine();
+      if (ImGui::Button("Back"))
+      {
+        LoadRendererConfig();
+        gameState = GameState::MENU;
+      }
     }
     ImGui::End();
     break;
   }
   case GameState::PAUSED_SETTINGS:
   {
-    if (ShowSettingsWindow(world) && ImGui::Selectable("Back"))
+    if (ShowSettingsWindow(world))
     {
-      LoadRendererConfig();
-      gameState = GameState::PAUSED;
+      ImGui::SameLine();
+      if (ImGui::Button("Back"))
+      {
+        LoadRendererConfig();
+        gameState = GameState::PAUSED;
+      }
     }
     ImGui::End();
     break;
   }
   case GameState::SERVER_SELECT:
   {
-    if (ImGui::Begin(""))
+    if (ImGui::Begin("Server Select"))
     {
-      ImGui::Text("Server select");
-      if (ImGui::Selectable("Back"))
+      for (auto&& [k, v] : sServerList)
+      {
+        if (v.is_table())
+        {
+          auto serverName = k.str();
+          
+          if (ImGui::Selectable(std::string(serverName).c_str(), sSelectedServerName == serverName))
+          {
+            sSelectedServerName = serverName;
+          }
+        }
+      }
+
+      ImGui::Separator();
+
+      {
+        auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+        const auto table  = sServerList.get_as<toml::table>(sSelectedServerName);
+        ImGui::BeginDisabled(!table);
+        if (ImGui::Button("Join Server"))
+        {
+          auto address               = (*table)["address"].value_or(std::string_view("localhost"));
+          [[maybe_unused]] auto port = (*table)["port"].value_or(1234);
+          *networking = std::make_unique<Networking::Client>(world, std::string(address).c_str());
+          gameState   = GameState::LOADING;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Delete"))
+        {
+          sServerList.erase(sSelectedServerName);
+          SaveServerList();
+        }
+        ImGui::EndDisabled();
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Add Server"))
+      {
+        sHostName = std::string(256, '\0');
+        const auto init = "Server";
+        std::memcpy(sHostName.data(), init, std::strlen(init));
+        sHostAddress  = std::string(256, '\0');
+        sHostPort      = 1234;
+        gameState = GameState::SERVER_SELECT_ADD_SERVER;
+      }
+
+      if (ImGui::Button("Back"))
       {
         gameState = GameState::MENU;
       }
     }
     ImGui::End();
+    break;
+  }
+  case GameState::SERVER_SELECT_ADD_SERVER:
+  {
+    if (ImGui::Begin("Add Server"))
+    {
+      ImGui::Text("Name");
+
+      ImGui::PushItemWidth(158);
+      ImGui::InputText("###hostname", sHostName.data(), sHostName.size());
+      ImGui::PopItemWidth();
+
+      ImGui::Text("Address");
+
+      ImGui::PushItemWidth(100);
+      ImGui::InputText("##Host", sHostAddress.data(), sHostAddress.size());
+      ImGui::PopItemWidth();
+
+      ImGui::SameLine();
+      ImGui::PushItemWidth(50);
+      ImGui::InputScalar("##Port", ImGuiDataType_U16, &sHostPort, nullptr, nullptr, "%hu");
+      ImGui::PopItemWidth();
+
+      ImGui::BeginDisabled(sServerList.contains(sHostName) || std::strlen(sHostName.c_str()) == 0);
+      if (ImGui::Button("Done"))
+      {
+        auto table = toml::table();
+        // Use C strings when inserting, otherwise all the NULs at the end of the string appear in the file as \u0000.
+        table.insert("address", sHostAddress.c_str());
+        table.insert("port", sHostPort);
+        sServerList.insert(sHostName.c_str(), table);
+        SaveServerList();
+        gameState = GameState::SERVER_SELECT;
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SameLine();
+      if (ImGui::Button("Back"))
+      {
+        gameState = GameState::SERVER_SELECT;
+      }
+    }
     break;
   }
   default: DEBUG_ASSERT(0);

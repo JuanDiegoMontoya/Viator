@@ -1181,6 +1181,7 @@ enum class GameState
   MENU_SETTINGS,
   PAUSED_SETTINGS,
   SERVER_SELECT,
+  SERVER_SELECT_ADD_SERVER,
 };
 
 enum class InputAxis
