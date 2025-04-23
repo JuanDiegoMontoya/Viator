@@ -442,6 +442,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
 
   noiseTexture = LoadImageFile("bluenoise256.png", false);
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
+  backgroundTexture = LoadImageFile("background.png", false);
+
   tonemapUniforms.tonemapper                = 1;
   tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
   tonemapUniforms.enableDithering           = 1;
@@ -555,12 +557,14 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
       nullptr);
   }
 
+  bool sceneWasRendered = false;
   if (auto gameState = world.GetRegistry().ctx().get<GameState>();
     gameState == GameState::GAME || gameState == GameState::PAUSED || gameState == GameState::PAUSED_SETTINGS)
   {
     ctx.Barrier();
     RenderGame(dt, world, commandBuffer);
     ctx.Barrier();
+    sceneWasRendered = true;
   }
 
   ctx.ImageBarrier(head_->swapchainImages_[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
@@ -598,7 +602,8 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
   vkCmdSetScissor(commandBuffer, 0, 1, &renderArea);
   ctx.BindGraphicsPipeline(debugTexturePipeline.GetPipeline());
   auto pushConstants = Temp::DebugTextureArguments{
-    .textureIndex = frame.sceneColorTonemapped->ImageView().GetSampledResourceHandle().index,
+    .textureIndex = sceneWasRendered ? frame.sceneColorTonemapped->ImageView().GetSampledResourceHandle().index
+                                     : backgroundTexture.value().ImageView().GetSampledResourceHandle().index,
     .samplerIndex = nearestSampler.GetResourceHandle().index,
   };
 
