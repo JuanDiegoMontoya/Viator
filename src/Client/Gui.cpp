@@ -635,8 +635,28 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SameLine();
       if (ImGui::Button("Delete"))
       {
-        std::filesystem::remove(sSelectedWorld.value());
-        sSelectedWorld = std::nullopt;
+        ImGui::OpenPopup("Delete?");
+      }
+
+      ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+      ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+      if (ImGui::BeginPopupModal("Delete?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+      {
+        ImGui::Text("Are you sure?");
+        ImGui::Separator();
+        if (ImGui::Button("Yes"))
+        {
+          std::filesystem::remove(sSelectedWorld.value());
+          sSelectedWorld = std::nullopt;
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel"))
+        {
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
       }
       ImGui::EndDisabled();
 
@@ -771,10 +791,30 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         ImGui::SameLine();
         if (ImGui::Button("Delete"))
         {
-          sServerList.erase(sSelectedServerName);
-          SaveServerList();
+          ImGui::OpenPopup("Delete?");
         }
         ImGui::EndDisabled();
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Delete?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+        {
+          ImGui::Text("Are you sure?");
+          ImGui::Separator();
+          if (ImGui::Button("Yes"))
+          {
+            sServerList.erase(sSelectedServerName);
+            SaveServerList();
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::SameLine();
+          if (ImGui::Button("Cancel"))
+          {
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::EndPopup();
+        }
       }
 
       ImGui::SameLine();
