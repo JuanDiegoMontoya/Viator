@@ -358,6 +358,7 @@ namespace Core::Serialization
     spdlog::info("Saving world {}", path);
     const auto& registry = world.GetRegistryRaw();
     auto file            = std::ofstream(path, std::ios::binary | std::ios::out | std::ios::trunc);
+    ASSERT(file);
     auto outputArchive   = cereal::BinaryOutputArchive(file);
 
     // Save relevant context variables.
@@ -400,15 +401,10 @@ namespace Core::Serialization
     auto& registry     = world.GetRegistryRaw();
     auto remoteToLocalTemp = std::unordered_map<entt::entity, entt::entity>();
     auto localToRemoteTemp = std::unordered_map<entt::entity, entt::entity>();
-    {
-      ZoneScopedN("registry.clear()");
-      registry.clear(); // Required to invoke on_destroy observers. In particular, for cleaning up physics objects.
-    }
-    registry = {};
-    CreateContextVariablesAndObservers(world);
-    registry.ctx().get<GameState>() = GameState::PAUSED;
+    world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Loading world";
 
     auto file = std::ifstream(path, std::ios::binary | std::ios::in);
+    ASSERT(file);
 
     {
       auto inputArchive = cereal::BinaryInputArchive(file);
@@ -575,7 +571,18 @@ namespace Core::Serialization
         }
         else
         {
-          localEntity = registry.create();
+          if (doRemap)
+          {
+            // Loading from network, don't remap. This will make errors in our remapping code more obvious.
+            localEntity = registry.create();
+          }
+          else
+          {
+            // When loading from a save, we just want to recreate the entities 1:1 without a remap.
+            // There are no local entities to mess this up.
+            localEntity = registry.create(remoteEntity);
+            DEBUG_ASSERT(localEntity == remoteEntity);
+          }
           remoteToLocal.emplace(remoteEntity, localEntity);
           localToRemote.emplace(localEntity, remoteEntity);
           SPDLOG_TRACE("Created new entity mapping: {} (local) to {} (remote)", entt::to_integral(localEntity), entt::to_integral(remoteEntity));

@@ -44,6 +44,11 @@ namespace
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
   const auto sRendererSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
   const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
+  const auto sSavesDirectory = GetAssetDirectory() / "saves";
+  const auto sWorldSavesDirectory  = sSavesDirectory / "worlds";
+  const auto sCharacterSavesDirectory  = sSavesDirectory / "characters";
+
+  auto sSelectedWorld = std::optional<std::filesystem::path>();
 
   // Rendering
   toml::parse_result sRendererConfig;
@@ -324,17 +329,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     {
       if (ImGui::Selectable("Singleplayer"))
       {
-        gameState = GameState::LOADING;
-        world.InitializeGameState();
-        // emplace_as doesn't overwrite context variables, so we have to first erase them (erase returns false if it failed, which is ok).
-        world.GetRegistry().ctx().erase<std::atomic<const char*>>("progressText"_hs);
-        world.GetRegistry().ctx().erase<std::atomic_int32_t>("progress"_hs);
-        world.GetRegistry().ctx().erase<std::atomic_int32_t>("total"_hs);
-        world.GetRegistry().ctx().erase<std::future<void>>("loading"_hs);
-        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
-        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
+        sSelectedWorld = std::nullopt;
+        gameState = GameState::WORLD_SELECT;
       }
 
       if (ImGui::Selectable("Multiplayer"))
@@ -524,6 +520,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     break;
   }
   case GameState::PAUSED:
+  {
     if (ImGui::Begin("Paused"))
     {
       if (ImGui::Selectable("Resume"))
@@ -554,12 +551,30 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
       if (ImGui::Selectable("Save (WIP)"))
       {
-        Core::Serialization::SaveRegistryToFile(world, "TEST.bin");
+        if (!std::filesystem::is_directory(sWorldSavesDirectory))
+        {
+          std::filesystem::create_directories(sWorldSavesDirectory);
+        }
+        Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.GetRegistry().ctx().get<std::string>("WorldName"_hs) + ".rizz"));
       }
 
       if (ImGui::Selectable("Load (WIP)"))
       {
-        Core::Serialization::LoadRegistryFromFile(world, "TEST.bin");
+        if (!std::filesystem::is_directory(sWorldSavesDirectory))
+        {
+          std::filesystem::create_directories(sWorldSavesDirectory);
+        }
+        const auto worldName = world.GetRegistry().ctx().get<std::string>("WorldName"_hs);
+
+        world.GetRegistryRaw().clear();
+        world.GetRegistryRaw() = {};
+        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, worldName);
+        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
+        CreateContextVariablesAndObservers(world);
+        world.GetRegistry().ctx().get<GameState>() = GameState::PAUSED;
+        Core::Serialization::LoadRegistryFromFile(world, sWorldSavesDirectory / (worldName + ".rizz"));
       }
 
       if (ImGui::Selectable("Exit to main menu"))
@@ -578,27 +593,82 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
     break;
-  case GameState::LOADING:
+  }
+  case GameState::WORLD_SELECT:
   {
-    if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+    ZoneScopedN("World Select");
+    if (ImGui::Begin("World Select"))
     {
-      auto* client = dynamic_cast<Networking::Client*>(networking->get());
-      ASSERT(client);
-      if (ImGui::Begin("Loading"))
+      if (std::filesystem::is_directory(sWorldSavesDirectory))
       {
-        ImGui::Text("%s", Core::Reflection::EnumToString(client->GetStatus()));
-
-        if (ImGui::Selectable("Cancel"))
+        for (int i = 0; const auto& entry : std::filesystem::directory_iterator(sWorldSavesDirectory))
         {
-          networking->reset();
-          gameState = GameState::MENU;
+          ImGui::PushID(i++);
+          if (entry.is_regular_file() && ImGui::Selectable(entry.path().stem().string().c_str(), entry.path() == sSelectedWorld))
+          {
+            sSelectedWorld = entry.path();
+          }
+          ImGui::PopID();
         }
       }
-      ImGui::End();
-      break;
-    }
 
-    // There is an ongoing connection attempt or the world is loading.
+      ImGui::BeginDisabled(!sSelectedWorld.has_value());
+      if (ImGui::Button("Load"))
+      {
+        world.GetRegistryRaw().clear();
+        world.GetRegistryRaw() = {};
+        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
+        CreateContextVariablesAndObservers(world);
+        world.GetRegistry().ctx().get<GameState>() = GameState::LOADING_SP;
+        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
+          std::async(std::launch::async,
+            [&world, path = sSelectedWorld.value()]
+            {
+              Core::Serialization::LoadRegistryFromFile(world, path);
+              world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, path.stem().string());
+            }));
+        sSelectedWorld = std::nullopt;
+      }
+
+      ImGui::SameLine();
+      if (ImGui::Button("Delete"))
+      {
+        std::filesystem::remove(sSelectedWorld.value());
+        sSelectedWorld = std::nullopt;
+      }
+      ImGui::EndDisabled();
+
+      static char newWorldName[256] = "World";
+      ImGui::InputText("Name", newWorldName, 256);
+      if (ImGui::Button("Create"))
+      {
+        world.InitializeGameState();
+        // emplace_as doesn't overwrite context variables, so we have to first erase them (erase returns false if it failed, which is ok).
+        world.GetRegistry().ctx().erase<std::string>("WorldName"_hs);
+        world.GetRegistry().ctx().erase<std::atomic<const char*>>("progressText"_hs);
+        world.GetRegistry().ctx().erase<std::atomic_int32_t>("progress"_hs);
+        world.GetRegistry().ctx().erase<std::atomic_int32_t>("total"_hs);
+        world.GetRegistry().ctx().erase<std::future<void>>("loading"_hs);
+        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, newWorldName);
+        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
+        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
+        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
+        gameState = GameState::LOADING_SP;
+      }
+
+      if (ImGui::Button("Back"))
+      {
+        gameState = GameState::MENU;
+      }
+    }
+    ImGui::End();
+    break;
+  }
+  case GameState::LOADING_SP:
+  {
     auto& future = world.GetRegistry().ctx().get<std::future<void>>("loading"_hs);
     using namespace std::chrono_literals;
     if (future.wait_for(0s) == std::future_status::ready)
@@ -618,6 +688,27 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::End();
     }
     break;
+  }
+  case GameState::LOADING_MP:
+  {
+    if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+    {
+      auto* client = dynamic_cast<Networking::Client*>(networking->get());
+      ASSERT(client);
+      if (ImGui::Begin("Loading"))
+      {
+        ImGui::Text("%s", Core::Reflection::EnumToString(client->GetStatus()));
+
+        if (ImGui::Selectable("Cancel"))
+        {
+          networking->reset();
+          gameState = GameState::SERVER_SELECT;
+        }
+      }
+      ImGui::End();
+      break;
+    }
+    UNREACHABLE;
   }
   case GameState::MENU_SETTINGS:
   {
@@ -675,7 +766,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           auto address               = (*table)["address"].value_or(std::string_view("localhost"));
           [[maybe_unused]] auto port = (*table)["port"].value_or(1234);
           *networking = std::make_unique<Networking::Client>(world, std::string(address).c_str());
-          gameState   = GameState::LOADING;
+          gameState   = GameState::LOADING_MP;
         }
         ImGui::SameLine();
         if (ImGui::Button("Delete"))
