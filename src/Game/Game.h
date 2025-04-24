@@ -317,6 +317,11 @@ class RegistryProxy
 public:
   explicit RegistryProxy(entt::registry& registry) : registry_(&registry) {}
 
+  [[nodiscard]] const entt::registry& GetRaw() const
+  {
+    return *registry_;
+  }
+
   [[nodiscard]] auto create()
   {
     return registry_->create();
@@ -522,7 +527,13 @@ public:
 
   void InitializeGameDefinitions();
 
-  void GenerateMap();
+  struct MapGenInfo
+  {
+  };
+
+  void CreateGrid(glm::ivec3 numChunks);
+  void CreateInitialEntities();
+  void GenerateMap(const MapGenInfo& mapGenInfo);
 
   // Adds LocalTransform, GlobalTransform, InterpolatedTransform, RenderTransform, and Hierarchy components.
   entt::entity CreateRenderableEntityNoHashGrid(glm::vec3 position, glm::quat rotation = glm::quat(1, 0, 0, 0), float scale = 1);

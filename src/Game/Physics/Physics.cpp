@@ -250,7 +250,7 @@ namespace Physics
           refShape = settings.Create().Get();
         },
         [&](Plane plane) { refShape = new JPH::PlaneShape(JPH::Plane(ToJolt(plane.normal), plane.constant)); },
-        [&](UseTwoLevelGrid) { refShape = new TwoLevelGridShape(registry.ctx().get<TwoLevelGrid>()); },
+        [&](UseTwoLevelGrid) { refShape = new TwoLevelGridShape(registry.GetRaw()); },
       },
       shape.shape);
 

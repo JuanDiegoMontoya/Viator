@@ -5,15 +5,19 @@
 #include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "Jolt/Physics/Collision/CollideShape.h"
 #include "Jolt/Physics/Collision/CollisionDispatch.h"
+#include "entt/entity/registry.hpp"
 
 namespace Physics
 {
   class TwoLevelGridShape final : public JPH::Shape
   {
   public:
-    TwoLevelGridShape(const TwoLevelGrid& twoLevelGrid) : Shape(JPH::EShapeType::User1, JPH::EShapeSubType::User1), twoLevelGrid_(&twoLevelGrid) {}
+    TwoLevelGridShape(const entt::registry& registry) : Shape(JPH::EShapeType::User1, JPH::EShapeSubType::User1), registry_(&registry) {}
 
-    const TwoLevelGrid* twoLevelGrid_;
+  private:
+    const entt::registry* registry_;
+    const TwoLevelGrid& GetTwoLevelGrid() const;
+  public:
 
     static void CollideTwoLevelGrid(const Shape* inShape1,
       const Shape* inShape2,

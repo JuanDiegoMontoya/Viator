@@ -1,4 +1,5 @@
 #include "TwoLevelGridShape.h"
+#include "../Game.h"
 
 #include "PhysicsUtils.h"
 
@@ -20,6 +21,11 @@ constexpr float VX_EPSILON = 0;
 
 // Amount by which to expand the AABB of shapes tested against the grid. This is a hack to make the player not stick to surfaces.
 constexpr float VX_AABB_EPSILON = 1e-1f;
+
+const TwoLevelGrid& Physics::TwoLevelGridShape::GetTwoLevelGrid() const
+{
+  return registry_->ctx().get<TwoLevelGrid>();
+}
 
 void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
   const Shape* inShape2,
@@ -49,7 +55,7 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
   for (int x = (int)std::floor(s2min.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(s2max.GetX() + VX_AABB_EPSILON); x++)
   {
     // Skip voxel if non-solid
-    if (!s1->twoLevelGrid_->IsVoxelSolid(s1->twoLevelGrid_->GetVoxelAt({x, y, z})))
+    if (!s1->GetTwoLevelGrid().IsVoxelSolid(s1->GetTwoLevelGrid().GetVoxelAt({x, y, z})))
     {
       continue;
     }
@@ -113,7 +119,7 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
   for (int x = (int)std::floor(castMin.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(castMax.GetX() + VX_AABB_EPSILON); x++)
   {
     // Skip voxel if non-solid
-    if (!s2->twoLevelGrid_->IsVoxelSolid(s2->twoLevelGrid_->GetVoxelAt({x, y, z})))
+    if (!s2->GetTwoLevelGrid().IsVoxelSolid(s2->GetTwoLevelGrid().GetVoxelAt({x, y, z})))
     {
       continue;
     }
@@ -158,7 +164,7 @@ void Physics::TwoLevelGridShape::CastRay(const JPH::RayCast& inRay,
   const auto direction = Physics::ToGlm(inRay.mDirection.Normalized());
   auto tMax = inRay.mDirection.Length();
   const auto origin = Physics::ToGlm(inRay.mOrigin);
-  if (twoLevelGrid_->TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
+  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
   {
     auto id     = inSubShapeIDCreator.PushID(TwoLevelGrid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
     auto result = JPH::CastRayCollector::ResultType();
@@ -180,7 +186,7 @@ bool Physics::TwoLevelGridShape::CastRay([[maybe_unused]] const JPH::RayCast& in
   const auto direction = glm::normalize(Physics::ToGlm(inRay.mDirection));
   const auto tMax      = inRay.mDirection.Length();
   auto hit = TwoLevelGrid::HitSurfaceParameters();
-  if (twoLevelGrid_->TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
+  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
   {
     const auto hitFraction = glm::distance(origin, hit.positionWorld) / tMax;
     if (hitFraction >= ioHit.GetEarlyOutFraction())
@@ -219,13 +225,13 @@ void Physics::TwoLevelGridShape::CollideSoftBodyVertices([[maybe_unused]] JPH::M
 
 float Physics::TwoLevelGridShape::GetInnerRadius() const
 {
-  return float(glm::compMin(twoLevelGrid_->dimensions_)) / 2.0f;
+  return float(glm::compMin(GetTwoLevelGrid().dimensions_)) / 2.0f;
 }
 
 JPH::AABox Physics::TwoLevelGridShape::GetLocalBounds() const
 {
   return JPH::AABox(JPH::Vec3Arg(0, 0, 0),
-    JPH::Vec3Arg((float)twoLevelGrid_->dimensions_.x, (float)twoLevelGrid_->dimensions_.y, (float)twoLevelGrid_->dimensions_.z));
+    JPH::Vec3Arg((float)GetTwoLevelGrid().dimensions_.x, (float)GetTwoLevelGrid().dimensions_.y, (float)GetTwoLevelGrid().dimensions_.z));
 }
 
 JPH::MassProperties Physics::TwoLevelGridShape::GetMassProperties() const
@@ -283,12 +289,12 @@ JPH::Vec3 Physics::TwoLevelGridShape::GetSurfaceNormal([[maybe_unused]] const JP
   const auto v0pos = glm::ivec3(glm::floor(ToGlm(pos0)));
   const auto v1pos = glm::ivec3(glm::floor(ToGlm(pos1)));
 
-  [[maybe_unused]] auto v0 = twoLevelGrid_->GetVoxelAt(v0pos);
+  [[maybe_unused]] auto v0 = GetTwoLevelGrid().GetVoxelAt(v0pos);
 
   // Choose position of solid voxel, which is the one we're colliding with. If both voxels are solid (which shouldn't happen), pick an arbitrary position.
   auto solidVoxel = JPH::Vec3();
   [[maybe_unused]] auto airVoxel = JPH::Vec3();
-  if (twoLevelGrid_->IsVoxelSolid(v0))
+  if (GetTwoLevelGrid().IsVoxelSolid(v0))
   {
     solidVoxel = ToJolt(v0pos);
     airVoxel   = ToJolt(v1pos);

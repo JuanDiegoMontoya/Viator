@@ -150,7 +150,7 @@ namespace Gui
     style.Colors[ImGuiCol_NavHighlight]          = ImVec4(1.00f, 0.00f, 0.94f, 1.00f);
     style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.69f, 1.00f);
     style.Colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.12f, 0.00f, 1.00f, 1.00f);
-    style.Colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.00f, 0.00f, 1.00f, 1.00f);
+    style.Colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
   }
 
   void ApplyFrogImGuiStyle()

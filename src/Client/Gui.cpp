@@ -31,6 +31,7 @@
 #include "IconsMaterialDesign.h"
 #include "toml++/toml.hpp"
 
+#include <array>
 #include <memory>
 #include <numeric>
 #include <type_traits>
@@ -46,7 +47,8 @@ namespace
   const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
   const auto sSavesDirectory = GetAssetDirectory() / "saves";
   const auto sWorldSavesDirectory  = sSavesDirectory / "worlds";
-  const auto sCharacterSavesDirectory  = sSavesDirectory / "characters";
+  const auto sCharacterSavesDirectory = sSavesDirectory / "characters";
+  std::string sNewWorldName           = std::string(256, '\0');
 
   auto sSelectedWorld = std::optional<std::filesystem::path>();
 
@@ -597,6 +599,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   case GameState::WORLD_SELECT:
   {
     ZoneScopedN("World Select");
+    auto saveNames = std::unordered_set<std::string>();
     if (ImGui::Begin("World Select"))
     {
       if (std::filesystem::is_directory(sWorldSavesDirectory))
@@ -604,6 +607,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         for (int i = 0; const auto& entry : std::filesystem::directory_iterator(sWorldSavesDirectory))
         {
           ImGui::PushID(i++);
+          saveNames.emplace(entry.path().stem().string().c_str());
           if (entry.is_regular_file() && ImGui::Selectable(entry.path().stem().string().c_str(), entry.path() == sSelectedWorld))
           {
             sSelectedWorld = entry.path();
@@ -611,6 +615,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::PopID();
         }
       }
+
+      ImGui::Separator();
 
       ImGui::BeginDisabled(!sSelectedWorld.has_value());
       if (ImGui::Button("Load"))
@@ -635,13 +641,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SameLine();
       if (ImGui::Button("Delete"))
       {
-        ImGui::OpenPopup("Delete?");
+        ImGui::OpenPopup("Delete World");
       }
 
-      ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+      const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
       ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-      if (ImGui::BeginPopupModal("Delete?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+      if (ImGui::BeginPopupModal("Delete World", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
       {
         ImGui::Text("Are you sure?");
         ImGui::Separator();
@@ -660,23 +666,102 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
       ImGui::EndDisabled();
 
-      static char newWorldName[256] = "World";
-      ImGui::InputText("Name", newWorldName, 256);
-      if (ImGui::Button("Create"))
+      ImGui::SameLine();
+      if (ImGui::Button("New World"))
       {
+        constexpr char initialWorldName[] = "World";
+        std::memcpy(sNewWorldName.data(), initialWorldName, sizeof(initialWorldName));
+        ImGui::OpenPopup("New World##1");
+      }
+      
+      ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+      static int selectedWorldSize = 0;
+      auto MakeWorld = [&]
+      {
+        constexpr auto worldSizes = std::array{glm::ivec3{2, 5, 2}, glm::ivec3{4, 5, 4}, glm::ivec3{8, 5, 8}, glm::ivec3{10, 5, 10}};
         world.InitializeGameState();
+        world.CreateGrid(worldSizes.at(selectedWorldSize));
+        world.CreateInitialEntities();
         // emplace_as doesn't overwrite context variables, so we have to first erase them (erase returns false if it failed, which is ok).
         world.GetRegistry().ctx().erase<std::string>("WorldName"_hs);
         world.GetRegistry().ctx().erase<std::atomic<const char*>>("progressText"_hs);
         world.GetRegistry().ctx().erase<std::atomic_int32_t>("progress"_hs);
         world.GetRegistry().ctx().erase<std::atomic_int32_t>("total"_hs);
         world.GetRegistry().ctx().erase<std::future<void>>("loading"_hs);
-        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, newWorldName);
+        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, sNewWorldName.c_str()); // Construct from C string so extra NULs aren't included.
         world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
         world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
         world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
-        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs, std::async(std::launch::async, [&world] { world.GenerateMap(); }));
+        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
+          std::async(std::launch::async,
+            [&world]
+            {
+              world.GenerateMap({});
+              world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Saving";
+              // Save world right after creating it.
+              if (!std::filesystem::is_directory(sWorldSavesDirectory))
+              {
+                std::filesystem::create_directories(sWorldSavesDirectory);
+              }
+              Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.GetRegistry().ctx().get<std::string>("WorldName"_hs) + ".rizz"));
+            }));
         gameState = GameState::LOADING_SP;
+        ImGui::CloseCurrentPopup();
+      };
+      if (ImGui::BeginPopupModal("New World##1", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+      {
+        ImGui::PushItemWidth(200);
+        ImGui::InputText("Name", sNewWorldName.data(), sNewWorldName.size());
+        if (ImGui::IsWindowAppearing())
+        {
+          selectedWorldSize = 0;
+        }
+        // TODO: Larger sizes crash the game because they overflow voxel memory during world generation. The fix is to compress chunks after generating them.
+        //ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium\0Big");
+        ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small");
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Create"))
+        {
+          if (saveNames.contains(sNewWorldName.c_str()))
+          {
+            ImGui::OpenPopup("Overwrite World");
+          }
+          else
+          {
+            MakeWorld();
+          }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel"))
+        {
+          ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal("Overwrite World", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+          ImGui::Text("A world with this name already exists.\nDo you want to overwrite it?");
+
+          ImGui::Separator();
+
+          if (ImGui::Button("Yes"))
+          {
+            MakeWorld();
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::SameLine();
+          if (ImGui::Button("Cancel"))
+          {
+            ImGui::CloseCurrentPopup();
+          }
+          ImGui::EndPopup();
+        }
+
+        ImGui::EndPopup();
       }
 
       if (ImGui::Button("Back"))
@@ -791,14 +876,14 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         ImGui::SameLine();
         if (ImGui::Button("Delete"))
         {
-          ImGui::OpenPopup("Delete?");
+          ImGui::OpenPopup("Delete Server");
         }
         ImGui::EndDisabled();
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Delete?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+        if (ImGui::BeginPopupModal("Delete Server", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
           ImGui::Text("Are you sure?");
           ImGui::Separator();

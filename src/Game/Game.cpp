@@ -2098,49 +2098,6 @@ void World::InitializeGameState()
 
   // Reset RNG
   registry_.ctx().insert_or_assign<PCG::Rng>(1234);
-
-  // Make player entity
-  auto p = CreatePlayer();
-  registry_.emplace<LocalPlayer>(p);
-
-  auto e = CreateRenderableEntity({0, 0, 0});
-  registry_.emplace<Name>(e).name = "Test";
-  registry_.emplace<Mesh>(e).name = "frog";
-  
-  auto pe = CreateRenderableEntity({});
-  registry_.emplace<Name>(pe).name = "Death Floor";
-  registry_.emplace<ContactDamage>(pe) = {.damage = 1000, .knockback = 0};
-  registry_.emplace<Physics::RigidBodySettings>(pe,
-    Physics::RigidBodySettings {
-      .shape      = Physics::Plane{{0, 1, 0}, 0},
-      .activate   = false,
-      .isSensor   = true,
-      .motionType = JPH::EMotionType::Static,
-      .layer      = Physics::Layers::HURTBOX,
-    });
-
-  auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(glm::vec3{2, 5, 2}));
-
-  auto voxelMats = std::vector<TwoLevelGrid::Material>();
-  for (const auto& def : registry_.ctx().get<BlockRegistry>().GetAllDefinitions())
-  {
-    voxelMats.emplace_back(TwoLevelGrid::Material{
-      .isVisible = !def->GetMaterialDesc().isInvisible,
-      .isSolid = def->GetIsSolid(),
-    });
-  }
-  grid.SetMaterialArray(std::move(voxelMats));
-
-  auto ve                          = registry_.create();
-  registry_.emplace<Name>(ve).name = "Voxels";
-  registry_.emplace<VoxelsComponent>(ve);
-  registry_.emplace<Physics::RigidBodySettings>(ve,
-    Physics::RigidBodySettings{
-      .shape      = Physics::UseTwoLevelGrid{},
-      .activate   = false,
-      .motionType = JPH::EMotionType::Static,
-      .layer      = Physics::Layers::WORLD,
-    });
 }
 
 void World::InitializeGameDefinitions()
@@ -2452,7 +2409,56 @@ void World::InitializeGameDefinitions()
   head->CreateRenderingMaterials(blockDefs);
 }
 
-void World::GenerateMap()
+void World::CreateGrid(glm::ivec3 numChunks)
+{
+  auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(numChunks));
+
+  auto voxelMats = std::vector<TwoLevelGrid::Material>();
+  for (const auto& def : registry_.ctx().get<BlockRegistry>().GetAllDefinitions())
+  {
+    voxelMats.emplace_back(TwoLevelGrid::Material{
+      .isVisible = !def->GetMaterialDesc().isInvisible,
+      .isSolid   = def->GetIsSolid(),
+    });
+  }
+  grid.SetMaterialArray(std::move(voxelMats));
+}
+
+void World::CreateInitialEntities()
+{
+  // Make player entity
+  auto p = CreatePlayer();
+  registry_.emplace<LocalPlayer>(p);
+
+  auto e                          = CreateRenderableEntity({0, 0, 0});
+  registry_.emplace<Name>(e).name = "Test";
+  registry_.emplace<Mesh>(e).name = "frog";
+
+  auto pe                              = CreateRenderableEntity({});
+  registry_.emplace<Name>(pe).name     = "Death Floor";
+  registry_.emplace<ContactDamage>(pe) = {.damage = 1000, .knockback = 0};
+  registry_.emplace<Physics::RigidBodySettings>(pe,
+    Physics::RigidBodySettings{
+      .shape      = Physics::Plane{{0, 1, 0}, 0},
+      .activate   = false,
+      .isSensor   = true,
+      .motionType = JPH::EMotionType::Static,
+      .layer      = Physics::Layers::HURTBOX,
+    });
+
+  auto ve                          = registry_.create();
+  registry_.emplace<Name>(ve).name = "Voxels";
+  registry_.emplace<VoxelsComponent>(ve);
+  registry_.emplace<Physics::RigidBodySettings>(ve,
+    Physics::RigidBodySettings{
+      .shape      = Physics::UseTwoLevelGrid{},
+      .activate   = false,
+      .motionType = JPH::EMotionType::Static,
+      .layer      = Physics::Layers::WORLD,
+    });
+}
+
+void World::GenerateMap(const MapGenInfo&)
 {
   ZoneScoped;
 #ifndef GAME_HEADLESS
