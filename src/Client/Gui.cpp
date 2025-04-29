@@ -29,6 +29,7 @@
 #include "entt/meta/container.hpp"
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
+#include "imgui_internal.h"
 #include "toml++/toml.hpp"
 
 #include <array>
@@ -199,6 +200,33 @@ namespace
       ImGui::PopStyleVar();
     }
     ImGui::End();
+  }
+
+  bool LoadingBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col)
+  {
+    using namespace ImGui;
+    ImGuiWindow* window = GetCurrentWindow();
+    if (window->SkipItems)
+      return false;
+
+    ImGuiContext& g         = *GImGui;
+    const ImGuiStyle& style = g.Style;
+    const ImGuiID id        = window->GetID(label);
+
+    ImVec2 pos  = window->DC.CursorPos;
+    ImVec2 size = size_arg;
+    size.x -= style.FramePadding.x * 2;
+
+    const ImRect bb(pos, ImVec2(pos.x + size.x, pos.y + size.y));
+    ItemSize(bb, style.FramePadding.y);
+    if (!ItemAdd(bb, id))
+      return false;
+
+    // Render
+    window->DrawList->AddRectFilled(bb.Min, ImVec2(pos.x + size.x, bb.Max.y), bg_col);
+    window->DrawList->AddRectFilled(bb.Min, ImVec2(pos.x + size.x * value, bb.Max.y), fg_col);
+
+    return true;
   }
 } // namespace
 
@@ -538,20 +566,21 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
 
       ImGui::BeginDisabled(networking->get());
-      if (ImGui::Selectable("Open Server (WIP)"))
+      if (ImGui::Selectable("Open Server"))
       {
         *networking = std::make_unique<Networking::Server>(world);
       }
       ImGui::EndDisabled();
 
       ImGui::BeginDisabled(!networking->get() || !world.IsServer());
-      if (ImGui::Selectable("Close Server (WIP)"))
+      if (ImGui::Selectable("Close Server"))
       {
         networking->reset();
       }
       ImGui::EndDisabled();
 
-      if (ImGui::Selectable("Save (WIP)"))
+      ImGui::BeginDisabled(world.IsClient());
+      if (ImGui::Selectable("Save"))
       {
         if (!std::filesystem::is_directory(sWorldSavesDirectory))
         {
@@ -559,7 +588,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
         Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.GetRegistry().ctx().get<std::string>("WorldName"_hs) + ".rizz"));
       }
+      ImGui::EndDisabled();
 
+      /*
       if (ImGui::Selectable("Load (WIP)"))
       {
         if (!std::filesystem::is_directory(sWorldSavesDirectory))
@@ -578,6 +609,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistry().ctx().get<GameState>() = GameState::PAUSED;
         Core::Serialization::LoadRegistryFromFile(world, sWorldSavesDirectory / (worldName + ".rizz"));
       }
+      */
 
       if (ImGui::Selectable("Exit to main menu"))
       {
@@ -788,7 +820,10 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       const auto& total        = world.GetRegistry().ctx().get<std::atomic_int32_t>("total"_hs);
       if (ImGui::Begin("Loading"))
       {
-        ImGui::Text("%s: %d / %d", progressText.load(), progress.load(), total.load());
+        ImGui::Text("%s", progressText.load());
+        constexpr auto bgColor = ImColor(0.4f, 0.4f, 0.4f, 1.0f);
+        constexpr auto fgColor = ImColor(1.0f, 1.0f, 1.0f, 1.0f);
+        LoadingBar("##loading", float(progress.load()) / total.load(), ImVec2(ImGui::GetContentRegionAvail().x, 15), bgColor, fgColor);
       }
       ImGui::End();
     }
