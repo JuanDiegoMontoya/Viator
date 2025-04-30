@@ -124,6 +124,8 @@ add_executable(frogRender
     src/Core/Assert2.h
     src/Core/Assert2.cpp
     src/Core/Exception.h
+    src/Game/VoxLoader.h
+    src/Game/VoxLoader.cpp
 )
 
 # Precompiled headers for standard library
