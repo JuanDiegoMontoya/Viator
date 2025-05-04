@@ -222,6 +222,7 @@ namespace Fvog
     [[maybe_unused]] auto driverVersionString = DriverVersonToString(physicalDevice_.properties.driverVersion, physicalDevice_.properties.vendorID);
     spdlog::info("Selected device: {}. Driver version {}", physicalDevice_.properties.deviceName, driverVersionString);
 
+#if 0
     supportsRayTracing = physicalDevice_.is_extension_present(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) &&
                          physicalDevice_.is_extension_present(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) &&
                          physicalDevice_.is_extension_present(VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME) &&
@@ -258,6 +259,7 @@ namespace Fvog
                          physicalDevice_.enable_extension_features_if_present(rtPipelineFeatures) &&
                          physicalDevice_.enable_extension_features_if_present(positionFetchFeatures) &&
                          physicalDevice_.enable_extension_features_if_present(rayQueryFeatures);
+#endif
 
     device_ = vkb::DeviceBuilder{physicalDevice_}.build().value();
 
