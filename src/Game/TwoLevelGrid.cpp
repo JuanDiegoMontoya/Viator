@@ -1,4 +1,5 @@
 #include "TwoLevelGrid.h"
+#include "Core/Assert2.h"
 
 #include "tracy/Tracy.hpp"
 
@@ -434,6 +435,50 @@ void TwoLevelGrid::FreeBottomLevelBrick(uint32_t index)
 bool TwoLevelGrid::IsPositionInGrid(glm::ivec3 worldPos) const
 {
   return glm::all(glm::greaterThanEqual(worldPos, glm::ivec3(0))) && glm::all(glm::lessThan(worldPos, dimensions_));
+}
+
+void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
+{
+  materials_ = std::move(materials);
+
+  // SketchyBuffer::Alloc is not RAII.
+  for (auto& alloc : subGridAllocations)
+  {
+    buffer.Free(alloc);
+  }
+  subGridAllocations.clear();
+
+  for (auto& material : materials_)
+  {
+    // TODO: Make allocations.
+    if (auto* grid = material.subGrid)
+    {
+      // Raw voxel data.
+      ASSERT(grid->dimensions.x == grid->dimensions.y && grid->dimensions.x == grid->dimensions.z, "Grid must be a cube.");
+      const auto gridSize = grid->dimensions.x * grid->dimensions.y * grid->dimensions.z * sizeof(SubVoxel);
+      auto gridAlloc      = buffer.Allocate(gridSize, 4);
+      auto* mem           = buffer.GetBase<SubVoxel>() + gridAlloc.offset / sizeof(SubVoxel);
+      std::memcpy(mem, grid->grid.get(), gridSize);
+      buffer.MarkRange(gridAlloc.offset, gridSize);
+
+      // GpuSubGrid
+      ASSERT(gridAlloc.offset / sizeof(SubVoxel) <= UINT32_MAX);
+      auto subGridInfo = GpuSubGrid{
+        .dimensions = glm::ivec3(grid->dimensions),
+        .gridBase   = uint32_t(gridAlloc.offset / sizeof(SubVoxel)),
+        //.materials  = grid->materials,
+      };
+      std::ranges::copy(grid->materials, subGridInfo.materials);
+      auto gridInfoAlloc = buffer.Allocate(sizeof(subGridInfo), sizeof(subGridInfo));
+      auto* mem2         = buffer.GetBase<GpuSubGrid>() + gridInfoAlloc.offset / sizeof(subGridInfo);
+      std::memcpy(mem2, &subGridInfo, sizeof(subGridInfo));
+      buffer.MarkDirtyPages(mem2);
+      material.subGrid->myIndexINTERNAL = uint32_t(gridInfoAlloc.offset / sizeof(subGridInfo));
+
+      subGridAllocations.emplace_back(gridAlloc);
+      subGridAllocations.emplace_back(gridInfoAlloc);
+    }
+  }
 }
 
 void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)

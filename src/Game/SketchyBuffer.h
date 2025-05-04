@@ -71,6 +71,16 @@ public:
     return gpuBuffer_;
   }
 
+  void MarkRange(size_t offset, size_t size)
+  {
+    const auto minPage = offset / PAGE_SIZE;
+    const auto maxPage = (offset + size) / PAGE_SIZE;
+    for (auto i = minPage; i <= maxPage; i++)
+    {
+      dirtyPages_.insert(uint32_t(i));
+    }
+  }
+
   // Update the object at an address that aliases the array returned by GetBase.
   template<typename T>
   void MarkDirtyPages(const T* address)

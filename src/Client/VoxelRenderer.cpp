@@ -7,6 +7,7 @@
 #include "Fvog/Rendering2.h"
 #include "Fvog/detail/Common.h"
 #include "Core/Assert2.h"
+#include "Game/VoxLoader.h"
 
 #include "shaders/Config.shared.h"
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
@@ -45,6 +46,7 @@ namespace
     HAS_EMISSION_TEXTURE         = 1 << 1,
     RANDOMIZE_TEXCOORDS_ROTATION = 1 << 2,
     IS_INVISIBLE                 = 1 << 3,
+    IS_SUBGRID                   = 1 << 4,
   };
   FVOG_DECLARE_FLAG_TYPE(VoxelMaterialFlags, MaterialFlagBit, uint32_t);
 
@@ -55,6 +57,7 @@ namespace
     glm::vec3 baseColorFactor;
     shared::Texture2D emissionTexture;
     glm::vec3 emissionFactor;
+    FVOG_UINT32 subGridIndex;
   };
 
   struct GpuMesh
@@ -226,7 +229,7 @@ namespace
 VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
 {
   ZoneScoped;
-
+  
   g_meshes.emplace("frog", LoadObjFile(GetAssetDirectory() / "models/frog.obj"));
   g_meshes.emplace("ar15", LoadObjFile(GetAssetDirectory() / "models/ar15.obj"));
   g_meshes.emplace("tracer", LoadObjFile(GetAssetDirectory() / "models/tracer.obj"));
@@ -501,6 +504,11 @@ void VoxelRenderer::CreateRenderingMaterials(std::span<const std::unique_ptr<Blo
     if (desc.isInvisible)
     {
       gpuMat.materialFlags |= MaterialFlagBit::IS_INVISIBLE;
+    }
+    if (def->GetSubGrid())
+    {
+      gpuMat.materialFlags |= MaterialFlagBit::IS_SUBGRID;
+      gpuMat.subGridIndex = def->GetSubGrid()->myIndexINTERNAL;
     }
 
     voxelMaterials.emplace_back(gpuMat);

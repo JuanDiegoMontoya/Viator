@@ -88,6 +88,7 @@ bottomLevelBricksBuffers[];
 #define HAS_EMISSION_TEXTURE         (1 << 1)
 #define RANDOMIZE_TEXCOORDS_ROTATION (1 << 2)
 #define IS_INVISIBLE                 (1 << 3)
+#define IS_SUBGRID                   (1 << 4)
 
 struct GpuVoxelMaterial
 {
@@ -96,6 +97,7 @@ struct GpuVoxelMaterial
   FVOG_VEC3 baseColorFactor;
   Texture2D emissionTexture;
   FVOG_VEC3 emissionFactor;
+  FVOG_UINT32 subGridIndex;
 };
 
 FVOG_DECLARE_STORAGE_BUFFERS_2(VoxelMaterials)
@@ -109,6 +111,34 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(Lights)
   GpuLight lights[];
 }
 lightsBuffers[];
+
+// Subgrid stuff
+struct SubVoxelMaterial
+{
+  vec4 colorSrgb;
+};
+
+struct GpuSubGrid
+{
+  ivec3 dimensions;
+  uint gridBase;
+  SubVoxelMaterial materials[255];
+};
+
+FVOG_DECLARE_STORAGE_BUFFERS_2(SubGridInfos)
+{
+  GpuSubGrid subGrids[];
+}
+subGridBuffers[];
+
+FVOG_DECLARE_STORAGE_BUFFERS_2(SubGridData)
+{
+  uint8_t subVoxels[];
+}
+subGridDataBuffers[];
+
+#define SUBGRIDS subGridBuffers[g_voxels.bufferIdx].subGrids
+#define SUBVOXELS subGridDataBuffers[g_voxels.bufferIdx].subVoxels
 
 Voxels g_voxels;
 
@@ -140,6 +170,12 @@ GridHierarchyCoords GetCoordsOfVoxelAt(ivec3 voxelCoord)
   // assert(glm::all(glm::lessThan(localVoxelCoord, glm::ivec3(BL_BRICK_SIDE_LENGTH))));
 
   return GridHierarchyCoords(topLevelCoord, bottomLevelCoord, localVoxelCoord);
+}
+
+int FlattenSubGridCoord(uint subGridIndex, ivec3 coord)
+{
+  GpuSubGrid subGrid = SUBGRIDS[subGridIndex];
+  return (coord.z * subGrid.dimensions.x * subGrid.dimensions.y) + (coord.y * subGrid.dimensions.x) + coord.x;
 }
 
 int FlattenTopLevelBrickCoord(ivec3 coord)
@@ -230,11 +266,13 @@ struct HitSurfaceParameters
   vec3 positionWorld;
   vec3 flatNormalWorld;
   vec2 texCoords;
+  SubVoxelMaterial subVoxelMaterial;
 };
 
 float gTopLevelBricksTraversed    = 0;
 float gBottomLevelBricksTraversed = 0;
 float gVoxelsTraversed            = 0;
+float gSubGridVoxelsTraversed     = 0;
 
 #define EPSILON 1e-5
 
@@ -271,6 +309,54 @@ bool vx_IsVisible(voxel_t voxel)
   return !bool(material.materialFlags & IS_INVISIBLE);
 }
 
+// Ray position in [0, subGrid.dimensions)
+bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, vec3 cases, out HitSurfaceParameters hit)
+{
+  GpuSubGrid subGrid   = SUBGRIDS[subGridIndex];
+  rayPosition          = clamp(rayPosition, vec3(EPSILON), vec3(subGrid.dimensions - EPSILON));
+  vec3 mapPos          = floor(rayPosition);
+  const vec3 deltaDist = init.deltaDist;
+  const vec3 S         = init.S;
+  const vec3 stepDir   = init.stepDir;
+  vec3 sideDist        = (S - stepDir * fract(rayPosition)) * deltaDist;
+
+  for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, ivec3(subGrid.dimensions))); i++)
+  {
+    const uint subVoxelIndex = FlattenSubGridCoord(subGridIndex, ivec3(mapPos));
+    const uint8_t subVoxel = SUBVOXELS[subGrid.gridBase + subVoxelIndex];
+    if (subVoxel != 0)
+    {
+      gSubGridVoxelsTraversed++;
+      const vec3 p      = mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
+      const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+      const float t     = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
+      vec3 hitWorldPos  = rayPosition + rayDirection * t;
+
+      if (i == 0)
+      {
+        hitWorldPos = rayPosition;// / subGrid.dimensions;
+      }
+
+      hit.positionWorld   = hitWorldPos / subGrid.dimensions;
+      hit.flatNormalWorld = normal;
+      hit.subVoxelMaterial = subGrid.materials[0];
+      return true;
+    }
+
+    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+
+    cases.x = conds.x * conds.y;                   // if       x dir
+    cases.y = (1.0 - cases.x) * conds.z * conds.w; // else if  y dir
+    cases.z = (1.0 - cases.x) * (1.0 - cases.y);   // else     z dir
+
+    sideDist += max((2.0 * cases - 1.0) * deltaDist, 0.0);
+
+    mapPos += cases * stepDir;
+  }
+
+  return false;
+}
+
 // Ray position in (0, BL_BRICK_SIDE_LENGTH)
 bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr bottomLevelBrickPtr, vx_InitialDDAState init, vec3 cases, out HitSurfaceParameters hit)
 {
@@ -290,7 +376,6 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
     const bool occupancy = bool(BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].occupancy.bitmask[localVoxelIndex / 32u] & (1u << localVoxelIndex % 32u));
     if (occupancy)
     {
-      const voxel_t voxel = BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].voxels[localVoxelIndex];
       const vec3 p      = mapPos + 0.5 - stepDir * 0.5;
       const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
 
@@ -304,12 +389,26 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
         hitWorldPos = rayPosition;
       }
 
-      hit.voxel           = voxel;
-      hit.voxelPosition   = ivec3(mapPos);
-      hit.positionWorld   = hitWorldPos;
-      hit.texCoords       = vx_GetTexCoords(normal, uvw);
-      hit.flatNormalWorld = normal;
-      return true;
+      const voxel_t voxel = BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].voxels[localVoxelIndex];
+      hit.voxel         = voxel;
+      hit.voxelPosition = ivec3(mapPos);
+
+      GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+      if (bool(material.materialFlags & IS_SUBGRID))
+      {
+        if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, hit))
+        {
+          hit.positionWorld += ivec3(mapPos);
+          return true;
+        }
+      }
+      else
+      {
+        hit.positionWorld   = hitWorldPos;
+        hit.texCoords       = vx_GetTexCoords(normal, uvw);
+        hit.flatNormalWorld = normal;
+        return true;
+      }
     }
 
     vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
@@ -552,6 +651,13 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
 vec3 GetHitAlbedo(HitSurfaceParameters hit)
 {
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
+
+  if (bool(material.materialFlags & IS_SUBGRID))
+  {
+    //return vec3(hit.flatNormalWorld * .5 + .5);
+    return hit.subVoxelMaterial.colorSrgb.rgb;
+  }
+
   vec3 albedo               = material.baseColorFactor;
   if (bool(material.materialFlags & HAS_BASE_COLOR_TEXTURE))
   {
@@ -569,6 +675,10 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 vec3 GetHitEmission(HitSurfaceParameters hit)
 {
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
+  if (bool(material.materialFlags & IS_SUBGRID))
+  {
+    return vec3(0);
+  }
   vec3 emission             = material.emissionFactor;
   if (bool(material.materialFlags & HAS_EMISSION_TEXTURE))
   {

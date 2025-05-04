@@ -105,6 +105,10 @@ struct TwoLevelGrid
   int FlattenTopLevelBrickCoord(glm::ivec3 coord) const;
   static int FlattenBottomLevelBrickCoord(glm::ivec3 coord);
   static int FlattenVoxelCoord(glm::ivec3 coord);
+  static int FlattenGenericCoord(glm::ivec3 gridDimensions, glm::ivec3 coord)
+  {
+    return (coord.z * gridDimensions.x * gridDimensions.y) + (coord.y * gridDimensions.x) + coord.x;
+  }
 
   const TopLevelBrickPtr& GetTopLevelBrickPtr(uint32_t index) const;
   TopLevelBrickPtr& GetTopLevelBrickPtr(uint32_t index);
@@ -122,16 +126,50 @@ struct TwoLevelGrid
 
   bool IsPositionInGrid(glm::ivec3 worldPos) const;
 
+  enum class SubVoxel : uint8_t
+  {
+    Air = 0,
+  };
+
+  struct SubVoxelMaterial
+  {
+    glm::vec4 colorSrgb;
+  };
+
+  // Describes a block composed of a grid of sub-blocks.
+  // The sub-blocks are only described with a material and color, which are defined in a palette.
+  struct SubGrid
+  {
+    // Max size: 255^3
+    // Should probably assert that this is a cube.
+    glm::u8vec3 dimensions;
+    std::unique_ptr<SubVoxel[]> grid;
+    // The 0th material is air and is thus omitted.
+    // All other material indices are shifted down.
+    SubVoxelMaterial materials[255];
+    // Device index/pointer used for rendering.
+    // Set when the user calls SetMaterialArray.
+    mutable uint32_t myIndexINTERNAL;
+  };
+
+private:
+  struct GpuSubGrid
+  {
+    glm::ivec3 dimensions;
+    uint32_t gridBase; // Base offset of buffer containing dims.x * dims.y * dims.z SubVoxels.
+    SubVoxelMaterial materials[255];
+  };
+
+public:
+
   struct Material
   {
     bool isVisible;
     bool isSolid;
+    const SubGrid* subGrid; // Optional.
   };
 
-  void SetMaterialArray(std::vector<Material> materials)
-  {
-    materials_ = std::move(materials);
-  }
+  void SetMaterialArray(std::vector<Material> materials);
 
   bool IsVoxelSolid(voxel_t voxel) const
   {
@@ -173,6 +211,7 @@ struct TwoLevelGrid
 
   std::vector<Material> materials_;
 private:
+  std::vector<SketchyBuffer::Alloc> subGridAllocations;
   std::unique_ptr<std::mutex> mutex_;
   // TracyLockable(std::mutex, STINKY_MUTEX); // Crashes Tracy client, possibly because I have too many threads.
 };

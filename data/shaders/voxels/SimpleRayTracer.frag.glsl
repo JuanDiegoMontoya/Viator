@@ -62,5 +62,9 @@ void main()
 
   o_albedo = vec4(albedo, 1);
   o_normal = vec4(normal, 1);
-  o_radiance = vec4(radiance, 1);
+  vec3 bonus = vec3(0);
+  // bonus.r += gSubGridVoxelsTraversed / 5;
+  // bonus.g += gVoxelsTraversed / 30;
+  // bonus.b += gBottomLevelBricksTraversed / 4;
+  o_radiance = vec4(radiance + bonus, 1);
 }

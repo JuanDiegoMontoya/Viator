@@ -5,6 +5,7 @@
 #include "Client/Fvog/detail/Flags.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "MathUtilities.h"
+#include "TwoLevelGrid.h"
 #include "Networking/Interface.h"
 
 #include "entt/entity/registry.hpp"
@@ -137,6 +138,8 @@ struct VoxelMaterialDesc
   glm::vec3 baseColorFactor = {1, 1, 1};
   std::optional<std::string> emissionTexture;
   glm::vec3 emissionFactor = {0, 0, 0};
+  // This is only a shared ptr because I'm lazy and want this struct to remain copyable.
+  std::shared_ptr<TwoLevelGrid::SubGrid> subGrid;
 };
 
 struct DropSelf {};
@@ -227,6 +230,11 @@ public:
   [[nodiscard]] BlockId GetBlockId() const
   {
     return blockId_;
+  }
+
+  [[nodiscard]] const TwoLevelGrid::SubGrid* GetSubGrid() const
+  {
+    return createInfo_.voxelMaterialDesc.subGrid.get();
   }
 
 protected:

@@ -2274,6 +2274,37 @@ void World::InitializeGameDefinitions()
       },
   }));
 
+  constexpr auto szz = glm::ivec3{4, 4, 4};
+  auto subGrid = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
+
+  for (int z = 0; z < szz.z; z++)
+  for (int y = 0; y < szz.y; y++)
+  for (int x = 0; x < szz.x; x++)
+  {
+    auto& voxel = subGrid[TwoLevelGrid::FlattenGenericCoord(szz, {x, y, z})];
+    if (z % 2 == 0 && y % 2 == 0 && x % 2 == 0)
+    {
+      voxel = TwoLevelGrid::SubVoxel(1);
+    }
+    else
+    {
+      voxel = TwoLevelGrid::SubVoxel::Air;
+    }
+  }
+
+  [[maybe_unused]] const auto subBlockId = blocks.Add(new BlockDefinition({
+    .name          = "Sub",
+    .initialHealth = 100,
+    .voxelMaterialDesc = VoxelMaterialDesc
+      {
+        .subGrid = std::make_shared<TwoLevelGrid::SubGrid>(TwoLevelGrid::SubGrid{
+          .dimensions = szz,
+          .grid       = std::move(subGrid),
+          .materials  = {{glm::vec4(1, 1, 1, 1)}},
+        }),
+      },
+  }));
+
   [[maybe_unused]] const auto lightBlockItemId = blocks.Get(blocks.Add(new BlockDefinition({.name = "Light",
       .voxelMaterialDesc =
         VoxelMaterialDesc{
@@ -2403,10 +2434,6 @@ void World::InitializeGameDefinitions()
     .chanceForOne = 0.5f,
   });
   loot.Add("worm", std::move(wormLoot));
-
-  auto* head     = registry_.ctx().get<Head*>();
-  auto blockDefs = blocks.GetAllDefinitions();
-  head->CreateRenderingMaterials(blockDefs);
 }
 
 void World::CreateGrid(glm::ivec3 numChunks)
@@ -2414,14 +2441,19 @@ void World::CreateGrid(glm::ivec3 numChunks)
   auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(numChunks));
 
   auto voxelMats = std::vector<TwoLevelGrid::Material>();
-  for (const auto& def : registry_.ctx().get<BlockRegistry>().GetAllDefinitions())
+  auto blockDefs = registry_.ctx().get<BlockRegistry>().GetAllDefinitions();
+  for (const auto& def : blockDefs)
   {
     voxelMats.emplace_back(TwoLevelGrid::Material{
       .isVisible = !def->GetMaterialDesc().isInvisible,
       .isSolid   = def->GetIsSolid(),
+      .subGrid   = def->GetSubGrid(),
     });
   }
   grid.SetMaterialArray(std::move(voxelMats));
+
+  auto* head = registry_.ctx().get<Head*>();
+  head->CreateRenderingMaterials(blockDefs);
 }
 
 void World::CreateInitialEntities()
