@@ -2,6 +2,7 @@
 #include "Core/Assert2.h"
 
 #include "tracy/Tracy.hpp"
+#include "spdlog/spdlog.h"
 
 #include "glm/vector_relational.hpp"
 #include "glm/common.hpp"
@@ -439,6 +440,7 @@ bool TwoLevelGrid::IsPositionInGrid(glm::ivec3 worldPos) const
 
 void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
 {
+  ZoneScoped;
   materials_ = std::move(materials);
 
   // SketchyBuffer::Alloc is not RAII.
@@ -448,13 +450,18 @@ void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
   }
   subGridAllocations.clear();
 
+  int i = 0;
   for (auto& material : materials_)
   {
+    i++;
     // TODO: Make allocations.
     if (auto* grid = material.subGrid)
     {
       // Raw voxel data.
-      ASSERT(grid->dimensions.x == grid->dimensions.y && grid->dimensions.x == grid->dimensions.z, "Grid must be a cube.");
+      if (!(grid->dimensions.x == grid->dimensions.y && grid->dimensions.x == grid->dimensions.z))
+      {
+        spdlog::warn("Material at index {} has non-cube shape ({}, {}, {}) and will not render correctly.", i, grid->dimensions.x, grid->dimensions.y, grid->dimensions.z);
+      }
       const auto gridSize = grid->dimensions.x * grid->dimensions.y * grid->dimensions.z * sizeof(SubVoxel);
       auto gridAlloc      = buffer.Allocate(gridSize, 4);
       auto* mem           = buffer.GetBase<SubVoxel>() + gridAlloc.offset / sizeof(SubVoxel);

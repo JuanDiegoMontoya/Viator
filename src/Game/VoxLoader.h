@@ -146,4 +146,16 @@ namespace Vox
 
   std::unique_ptr<Chunk> LoadFromMemory(std::istream& stream);
   std::unique_ptr<Chunk> LoadFromFile(const std::filesystem::path& path);
+
+  struct ProcessedModel
+  {
+    const Chunk_RGBA* paletteChunk = nullptr;
+    const Chunk_IMAP* iMapChunk    = nullptr;
+    const Chunk_SIZE* sizeChunk    = nullptr;
+    const Chunk_XYZI* voxelChunk   = nullptr;
+    std::vector<const Chunk_MATL*> materials;
+  };
+
+  // Locates important (for our purposes) chunks in the model.
+  ProcessedModel ProcessModel(const Chunk& root);
 } // namespace Vox

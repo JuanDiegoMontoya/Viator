@@ -1504,3 +1504,9 @@ private:
   std::unique_ptr<Networking::Interface> networking_;
   std::unique_ptr<World> world_;
 };
+
+namespace Vox
+{
+  struct Chunk;
+}
+std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root);

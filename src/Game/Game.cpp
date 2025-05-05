@@ -19,6 +19,7 @@
 #include "Networking/Client.h"
 #include "Networking/Server.h"
 #include "Networking/RPC.h"
+#include "VoxLoader.h"
 
 #include "entt/entity/handle.hpp"
 
@@ -3381,6 +3382,38 @@ glm::vec3 GetUp(glm::quat rotation)
 glm::vec3 GetRight(glm::quat rotation)
 {
   return glm::mat3_cast(rotation)[0];
+}
+
+std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
+{
+  auto processed  = Vox::ProcessModel(root);
+  ASSERT(processed.voxelChunk);
+  ASSERT(processed.sizeChunk);
+  ASSERT(processed.paletteChunk);
+  ASSERT(!processed.iMapChunk, "TODO: IMAP chunk");
+  const auto dims = glm::ivec3(processed.sizeChunk->sizeX, processed.sizeChunk->sizeZ, processed.sizeChunk->sizeY); // Z-up
+  auto subVoxels    = std::make_unique<TwoLevelGrid::SubVoxel[]>(dims.x * dims.y * dims.z);
+
+  for (uint32_t i = 0; i < processed.voxelChunk->numVoxels; i++)
+  {
+    const auto voxel    = processed.voxelChunk->voxels[i];
+    const auto position = glm::ivec3(dims.x - 1 - voxel.x, voxel.z, voxel.y); // Z-up RH
+    ASSERT(glm::all(glm::greaterThanEqual(position, glm::ivec3(0))) && glm::all(glm::lessThan(position, dims)));
+    subVoxels[TwoLevelGrid::FlattenGenericCoord(dims, position)] = TwoLevelGrid::SubVoxel(voxel.colorIndex);
+  }
+
+  auto subGrid = std::make_shared<TwoLevelGrid::SubGrid>(TwoLevelGrid::SubGrid{
+    .dimensions = dims,
+    .grid       = std::move(subVoxels),
+  });
+
+  for (int i = 0; i < 255; i++)
+  {
+    const auto color                 = processed.paletteChunk->colors[i];
+    subGrid->materials[i].colorSrgb = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1};
+  }
+
+  return subGrid;
 }
 
 void World::SetParent(entt::entity child, entt::entity parent)

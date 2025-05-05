@@ -339,7 +339,7 @@ bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, 
 
       hit.positionWorld   = hitWorldPos / subGrid.dimensions;
       hit.flatNormalWorld = normal;
-      hit.subVoxelMaterial = subGrid.materials[0];
+      hit.subVoxelMaterial = subGrid.materials[subVoxel - 1];
       return true;
     }
 

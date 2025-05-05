@@ -1,6 +1,7 @@
 #include "VoxLoader.h"
 
 #include "spdlog/spdlog.h"
+#include "spdlog/fmt/std.h"
 
 #include <exception>
 #include <fstream>
@@ -232,5 +233,57 @@ namespace Vox
       throw std::runtime_error("Failed to open file: " + path.string());
     }
     return LoadFromMemory(file);
+  }
+
+  // Invokes predicate on all nodes of the hierarchy. Exits early if predicate returns true.
+  bool ForEachNode(const Chunk& root, const auto& predicate)
+  {
+    if (predicate(root))
+    {
+      return true;
+    }
+
+    for (const auto& child : root.children)
+    {
+      if (ForEachNode(*child, predicate))
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  ProcessedModel ProcessModel(const Chunk& root)
+  {
+    auto processed = ProcessedModel{};
+
+    ForEachNode(root,
+      [&](const Chunk& chunk)
+      {
+        if (std::memcmp(chunk.id, "RGBA", 4) == 0)
+        {
+          processed.paletteChunk = reinterpret_cast<const Chunk_RGBA*>(&chunk);
+        }
+        else if (std::memcmp(chunk.id, "IMAP", 4) == 0)
+        {
+          processed.iMapChunk = reinterpret_cast<const Chunk_IMAP*>(&chunk);
+        }
+        else if (std::memcmp(chunk.id, "SIZE", 4) == 0)
+        {
+          processed.sizeChunk = reinterpret_cast<const Chunk_SIZE*>(&chunk);
+        }
+        else if (std::memcmp(chunk.id, "XYZI", 4) == 0)
+        {
+          processed.voxelChunk = reinterpret_cast<const Chunk_XYZI*>(&chunk);
+        }
+        else if (std::memcmp(chunk.id, "MATL", 4) == 0)
+        {
+          processed.materials.emplace_back(reinterpret_cast<const Chunk_MATL*>(&chunk));
+        }
+        return false;
+      });
+
+    return processed;
   }
 } // namespace Vox
