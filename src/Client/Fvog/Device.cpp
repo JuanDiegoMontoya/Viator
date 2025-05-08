@@ -142,7 +142,7 @@ namespace Fvog
         .drawIndirectCount = true,
         .storageBuffer8BitAccess = true,
         .uniformAndStorageBuffer8BitAccess = true,
-        //.shaderFloat16 = true,
+        .shaderFloat16 = true, // TODO: Query support and conditionally enable. Pascal does not support this feature.
         .shaderInt8 = true,
         .descriptorIndexing = true,
         .shaderInputAttachmentArrayDynamicIndexing = true,
@@ -178,6 +178,7 @@ namespace Fvog
       .set_required_features_13({
         .shaderDemoteToHelperInvocation = true,
         .shaderTerminateInvocation = true,
+        .subgroupSizeControl = true,
         .synchronization2 = true,
         .dynamicRendering = true,
         .shaderIntegerDotProduct = true,
@@ -192,6 +193,49 @@ namespace Fvog
     }
 
     physicalDevice_ = maybePhysicalDevice.value();
+
+    // Query properties and features.
+    {
+      properties13 = VkPhysicalDeviceVulkan13Properties{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
+      };
+      properties12 = VkPhysicalDeviceVulkan12Properties{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
+        .pNext = &properties13,
+      };
+      properties11 = VkPhysicalDeviceVulkan11Properties{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
+        .pNext = &properties12,
+      };
+      properties10 = VkPhysicalDeviceProperties2{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &properties11,
+      };
+    
+      vkGetPhysicalDeviceProperties2(physicalDevice_, &properties10);
+
+      features13 = VkPhysicalDeviceVulkan13Features{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+      };
+
+      features12 = VkPhysicalDeviceVulkan12Features{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = &features13,
+      };
+
+      features11 = VkPhysicalDeviceVulkan11Features{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = &features12,
+      };
+      features10 = VkPhysicalDeviceFeatures2{
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext = &features11,
+      };
+
+      vkGetPhysicalDeviceFeatures2(physicalDevice_, &features10);
+    }
+
+    supportsFp16 = features12.shaderFloat16;
 
 #ifdef FROG_DEBUG
     supportsRelaxedExtendedInstruction = physicalDevice_.enable_extension_if_present(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME);

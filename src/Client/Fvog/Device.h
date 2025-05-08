@@ -70,6 +70,16 @@ namespace Fvog
     bool supportsRayTracing = false;
     bool supportsRelaxedExtendedInstruction = false;
     bool supportsRobustness2 = false;
+    bool supportsFp16 = false;
+    VkPhysicalDeviceProperties2 properties10{};
+    VkPhysicalDeviceVulkan11Properties properties11{};
+    VkPhysicalDeviceVulkan12Properties properties12{};
+    VkPhysicalDeviceVulkan13Properties properties13{};
+
+    VkPhysicalDeviceFeatures2 features10;
+    VkPhysicalDeviceVulkan11Features features11;
+    VkPhysicalDeviceVulkan12Features features12;
+    VkPhysicalDeviceVulkan13Features features13;
 
     void FreeUnusedResources();
 
