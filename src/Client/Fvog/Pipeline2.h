@@ -155,6 +155,7 @@ namespace Fvog
     StencilState stencilState               = {};
     ColorBlendState colorBlendState         = {};
     RenderTargetFormats renderTargetFormats = {};
+    bool fsUseMinSubgroupSize = {};
   };
 
   /// @brief Parameters for the constructor of ComputePipeline
@@ -165,6 +166,9 @@ namespace Fvog
 
     /// @brief Non-null pointer to a compute shader
     const Shader* shader;
+
+    /// @brief If true, try to force the minimum supported subgroup size with VK_EXT_subgroup_size_control
+    bool useMinSubgroupSize = {};
   };
 
   struct RayTracingHitGroup

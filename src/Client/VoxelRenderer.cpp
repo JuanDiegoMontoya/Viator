@@ -432,6 +432,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .stage = Fvog::PipelineStage::COMPUTE_SHADER,
         .path  = GetShaderDirectory() / "voxels/PerPixelPathtracer.comp.glsl",
       },
+    .useMinSubgroupSize = true,
   });
 
   tonemapPipeline = GetPipelineManager().EnqueueCompileComputePipeline({

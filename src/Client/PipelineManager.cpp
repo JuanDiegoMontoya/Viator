@@ -1,7 +1,9 @@
 #include "PipelineManager.h"
 #include "Fvog/detail/Hash2.h"
+#include "Core/Assert2.h"
 
 #include "tracy/Tracy.hpp"
+#include "spdlog/spdlog.h"
 
 namespace
 {
@@ -17,8 +19,9 @@ PipelineManager::ComputePipelineKey PipelineManager::EnqueueCompileComputePipeli
     ComputePipelineValue{
       .pipeline = std::make_unique<Fvog::ComputePipeline>(
         // TODO: defer pipeline creation
-        Fvog::ComputePipelineInfo{.name = createInfo.name, .shader = shaderModuleValue.shader.get()}),
+        Fvog::ComputePipelineInfo{.name = createInfo.name, .shader = shaderModuleValue.shader.get(), .useMinSubgroupSize = createInfo.useMinSubgroupSize}),
       .shaderModuleValue = &shaderModuleValue,
+      .useMinSubgroupSize = createInfo.useMinSubgroupSize,
     });
   return ComputePipelineKey{myId, this};
 }
@@ -33,12 +36,14 @@ PipelineManager::GraphicsPipelineKey PipelineManager::EnqueueCompileGraphicsPipe
   if (createInfo.fragmentModuleInfo)
   {
     fragmentModule = &EmplaceOrGetShaderModuleValue(*createInfo.fragmentModuleInfo);
+    ASSERT(fragmentModule->status == Status::SUCCESS);
     stages.push_back(*createInfo.fragmentModuleInfo);
   }
 
   if (createInfo.vertexModuleInfo)
   {
     vertexModule = &EmplaceOrGetShaderModuleValue(*createInfo.vertexModuleInfo);
+    ASSERT(vertexModule->status == Status::SUCCESS);
     stages.push_back(*createInfo.vertexModuleInfo);
   }
 
@@ -56,9 +61,11 @@ PipelineManager::GraphicsPipelineKey PipelineManager::EnqueueCompileGraphicsPipe
         .stencilState        = createInfo.state.stencilState,
         .colorBlendState     = createInfo.state.colorBlendState,
         .renderTargetFormats = createInfo.state.renderTargetFormats,
+        .fsUseMinSubgroupSize = createInfo.fsUseMinSubgroupSize,
       }),
       .stages   = std::move(stages),
       .state    = createInfo.state,
+      .fsUseMinSubgroupSize = createInfo.fsUseMinSubgroupSize,
     });
   return GraphicsPipelineKey{myId, this};
 }
@@ -98,6 +105,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
           auto newPipeline = Fvog::ComputePipeline({
             .name   = "temp", // TODO: reuse actual pipeline name
             .shader = shaderModule->shader.get(),
+            .useMinSubgroupSize = v.useMinSubgroupSize,
           });
 
           *v.pipeline = std::move(newPipeline);
@@ -105,7 +113,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
         catch (std::exception& e)
         {
           // TODO: invoke pipeline completion handler or something
-          printf("Failed to compile compute pipeline. Reason: %s\n", e.what());
+          spdlog::error("Failed to compile compute pipeline. Reason: {}", e.what());
         }
       }
     }
@@ -139,6 +147,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
             .stencilState        = v.state.stencilState,
             .colorBlendState     = v.state.colorBlendState,
             .renderTargetFormats = v.state.renderTargetFormats,
+            .fsUseMinSubgroupSize = v.fsUseMinSubgroupSize,
           });
 
           *v.pipeline = std::move(newPipeline);
@@ -146,7 +155,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
         catch (std::exception& e)
         {
           // TODO: invoke pipeline completion handler or something
-          printf("Failed to compile compute pipeline. Reason: %s\n", e.what());
+          spdlog::error("Failed to compile compute pipeline. Reason: {}", e.what());
         }
       }
     }
@@ -154,7 +163,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
   catch(std::exception& e)
   {
     // TODO: invoke shader completion handler or something
-    printf("Failed to compile shader. Reason: %s\n", e.what());
+    spdlog::error("Failed to compile shader. Reason: {}", e.what());
   }
 }
 
@@ -248,7 +257,7 @@ PipelineManager::ShaderModuleValue& PipelineManager::EmplaceOrGetShaderModuleVal
   }
   catch (std::exception& e)
   {
-    printf("shader compilation error: %s\n", e.what());
+    spdlog::error("shader compilation error: {}", e.what());
     shaderModule->status = Status::FAILED;
   }
 

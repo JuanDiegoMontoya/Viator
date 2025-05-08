@@ -93,6 +93,7 @@ public:
   {
     std::string name = {};
     ShaderModuleCreateInfo shaderModuleInfo;
+    bool useMinSubgroupSize;
   };
 
   struct GraphicsPipelineState
@@ -112,6 +113,7 @@ public:
     std::optional<ShaderModuleCreateInfo> vertexModuleInfo;
     std::optional<ShaderModuleCreateInfo> fragmentModuleInfo;
     GraphicsPipelineState state;
+    bool fsUseMinSubgroupSize;
   };
 
   //GraphicsPipelineKey EnqueueCompileGraphicsPipeline();
@@ -155,12 +157,14 @@ private:
     std::unique_ptr<Fvog::GraphicsPipeline> pipeline;
     std::vector<ShaderModuleCreateInfo> stages;
     GraphicsPipelineState state;
+    bool fsUseMinSubgroupSize;
   };
 
   struct ComputePipelineValue
   {
     std::unique_ptr<Fvog::ComputePipeline> pipeline;
     ShaderModuleValue* shaderModuleValue;
+    bool useMinSubgroupSize;
   };
 
   ShaderModuleValue& EmplaceOrGetShaderModuleValue(const ShaderModuleCreateInfo& createInfo);

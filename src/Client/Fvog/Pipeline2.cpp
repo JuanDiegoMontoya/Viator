@@ -35,10 +35,15 @@ namespace Fvog
       .pName = "main",
     });
 
+    auto fsRequiredSubgroupSize = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo{
+      .sType                = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+      .requiredSubgroupSize = GetDevice().properties13.minSubgroupSize,
+    };
     if (info.fragmentShader)
     {
       stages.emplace_back(VkPipelineShaderStageCreateInfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext  = (info.fsUseMinSubgroupSize && GetDevice().properties13.requiredSubgroupSizeStages & VK_SHADER_STAGE_FRAGMENT_BIT) ? &fsRequiredSubgroupSize : nullptr,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
         .module = info.fragmentShader->Handle(),
         .pName = "main",
@@ -203,17 +208,23 @@ namespace Fvog
     ZoneNamed(_, true);
     ZoneNameV(_, name_.data(), name_.size());
 
+    auto requiredSubgroupSize = VkPipelineShaderStageRequiredSubgroupSizeCreateInfo{
+      .sType                = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO,
+      .requiredSubgroupSize = GetDevice().properties13.minSubgroupSize,
+    };
     CheckVkResult(vkCreateComputePipelines(Fvog::GetDevice().device_,
       nullptr,
       1,
       Address(VkComputePipelineCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-        .stage = {
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-          .module = info.shader->Handle(),
-          .pName = "main",
-        },
+        .stage =
+          {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = (info.useMinSubgroupSize && GetDevice().properties13.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) ? &requiredSubgroupSize : nullptr,
+            .stage  = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = info.shader->Handle(),
+            .pName  = "main",
+          },
         .layout = pipelineLayout,
       }),
       nullptr,

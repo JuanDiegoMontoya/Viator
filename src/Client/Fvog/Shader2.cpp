@@ -136,7 +136,7 @@ namespace Fvog
       }
       return static_cast<EShLanguage>(-1);
     }
-
+    
     detail::ShaderCompileInfo CompileShaderToSpirv(VkShaderStageFlagBits stage, std::string_view source, glslang::TShader::Includer* includer)
     {
       ZoneScoped;
@@ -154,6 +154,10 @@ namespace Fvog
       {
         preamble += "#define FROGRENDER_RAYTRACING_ENABLE 1\n";
       }
+      if (GetDevice().supportsFp16)
+      {
+        preamble += "#define FROGRENDER_FP16_ENABLE 1\n";
+      }
       shader.setPreamble(preamble.c_str());
       shader.setOverrideVersion(460);
       if (GetDevice().supportsRelaxedExtendedInstruction)
@@ -164,7 +168,7 @@ namespace Fvog
       bool parseResult;
       {
         ZoneScopedN("Parse shader");
-        constexpr auto compilerMessages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDebugInfo | EShMsgBuiltinSymbolTable | EShMsgEnhanced | EShMsgAbsolutePath | EShMsgDisplayErrorColumn);
+        constexpr auto compilerMessages = EShMessages(EShMsgSpvRules | EShMsgVulkanRules | EShMsgDebugInfo /*| EShMsgBuiltinSymbolTable*/ | EShMsgEnhanced | EShMsgAbsolutePath | EShMsgDisplayErrorColumn);
         if (includer)
         {
           parseResult = shader.parse(GetDefaultResources(), 460, EProfile::ECoreProfile, false, false, compilerMessages, *includer);
@@ -239,7 +243,7 @@ namespace Fvog
   {
     using namespace detail;
     ZoneScoped;
-    
+
     CheckVkResult(
       vkCreateShaderModule(Fvog::GetDevice().device_,
         Address(VkShaderModuleCreateInfo{
