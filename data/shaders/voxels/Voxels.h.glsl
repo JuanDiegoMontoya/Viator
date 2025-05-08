@@ -648,6 +648,265 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
   return false;
 }
 
+// Hierarchical DDA with a single loop and a manually managed stack.
+bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
+{
+  // Clear hit
+  hit.voxel = 0;
+  hit.voxelPosition = vec3(0);
+  hit.positionWorld = vec3(0);
+  hit.flatNormalWorld = vec3(0);
+  hit.texCoords = vec2(0);
+  hit.subVoxelMaterial.colorSrgb = vec4(0);
+
+  const int RAY_STATE_TOP_LEVEL    = 0;
+  const int RAY_STATE_BOTTOM_LEVEL = 1;
+  const int RAY_STATE_VOXEL        = 2;
+  const int RAY_STATE_SUBVOXEL     = 3;
+  const int RAY_STATE_COUNT        = 4;
+
+  struct StackFrame
+  {
+    vec3 rayPosition;
+    vec3 mapPos;
+    vec3 sideDist;
+    vec3 cases;
+    int i;
+  };
+
+  // Common state
+  const vec3 deltaDist = 1.0 / abs(rayDirection);
+  const vec3 S         = vec3(step(0.0, rayDirection));
+  const vec3 stepDir   = 2 * S - 1;
+  const vec3 minRayPos = vec3(0); // Constant- none of the grids allow negative positions.
+  vec3 maxRayPos = g_voxels.topLevelBricksDims;
+  bool hasHit = false;
+
+  // Stack frames and location of the ray in the grid hierarchy (stack pointer).
+  StackFrame frames[RAY_STATE_COUNT];
+  int rayState = RAY_STATE_TOP_LEVEL;
+
+  // Initial (top-level) ray state
+  frames[0].rayPosition = rayPositionW / TL_BRICK_VOXELS_PER_SIDE;
+  frames[0].mapPos = floor(frames[0].rayPosition);
+  frames[0].sideDist = (S - stepDir * fract(frames[0].rayPosition)) * deltaDist;
+  frames[0].cases = frames[0].sideDist;
+  frames[0].i = 0;
+
+  // Subgrid (subvoxel)-level ray state
+  uint subGridIndex;
+  
+  for (; frames[rayState].i < tMax;)
+  {
+    // For the top level, traversal outside the map area is ok, just skip.
+    if (all(greaterThanEqual(frames[rayState].mapPos, minRayPos)) && all(lessThan(frames[rayState].mapPos, maxRayPos)))
+    {
+      TopLevelBrickPtr topLevelBrickPtr;
+      BottomLevelBrickPtr bottomLevelBrickPtr;
+      uint localVoxelIndex;
+      bool voxelOccupancy;
+      uint8_t subVoxel;
+
+      // Determine whether to go down to the next level of the hierarchy or continue DDA in this level
+      bool maybeHit = false;
+      if (rayState == RAY_STATE_TOP_LEVEL)
+      {
+        gTopLevelBricksTraversed++;
+        const uint topLevelIndex = FlattenTopLevelBrickCoord(ivec3(frames[rayState].mapPos));
+        topLevelBrickPtr = TOP_LEVEL_PTRS[g_voxels.topLevelBrickPtrsBaseIndex + topLevelIndex];
+        // If brick is not all invisible
+        maybeHit = !(topLevelBrickPtr.voxelsDoBeAllSame == 1 && !vx_IsVisible(topLevelBrickPtr.topLevelBrickIndexOrVoxelIfAllSame));
+      }
+      else if (rayState == RAY_STATE_BOTTOM_LEVEL)
+      {
+        gBottomLevelBricksTraversed++;
+        const uint bottomLevelIndex = FlattenBottomLevelBrickCoord(ivec3(frames[rayState].mapPos));
+        bottomLevelBrickPtr = TOP_LEVEL_BRICKS[topLevelBrickPtr.topLevelBrickIndexOrVoxelIfAllSame].bricks[bottomLevelIndex];
+        maybeHit = !(bottomLevelBrickPtr.voxelsDoBeAllSame == 1 && !vx_IsVisible(bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame));
+      }
+      else if (rayState == RAY_STATE_VOXEL)
+      {
+        gVoxelsTraversed++;
+        localVoxelIndex = FlattenVoxelCoord(ivec3(frames[rayState].mapPos));
+        voxelOccupancy = bool(BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].occupancy.bitmask[localVoxelIndex / 32u] & (1u << localVoxelIndex % 32u));
+        maybeHit = voxelOccupancy;
+      }
+      else if (rayState == RAY_STATE_SUBVOXEL)
+      {
+        const uint subVoxelIndex = FlattenSubGridCoord(subGridIndex, ivec3(frames[rayState].mapPos));
+        subVoxel = SUBVOXELS[SUBGRIDS[subGridIndex].gridBase + subVoxelIndex];
+        maybeHit = subVoxel != 0;
+      }
+
+      if (maybeHit)
+      {
+        const vec3 p      = frames[rayState].mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
+        const vec3 normal = vec3(ivec3(vec3(frames[rayState].cases))) * -vec3(stepDir);
+        // Degenerate if ray starts inside a homogeneous top-level brick
+        const float t    = (dot(normal, p - frames[rayState].rayPosition)) / dot(normal, rayDirection);
+        vec3 hitWorldPos = frames[rayState].rayPosition + rayDirection * t;
+        vec3 uvw         = hitWorldPos - frames[rayState].mapPos; // Don't use fract here
+
+        if (frames[rayState].i == 0)
+        {
+          if (rayState != RAY_STATE_SUBVOXEL)
+          {
+            uvw = frames[rayState].rayPosition - frames[rayState].mapPos;
+          }
+          hitWorldPos = frames[rayState].rayPosition;
+        }
+
+        if (rayState == RAY_STATE_TOP_LEVEL)
+        {
+          if (topLevelBrickPtr.voxelsDoBeAllSame == 1)
+          {
+            hit.voxel = voxel_t(topLevelBrickPtr.topLevelBrickIndexOrVoxelIfAllSame);
+            // Hack, but seems to work
+            hit.voxelPosition   = ivec3(hitWorldPos * TL_BRICK_VOXELS_PER_SIDE - EPSILON);
+            hit.positionWorld   = hitWorldPos * TL_BRICK_VOXELS_PER_SIDE;
+            hit.texCoords       = fract(vx_GetTexCoords(normal, uvw) * TL_BRICK_VOXELS_PER_SIDE); // Might behave poorly
+            hit.flatNormalWorld = normal;
+            hasHit              = true;
+            break;
+          }
+
+          rayState++;
+
+          maxRayPos = vec3(TL_BRICK_SIDE_LENGTH);
+          frames[rayState].rayPosition = clamp(uvw * TL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(TL_BRICK_SIDE_LENGTH - EPSILON));
+          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
+          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
+          frames[rayState].cases       = frames[rayState - 1].cases;
+          frames[rayState].i           = 0;
+          continue;
+        }
+        else if (rayState == RAY_STATE_BOTTOM_LEVEL)
+        {
+          if (bottomLevelBrickPtr.voxelsDoBeAllSame == 1)
+          {
+            hit.voxel = voxel_t(bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame);
+            // Hack, but seems to work
+            hit.voxelPosition   = ivec3(hitWorldPos * BL_BRICK_SIDE_LENGTH - EPSILON);
+            hit.positionWorld   = hitWorldPos * BL_BRICK_SIDE_LENGTH;
+            hit.texCoords       = fract(vx_GetTexCoords(normal, uvw) * BL_BRICK_SIDE_LENGTH); // Might behave poorly
+            hit.flatNormalWorld = normal;
+            hasHit              = true;
+            break;
+          }
+
+          rayState++;
+          
+          maxRayPos = vec3(BL_BRICK_SIDE_LENGTH);
+          frames[rayState].rayPosition = clamp(uvw * BL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(BL_BRICK_SIDE_LENGTH - EPSILON));
+          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
+          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
+          frames[rayState].cases       = frames[rayState - 1].cases;
+          frames[rayState].i           = 0;
+          continue;
+        }
+        else if (rayState == RAY_STATE_VOXEL)
+        {
+          const voxel_t voxel = BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].voxels[localVoxelIndex];
+          hit.voxel         = voxel;
+          hit.voxelPosition = ivec3(frames[rayState].mapPos);
+
+          GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+          if (!bool(material.materialFlags & IS_SUBGRID))
+          {
+            hit.positionWorld   = hitWorldPos;
+            hit.texCoords       = vx_GetTexCoords(normal, uvw);
+            hit.flatNormalWorld = normal;
+            hasHit              = true;
+            break;
+          }
+
+          rayState++;
+          
+          subGridIndex = material.subGridIndex;
+          const vec3 subGridDims = SUBGRIDS[subGridIndex].dimensions;
+          maxRayPos = subGridDims;
+          frames[rayState].rayPosition = clamp(uvw * subGridDims, vec3(EPSILON), vec3(subGridDims - EPSILON));
+          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
+          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
+          frames[rayState].cases       = frames[rayState - 1].cases;
+          frames[rayState].i           = 0;
+          continue;
+        }
+        else if (rayState == RAY_STATE_SUBVOXEL)
+        {
+          hit.positionWorld    = hitWorldPos / SUBGRIDS[subGridIndex].dimensions;
+          hit.flatNormalWorld  = normal;
+          hit.subVoxelMaterial = SUBGRIDS[subGridIndex].materials[subVoxel - 1];
+          hasHit = true;
+          break;
+        }
+      }
+    }
+    else if (rayState != RAY_STATE_TOP_LEVEL) // If OOB, "return" from inner grid traversal.
+    {
+      rayState--;
+      // Reset grid bounds.
+      if (rayState == RAY_STATE_TOP_LEVEL)
+      {
+        maxRayPos = g_voxels.topLevelBricksDims;
+      }
+      else if (rayState == RAY_STATE_BOTTOM_LEVEL)
+      {
+        maxRayPos = vec3(TL_BRICK_SIDE_LENGTH);
+      }
+      else if (rayState == RAY_STATE_VOXEL)
+      {
+        maxRayPos = vec3(BL_BRICK_SIDE_LENGTH);
+      }
+      // Fallthrough and finish the step of traversal in the level above us.
+    }
+
+    vec4 conds = step(frames[rayState].sideDist.xxyy, frames[rayState].sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+
+    frames[rayState].cases.x = conds.x * conds.y;
+    frames[rayState].cases.y = (1.0 - frames[rayState].cases.x) * conds.z * conds.w;
+    frames[rayState].cases.z = (1.0 - frames[rayState].cases.x) * (1.0 - frames[rayState].cases.y);
+
+    frames[rayState].sideDist += max((2.0 * frames[rayState].cases - 1.0) * deltaDist, 0.0);
+
+    frames[rayState].mapPos += frames[rayState].cases * stepDir;
+
+    frames[rayState].i++;
+  }
+
+  if (hasHit)
+  {
+    // Fallthrough intentional
+    switch (rayState - 1)
+    {
+    case RAY_STATE_SUBVOXEL: // Unreachable
+    case RAY_STATE_VOXEL:
+      hit.positionWorld += frames[RAY_STATE_VOXEL].mapPos;
+    case RAY_STATE_BOTTOM_LEVEL:
+      hit.voxelPosition += frames[RAY_STATE_BOTTOM_LEVEL].mapPos * BL_BRICK_SIDE_LENGTH;
+      hit.positionWorld += frames[RAY_STATE_BOTTOM_LEVEL].mapPos * BL_BRICK_SIDE_LENGTH;
+    case RAY_STATE_TOP_LEVEL:
+      hit.voxelPosition += frames[RAY_STATE_TOP_LEVEL].mapPos * TL_BRICK_VOXELS_PER_SIDE;
+      hit.positionWorld += frames[RAY_STATE_TOP_LEVEL].mapPos * TL_BRICK_VOXELS_PER_SIDE;
+    }
+
+    GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
+    if (bool(material.materialFlags & RANDOMIZE_TEXCOORDS_ROTATION))
+    {
+      // Random quarter turn
+      const float cos90[4] = {1, 0, -1, 0};
+      const uint quarters  = uint(10000 * MM_Hash3(hit.voxelPosition + hit.flatNormalWorld * 0.5));
+      const float cosTheta = cos90[quarters % 4];
+      const float sinTheta = cos90[(quarters + 1) % 4];
+      const mat2 rot       = {{cosTheta, sinTheta}, {-sinTheta, cosTheta}};
+      hit.texCoords -= .5;
+      hit.texCoords = rot * hit.texCoords;
+      hit.texCoords += 0.5;
+    }
+  }
+  return hasHit;
+}
+
 vec3 GetHitAlbedo(HitSurfaceParameters hit)
 {
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
@@ -658,7 +917,7 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
     return hit.subVoxelMaterial.colorSrgb.rgb;
   }
 
-  vec3 albedo               = material.baseColorFactor;
+  vec3 albedo = material.baseColorFactor;
   if (bool(material.materialFlags & HAS_BASE_COLOR_TEXTURE))
   {
     albedo *= textureLod(material.baseColorTexture, g_voxels.voxelSampler, hit.texCoords, 0).rgb;

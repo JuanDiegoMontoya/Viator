@@ -29,7 +29,7 @@ vec3 CreateRay(vec2 uv, mat4 view_from_clip, mat4 world_from_view)
   vec4 dirView = view_from_clip * posClip;
   dirView.w = 0.0;
   const vec3 dirWorld = (world_from_view * dirView).xyz;
-  return normalize(dirWorld); 
+  return normalize(dirWorld);
 }
 
 void main()
@@ -44,7 +44,8 @@ void main()
 
   HitSurfaceParameters hit;
   //if (vx_TraceRaySimple(rayPos, rayDir, 512, hit))
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 32, hit))
+  //if (vx_TraceRayMultiLevel(rayPos, rayDir, 32, hit))
+  if (vx_TraceRayUnified(rayPos, rayDir, 132, hit))
   {
     albedo = GetHitAlbedo(hit);
     normal = hit.flatNormalWorld;
