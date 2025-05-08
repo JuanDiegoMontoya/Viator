@@ -266,7 +266,7 @@ struct HitSurfaceParameters
   vec3 positionWorld;
   vec3 flatNormalWorld;
   vec2 texCoords;
-  SubVoxelMaterial subVoxelMaterial;
+  uint subVoxelMaterialIndex;
 };
 
 float gTopLevelBricksTraversed    = 0;
@@ -339,7 +339,7 @@ bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, 
 
       hit.positionWorld   = hitWorldPos / subGrid.dimensions;
       hit.flatNormalWorld = normal;
-      hit.subVoxelMaterial = subGrid.materials[subVoxel - 1];
+      hit.subVoxelMaterialIndex = subVoxel - 1;
       return true;
     }
 
@@ -657,49 +657,60 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
   hit.positionWorld = vec3(0);
   hit.flatNormalWorld = vec3(0);
   hit.texCoords = vec2(0);
-  hit.subVoxelMaterial.colorSrgb = vec4(0);
+  hit.subVoxelMaterialIndex = 0;
 
-  const int RAY_STATE_TOP_LEVEL    = 0;
-  const int RAY_STATE_BOTTOM_LEVEL = 1;
-  const int RAY_STATE_VOXEL        = 2;
-  const int RAY_STATE_SUBVOXEL     = 3;
-  const int RAY_STATE_COUNT        = 4;
+  // Stack pointer type. Crashes on AMD (25.3.1) if 8-bit type.
+  #define sp_t int16_t
+  const sp_t RAY_STATE_TOP_LEVEL    = sp_t(0);
+  const sp_t RAY_STATE_BOTTOM_LEVEL = sp_t(1);
+  const sp_t RAY_STATE_VOXEL        = sp_t(2);
+  const sp_t RAY_STATE_SUBVOXEL     = sp_t(3);
+  const sp_t RAY_STATE_COUNT        = sp_t(4);
 
+  // StackFrame typedefs
+  #define rp_t vec3
+  #define mp_t i8vec3
+  #define sd_t vec3
+  #define i_t uint8_t
   struct StackFrame
   {
-    vec3 rayPosition;
-    vec3 mapPos;
-    vec3 sideDist;
-    vec3 cases;
-    int i;
+    rp_t rayPosition;
+    mp_t mapPos;
+    sd_t sideDist;
+    bvec3 cases;
+    i_t i;
   };
 
   // Common state
   const vec3 deltaDist = 1.0 / abs(rayDirection);
-  const vec3 S         = vec3(step(0.0, rayDirection));
-  const vec3 stepDir   = 2 * S - 1;
+  const bvec3 S         = bvec3(step(0.0, rayDirection));
+  //#define stepDir (2 * vec3(S) - 1)
+  #define stepDir_t i8vec3
+  const stepDir_t stepDir = stepDir_t(2 * vec3(S) - 1);
   const vec3 minRayPos = vec3(0); // Constant- none of the grids allow negative positions.
-  vec3 maxRayPos = g_voxels.topLevelBricksDims;
+  #define mrp_t i8vec3
+  mrp_t maxRayPos = mrp_t(g_voxels.topLevelBricksDims);
   bool hasHit = false;
 
   // Stack frames and location of the ray in the grid hierarchy (stack pointer).
-  StackFrame frames[RAY_STATE_COUNT];
-  int rayState = RAY_STATE_TOP_LEVEL;
+  StackFrame frames[int(RAY_STATE_COUNT)];
+  sp_t rayState = RAY_STATE_TOP_LEVEL;
 
   // Initial (top-level) ray state
-  frames[0].rayPosition = rayPositionW / TL_BRICK_VOXELS_PER_SIDE;
-  frames[0].mapPos = floor(frames[0].rayPosition);
-  frames[0].sideDist = (S - stepDir * fract(frames[0].rayPosition)) * deltaDist;
-  frames[0].cases = frames[0].sideDist;
-  frames[0].i = 0;
+  frames[0].rayPosition = rp_t(rayPositionW / TL_BRICK_VOXELS_PER_SIDE);
+  frames[0].mapPos = mp_t(floor(frames[0].rayPosition));
+  frames[0].sideDist = sd_t((i8vec3(S) - stepDir * fract(frames[0].rayPosition)) * deltaDist);
+  frames[0].cases = bvec3(round(frames[0].sideDist));
+  frames[0].i = i_t(0);
 
   // Subgrid (subvoxel)-level ray state
   uint subGridIndex;
   
-  for (; frames[rayState].i < tMax;)
+  [[dont_unroll]]
+  for (; frames[rayState].i < i_t(tMax);)
   {
     // For the top level, traversal outside the map area is ok, just skip.
-    if (all(greaterThanEqual(frames[rayState].mapPos, minRayPos)) && all(lessThan(frames[rayState].mapPos, maxRayPos)))
+    if (all(greaterThanEqual(frames[rayState].mapPos, minRayPos)) && all(lessThan(frames[rayState].mapPos, mp_t(maxRayPos))))
     {
       TopLevelBrickPtr topLevelBrickPtr;
       BottomLevelBrickPtr bottomLevelBrickPtr;
@@ -740,18 +751,21 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
 
       if (maybeHit)
       {
+        #define uvw_t vec3
+        #define n_t i8vec3
+
         const vec3 p      = frames[rayState].mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
-        const vec3 normal = vec3(ivec3(vec3(frames[rayState].cases))) * -vec3(stepDir);
+        const n_t normal = n_t(i8vec3(frames[rayState].cases) * -i8vec3(stepDir));
         // Degenerate if ray starts inside a homogeneous top-level brick
         const float t    = (dot(normal, p - frames[rayState].rayPosition)) / dot(normal, rayDirection);
         vec3 hitWorldPos = frames[rayState].rayPosition + rayDirection * t;
-        vec3 uvw         = hitWorldPos - frames[rayState].mapPos; // Don't use fract here
+        uvw_t uvw    = uvw_t(hitWorldPos - frames[rayState].mapPos); // Don't use fract here
 
-        if (frames[rayState].i == 0)
+        if (frames[rayState].i == i_t(0))
         {
           if (rayState != RAY_STATE_SUBVOXEL)
           {
-            uvw = frames[rayState].rayPosition - frames[rayState].mapPos;
+            uvw = uvw_t(frames[rayState].rayPosition - frames[rayState].mapPos);
           }
           hitWorldPos = frames[rayState].rayPosition;
         }
@@ -772,13 +786,8 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
 
           rayState++;
 
-          maxRayPos = vec3(TL_BRICK_SIDE_LENGTH);
-          frames[rayState].rayPosition = clamp(uvw * TL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(TL_BRICK_SIDE_LENGTH - EPSILON));
-          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
-          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
-          frames[rayState].cases       = frames[rayState - 1].cases;
-          frames[rayState].i           = 0;
-          continue;
+          maxRayPos = mrp_t(TL_BRICK_SIDE_LENGTH);
+          frames[rayState].rayPosition = rp_t(clamp(vec3(uvw) * TL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(TL_BRICK_SIDE_LENGTH - EPSILON)));
         }
         else if (rayState == RAY_STATE_BOTTOM_LEVEL)
         {
@@ -796,13 +805,8 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
 
           rayState++;
           
-          maxRayPos = vec3(BL_BRICK_SIDE_LENGTH);
-          frames[rayState].rayPosition = clamp(uvw * BL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(BL_BRICK_SIDE_LENGTH - EPSILON));
-          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
-          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
-          frames[rayState].cases       = frames[rayState - 1].cases;
-          frames[rayState].i           = 0;
-          continue;
+          maxRayPos = mrp_t(BL_BRICK_SIDE_LENGTH);
+          frames[rayState].rayPosition = rp_t(clamp(vec3(uvw) * BL_BRICK_SIDE_LENGTH, vec3(EPSILON), vec3(BL_BRICK_SIDE_LENGTH - EPSILON)));
         }
         else if (rayState == RAY_STATE_VOXEL)
         {
@@ -820,25 +824,43 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
             break;
           }
 
+#if 0
+          vx_InitialDDAState init;
+          init.deltaDist = deltaDist;
+          init.S         = vec3(S);
+          init.stepDir   = stepDir;
+          if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, vec3(frames[rayState].cases), hit))
+          {
+            hit.positionWorld += ivec3(frames[rayState].mapPos);
+            hasHit = true;
+            break;
+          }
+#else
           rayState++;
           
           subGridIndex = material.subGridIndex;
           const vec3 subGridDims = SUBGRIDS[subGridIndex].dimensions;
-          maxRayPos = subGridDims;
-          frames[rayState].rayPosition = clamp(uvw * subGridDims, vec3(EPSILON), vec3(subGridDims - EPSILON));
-          frames[rayState].mapPos      = floor(frames[rayState].rayPosition);
-          frames[rayState].sideDist    = (S - stepDir * fract(frames[rayState].rayPosition)) * deltaDist;
-          frames[rayState].cases       = frames[rayState - 1].cases;
-          frames[rayState].i           = 0;
-          continue;
+          maxRayPos = mrp_t(subGridDims);
+          frames[rayState].rayPosition = rp_t(clamp(uvw * subGridDims, vec3(EPSILON), vec3(subGridDims - EPSILON)));
+#endif
         }
         else if (rayState == RAY_STATE_SUBVOXEL)
         {
           hit.positionWorld    = hitWorldPos / SUBGRIDS[subGridIndex].dimensions;
           hit.flatNormalWorld  = normal;
-          hit.subVoxelMaterial = SUBGRIDS[subGridIndex].materials[subVoxel - 1];
+          hit.subVoxelMaterialIndex = subVoxel - 1;
+          //hit.subVoxelMaterial = SUBGRIDS[subGridIndex].materials[subVoxel - 1];
           hasHit = true;
           break;
+        }
+
+        if (maybeHit)
+        {
+          frames[rayState].mapPos      = mp_t(floor(frames[rayState].rayPosition));
+          frames[rayState].sideDist    = sd_t((i8vec3(S) - stepDir * fract(frames[rayState].rayPosition)) * deltaDist);
+          frames[rayState].cases       = frames[rayState - 1].cases;
+          frames[rayState].i           = i_t(0);
+          continue;
         }
       }
     }
@@ -848,28 +870,28 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
       // Reset grid bounds.
       if (rayState == RAY_STATE_TOP_LEVEL)
       {
-        maxRayPos = g_voxels.topLevelBricksDims;
+        maxRayPos = mrp_t(g_voxels.topLevelBricksDims);
       }
       else if (rayState == RAY_STATE_BOTTOM_LEVEL)
       {
-        maxRayPos = vec3(TL_BRICK_SIDE_LENGTH);
+        maxRayPos = mrp_t(TL_BRICK_SIDE_LENGTH);
       }
       else if (rayState == RAY_STATE_VOXEL)
       {
-        maxRayPos = vec3(BL_BRICK_SIDE_LENGTH);
+        maxRayPos = mrp_t(BL_BRICK_SIDE_LENGTH);
       }
       // Fallthrough and finish the step of traversal in the level above us.
     }
 
-    vec4 conds = step(frames[rayState].sideDist.xxyy, frames[rayState].sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(frames[rayState].sideDist.xxyy, frames[rayState].sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
 
-    frames[rayState].cases.x = conds.x * conds.y;
-    frames[rayState].cases.y = (1.0 - frames[rayState].cases.x) * conds.z * conds.w;
-    frames[rayState].cases.z = (1.0 - frames[rayState].cases.x) * (1.0 - frames[rayState].cases.y);
+    frames[rayState].cases.x = conds.x && conds.y;
+    frames[rayState].cases.y = (!frames[rayState].cases.x) && conds.z && conds.w;
+    frames[rayState].cases.z = (!frames[rayState].cases.x) && (!frames[rayState].cases.y);
 
-    frames[rayState].sideDist += max((2.0 * frames[rayState].cases - 1.0) * deltaDist, 0.0);
+    frames[rayState].sideDist += sd_t(max((2.0 * vec3(frames[rayState].cases) - 1.0) * deltaDist, 0.0));
 
-    frames[rayState].mapPos += frames[rayState].cases * stepDir;
+    frames[rayState].mapPos += mp_t(i8vec3(frames[rayState].cases) * stepDir);
 
     frames[rayState].i++;
   }
@@ -913,8 +935,7 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 
   if (bool(material.materialFlags & IS_SUBGRID))
   {
-    //return vec3(hit.flatNormalWorld * .5 + .5);
-    return hit.subVoxelMaterial.colorSrgb.rgb;
+    return SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
   }
 
   vec3 albedo = material.baseColorFactor;
@@ -984,7 +1005,8 @@ float GetPunctualLightVisibility(vec3 surfacePos, uint lightIndex)
 
 vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint samples, uint bounces, Texture2D noiseTexture)
 {
-  vec3 indirectIlluminance = {0, 0, 0};
+  #define illum_t min16vec3
+  illum_t indirectIlluminance = illum_t(0);
 
   // This state must be independent of the state used for sampling a direction
   // uint randState = PCG_Hash(shadingUniforms.frameNumber + PCG_Hash(gid.y + PCG_Hash(gid.x)));
@@ -994,7 +1016,9 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
   // uint noiseOffsetState = PCG_Hash(shadingUniforms.frameNumber);
   uint noiseOffsetState = 12340;
 
-  vec3 currentAlbedo = vec3(1);
+  #define albedo_t min16vec3
+  vec3 currentAlbedo = albedo_t(1);
+  [[dont_unroll]]
   for (uint ptSample = 0; ptSample < samples; ptSample++)
   {
     // These additional sources of randomness are useful when the noise texture is a low resolution
@@ -1005,7 +1029,9 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
     vec3 curRayPos = rayPosition;
     // Surface curSurface = surface;
 
-    vec3 throughput = {1, 1, 1};
+    #define throughput_t min16vec3
+    throughput_t throughput = throughput_t(1);
+    [[dont_unroll]]
     for (uint bounce = 0; bounce < bounces; bounce++)
     {
       const ivec2 noiseOffset       = ivec2(PCG_RandU32(noiseOffsetState), PCG_RandU32(noiseOffsetState));
@@ -1025,12 +1051,13 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
       const vec3 brdf_over_pdf = currentAlbedo / M_PI / pdf; // Lambertian
       // const vec3 brdf_over_pdf = BRDF(-prevRayDir, curRayDir, curSurface) / pdf; // Cook-Torrance
 
-      throughput *= cos_theta * brdf_over_pdf;
+      throughput *= throughput_t(cos_theta * brdf_over_pdf);
 
       HitSurfaceParameters hit;
       if (vx_TraceRayMultiLevel(curRayPos, curRayDir, 16, hit))
+      //if (vx_TraceRayUnified(curRayPos, curRayDir, 64, hit))
       {
-        indirectIlluminance += throughput * GetHitEmission(hit);
+        indirectIlluminance += throughput * illum_t(GetHitEmission(hit));
 
         // prevRayDir = curRayDir;
         curRayPos     = hit.positionWorld + hit.flatNormalWorld * 0.0001;
@@ -1063,12 +1090,12 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
           const float sunShadow = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-4, sunDir);
 
           // indirectIlluminance += sunColor_internal_space *
-          indirectIlluminance += throughput *
+          indirectIlluminance += illum_t(throughput *
                                 // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
                                 //(curSurface.albedo / M_PI) *
                                 (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, sunDir), 0.0, 1.0) * sunShadow * 10000 /
                                 // sunShadow /
-                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf;
+                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
         }
         else
         {
@@ -1082,7 +1109,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
             surface.albedo   = GetHitAlbedo(hit);
             surface.normal   = hit.flatNormalWorld;
             surface.position = hit.positionWorld;
-            indirectIlluminance += throughput * visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
+            indirectIlluminance += illum_t(throughput * visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf);
           }
         }
       }
@@ -1094,13 +1121,13 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         //     shadingUniforms.shadingInternalColorSpace);
         // const vec3 skyEmittance = {.1, .3, .5};
         const vec3 skyEmittance = curRayDir * .5 + .5;
-        indirectIlluminance += skyEmittance * throughput;
+        indirectIlluminance += illum_t(skyEmittance) * throughput;
         break;
       }
     }
   }
 
-  return indirectIlluminance / samples;
+  return vec3(indirectIlluminance) / samples;
 }
 
 void vx_Init(Voxels voxels)

@@ -59,16 +59,35 @@
 #extension GL_EXT_buffer_reference : require              // BDA
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require // TODO: check support for this ext
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require // TODO: check support for this ext
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
 //#extension GL_EXT_buffer_reference2 : require              // BDA
 #extension GL_EXT_shader_image_load_formatted : require   // readable images without explicit format
 #extension GL_EXT_samplerless_texture_functions : require // texelFetch on sampled images
 #extension GL_EXT_debug_printf : enable                   // printf
+#extension GL_EXT_control_flow_attributes : require
 
 #ifdef FROGRENDER_RAYTRACING_ENABLE
 #extension GL_EXT_ray_tracing : require
 #extension GL_EXT_ray_query : require
 // TODO: Remove. This extension seems to be bugged on AMD drivers as of Sep 2, 2024
 #extension GL_EXT_ray_tracing_position_fetch : require
+#endif
+
+#ifndef FROGRENDER_FP16_ENABLE
+  #define FROGRENDER_FP16_ENABLE 
+#endif
+// minX_t typedefs
+#ifdef FROGRENDER_FP16_ENABLE
+  #define min16float float16_t
+  #define min16vec2 f16vec2
+  #define min16vec3 f16vec3
+  #define min16vec4 f16vec4
+#else
+  #define min16float float
+  #define min16vec2 vec2
+  #define min16vec3 vec3
+  #define min16vec4 vec4
 #endif
 
 #define NonUniformIndex nonuniformEXT
