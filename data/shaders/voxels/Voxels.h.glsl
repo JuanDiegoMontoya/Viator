@@ -508,6 +508,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
   bool hasHit = false;
   for (int i = 0; i < tMax; i++)
   {
+
     // For the top level, traversal outside the map area is ok, just skip
     if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, g_voxels.topLevelBricksDims)))
     {
@@ -550,6 +551,12 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
         }
       }
     }
+#if 0 // Early-out for rays that won't collide with the map.
+    else if (!AABBIntersect(rayPosition, rayDirection, vec3(0), g_voxels.topLevelBricksDims))
+    {
+      return false;
+    }
+#endif
 
     vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
 
@@ -671,7 +678,7 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
   #define rp_t vec3
   #define mp_t i8vec3
   #define sd_t vec3
-  #define i_t uint8_t
+  #define i_t uint16_t
   struct StackFrame
   {
     rp_t rayPosition;
@@ -709,6 +716,15 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
   [[dont_unroll]]
   for (; frames[rayState].i < i_t(tMax);)
   {
+    if (rayState == RAY_STATE_TOP_LEVEL)
+    {
+      // Early out if the ray can't re-enter the grid.
+      if (!AABBIntersect(frames[RAY_STATE_TOP_LEVEL].rayPosition, rayDirection, minRayPos, maxRayPos))
+      {
+        return false;
+      }
+    }
+
     // For the top level, traversal outside the map area is ok, just skip.
     if (all(greaterThanEqual(frames[rayState].mapPos, minRayPos)) && all(lessThan(frames[rayState].mapPos, mp_t(maxRayPos))))
     {
@@ -978,7 +994,7 @@ vec3 GetHitEmission(HitSurfaceParameters hit)
 float TraceSunRay(vec3 rayPosition, vec3 sunDir)
 {
   HitSurfaceParameters hit2;
-  if (vx_TraceRayMultiLevel(rayPosition, sunDir, 64, hit2))
+  if (vx_TraceRayMultiLevel(rayPosition, sunDir, 8, hit2))
   {
     return 0;
   }
@@ -1055,7 +1071,8 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
 
       HitSurfaceParameters hit;
       if (vx_TraceRayMultiLevel(curRayPos, curRayDir, 16, hit))
-      //if (vx_TraceRayUnified(curRayPos, curRayDir, 64, hit))
+      //if (vx_TraceRayUnified(curRayPos, curRayDir, 256, hit))
+      //if (vx_TraceRaySimple(curRayPos, curRayDir, 256, hit))
       {
         indirectIlluminance += throughput * illum_t(GetHitEmission(hit));
 
@@ -1081,35 +1098,48 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         //     xi,
         //     numSunShadowRays);
 
-        // TODO: merge divergent ray tracing in these branches (perf is literally halved when there's even one local light)
         const uint lightIndex = PCG_RandU32(randState) % (g_voxels.numLights + 1);
         const float lightPdf  = 1.0 / (g_voxels.numLights + 1);
+        vec3 neeRayDir;
         if (lightIndex == 0)
         {
-          const vec3 sunDir     = normalize(vec3(.7, 1, .3));
-          const float sunShadow = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-4, sunDir);
-
-          // indirectIlluminance += sunColor_internal_space *
-          indirectIlluminance += illum_t(throughput *
-                                // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
-                                //(curSurface.albedo / M_PI) *
-                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, sunDir), 0.0, 1.0) * sunShadow * 10000 /
-                                // sunShadow /
-                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
+          neeRayDir = normalize(vec3(.7, 1, .3));
         }
         else
         {
           // Local light NEE
           GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex - 1];
-
-          const float visibility = GetPunctualLightVisibility(hit.positionWorld + hit.flatNormalWorld * 0.0001, lightIndex - 1);
-          if (visibility > 0)
+          neeRayDir = normalize(light.position - hit.positionWorld);
+        }
+        float hitDist2 = 1e20;
+        HitSurfaceParameters hit2;
+        if (vx_TraceRayMultiLevel(curRayPos, neeRayDir, 16, hit2))
+        //if (vx_TraceRayUnified(curRayPos, neeRayDir, 256, hit2))
+        //if (vx_TraceRaySimple(curRayPos, neeRayDir, 256, hit2))
+        {
+          hitDist2 = distance2(hit2.positionWorld, hit.positionWorld);
+        }
+        
+        if (lightIndex == 0 && hitDist2 > 1e10)
+        {
+          indirectIlluminance += illum_t(throughput *
+                                // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
+                                //(curSurface.albedo / M_PI) *
+                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * 10000 /
+                                // sunShadow /
+                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
+        }
+        else
+        {
+          GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex - 1];
+          // If hit distance is farther than distance to light, then we made it to the light.
+          if (hitDist2 > distance2(hit.positionWorld, light.position))
           {
             Surface surface;
             surface.albedo   = GetHitAlbedo(hit);
             surface.normal   = hit.flatNormalWorld;
             surface.position = hit.positionWorld;
-            indirectIlluminance += illum_t(throughput * visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf);
+            indirectIlluminance += illum_t(throughput * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf);
           }
         }
       }

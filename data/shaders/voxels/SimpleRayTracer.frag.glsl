@@ -44,8 +44,8 @@ void main()
 
   HitSurfaceParameters hit;
   //if (vx_TraceRaySimple(rayPos, rayDir, 512, hit))
-  //if (vx_TraceRayMultiLevel(rayPos, rayDir, 32, hit))
-  if (vx_TraceRayUnified(rayPos, rayDir, 132, hit))
+  if (vx_TraceRayMultiLevel(rayPos, rayDir, 32, hit))
+  //if (vx_TraceRayUnified(rayPos, rayDir, 132, hit))
   {
     albedo = GetHitAlbedo(hit);
     normal = hit.flatNormalWorld;

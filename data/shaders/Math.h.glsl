@@ -180,4 +180,31 @@ float cosine_weighted_hemisphere_PDF(float cosTheta)
   return cosTheta / M_PI;
 }
 
+// https://github.com/JuanDiegoMontoya/Voxel_Engine/blob/0d837ca6c7c659c92fbf518f61a9659d60a133df/Source/Source/resources/Shaders/chunk_splat.fs#L120
+// Slab method
+bool AABBIntersect(vec3 ro, vec3 rd, vec3 minV, vec3 maxV)
+{
+  // inverse of ray direction
+  vec3 invR = 1.0 / rd;
+
+  vec3 tbot = (minV - ro) * invR;
+  vec3 ttop = (maxV - ro) * invR;
+
+  vec3 tmin = min(ttop, tbot);
+  vec3 tmax = max(ttop, tbot);
+
+  vec2 t = max(tmin.xx, tmin.yz);
+
+  float t0 = max(t.x, t.y);
+  t = min(tmax.xx, tmax.yz);
+  float t1 = min(t.x, t.y);
+
+  return t0 <= t1;
+}
+
+float distance2(vec3 a, vec3 b)
+{
+  return dot(a - b, a - b);
+}
+
 #endif // MATH_H
