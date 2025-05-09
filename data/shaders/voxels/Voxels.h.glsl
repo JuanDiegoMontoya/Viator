@@ -66,19 +66,19 @@ struct TopLevelBrickPtr
   uint topLevelBrickIndexOrVoxelIfAllSame;
 };
 
-FVOG_DECLARE_STORAGE_BUFFERS(TopLevelBrickPtrs)
+FVOG_DECLARE_STORAGE_BUFFERS(restrict TopLevelBrickPtrs)
 {
   TopLevelBrickPtr topLevelPtrs[];
 }
 topLevelPtrsBuffers[];
 
-FVOG_DECLARE_STORAGE_BUFFERS(TopLevelBricks)
+FVOG_DECLARE_STORAGE_BUFFERS(restrict TopLevelBricks)
 {
   TopLevelBrick topLevelBricks[];
 }
 topLevelBricksBuffers[];
 
-FVOG_DECLARE_STORAGE_BUFFERS(BottomLevelBricks)
+FVOG_DECLARE_STORAGE_BUFFERS(restrict BottomLevelBricks)
 {
   BottomLevelBrick bottomLevelBricks[];
 }
@@ -100,13 +100,13 @@ struct GpuVoxelMaterial
   FVOG_UINT32 subGridIndex;
 };
 
-FVOG_DECLARE_STORAGE_BUFFERS_2(VoxelMaterials)
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict VoxelMaterials)
 {
   GpuVoxelMaterial materials[];
 }
 voxelMaterialsBuffers[];
 
-FVOG_DECLARE_STORAGE_BUFFERS_2(Lights)
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict Lights)
 {
   GpuLight lights[];
 }
@@ -125,13 +125,13 @@ struct GpuSubGrid
   SubVoxelMaterial materials[255];
 };
 
-FVOG_DECLARE_STORAGE_BUFFERS_2(SubGridInfos)
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict SubGridInfos)
 {
   GpuSubGrid subGrids[];
 }
 subGridBuffers[];
 
-FVOG_DECLARE_STORAGE_BUFFERS_2(SubGridData)
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict SubGridData)
 {
   uint8_t subVoxels[];
 }
@@ -262,7 +262,7 @@ bool GetOccupancyAt(ivec3 voxelCoord)
 struct HitSurfaceParameters
 {
   voxel_t voxel;
-  vec3 voxelPosition;
+  ivec3 voxelPosition;
   vec3 positionWorld;
   vec3 flatNormalWorld;
   vec2 texCoords;
@@ -279,8 +279,8 @@ float gSubGridVoxelsTraversed     = 0;
 struct vx_InitialDDAState
 {
   vec3 deltaDist;
-  vec3 S;
-  vec3 stepDir;
+  bvec3 S;
+  i8vec3 stepDir;
 };
 
 vec2 vx_GetTexCoords(vec3 normal, vec3 uvw)
@@ -310,15 +310,12 @@ bool vx_IsVisible(voxel_t voxel)
 }
 
 // Ray position in [0, subGrid.dimensions)
-bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, vec3 cases, out HitSurfaceParameters hit)
+bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, out HitSurfaceParameters hit)
 {
   GpuSubGrid subGrid   = SUBGRIDS[subGridIndex];
   rayPosition          = clamp(rayPosition, vec3(EPSILON), vec3(subGrid.dimensions - EPSILON));
-  vec3 mapPos          = floor(rayPosition);
-  const vec3 deltaDist = init.deltaDist;
-  const vec3 S         = init.S;
-  const vec3 stepDir   = init.stepDir;
-  vec3 sideDist        = (S - stepDir * fract(rayPosition)) * deltaDist;
+  vec3 mapPos          = (floor(rayPosition));
+  vec3 sideDist        = (vec3(init.S) - init.stepDir * fract(rayPosition)) * init.deltaDist;
 
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, ivec3(subGrid.dimensions))); i++)
   {
@@ -327,8 +324,8 @@ bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, 
     if (subVoxel != 0)
     {
       gSubGridVoxelsTraversed++;
-      const vec3 p      = mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
-      const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+      const vec3 p      = mapPos + 0.5 - init.stepDir * 0.5; // Point on axis plane
+      const vec3 normal = i8vec3(vec3(cases) * -vec3(init.stepDir));
       const float t     = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
       vec3 hitWorldPos  = rayPosition + rayDirection * t;
 
@@ -343,29 +340,26 @@ bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, 
       return true;
     }
 
-    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
 
-    cases.x = conds.x * conds.y;                   // if       x dir
-    cases.y = (1.0 - cases.x) * conds.z * conds.w; // else if  y dir
-    cases.z = (1.0 - cases.x) * (1.0 - cases.y);   // else     z dir
+    cases.x = conds.x && conds.y;
+    cases.y = (!cases.x) && conds.z && conds.w;
+    cases.z = (!cases.x) && (!cases.y);
 
-    sideDist += max((2.0 * cases - 1.0) * deltaDist, 0.0);
+    sideDist += (max((2.0 * vec3(cases) - 1.0) * init.deltaDist, 0.0));
 
-    mapPos += cases * stepDir;
+    mapPos += (i8vec3(cases) * init.stepDir);
   }
 
   return false;
 }
 
 // Ray position in (0, BL_BRICK_SIDE_LENGTH)
-bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr bottomLevelBrickPtr, vx_InitialDDAState init, vec3 cases, out HitSurfaceParameters hit)
+bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr bottomLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, out HitSurfaceParameters hit)
 {
   rayPosition          = clamp(rayPosition, vec3(EPSILON), vec3(BL_BRICK_SIDE_LENGTH - EPSILON));
-  vec3 mapPos          = floor(rayPosition);
-  const vec3 deltaDist = init.deltaDist;
-  const vec3 S         = init.S;
-  const vec3 stepDir   = init.stepDir;
-  vec3 sideDist        = (S - stepDir * fract(rayPosition)) * deltaDist;
+  vec3 mapPos          = vec3(floor(rayPosition));
+  vec3 sideDist        = (vec3(init.S) - init.stepDir * fract(rayPosition)) * init.deltaDist;
   
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(BL_BRICK_SIDE_LENGTH))); i++)
   {
@@ -376,8 +370,8 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
     const bool occupancy = bool(BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].occupancy.bitmask[localVoxelIndex / 32u] & (1u << localVoxelIndex % 32u));
     if (occupancy)
     {
-      const vec3 p      = mapPos + 0.5 - stepDir * 0.5;
-      const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+      const vec3 p      = mapPos + 0.5 - init.stepDir * 0.5;
+      const vec3 normal = i8vec3(vec3(cases) * -vec3(init.stepDir));
 
       const float t    = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
       vec3 hitWorldPos = rayPosition + rayDirection * t;
@@ -411,29 +405,29 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
       }
     }
 
-    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
 
-    cases.x = conds.x * conds.y;                   // if       x dir
-    cases.y = (1.0 - cases.x) * conds.z * conds.w; // else if  y dir
-    cases.z = (1.0 - cases.x) * (1.0 - cases.y);   // else     z dir
+    cases.x = conds.x && conds.y;
+    cases.y = (!cases.x) && conds.z && conds.w;
+    cases.z = (!cases.x) && (!cases.y);
 
-    sideDist += max((2.0 * cases - 1.0) * deltaDist, 0.0);
+    sideDist += (max((2.0 * vec3(cases) - 1.0) * init.deltaDist, 0.0));
 
-    mapPos += cases * stepDir;
+    mapPos += (i8vec3(cases) * init.stepDir);
   }
 
   return false;
 }
 
 // Ray position in (0, TL_BRICK_SIDE_LENGTH)
-bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelBrickPtr topLevelBrickPtr, vx_InitialDDAState init, vec3 cases, out HitSurfaceParameters hit)
+bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelBrickPtr topLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, out HitSurfaceParameters hit)
 {
   rayPosition          = clamp(rayPosition, vec3(EPSILON), vec3(TL_BRICK_SIDE_LENGTH - EPSILON));
-  vec3 mapPos          = floor(rayPosition);
+  vec3 mapPos          = vec3(floor(rayPosition));
   const vec3 deltaDist = init.deltaDist;
-  const vec3 S         = init.S;
+  const bvec3 S        = init.S;
   const vec3 stepDir   = init.stepDir;
-  vec3 sideDist        = (S - stepDir * fract(rayPosition)) * deltaDist;
+  vec3 sideDist        = (vec3(S) - stepDir * fract(rayPosition)) * deltaDist;
 
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, ivec3(TL_BRICK_SIDE_LENGTH))); i++)
   {
@@ -443,7 +437,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelB
     {
       gBottomLevelBricksTraversed++;
       const vec3 p      = mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
-      const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+      const vec3 normal = vec3(cases) * -vec3(init.stepDir);
       const float t     = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
       vec3 hitWorldPos  = rayPosition + rayDirection * t;
       vec3 uvw          = hitWorldPos - mapPos;
@@ -456,6 +450,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelB
 
       if (bottomLevelBrickPtr.voxelsDoBeAllSame == 1)
       {
+        // TODO: Invokes UB when the brick is composed of subvoxels
         hit.voxel = voxel_t(bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame);
         // Hack, but seems to work
         hit.voxelPosition   = ivec3(hitWorldPos * BL_BRICK_SIDE_LENGTH - EPSILON);
@@ -465,23 +460,23 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelB
         return true;
       }
 
-      if (vx_TraceRayVoxels(uvw * BL_BRICK_SIDE_LENGTH, rayDirection, bottomLevelBrickPtr, init, cases, hit))
+      if (vx_TraceRayVoxels(uvw * BL_BRICK_SIDE_LENGTH, rayDirection, bottomLevelBrickPtr, init, bvec3(cases), hit))
       {
-        hit.voxelPosition += mapPos * BL_BRICK_SIDE_LENGTH;
+        hit.voxelPosition += ivec3(mapPos * BL_BRICK_SIDE_LENGTH);
         hit.positionWorld += mapPos * BL_BRICK_SIDE_LENGTH;
         return true;
       }
     }
 
-    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
 
-    cases.x = conds.x * conds.y;                   // if       x dir
-    cases.y = (1.0 - cases.x) * conds.z * conds.w; // else if  y dir
-    cases.z = (1.0 - cases.x) * (1.0 - cases.y);   // else     z dir
+    cases.x = conds.x && conds.y;
+    cases.y = (!cases.x) && conds.z && conds.w;
+    cases.z = (!cases.x) && (!cases.y);
 
-    sideDist += max((2.0 * cases - 1.0) * deltaDist, 0.0);
+    sideDist += (max((2.0 * vec3(cases) - 1.0) * init.deltaDist, 0.0));
 
-    mapPos += cases * stepDir;
+    mapPos += (i8vec3(cases) * init.stepDir);
   }
 
   return false;
@@ -491,11 +486,11 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelB
 bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
 {
   rayPosition /= TL_BRICK_VOXELS_PER_SIDE;
-  vec3 mapPos          = floor(rayPosition);
+  i8vec3 mapPos        = i8vec3(floor(rayPosition));
   const vec3 deltaDist = 1.0 / abs(rayDirection);
-  const vec3 S         = vec3(step(0.0, rayDirection));
-  const vec3 stepDir   = 2 * S - 1;
-  vec3 sideDist        = (S - stepDir * fract(rayPosition)) * deltaDist;
+  const bvec3 S        = bvec3(step(0.0, rayDirection));
+  const i8vec3 stepDir = i8vec3(2 * i8vec3(S) - 1);
+  vec3 sideDist        = (vec3(S) - stepDir * fract(rayPosition)) * deltaDist;
 
   // Cache these computations
   vx_InitialDDAState init;
@@ -503,14 +498,13 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
   init.S         = S;
   init.stepDir   = stepDir;
 
-  vec3 cases = sideDist;
+  bvec3 cases = bvec3(sideDist);
 
   bool hasHit = false;
   for (int i = 0; i < tMax; i++)
   {
-
     // For the top level, traversal outside the map area is ok, just skip
-    if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, g_voxels.topLevelBricksDims)))
+    if (all(greaterThanEqual(mapPos, i8vec3(0))) && all(lessThan(mapPos, i8vec3(g_voxels.topLevelBricksDims))))
     {
       gTopLevelBricksTraversed++;
       const uint topLevelIndex          = FlattenTopLevelBrickCoord(ivec3(mapPos));
@@ -518,7 +512,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
       if (!(topLevelBrickPtr.voxelsDoBeAllSame == 1 && !vx_IsVisible(topLevelBrickPtr.topLevelBrickIndexOrVoxelIfAllSame))) // If brick is not all invisible
       {
         const vec3 p      = mapPos + 0.5 - stepDir * 0.5; // Point on axis plane
-        const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+        const i8vec3 normal = i8vec3(vec3(cases) * -vec3(init.stepDir));
         // Degenerate if ray starts inside a homogeneous top-level brick
         const float t    = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
         vec3 hitWorldPos = rayPosition + rayDirection * t;
@@ -532,6 +526,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
 
         if (topLevelBrickPtr.voxelsDoBeAllSame == 1)
         {
+          // TODO: Invokes UB when the brick is composed of subvoxels
           hit.voxel = voxel_t(topLevelBrickPtr.topLevelBrickIndexOrVoxelIfAllSame);
           // Hack, but seems to work
           hit.voxelPosition   = ivec3(hitWorldPos * TL_BRICK_VOXELS_PER_SIDE - EPSILON);
@@ -558,21 +553,21 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
     }
 #endif
 
-    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
 
-    cases.x = conds.x * conds.y;                   // if       x dir
-    cases.y = (1.0 - cases.x) * conds.z * conds.w; // else if  y dir
-    cases.z = (1.0 - cases.x) * (1.0 - cases.y);   // else     z dir
+    cases.x = conds.x && conds.y;
+    cases.y = (!cases.x) && conds.z && conds.w;
+    cases.z = (!cases.x) && (!cases.y);
 
-    sideDist += max((2.0 * cases - 1.0) * deltaDist, 0.0);
+    sideDist += (max((2.0 * vec3(cases) - 1.0) * deltaDist, 0.0));
 
-    mapPos += cases * stepDir;
+    mapPos += (i8vec3(cases) * stepDir);
   }
 
   if (hasHit)
   {
     GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
-    if (true && bool(material.materialFlags & RANDOMIZE_TEXCOORDS_ROTATION))
+    if (bool(material.materialFlags & RANDOMIZE_TEXCOORDS_ROTATION))
     {
       // Random quarter turn
       const float cos90[4] = {1, 0, -1, 0};
@@ -580,7 +575,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
       const float cosTheta = cos90[quarters % 4];
       const float sinTheta = cos90[(quarters + 1) % 4];
       const mat2 rot       = {{cosTheta, sinTheta}, {-sinTheta, cosTheta}};
-      hit.texCoords -= .5;
+      hit.texCoords -= 0.5;
       hit.texCoords = rot * hit.texCoords;
       hit.texCoords += 0.5;
     }
@@ -646,7 +641,7 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
         hit.voxelPosition   = ivec3(mapPos);
         hit.positionWorld   = hitWorldPos;
         hit.texCoords       = vx_GetTexCoords(normal, uvw);
-        hit.flatNormalWorld = normal;
+        hit.flatNormalWorld = i8vec3(normal);
         return true;
       }
     }
@@ -660,9 +655,9 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
 {
   // Clear hit
   hit.voxel = 0;
-  hit.voxelPosition = vec3(0);
+  hit.voxelPosition = ivec3(0);
   hit.positionWorld = vec3(0);
-  hit.flatNormalWorld = vec3(0);
+  hit.flatNormalWorld = i8vec3(0);
   hit.texCoords = vec2(0);
   hit.subVoxelMaterialIndex = 0;
 
