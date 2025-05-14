@@ -237,11 +237,12 @@ void VoxelRenderer::LoadRendererConfig()
   spdlog::debug("Load renderer config.");
 
   sRendererConfigModified = false;
-  auto file = std::fstream(sRendererSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
-  sRendererConfig   = toml::parse(file);
-  pathTracerSamples = sRendererConfig["pathtracer"]["samples"].value_or(pathTracerSamples);
-  pathTracerBounces = sRendererConfig["pathtracer"]["bounces"].value_or(pathTracerBounces);
-  enableBloom       = sRendererConfig["bloom"]["enable"].value_or(enableBloom);
+  auto file               = std::fstream(sRendererSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
+  sRendererConfig         = toml::parse(file);
+  giMethod_               = sRendererConfig["gi"]["method"].value_or(giMethod_);
+  pathTracerSamples       = sRendererConfig["pathtracer"]["samples"].value_or(pathTracerSamples);
+  pathTracerBounces       = sRendererConfig["pathtracer"]["bounces"].value_or(pathTracerBounces);
+  enableBloom             = sRendererConfig["bloom"]["enable"].value_or(enableBloom);
 }
 
 void VoxelRenderer::InitGui()
@@ -305,6 +306,25 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 {
   if (ImGui::Begin("Settings"))
   {
+    ImGui::Text("Global Illumination Method");
+    ImGui::Separator();
+    if (ImGui::RadioButton("None", giMethod_ == GIMethod::None))
+    {
+      sRendererConfigModified = true;
+      giMethod_               = GIMethod::None;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Path Tracing", giMethod_ == GIMethod::PerPixelPathTracing))
+    {
+      sRendererConfigModified = true;
+      giMethod_               = GIMethod::PerPixelPathTracing;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("DDGI", giMethod_ == GIMethod::DDGI))
+    {
+      sRendererConfigModified = true;
+      giMethod_               = GIMethod::DDGI;
+    }
     sRendererConfigModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
     sRendererConfigModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
     sRendererConfigModified |= ImGui::Checkbox("Bloom", &enableBloom);
@@ -320,6 +340,9 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       auto bloom = toml::table();
       bloom.insert_or_assign("enable", enableBloom);
       sRendererConfig.insert_or_assign("bloom", bloom);
+      auto gi = toml::table();
+      gi.insert_or_assign("method", giMethod_);
+      sRendererConfig.insert_or_assign("gi", gi);
       SaveRendererConfig();
       sRendererConfigModified = false;
     }
@@ -1012,6 +1035,22 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       auto& debug = ctx.get<Debugging>();
       ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
+      ImGui::Text("DDGI");
+      ImGui::Separator();
+      if (ImGui::RadioButton("None", ddgiDebugView_ == DDGIDebugView::None))
+      {
+        ddgiDebugView_ = DDGIDebugView::None;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Luminance", ddgiDebugView_ == DDGIDebugView::Luminance))
+      {
+        ddgiDebugView_ = DDGIDebugView::Luminance;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Illuminance", ddgiDebugView_ == DDGIDebugView::Illuminance))
+      {
+        ddgiDebugView_ = DDGIDebugView::Illuminance;
+      }
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);

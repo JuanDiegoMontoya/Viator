@@ -1,5 +1,8 @@
 [bloom]
-enable = true
+enable = false
+
+[gi]
+method = 2
 
 [pathtracer]
 bounces = 2

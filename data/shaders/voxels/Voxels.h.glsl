@@ -10,10 +10,7 @@ struct Voxels
   FVOG_IVEC3 dimensions;
   FVOG_UINT32 bufferIdx;
   FVOG_UINT32 materialBufferIdx;
-#ifdef __cplusplus
-  shared::
-#endif
-  Sampler voxelSampler;
+  FVOG_SHARED Sampler voxelSampler;
   FVOG_UINT32 numLights;
   FVOG_UINT32 lightBufferIdx;
 };
@@ -1000,10 +997,18 @@ float TraceSunRay(vec3 rayPosition, vec3 sunDir)
 float GetPunctualLightVisibility(vec3 surfacePos, uint lightIndex)
 {
   const GpuLight light  = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex];
-  const float lightDist = distance(surfacePos, light.position);
+  const float lightDist2 = distance2(surfacePos, light.position);
+
+  if (lightDist2 <= 1e-2)
+  {
+    return 1.0;
+  }
+
+  const float lightDist = sqrt(lightDist2);
 
   HitSurfaceParameters hit;
-  if (vx_TraceRayMultiLevel(surfacePos, normalize(light.position - surfacePos), lightDist * 3, hit))
+  // TODO: More accurate tMax calculation. If lightDist is used, check for inf/nan and clamp to a relatively small number.
+  if (vx_TraceRayMultiLevel(surfacePos, normalize(light.position - surfacePos), 5, hit))
   {
     const float hitDist = distance(hit.positionWorld, surfacePos);
     if (hitDist < lightDist)
@@ -1124,7 +1129,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
                                 // sunShadow /
                                 solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
         }
-        else
+        else if (lightIndex > 0)
         {
           GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex - 1];
           // If hit distance is farther than distance to light, then we made it to the light.

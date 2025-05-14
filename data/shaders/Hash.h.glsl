@@ -29,6 +29,11 @@ float PCG_RandFloat(inout uint state, float min_, float max_)
   return f * (max_ - min_) + min_;
 }
 
+float PCG_RandFloat(inout uint state)
+{
+  return PCG_RandFloat(state, 0, 1);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Miscellany
 // mostly sin(fract(..)) stuff that I don't approve of but am too lazy to change

@@ -4,6 +4,8 @@
 #include "../Resources.h.glsl"
 #include "../Color.h.glsl"
 #include "Voxels.h.glsl"
+#define DDGI_NO_PUSH_CONSTANTS
+#include "../ddgi/Common.shared.h"
 
 #ifdef __cplusplus
 using namespace shared;
@@ -19,6 +21,14 @@ FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
   Image2D sceneColor;
   FVOG_UINT32 internalColorSpace;
   FVOG_UINT32 uniformBufferIndex;
+  
+#ifndef __cplusplus
+  DDGIArgs ddgi;
+#else
+  VkDeviceAddress ddgi;
+#endif
+  Sampler samplerr;
+  FVOG_UINT32 giMethod; // 1 = per-pixel PT. 2 = DDGI
 };
 
 #endif

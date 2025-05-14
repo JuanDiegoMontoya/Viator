@@ -12,6 +12,7 @@
 #include "shaders/Config.shared.h"
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
 #include "shaders/voxels/ShadeDeferred.shared.h"
+#include "shaders/ddgi/DebugProbesCommon.h.glsl"
 
 #ifdef JPH_DEBUG_RENDERER
 #include "Game/Physics/DebugRenderer.h"
@@ -454,7 +455,13 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
 
   InitGui();
 
-  // TEMP: hardcoded exposure of 0
+  InitDDGI({
+    .probeRadianceResolution   = {12, 12},
+    .probeIrradianceResolution = {12, 12}, // Should be 10x10
+    .gridResolution            = {20, 20, 20},
+    .baseGridScale             = 16,
+  });
+
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
@@ -655,6 +662,17 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
   });
 
+  auto voxelSampler = Fvog::Sampler(
+    {
+      .magFilter     = VK_FILTER_NEAREST,
+      .minFilter     = VK_FILTER_NEAREST,
+      .mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .addressModeV  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+      .maxAnisotropy = 16,
+    },
+    "Voxel Sampler");
+
   ctx.Barrier();
 
   auto viewMat  = glm::mat4(1);
@@ -818,18 +836,53 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
     }
 
-    auto voxelSampler = Fvog::Sampler(
-      {
-        .magFilter     = VK_FILTER_NEAREST,
-        .minFilter     = VK_FILTER_NEAREST,
-        .mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .addressModeU  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV  = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .maxAnisotropy = 16,
-      },
-      "Voxel Sampler");
+    auto& grid        = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    const auto voxels = Voxels{
+      .topLevelBricksDims         = grid.topLevelBricksDims_,
+      .topLevelBrickPtrsBaseIndex = grid.topLevelBrickPtrsBaseIndex,
+      .dimensions                 = grid.dimensions_,
+      .bufferIdx                  = grid.buffer.GetGpuBuffer().GetResourceHandle().index,
+      .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
+      .voxelSampler               = voxelSampler,
+      .numLights                  = (uint32_t)lights.size(),
+      .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
+    };
 
-    auto& grid            = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    // DDGI- good candidate for async compute or overlapped work.
+    if (giMethod_ == GIMethod::DDGI)
+    {
+      auto marker = ctx.MakeScopedDebugMarker("DDGI");
+
+      ddgi.args = DDGIArgs{
+        .voxels                   = voxels,
+        .internalColorSpace       = tonemapUniforms.shadingInternalColorSpace,
+        .noiseTexture             = noiseTexture->ImageView().GetTexture2D(),
+        .samples                  = 1,
+        .bounces                  = 2,
+        .gridInfo                 = ddgi.args.gridInfo,
+        .packedProbeRadiance      = ddgi.packedProbeRadiance->ImageView().GetImage2D(),
+        .packedProbeIrradiance    = ddgi.packedProbeIrradiance->ImageView().GetImage2D(),
+        .packedProbeRadianceTex   = ddgi.packedProbeRadiance->ImageView().GetTexture2D(),
+        .packedProbeIrradianceTex = ddgi.packedProbeIrradiance->ImageView().GetTexture2D(),
+        .linearSampler            = linearClampSampler,
+      };
+
+      ctx.ImageBarrierDiscard(ddgi.packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+
+      ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
+      ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+
+      ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
+      const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
+      ctx.DispatchInvocations(extent.width * extent.height, 1, 1); // TODO: caculate extent based on number of live probes instead of image size.
+
+      ctx.Barrier();
+
+      ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
+      ctx.DispatchInvocations(extent.width * extent.height, 1, 1);
+    }
+
     auto albedoAttachment = Fvog::RenderColorAttachment{
       .texture = frame.sceneAlbedo.value().ImageView(),
       .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -853,16 +906,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .colorAttachments = colorAttachments,
       .depthAttachment  = depthAttachment,
     });
-    const auto voxels = Voxels{
-      .topLevelBricksDims         = grid.topLevelBricksDims_,
-      .topLevelBrickPtrsBaseIndex = grid.topLevelBrickPtrsBaseIndex,
-      .dimensions                 = grid.dimensions_,
-      .bufferIdx                  = grid.buffer.GetGpuBuffer().GetResourceHandle().index,
-      .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
-      .voxelSampler               = voxelSampler,
-      .numLights                  = (uint32_t)lights.size(),
-      .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
-    };
     {
       // Voxels
       TracyVkZone(head_->tracyVkContext_, commandBuffer, "Voxels");
@@ -935,6 +978,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_GENERAL);
 
     // Indirect illuminance
+    if (giMethod_ == GIMethod::PerPixelPathTracing)
     {
       ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
       ctx.SetPushConstants(PerPixelPathtracerArguments{
@@ -949,21 +993,21 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .bounces             = uint32_t(pathTracerBounces),
       });
       ctx.DispatchInvocations(frame.sceneIlluminance->GetCreateInfo().extent);
-    }
 
-    // Denoise. Issues barriers internally.
-    bilateral_.DenoiseIlluminance(
-      {
-        .sceneAlbedo              = &frame.sceneAlbedo.value(),
-        .sceneNormal              = &frame.sceneNormal.value(),
-        .sceneDepth               = &frame.sceneDepth.value(),
-        .sceneIlluminance         = &frame.sceneIlluminance.value(),
-        .sceneIlluminancePingPong = &frame.sceneIlluminancePingPong.value(),
-        .clip_from_view           = clip_from_view,
-        .world_from_clip          = glm::inverse(clip_from_world),
-        .cameraPos                = position,
-      },
-      commandBuffer);
+      // Denoise. Issues barriers internally.
+      bilateral_.DenoiseIlluminance(
+        {
+          .sceneAlbedo              = &frame.sceneAlbedo.value(),
+          .sceneNormal              = &frame.sceneNormal.value(),
+          .sceneDepth               = &frame.sceneDepth.value(),
+          .sceneIlluminance         = &frame.sceneIlluminance.value(),
+          .sceneIlluminancePingPong = &frame.sceneIlluminancePingPong.value(),
+          .clip_from_view           = clip_from_view,
+          .world_from_clip          = glm::inverse(clip_from_world),
+          .cameraPos                = position,
+        },
+        commandBuffer);
+    }
     
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
 
@@ -980,9 +1024,50 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .ddgi                 = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+        .samplerr             = linearClampSampler,
+        .giMethod             = uint32_t(giMethod_),
       });
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }
+  }
+
+  ctx.Barrier();
+  ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrier(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+
+  // DDGI debug probes.
+  if (ddgiDebugView_ != DDGIDebugView::None)
+  {
+    //auto marker = ctx.MakeScopedDebugMarker("DDGI Debug Probes");
+    auto sceneColorAttachment = Fvog::RenderColorAttachment{
+      .texture = frame.sceneColor.value().ImageView(),
+      .loadOp  = VK_ATTACHMENT_LOAD_OP_LOAD,
+    };
+    auto depthAttachment = Fvog::RenderDepthStencilAttachment{
+      .texture    = frame.sceneDepth.value().ImageView(),
+      .loadOp     = VK_ATTACHMENT_LOAD_OP_LOAD,
+    };
+    ctx.BeginRendering({
+      .name             = "DDGI Debug Probes",
+      .colorAttachments = {&sceneColorAttachment, 1},
+      .depthAttachment  = depthAttachment,
+    });
+
+    ctx.BindGraphicsPipeline(ddgi.debugProbesPipeline.GetPipeline());
+    const auto& icosphere_3 = g_meshes.at("icosphere_3");
+    ctx.SetPushConstants(DebugProbesArguments{
+      .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
+      .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+      .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+      .samplerr            = linearClampSampler,
+      .debugMode           = uint32_t(ddgiDebugView_),
+    });
+    ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+    const auto& res = ddgi.args.gridInfo.gridResolution;
+    ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+
+    ctx.EndRendering();
   }
 
   ctx.Barrier();
@@ -1049,4 +1134,60 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name,
   auto texture = LoadImageFile(std::filesystem::path("voxels") / (name + ".png"), srgb);
 
   return stringToTexture.emplace(name, std::move(texture)).first->second;
+}
+
+void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
+{
+  ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
+  ddgi.traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+       .name = "DDGI Trace Luminance",
+       .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+           .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+           .path  = GetShaderDirectory() / "ddgi/TraceProbes.comp.glsl",
+      },
+  });
+
+  ddgi.convolveIrradiancePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "DDGI Convolve Illuminance",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "ddgi/ConvolveIrradiance.comp.glsl",
+      },
+  });
+
+  ddgi.debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
+    .name = "Debug Probes",
+    .vertexModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::VERTEX_SHADER,
+        .path  = GetShaderDirectory() / "ddgi/DebugProbes.vert.glsl",
+      },
+    .fragmentModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::FRAGMENT_SHADER,
+        .path  = GetShaderDirectory() / "ddgi/DebugProbes.frag.glsl",
+      },
+    .state =
+      {
+        .rasterizationState = {.cullMode = VK_CULL_MODE_BACK_BIT},
+        .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
+        .renderTargetFormats =
+          {
+            .colorAttachmentFormats = {{Frame::sceneColorFormat}},
+            .depthAttachmentFormat  = Frame::sceneDepthFormat,
+          },
+      },
+  });
+
+  g_meshes.emplace("icosphere_3", LoadObjFile(GetAssetDirectory() / "models/icosphere_3.obj"));
+
+  ddgi.args.gridInfo = probeGridInfo;
+  ddgi.argsBuffer.emplace(1, "DDGI Arguments");
+  const auto numProbes     = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;  
+  const auto width         = probeGridInfo.probeRadianceResolution.x * std::ceil(std::sqrt(float(numProbes)));
+  const auto height        = probeGridInfo.probeRadianceResolution.x * std::ceil(numProbes * probeGridInfo.probeRadianceResolution.x / width);
+  ddgi.packedProbeRadiance = Fvog::CreateTexture2D({uint32_t(width), uint32_t(height)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
+  ddgi.packedProbeIrradiance = Fvog::CreateTexture2D({uint32_t(width), uint32_t(height)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
 }

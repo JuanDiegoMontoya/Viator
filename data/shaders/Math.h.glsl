@@ -207,4 +207,21 @@ float distance2(vec3 a, vec3 b)
   return dot(a - b, a - b);
 }
 
+float LinearWeight(float p, float x)
+{
+  return clamp(1 - abs(p - x), 0, 1);
+}
+
+float BilinearWeight(vec2 p, vec2 x)
+{
+  return LinearWeight(p[0], x[0]) * LinearWeight(p[1], x[1]);
+}
+
+// p: reference texel location to calculate a trilinear weight for
+// x: sample location
+float TrilinearWeight(vec3 p, vec3 x)
+{
+  return BilinearWeight(p.xy, x.xy) * LinearWeight(p.z, x.z);
+}
+
 #endif // MATH_H

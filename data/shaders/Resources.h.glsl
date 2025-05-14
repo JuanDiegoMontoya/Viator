@@ -5,6 +5,10 @@
 #ifdef __cplusplus
 
 #include <cstdint>
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+#include "glm/vec4.hpp"
+#include "glm/mat4x4.hpp"
 
 #define FVOG_FLOAT float
 #define FVOG_VEC2 glm::vec2
@@ -177,6 +181,7 @@
 #define Fvog_texture3D(textureIndex) \
   FvogGetSampledImage(texture3D, textureIndex)
 
+#define FVOG_SHARED
 
 #endif // !__cplusplus
 
@@ -187,6 +192,7 @@
 #define FVOG_DESCRIPTOR_TYPE_SAMPLER       4 // TODO: differentiate shadow samplers?
 
 #ifdef __cplusplus
+#define FVOG_SHARED shared::
 namespace shared {
 #endif
 

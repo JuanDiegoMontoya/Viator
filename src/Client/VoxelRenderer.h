@@ -10,6 +10,7 @@
 #include "techniques/AutoExposure.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
+#include "shaders/ddgi/Common.shared.h"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -162,6 +163,40 @@ private:
   std::unordered_map<std::string, Fvog::Texture> stringToTexture;
   PlayerHead* head_;
   entt::entity selectedEntity = entt::null;
+
+  // DDGI
+  struct DDGI
+  {
+    static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
+    std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;
+    std::optional<Fvog::Texture> packedProbeRadiance;
+    //std::optional<Fvog::Texture> packedProbeDepth;
+    std::optional<Fvog::Texture> packedProbeIrradiance;
+    DDGIArgs args{};
+    PipelineManager::ComputePipelineKey traceRaysPipeline;
+    PipelineManager::ComputePipelineKey convolveIrradiancePipeline;
+    PipelineManager::GraphicsPipelineKey debugProbesPipeline;
+  } ddgi;
+
+  void InitDDGI(const DDGIProbeGridInfo& probeGridInfo);
+
+  enum class DDGIDebugView
+  {
+    None,
+    Luminance,
+    Illuminance,
+  };
+
+  DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
+
+  enum class GIMethod
+  {
+    None,
+    PerPixelPathTracing,
+    DDGI,
+  };
+
+  GIMethod giMethod_ = GIMethod::DDGI;
 
   int32_t pathTracerSamples = 1;
   int32_t pathTracerBounces = 2;
