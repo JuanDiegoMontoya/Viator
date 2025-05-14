@@ -1,4 +1,4 @@
-#include "Common.shared.h"
+#include "ProbeCommon.shared.h"
 
 layout(local_size_x = 128, local_size_y = 1) in;
 

@@ -3,7 +3,7 @@
 
 #include "../Resources.h.glsl"
 #define DDGI_NO_PUSH_CONSTANTS
-#include "Common.shared.h"
+#include "ProbeCommon.shared.h"
 
 #ifndef __cplusplus
 #include "../GlobalUniforms.h.glsl"

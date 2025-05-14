@@ -5,7 +5,7 @@
 #include "../Color.h.glsl"
 #include "Voxels.h.glsl"
 #define DDGI_NO_PUSH_CONSTANTS
-#include "../ddgi/Common.shared.h"
+#include "../ddgi/ProbeCommon.shared.h"
 
 #ifdef __cplusplus
 using namespace shared;

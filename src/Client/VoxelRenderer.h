@@ -10,7 +10,7 @@
 #include "techniques/AutoExposure.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
-#include "shaders/ddgi/Common.shared.h"
+#include "shaders/ddgi/ProbeCommon.shared.h"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
