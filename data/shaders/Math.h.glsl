@@ -5,7 +5,7 @@
 
 // Constants
 const float M_PI = 3.141592654;
-
+const float M_SQRT_3 = 1.73205081;
 
 // Functions
 vec3 PolarToCartesian(float phi, float theta)

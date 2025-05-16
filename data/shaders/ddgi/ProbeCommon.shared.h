@@ -7,9 +7,8 @@
 struct DDGIProbeGridInfo
 {
   FVOG_IVEC2 probeRadianceResolution;
-  //FVOG_IVEC2 probeDepthResolution;
-  //FVOG_IVEC2 probeFilteredDepthResolution;
   FVOG_IVEC2 probeIrradianceResolution;
+  FVOG_IVEC2 probeDepthMomentsResolution;
   FVOG_IVEC3 gridResolution;
   FVOG_FLOAT baseGridScale; // Scale of smallest cascade. Successive cascades have 2x the scale as the last.
 };
@@ -31,8 +30,12 @@ struct DDGIArgs
   DDGIProbeGridInfo gridInfo;
   FVOG_SHARED Image2D packedProbeRadiance;
   FVOG_SHARED Image2D packedProbeIrradiance;
+  FVOG_SHARED Image2D packedProbeRawDepth;
+  FVOG_SHARED Image2D packedProbeDepthMoments;
   FVOG_SHARED Texture2D packedProbeRadianceTex;
   FVOG_SHARED Texture2D packedProbeIrradianceTex;
+  FVOG_SHARED Texture2D packedProbeRawDepthTex;
+  FVOG_SHARED Texture2D packedProbeDepthMomentsTex;
   FVOG_SHARED Sampler linearSampler;
 };
 

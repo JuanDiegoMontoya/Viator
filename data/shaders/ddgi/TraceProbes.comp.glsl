@@ -24,6 +24,7 @@ void main()
   const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeRadianceResolution);
   
   vec3 radiance = {0, 0, 0};
+  float depth = 1234;
 
   uint randState = PCG_Hash(gid);
 
@@ -32,12 +33,14 @@ void main()
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 8, hit))
   {
     // Pixel is black if hit is extremely close (i.e. probe is inside geometry).
-    if (distance2(rayPos, hit.positionWorld) > 1e-3)
+    const float hitDist2 = distance2(rayPos, hit.positionWorld);
+    if (hitDist2 > 1e-3)
     {
+      depth = sqrt(hitDist2);
       const vec3 albedo = GetHitAlbedo(hit);
       radiance += GetHitEmission(hit);
       
-      const int samples = 8;//args.samples;
+      const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
       radiance += albedo * TraceIndirectLighting(texelCoord, hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
       //const vec4 posClip = uniforms.viewProj * vec4(hit.positionWorld, 1.0);
@@ -73,7 +76,6 @@ void main()
   else
   {
     radiance = rayDir * .5 + .5;
-    //gl_FragDepth = FAR_DEPTH;
   }
   
   // Direct lighting
@@ -95,8 +97,10 @@ void main()
     }
   }
 
+  depth = min(depth, args.gridInfo.baseGridScale * M_SQRT_3);
   const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
   imageStore(args.packedProbeRadiance, texelOffset + texelCoord, vec4(radiance, 0));
+  imageStore(args.packedProbeRawDepth, texelOffset + texelCoord, vec4(depth, 0, 0, 0));
   
   ///// For work texels on the edge of the probe, write to applicable border texels.
   // Sides
@@ -104,24 +108,28 @@ void main()
   {
     const ivec2 borderCoord = {-1, args.gridInfo.probeRadianceResolution.y - 1 - texelCoord.y};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
   
   if (texelCoord.x == args.gridInfo.probeRadianceResolution.x - 1)
   {
     const ivec2 borderCoord = {args.gridInfo.probeRadianceResolution.x, args.gridInfo.probeRadianceResolution.y - 1 - texelCoord.y};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
   
   if (texelCoord.y == 0)
   {
     const ivec2 borderCoord = {args.gridInfo.probeRadianceResolution.x - 1 - texelCoord.x, -1};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
   
   if (texelCoord.y == args.gridInfo.probeRadianceResolution.y - 1)
   {
     const ivec2 borderCoord = {args.gridInfo.probeRadianceResolution.x - 1 - texelCoord.x, args.gridInfo.probeRadianceResolution.y};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
 
   // Corners
@@ -129,23 +137,27 @@ void main()
   {
     const ivec2 borderCoord = args.gridInfo.probeRadianceResolution;
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
   
   if (texelCoord == args.gridInfo.probeRadianceResolution - 1)
   {
     const ivec2 borderCoord = {-1, -1};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
   
   if (texelCoord == ivec2(0, args.gridInfo.probeRadianceResolution.y - 1))
   {
     const ivec2 borderCoord = {args.gridInfo.probeRadianceResolution.x, -1};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
 
   if (texelCoord == ivec2(args.gridInfo.probeRadianceResolution.x - 1, 0))
   {
     const ivec2 borderCoord = {-1, args.gridInfo.probeRadianceResolution.y};
     imageStore(args.packedProbeRadiance, texelOffset + borderCoord, vec4(radiance, 0));
+    imageStore(args.packedProbeRawDepth, texelOffset + borderCoord, vec4(depth, 0, 0, 0));
   }
 }

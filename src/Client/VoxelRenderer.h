@@ -170,8 +170,9 @@ private:
     static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
     std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;
     std::optional<Fvog::Texture> packedProbeRadiance;
-    //std::optional<Fvog::Texture> packedProbeDepth;
+    std::optional<Fvog::Texture> packedProbeRawDepth; // Same resolution as radiance
     std::optional<Fvog::Texture> packedProbeIrradiance;
+    std::optional<Fvog::Texture> packedProbeDepthMoments; // Filtered depth and depth^2
     DDGIArgs args{};
     PipelineManager::ComputePipelineKey traceRaysPipeline;
     PipelineManager::ComputePipelineKey convolveIrradiancePipeline;

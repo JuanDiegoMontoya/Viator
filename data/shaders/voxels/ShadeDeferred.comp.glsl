@@ -24,7 +24,7 @@ void main()
   const vec3 albedo_internal = color_convert_src_to_dst(texelFetch(gAlbedo, gid, 0).rgb, 
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
-  const vec3 normal = texelFetch(gNormal, gid, 0).xyz;
+  const vec3 normal = normalize(texelFetch(gNormal, gid, 0).xyz);
   const float depth = texelFetch(gDepth, gid, 0).x;
   const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
 
@@ -48,12 +48,13 @@ void main()
   }
   else if (giMethod == 2)
   {
-    const vec3 probeCoord = (positionWorld - 0.5) / ddgi.gridInfo.baseGridScale;
-    const ivec3 minProbe = ivec3(floor(probeCoord));
+    const vec3 normalBias = normal * 0;
+    const vec3 posProbeSpace = (positionWorld + normalBias - 0.5) / ddgi.gridInfo.baseGridScale;
+    const ivec3 minProbe = ivec3(floor(posProbeSpace));
     const ivec3 maxProbe = minProbe + 1;
     float sumWeights = 0;
     // Sample nearest 8 probes and apply trilinear weights.
-    if (all(greaterThanEqual(probeCoord, vec3(0))) && all(lessThan(probeCoord, ddgi.gridInfo.gridResolution)))
+    if (all(greaterThanEqual(posProbeSpace, vec3(0))) && all(lessThan(posProbeSpace, ddgi.gridInfo.gridResolution)))
     {
       //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
 
@@ -62,32 +63,25 @@ void main()
       for (int x = minProbe.x; x <= maxProbe.x; x++)
       {
         //const ivec3 p = ivec3(round(probeCoord));
-        const vec3 p = vec3(x, y, z);
-        //const vec3 p = vec3(minProbe);
-        const float weight = TrilinearWeight(p, probeCoord);
-        if (weight == 0)
-        {
-          //continue;
-        }
-        
-        //const vec3 dir = normalize(p - probeCoord);
-        //const vec3 dir = normalize(probeCoord - p);
-        const vec3 dir = normal;
+        const vec3 probePos = vec3(x, y, z);
+        const float trilinearWeight = TrilinearWeight(probePos, posProbeSpace);
+
+        // Give less weight to probes that lie below the plane of the shaded point.
+        const vec3 dirToProbe = normalize(probePos - posProbeSpace);
+        const float backfaceWeight = dot(dirToProbe, normal) * 0.5 + 0.5;
 
         // Sample probe
-        const int probeIndex = ProbeCoordToIndex(ivec3(p), ddgi.gridInfo.gridResolution);
+        const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo.gridResolution);
         const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance);
-        const vec2 uv = ProbeDirectionToUv(dir, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
+        const vec2 uv = ProbeDirectionToUv(normal, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
 
-        if (illuminance == vec3(0))
-        {
-          continue;
-        }
+        const float weight = max(EPSILON, trilinearWeight * backfaceWeight);
         irradiance_internal += albedo_internal * weight * illuminance;
         sumWeights += weight;
       }
+
       // If an occluded probe contributes nothing, then boost the other probes' contributions.
       if (sumWeights > 1e-3)
       {
