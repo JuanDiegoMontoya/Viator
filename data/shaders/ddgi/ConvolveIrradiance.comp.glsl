@@ -42,7 +42,7 @@ void main()
     const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance);
     const vec2 uv = ProbeDirectionToUv(sampleDir, probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
 
-    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, uvOffset + uv, 0).rgb * cosTheta / pdf;
+    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, uvOffset + uv, 0).rgb * cosTheta / pdf / M_PI;
   }
   irradiance += tempAccum / SHRIMPLES;
 
