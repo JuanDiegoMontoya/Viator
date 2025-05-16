@@ -46,58 +46,5 @@ void main()
   }
   irradiance += tempAccum / SHRIMPLES;
 
-  // 1D probe index -> 2D texel offset (corner of probe in the atlas).
-  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeIrradiance), args.gridInfo.probeIrradianceResolution);
-  imageStore(args.packedProbeIrradiance, texelOffset + texelCoord, vec4(irradiance, 0));
-
-  ///// For work texels on the edge of the probe, write to applicable border texels.
-  // Sides
-  if (texelCoord.x == 0)
-  {
-    const ivec2 borderCoord = {-1, args.gridInfo.probeIrradianceResolution.y - 1 - texelCoord.y};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-  
-  if (texelCoord.x == args.gridInfo.probeIrradianceResolution.x - 1)
-  {
-    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x, args.gridInfo.probeIrradianceResolution.y - 1 - texelCoord.y};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-  
-  if (texelCoord.y == 0)
-  {
-    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x - 1 - texelCoord.x, -1};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-  
-  if (texelCoord.y == args.gridInfo.probeIrradianceResolution.y - 1)
-  {
-    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x - 1 - texelCoord.x, args.gridInfo.probeIrradianceResolution.y};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-
-  // Corners
-  if (texelCoord == ivec2(0, 0))
-  {
-    const ivec2 borderCoord = args.gridInfo.probeIrradianceResolution;
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-  
-  if (texelCoord == args.gridInfo.probeIrradianceResolution - 1)
-  {
-    const ivec2 borderCoord = {-1, -1};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-  
-  if (texelCoord == ivec2(0, args.gridInfo.probeIrradianceResolution.y - 1))
-  {
-    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x, -1};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
-
-  if (texelCoord == ivec2(args.gridInfo.probeIrradianceResolution.x - 1, 0))
-  {
-    const ivec2 borderCoord = {-1, args.gridInfo.probeIrradianceResolution.y};
-    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
-  }
+  WriteToProbeWithBorder(args.packedProbeIrradiance, probeIndex, args.gridInfo.probeIrradianceResolution, texelCoord, vec4(irradiance, 0));
 }

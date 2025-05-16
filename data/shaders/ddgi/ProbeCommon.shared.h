@@ -105,6 +105,63 @@ int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
     probeCoord.x;
 }
 
+void WriteToProbeWithBorder(Image2D packedProbeImage, int probeIndex, ivec2 probeResolution, ivec2 texelCoord, vec4 value)
+{
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(packedProbeImage), probeResolution);
+  imageStore(packedProbeImage, texelOffset + texelCoord, value);
+  
+  ///// For work texels on the edge of the probe, write to applicable border texels.
+  // Sides
+  if (texelCoord.x == 0)
+  {
+    const ivec2 borderCoord = {-1, probeResolution.y - 1 - texelCoord.y};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+  
+  if (texelCoord.x == probeResolution.x - 1)
+  {
+    const ivec2 borderCoord = {probeResolution.x, probeResolution.y - 1 - texelCoord.y};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+  
+  if (texelCoord.y == 0)
+  {
+    const ivec2 borderCoord = {probeResolution.x - 1 - texelCoord.x, -1};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+  
+  if (texelCoord.y == probeResolution.y - 1)
+  {
+    const ivec2 borderCoord = {probeResolution.x - 1 - texelCoord.x, probeResolution.y};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+
+  // Corners
+  if (texelCoord == ivec2(0, 0))
+  {
+    const ivec2 borderCoord = probeResolution;
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+  
+  if (texelCoord == probeResolution - 1)
+  {
+    const ivec2 borderCoord = {-1, -1};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+  
+  if (texelCoord == ivec2(0, probeResolution.y - 1))
+  {
+    const ivec2 borderCoord = {probeResolution.x, -1};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+
+  if (texelCoord == ivec2(probeResolution.x - 1, 0))
+  {
+    const ivec2 borderCoord = {-1, probeResolution.y};
+    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+  }
+}
+
 #endif // !__cplusplus
 
 #endif // COMMON_SHARED_H
