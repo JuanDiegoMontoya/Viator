@@ -176,6 +176,7 @@ private:
     DDGIArgs args{};
     PipelineManager::ComputePipelineKey traceRaysPipeline;
     PipelineManager::ComputePipelineKey convolveIrradiancePipeline;
+    PipelineManager::ComputePipelineKey downsampleDepthPipeline;
     PipelineManager::GraphicsPipelineKey debugProbesPipeline;
   } ddgi;
 
@@ -186,6 +187,8 @@ private:
     None,
     Luminance,
     Illuminance,
+    RawDepth,
+    DepthMoments,
   };
 
   DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;

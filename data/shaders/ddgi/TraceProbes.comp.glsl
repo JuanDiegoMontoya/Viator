@@ -21,7 +21,8 @@ void main()
 
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo.probeRadianceResolution);
 
-  const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeRadianceResolution);
+  vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeRadianceResolution);
+  rayDir = normalize(rayDir + vec3(1e-4, 0, 0)); // HACK: perfectly 45-degree ray directions are not liked by DDA.
   
   vec3 radiance = {0, 0, 0};
   float depth = 1234;

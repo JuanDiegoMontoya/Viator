@@ -872,8 +872,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .linearSampler              = linearClampSampler,
       };
 
+      // TODO: Do not use discard barriers here since we will want to have some form of hysteresis/staggered updates.
       ctx.ImageBarrierDiscard(ddgi.packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
       ctx.ImageBarrierDiscard(ddgi.packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
 
       ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
       ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
@@ -885,6 +888,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.Barrier();
 
       ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
+      ctx.DispatchInvocations(extent.width * extent.height, 1, 1);
+
+      // No barrier is needed here
+      ctx.BindComputePipeline(ddgi.downsampleDepthPipeline.GetPipeline());
       ctx.DispatchInvocations(extent.width * extent.height, 1, 1);
     }
 
@@ -1164,6 +1171,15 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
       },
   });
 
+  ddgi.downsampleDepthPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "DDGI Downsample Probe Depth",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "ddgi/DownsampleProbeDepth.comp.glsl",
+      },
+  });
+
   ddgi.debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Debug Probes",
     .vertexModuleInfo =
@@ -1197,7 +1213,7 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
   const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);
   ddgi.packedProbeRadiance = Fvog::CreateTexture2D({uint32_t(width1), uint32_t(height1)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
-  ddgi.packedProbeRawDepth = Fvog::CreateTexture2D({uint32_t(width1), uint32_t(height1)}, Fvog::Format::R16_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Raw Depth");
+  ddgi.packedProbeRawDepth = Fvog::CreateTexture2D({uint32_t(width1), uint32_t(height1)}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Raw Depth");
 
   const auto width2  = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height2 = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeIrradianceResolution.x) / width2);
@@ -1205,5 +1221,5 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
 
   const auto width3  = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeDepthMomentsResolution.x) / width2);
-  ddgi.packedProbeDepthMoments = Fvog::CreateTexture2D({uint32_t(width3), uint32_t(height3)}, Fvog::Format::R16G16_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Depth Moments");
+  ddgi.packedProbeDepthMoments = Fvog::CreateTexture2D({uint32_t(width3), uint32_t(height3)}, Fvog::Format::R32G32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Depth Moments");
 }

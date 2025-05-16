@@ -48,8 +48,9 @@ void main()
   }
   else if (giMethod == 2)
   {
-    const vec3 normalBias = normal * 0;
-    const vec3 posProbeSpace = (positionWorld + normalBias - 0.5) / ddgi.gridInfo.baseGridScale;
+    const vec3 normalBias = normal * 0.5;
+    const vec3 posProbeSpaceBiased = (positionWorld + normalBias - 0.5) / ddgi.gridInfo.baseGridScale;
+    const vec3 posProbeSpace = (positionWorld - 0.5) / ddgi.gridInfo.baseGridScale;
     const ivec3 minProbe = ivec3(floor(posProbeSpace));
     const ivec3 maxProbe = minProbe + 1;
     float sumWeights = 0;
@@ -70,22 +71,46 @@ void main()
         const vec3 dirToProbe = normalize(probePos - posProbeSpace);
         const float backfaceWeight = dot(dirToProbe, normal) * 0.5 + 0.5;
 
-        // Sample probe
+        // Sample probe illuminance and depth moments.
         const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo.gridResolution);
+
         const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance);
         const vec2 uv = ProbeDirectionToUv(normal, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
+        
+        float vsmWeight = 1;
+        const float r = distance(probePos, posProbeSpaceBiased) * ddgi.gridInfo.baseGridScale;
 
-        const float weight = max(EPSILON, trilinearWeight * backfaceWeight);
+#if 1
+        const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
+        const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments);
+        const vec2 uv2 = ProbeDirectionToUv(-dirToProbe, probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
+        const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, samplerr, uvOffset2 + uv2, 0).xy;
+        const float mean = depthMoments.x;
+        const float mean2 = depthMoments.y;
+
+        if (r > mean)
+        {
+          const float variance = abs(mean * mean - mean2);
+          const float temp = r - mean;
+          vsmWeight = variance / (variance + temp * temp);
+        }
+#else // Regular shadow test.
+        const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
+        const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth);
+        const vec2 uv2 = ProbeDirectionToUv(-dirToProbe, probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
+        const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, samplerr, uvOffset2 + uv2, 0).x;
+
+        if (r > rawDepth)
+        {
+          vsmWeight = 0;
+        }
+#endif
+
+        const float weight = max(EPSILON, trilinearWeight * backfaceWeight * vsmWeight);
         irradiance_internal += albedo_internal * weight * illuminance;
         sumWeights += weight;
-      }
-
-      // If an occluded probe contributes nothing, then boost the other probes' contributions.
-      if (sumWeights > 1e-3)
-      {
-        irradiance_internal /= sumWeights;
       }
     }
   }

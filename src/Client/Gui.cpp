@@ -1051,6 +1051,15 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         ddgiDebugView_ = DDGIDebugView::Illuminance;
       }
+      if (ImGui::RadioButton("Raw Depth", ddgiDebugView_ == DDGIDebugView::RawDepth))
+      {
+        ddgiDebugView_ = DDGIDebugView::RawDepth;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Depth Moments", ddgiDebugView_ == DDGIDebugView::DepthMoments))
+      {
+        ddgiDebugView_ = DDGIDebugView::DepthMoments;
+      }
       ImGui::SliderFloat("Grid Scale", &ddgi.args.gridInfo.baseGridScale, 1, 32, "%.0f");
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();
