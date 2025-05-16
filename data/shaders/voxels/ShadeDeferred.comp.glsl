@@ -71,23 +71,16 @@ void main()
         }
         
         //const vec3 dir = normalize(p - probeCoord);
+        //const vec3 dir = normalize(probeCoord - p);
         const vec3 dir = normal;
 
         // Sample probe
-        const ivec3 sampledProbe = ivec3(p);
-        const int probeIndex = (sampledProbe.z * ddgi.gridInfo.gridResolution.x * ddgi.gridInfo.gridResolution.y) + (sampledProbe.y * ddgi.gridInfo.gridResolution.x) + sampledProbe.x;
-
-        const ivec2 probeGridSize2d = imageSize(ddgi.packedProbeRadiance) / ddgi.gridInfo.probeRadianceResolution;
-        const ivec2 texelOffset = ddgi.gridInfo.probeRadianceResolution * ivec2(
-          probeIndex % probeGridSize2d.x,
-          probeIndex / probeGridSize2d.x
-        );
-
-        const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeRadiance);
-        const vec2 uv = (Vec3ToOct(normalize(dir)) * .5 + .5) / (imageSize(ddgi.packedProbeRadiance) / ddgi.gridInfo.probeRadianceResolution);
-        const ivec2 texel = ivec2(uv * ddgi.gridInfo.probeRadianceResolution);
-
+        const int probeIndex = ProbeCoordToIndex(ivec3(p), ddgi.gridInfo.gridResolution);
+        const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
+        const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance);
+        const vec2 uv = ProbeDirectionToUv(dir, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
+
         if (illuminance == vec3(0))
         {
           continue;
@@ -96,7 +89,10 @@ void main()
         sumWeights += weight;
       }
       // If an occluded probe contributes nothing, then boost the other probes' contributions.
-      irradiance_internal /= sumWeights;
+      if (sumWeights > 1e-3)
+      {
+        irradiance_internal /= sumWeights;
+      }
     }
   }
 

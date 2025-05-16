@@ -1,5 +1,5 @@
 [bloom]
-enable = false
+enable = true
 
 [gi]
 method = 2

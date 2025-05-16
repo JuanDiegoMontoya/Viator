@@ -42,7 +42,66 @@ FVOG_DECLARE_ARGUMENTS(DDGIPushConstants)
 {
   DDGIArgs args;
 };
-#endif
-#endif
+#endif // !DDGI_NO_PUSH_CONSTANTS
 
-#endif
+///// Helper functions for shaders.
+
+ivec3 ProbeIndexToCoord(int probeIndex, ivec3 gridResolution)
+{
+  return ivec3(
+    probeIndex % gridResolution.x,
+    (probeIndex / gridResolution.x) % gridResolution.y,
+    probeIndex / (gridResolution.x * gridResolution.y)
+  );
+}
+
+// Number of texels in a probe, including border texels.
+// Accounts for 1-texel border.
+int TotalTexelsPerProbe(ivec2 probeResolution)
+{
+  return (2 + probeResolution.x) * (2 + probeResolution.y);
+}
+
+ivec2 GetWorkTexelCoord(int workIndex, ivec2 probeResolution)
+{
+  const int numTexels = probeResolution.x * probeResolution.y;
+  const int texelIndex = workIndex % numTexels;
+  return ivec2(
+    texelIndex % probeResolution.x,
+    texelIndex / probeResolution.x
+  );
+}
+
+// Gets the lower corner of a probe's __work area__ in image space.
+ivec2 GetProbeTexelOffset(int probeIndex, ivec2 packedProbeImageSize, ivec2 probeResolution)
+{
+  const ivec2 probeGridSize2d = packedProbeImageSize / (2 + probeResolution);
+  return (2 + probeResolution) * ivec2(
+    probeIndex % probeGridSize2d.x,
+    probeIndex / probeGridSize2d.x
+  ) + 1;
+}
+
+vec2 ProbeDirectionToUv(vec3 direction, int probeIndex, ivec2 packedProbeImageSize, ivec2 probeResolution)
+{
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, packedProbeImageSize, probeResolution);
+  const vec2 uvOffset = vec2(texelOffset) / packedProbeImageSize;
+  return (Vec3ToOct(normalize(direction)) * .5 + .5) / (packedProbeImageSize / probeResolution);
+}
+
+vec3 ProbeTexelCoordToDirection(ivec2 texelCoord, ivec2 probeResolution)
+{
+  const vec2 uv = (texelCoord + 0.5) / probeResolution;
+  return OctToVec3(uv * 2 - 1);
+}
+
+int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
+{
+  return (probeCoord.z * gridResolution.x * gridResolution.y) + 
+    (probeCoord.y * gridResolution.x) + 
+    probeCoord.x;
+}
+
+#endif // !__cplusplus
+
+#endif // COMMON_SHARED_H

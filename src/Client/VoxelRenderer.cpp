@@ -457,7 +457,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
 
   InitDDGI({
     .probeRadianceResolution   = {12, 12},
-    .probeIrradianceResolution = {12, 12}, // Should be 10x10
+    .probeIrradianceResolution = {10, 10},
     .gridResolution            = {20, 20, 20},
     .baseGridScale             = 16,
   });
@@ -1062,6 +1062,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
       .samplerr            = linearClampSampler,
       .debugMode           = uint32_t(ddgiDebugView_),
+      .probeSize           = ddgiDebugProbeSize_,
     });
     ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
     const auto& res = ddgi.args.gridInfo.gridResolution;
@@ -1138,6 +1139,7 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name,
 
 void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
 {
+  ASSERT(probeGridInfo.probeRadianceResolution.x > 0);
   ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
   ddgi.traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
        .name = "DDGI Trace Luminance",
@@ -1185,9 +1187,10 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
 
   ddgi.args.gridInfo = probeGridInfo;
   ddgi.argsBuffer.emplace(1, "DDGI Arguments");
-  const auto numProbes     = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;  
-  const auto width         = probeGridInfo.probeRadianceResolution.x * std::ceil(std::sqrt(float(numProbes)));
-  const auto height        = probeGridInfo.probeRadianceResolution.x * std::ceil(numProbes * probeGridInfo.probeRadianceResolution.x / width);
+  const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
+  // Probe sizes are dilated to include a 1-texel border.
+  const auto width         = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+  const auto height        = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width);
   ddgi.packedProbeRadiance = Fvog::CreateTexture2D({uint32_t(width), uint32_t(height)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
   ddgi.packedProbeIrradiance = Fvog::CreateTexture2D({uint32_t(width), uint32_t(height)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
 }

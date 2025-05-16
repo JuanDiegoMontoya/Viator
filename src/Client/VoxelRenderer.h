@@ -188,6 +188,7 @@ private:
   };
 
   DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
+  float ddgiDebugProbeSize_    = 1;
 
   enum class GIMethod
   {

@@ -7,50 +7,27 @@ void main()
   const int gid = int(gl_GlobalInvocationID.x);
 
   const int numProbes = args.gridInfo.gridResolution.x * args.gridInfo.gridResolution.y * args.gridInfo.gridResolution.z;
-  const int numTexels = args.gridInfo.probeRadianceResolution.x * args.gridInfo.probeRadianceResolution.y;
+  const int numTexels = args.gridInfo.probeIrradianceResolution.x * args.gridInfo.probeIrradianceResolution.y;
   const int probeIndex = gid / numTexels;
-  const int texelIndex = gid % numTexels;
 
   if (probeIndex >= numProbes)
   {
     return;
   }
 
-  vx_Init(args.voxels);
+  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo.probeIrradianceResolution);
+  const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeIrradianceResolution);
 
-  const ivec3 probeCoord = ivec3(
-    probeIndex % args.gridInfo.gridResolution.x,
-    (probeIndex / args.gridInfo.gridResolution.x) % args.gridInfo.gridResolution.y,
-    probeIndex / (args.gridInfo.gridResolution.x * args.gridInfo.gridResolution.y)
-  );
-
-  const ivec2 texelCoord = ivec2(
-    texelIndex % args.gridInfo.probeRadianceResolution.x,
-    texelIndex / args.gridInfo.probeRadianceResolution.x
-  );
-
-  // 1D probe index -> 2D texel offset (corner of probe in the atlas).
-  // TODO: Account for 1-texel border.
-  const ivec2 probeGridSize2d = imageSize(args.packedProbeRadiance) / args.gridInfo.probeRadianceResolution;
-  const ivec2 texelOffset = args.gridInfo.probeRadianceResolution * ivec2(
-    probeIndex % probeGridSize2d.x,
-    probeIndex / probeGridSize2d.x
-  );
-
-  const vec2 uv = (texelCoord + 0.5) / args.gridInfo.probeRadianceResolution;
-
-  const vec3 rayDir = OctToVec3(uv * 2 - 1);
-  
   vec3 irradiance = vec3(0);
-      
+
   uint rng = PCG_Hash(gid);
 
   // Sample probe
   vec3 tempAccum = vec3(0);
-  const int SHRIMPLES = 8;
+  const int SHRIMPLES = 64;
   for (int i = 0; i < SHRIMPLES; i++)
   {
-    // TEMP: sample hemisphere of radiance probe
+    // TODO: Use hammersley sequence for more even distribution.
     const vec2 xi = vec2(PCG_RandFloat(rng), PCG_RandFloat(rng));
     const vec3 sampleDir = normalize(map_to_unit_hemisphere_cosine_weighted(xi, rayDir));
     const float cosTheta = clamp(dot(sampleDir, rayDir), 0, 1);
@@ -61,13 +38,66 @@ void main()
     }
     const float pdf = cosine_weighted_hemisphere_PDF(cosTheta);
 
+    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance);
-    const vec2 uv = (Vec3ToOct(normalize(sampleDir)) * .5 + .5) / (imageSize(args.packedProbeRadiance) / args.gridInfo.probeRadianceResolution);
-    const ivec2 texel = ivec2(uv * args.gridInfo.probeRadianceResolution);
+    const vec2 uv = ProbeDirectionToUv(sampleDir, probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
 
     tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, uvOffset + uv, 0).rgb * cosTheta / pdf;
   }
   irradiance += tempAccum / SHRIMPLES;
 
+  // 1D probe index -> 2D texel offset (corner of probe in the atlas).
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeIrradiance), args.gridInfo.probeIrradianceResolution);
   imageStore(args.packedProbeIrradiance, texelOffset + texelCoord, vec4(irradiance, 0));
+
+  ///// For work texels on the edge of the probe, write to applicable border texels.
+  // Sides
+  if (texelCoord.x == 0)
+  {
+    const ivec2 borderCoord = {-1, args.gridInfo.probeIrradianceResolution.y - 1 - texelCoord.y};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+  
+  if (texelCoord.x == args.gridInfo.probeIrradianceResolution.x - 1)
+  {
+    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x, args.gridInfo.probeIrradianceResolution.y - 1 - texelCoord.y};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+  
+  if (texelCoord.y == 0)
+  {
+    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x - 1 - texelCoord.x, -1};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+  
+  if (texelCoord.y == args.gridInfo.probeIrradianceResolution.y - 1)
+  {
+    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x - 1 - texelCoord.x, args.gridInfo.probeIrradianceResolution.y};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+
+  // Corners
+  if (texelCoord == ivec2(0, 0))
+  {
+    const ivec2 borderCoord = args.gridInfo.probeIrradianceResolution;
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+  
+  if (texelCoord == args.gridInfo.probeIrradianceResolution - 1)
+  {
+    const ivec2 borderCoord = {-1, -1};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+  
+  if (texelCoord == ivec2(0, args.gridInfo.probeIrradianceResolution.y - 1))
+  {
+    const ivec2 borderCoord = {args.gridInfo.probeIrradianceResolution.x, -1};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
+
+  if (texelCoord == ivec2(args.gridInfo.probeIrradianceResolution.x - 1, 0))
+  {
+    const ivec2 borderCoord = {-1, args.gridInfo.probeIrradianceResolution.y};
+    imageStore(args.packedProbeIrradiance, texelOffset + borderCoord, vec4(irradiance, 0));
+  }
 }
