@@ -224,4 +224,9 @@ float TrilinearWeight(vec3 p, vec3 x)
   return BilinearWeight(p.xy, x.xy) * LinearWeight(p.z, x.z);
 }
 
+float square(float x)
+{
+  return x * x;
+}
+
 #endif // MATH_H

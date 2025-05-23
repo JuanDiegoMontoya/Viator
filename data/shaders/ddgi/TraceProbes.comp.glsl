@@ -73,6 +73,10 @@ void main()
         }
       }
     }
+    else
+    {
+      depth = 0;
+    }
   }
   else
   {

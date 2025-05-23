@@ -7,6 +7,10 @@
 
 #define uniforms perFrameUniformsBuffers[uniformBufferIndex]
 
+// When enabled, probes will be blended in a gamma-2 space to make gradients appear perceptually 
+// smoother than a simple photometrically linear blend.
+#define PERCEPTUAL_BLEND 1
+
 layout(local_size_x = 8, local_size_y = 8) in;
 void main()
 {
@@ -27,6 +31,7 @@ void main()
   const vec3 normal = normalize(texelFetch(gNormal, gid, 0).xyz);
   const float depth = texelFetch(gDepth, gid, 0).x;
   const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
+  const vec3 viewDirWS = normalize(positionWorld - uniforms.cameraPos.xyz);
 
   // Hack for unlit objects to render properly.
   if (normal == vec3(0))
@@ -48,8 +53,7 @@ void main()
   }
   else if (giMethod == 2)
   {
-    const vec3 normalBias = normal * 0.5;
-    const vec3 posProbeSpaceBiased = (positionWorld + normalBias - 0.5) / ddgi.gridInfo.baseGridScale;
+    vec3 irradiance_internalNoShadow = vec3(0);
     const vec3 posProbeSpace = (positionWorld - 0.5) / ddgi.gridInfo.baseGridScale;
     const ivec3 minProbe = ivec3(floor(posProbeSpace));
     const ivec3 maxProbe = minProbe + 1;
@@ -65,11 +69,13 @@ void main()
       {
         //const ivec3 p = ivec3(round(probeCoord));
         const vec3 probePos = vec3(x, y, z);
+        const vec3 probePosWS = probePos * ddgi.gridInfo.baseGridScale + 0.5;
         const float trilinearWeight = TrilinearWeight(probePos, posProbeSpace);
 
         // Give less weight to probes that lie below the plane of the shaded point.
         const vec3 dirToProbe = normalize(probePos - posProbeSpace);
-        const float backfaceWeight = dot(dirToProbe, normal) * 0.5 + 0.5;
+        //const float backfaceWeight = max(1e-4, dot(dirToProbe, normal));
+        const float backfaceWeight = square(max(1e-4, dot(dirToProbe, normal) * 0.5 + 0.5)) + 0.2; // Wrap shading term
 
         // Sample probe illuminance and depth moments.
         const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo.gridResolution);
@@ -79,38 +85,76 @@ void main()
         const vec2 uv = ProbeDirectionToUv(normal, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
         const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
         
-        float vsmWeight = 1;
-        const float r = distance(probePos, posProbeSpaceBiased) * ddgi.gridInfo.baseGridScale;
+        float shadowWeight = 1;
+        const float normalBias = 0.55 * ddgi.gridInfo.baseGridScale;
+        //const vec3 probeToPointBiasedWS = positionWorld - probePosWS + (normal + 3.0 * viewDirWS) * normalBias;
+        const vec3 probeToPointBiasedWS = (positionWorld + normal * normalBias) - probePosWS;
+        const vec3 dirToProbeBiased = normalize(-probeToPointBiasedWS);
+        const float distToProbeWS = length(probeToPointBiasedWS);
+        //const float distToProbeWS = length(probePos - posProbeSpace) * ddgi.gridInfo.baseGridScale;
 
 #if 1
         const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
         const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments);
-        const vec2 uv2 = ProbeDirectionToUv(-dirToProbe, probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
+        const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
         const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, samplerr, uvOffset2 + uv2, 0).xy;
         const float mean = depthMoments.x;
         const float mean2 = depthMoments.y;
 
-        if (r > mean)
+        if (distToProbeWS > mean)
         {
           const float variance = abs(mean * mean - mean2);
-          const float temp = r - mean;
-          vsmWeight = variance / (variance + temp * temp);
+          shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
         }
 #else // Regular shadow test.
         const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
         const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth);
-        const vec2 uv2 = ProbeDirectionToUv(-dirToProbe, probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
+        const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
         const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, samplerr, uvOffset2 + uv2, 0).x;
 
-        if (r > rawDepth)
+        if (distToProbeWS > rawDepth)
         {
-          vsmWeight = 0;
+          shadowWeight = 0;
         }
 #endif
 
-        const float weight = max(EPSILON, trilinearWeight * backfaceWeight * vsmWeight);
-        irradiance_internal += albedo_internal * weight * illuminance;
+        float weightNoTrilinear = backfaceWeight * shadowWeight;
+        float weightNoTrilinearNoShadow = backfaceWeight;
+        
+        weightNoTrilinear = max(1e-5, weightNoTrilinear);
+        weightNoTrilinearNoShadow = max(1e-5, weightNoTrilinearNoShadow);
+
+        // Since tiny leaks are very visible, we crush tiny weights here while keeping the curve continuous.
+        const float threshold = 0.2;
+        if (weightNoTrilinear < threshold)
+        {
+          weightNoTrilinear *= square(weightNoTrilinear) / square(threshold);
+        }
+        if (weightNoTrilinearNoShadow < threshold)
+        {
+          weightNoTrilinearNoShadow *= square(weightNoTrilinearNoShadow) / square(threshold);
+        }
+
+        const float weight = trilinearWeight * weightNoTrilinear;
+        const float weightNoShadow = trilinearWeight * weightNoTrilinearNoShadow;
+#if PERCEPTUAL_BLEND
+        irradiance_internal += weight * sqrt(albedo_internal * illuminance);
+        irradiance_internalNoShadow += weightNoShadow * sqrt(albedo_internal * illuminance);
+#else
+        irradiance_internal += weight * albedo_internal * illuminance;
+        irradiance_internalNoShadow += weightNoShadow * albedo_internal * illuminance;
+#endif
         sumWeights += weight;
+      }
+
+#if PERCEPTUAL_BLEND
+      irradiance_internal *= irradiance_internal;
+      irradiance_internalNoShadow *= irradiance_internalNoShadow;
+#endif
+
+      if (sumWeights < 1e-4)
+      {
+        irradiance_internal = irradiance_internalNoShadow;
       }
     }
   }
