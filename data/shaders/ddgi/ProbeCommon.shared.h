@@ -11,6 +11,7 @@ struct DDGIProbeGridInfo
   FVOG_IVEC2 probeDepthMomentsResolution;
   FVOG_IVEC3 gridResolution;
   FVOG_FLOAT baseGridScale; // Scale of smallest cascade. Successive cascades have 2x the scale as the last.
+  FVOG_IVEC3 gridOffset; // Offset of the grid, in baseGridScale units, from the origin.
 };
 
 #ifndef __cplusplus

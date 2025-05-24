@@ -29,7 +29,7 @@ void main()
 
   uint randState = PCG_Hash(gid);
 
-  const vec3 rayPos = ProbeIndexToCoord(probeIndex, args.gridInfo.gridResolution) * args.gridInfo.baseGridScale + 0.5;
+  const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo.gridResolution) + args.gridInfo.gridOffset) * args.gridInfo.baseGridScale + 0.5;
   HitSurfaceParameters hit;
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 8, hit))
   {

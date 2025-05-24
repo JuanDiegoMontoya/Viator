@@ -54,12 +54,14 @@ void main()
   else if (giMethod == 2)
   {
     vec3 irradiance_internalNoShadow = vec3(0);
-    const vec3 posProbeSpace = (positionWorld - 0.5) / ddgi.gridInfo.baseGridScale;
+    const vec3 posProbeSpacePreMod = ((positionWorld - 0.5) / ddgi.gridInfo.baseGridScale) - ddgi.gridInfo.gridOffset;
+    const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo.gridResolution);
     const ivec3 minProbe = ivec3(floor(posProbeSpace));
     const ivec3 maxProbe = minProbe + 1;
     float sumWeights = 0;
+    float sumWeightsNoShadow = 0;
     // Sample nearest 8 probes and apply trilinear weights.
-    if (all(greaterThanEqual(posProbeSpace, vec3(0))) && all(lessThan(posProbeSpace, ddgi.gridInfo.gridResolution)))
+    if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridInfo.gridResolution)))
     {
       //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
 
@@ -69,7 +71,7 @@ void main()
       {
         //const ivec3 p = ivec3(round(probeCoord));
         const vec3 probePos = vec3(x, y, z);
-        const vec3 probePosWS = probePos * ddgi.gridInfo.baseGridScale + 0.5;
+        const vec3 probePosWS = (probePos + ddgi.gridInfo.gridOffset) * ddgi.gridInfo.baseGridScale + 0.5;
         const float trilinearWeight = TrilinearWeight(probePos, posProbeSpace);
 
         // Give less weight to probes that lie below the plane of the shaded point.
@@ -86,7 +88,7 @@ void main()
         const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
         
         float shadowWeight = 1;
-        const float normalBias = 0.55 * ddgi.gridInfo.baseGridScale;
+        const float normalBias = 0.45 * ddgi.gridInfo.baseGridScale;
         //const vec3 probeToPointBiasedWS = positionWorld - probePosWS + (normal + 3.0 * viewDirWS) * normalBias;
         const vec3 probeToPointBiasedWS = (positionWorld + normal * normalBias) - probePosWS;
         const vec3 dirToProbeBiased = normalize(-probeToPointBiasedWS);
@@ -145,13 +147,18 @@ void main()
         irradiance_internalNoShadow += weightNoShadow * albedo_internal * illuminance;
 #endif
         sumWeights += weight;
+        sumWeightsNoShadow += weightNoShadow;
       }
+
+      irradiance_internal /= sumWeights;
+      irradiance_internalNoShadow /= sumWeightsNoShadow;
 
 #if PERCEPTUAL_BLEND
       irradiance_internal *= irradiance_internal;
       irradiance_internalNoShadow *= irradiance_internalNoShadow;
 #endif
 
+      // TODO: Smooth blend (mix + smoothstep) when sumWeights is small.
       if (sumWeights < 1e-4)
       {
         irradiance_internal = irradiance_internalNoShadow;

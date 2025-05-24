@@ -854,6 +854,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     {
       auto marker = ctx.MakeScopedDebugMarker("DDGI");
 
+      ddgi.args.gridInfo.gridOffset = glm::round((position - glm::vec3(glm::vec3(ddgi.args.gridInfo.gridResolution) * ddgi.args.gridInfo.baseGridScale / 2.0f)) / ddgi.args.gridInfo.baseGridScale);
       ddgi.args = DDGIArgs{
         .voxels                     = voxels,
         .internalColorSpace         = tonemapUniforms.shadingInternalColorSpace,
@@ -872,13 +873,14 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .linearSampler              = linearClampSampler,
       };
 
+      ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
+
       // TODO: Do not use discard barriers here since we will want to have some form of hysteresis/staggered updates.
       ctx.ImageBarrierDiscard(ddgi.packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
       ctx.ImageBarrierDiscard(ddgi.packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
       ctx.ImageBarrierDiscard(ddgi.packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
       ctx.ImageBarrierDiscard(ddgi.packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
 
-      ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
       ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
 
       ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
