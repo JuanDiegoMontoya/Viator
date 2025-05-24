@@ -459,8 +459,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
     .probeRadianceResolution     = {16, 16},
     .probeIrradianceResolution   = {10, 10},
     .probeDepthMomentsResolution = {10, 10},
-    .gridResolution              = {20, 20, 20},
-    .baseGridScale               = 16,
+    .gridResolution              = {10, 10, 10},
+    .baseGridScale               = 2,
   });
 
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
@@ -854,24 +854,43 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     {
       auto marker = ctx.MakeScopedDebugMarker("DDGI");
 
-      ddgi.args.gridInfo.gridOffset = glm::round((position - glm::vec3(glm::vec3(ddgi.args.gridInfo.gridResolution) * ddgi.args.gridInfo.baseGridScale / 2.0f)) / ddgi.args.gridInfo.baseGridScale);
+      // Successive cascades are 2x the scale of the previous.
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        ddgi.args.gridInfo[i]               = ddgi.args.gridInfo[0];
+        ddgi.args.gridInfo[i].baseGridScale = ddgi.args.gridInfo[0].baseGridScale * float(glm::exp2(i));
+      }
+
+      DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        ddgi.args.gridInfo[i].gridOffset =
+          glm::round((position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
+                     ddgi.args.gridInfo[i].baseGridScale);
+        tempGridInfos[i] = ddgi.args.gridInfo[i];
+      }
       ddgi.args = DDGIArgs{
         .voxels                     = voxels,
         .internalColorSpace         = tonemapUniforms.shadingInternalColorSpace,
         .noiseTexture               = noiseTexture->ImageView().GetTexture2D(),
         .samples                    = 1,
         .bounces                    = 2,
-        .gridInfo                   = ddgi.args.gridInfo,
-        .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2D(),
-        .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2D(),
-        .packedProbeRawDepth        = ddgi.packedProbeRawDepth->ImageView().GetImage2D(),
-        .packedProbeDepthMoments    = ddgi.packedProbeDepthMoments->ImageView().GetImage2D(),
-        .packedProbeRadianceTex     = ddgi.packedProbeRadiance->ImageView().GetTexture2D(),
-        .packedProbeIrradianceTex   = ddgi.packedProbeIrradiance->ImageView().GetTexture2D(),
-        .packedProbeRawDepthTex     = ddgi.packedProbeRawDepth->ImageView().GetTexture2D(),
-        .packedProbeDepthMomentsTex = ddgi.packedProbeDepthMoments->ImageView().GetTexture2D(),
+        //.gridInfo                   = ddgi.args.gridInfo,
+        .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2DArray(),
+        .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2DArray(),
+        .packedProbeRawDepth        = ddgi.packedProbeRawDepth->ImageView().GetImage2DArray(),
+        .packedProbeDepthMoments    = ddgi.packedProbeDepthMoments->ImageView().GetImage2DArray(),
+        .packedProbeRadianceTex     = ddgi.packedProbeRadiance->ImageView().GetTexture2DArray(),
+        .packedProbeIrradianceTex   = ddgi.packedProbeIrradiance->ImageView().GetTexture2DArray(),
+        .packedProbeRawDepthTex     = ddgi.packedProbeRawDepth->ImageView().GetTexture2DArray(),
+        .packedProbeDepthMomentsTex = ddgi.packedProbeDepthMoments->ImageView().GetTexture2DArray(),
         .linearSampler              = linearClampSampler,
       };
+
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        ddgi.args.gridInfo[i] = tempGridInfos[i];
+      }
 
       ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
 
@@ -885,16 +904,16 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
       ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
       const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
-      ctx.DispatchInvocations(extent.width * extent.height, 1, 1); // TODO: caculate extent based on number of live probes instead of image size.
+      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
 
       ctx.Barrier();
 
       ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
-      ctx.DispatchInvocations(extent.width * extent.height, 1, 1);
+      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
 
       // No barrier is needed here
       ctx.BindComputePipeline(ddgi.downsampleDepthPipeline.GetPipeline());
-      ctx.DispatchInvocations(extent.width * extent.height, 1, 1);
+      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
     }
 
     auto albedoAttachment = Fvog::RenderColorAttachment{
@@ -1070,17 +1089,21 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
     ctx.BindGraphicsPipeline(ddgi.debugProbesPipeline.GetPipeline());
     const auto& icosphere_3 = g_meshes.at("icosphere_3");
-    ctx.SetPushConstants(DebugProbesArguments{
-      .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
-      .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
-      .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-      .samplerr            = linearClampSampler,
-      .debugMode           = uint32_t(ddgiDebugView_),
-      .probeSize           = ddgiDebugProbeSize_,
-    });
-    ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-    const auto& res = ddgi.args.gridInfo.gridResolution;
-    ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+    for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
+    {
+      ctx.SetPushConstants(DebugProbesArguments{
+        .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
+        .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+        .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .samplerr            = linearClampSampler,
+        .debugMode           = uint32_t(ddgiDebugView_),
+        .probeSize           = ddgiDebugProbeSize_,
+        .cascade             = cascade,
+      });
+      ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+      const auto& res = ddgi.args.gridInfo[cascade].gridResolution;
+      ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+    }
 
     ctx.EndRendering();
   }
@@ -1208,20 +1231,27 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
 
   g_meshes.emplace("icosphere_3", LoadObjFile(GetAssetDirectory() / "models/icosphere_3.obj"));
 
-  ddgi.args.gridInfo = probeGridInfo;
+  ddgi.args.gridInfo[0] = probeGridInfo;
   ddgi.argsBuffer.emplace(1, "DDGI Arguments");
   const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
   // Probe sizes are dilated to include a 1-texel border.
   const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);
-  ddgi.packedProbeRadiance = Fvog::CreateTexture2D({uint32_t(width1), uint32_t(height1)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
-  ddgi.packedProbeRawDepth = Fvog::CreateTexture2D({uint32_t(width1), uint32_t(height1)}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Raw Depth");
+  ddgi.packedProbeRadiance =
+    Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
+  ddgi.packedProbeRawDepth =
+    Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Raw Depth");
 
   const auto width2  = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height2 = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeIrradianceResolution.x) / width2);
-  ddgi.packedProbeIrradiance = Fvog::CreateTexture2D({uint32_t(width2), uint32_t(height2)}, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
+  ddgi.packedProbeIrradiance =
+    Fvog::CreateTexture2DArray({uint32_t(width2), uint32_t(height2)}, DDGI_NUM_CASCADES, DDGI::radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
 
   const auto width3  = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeDepthMomentsResolution.x) / width2);
-  ddgi.packedProbeDepthMoments = Fvog::CreateTexture2D({uint32_t(width3), uint32_t(height3)}, Fvog::Format::R32G32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Depth Moments");
+  ddgi.packedProbeDepthMoments = Fvog::CreateTexture2DArray({uint32_t(width3), uint32_t(height3)},
+    DDGI_NUM_CASCADES,
+    Fvog::Format::R32G32_SFLOAT,
+    Fvog::TextureUsage::GENERAL,
+    "DDGI Probe Depth Moments");
 }

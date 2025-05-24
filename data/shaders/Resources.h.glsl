@@ -151,6 +151,9 @@
 #define Fvog_sampler2D(textureIndex, samplerIndex) \
   NonUniformIndex(sampler2D(FvogGetSampledImage(texture2D, textureIndex), FvogGetSampler(samplerIndex)))
   
+#define Fvog_sampler2DArray(textureIndex, samplerIndex) \
+  NonUniformIndex(sampler2DArray(FvogGetSampledImage(texture2DArray, textureIndex), FvogGetSampler(samplerIndex)))
+
 #define Fvog_usampler2D(textureIndex, samplerIndex) \
   NonUniformIndex(usampler2D(FvogGetSampledImage(utexture2D, textureIndex), FvogGetSampler(samplerIndex)))
 
@@ -162,6 +165,9 @@
 
 #define Fvog_image2D(imageIndex) \
   FvogGetStorageImage(image2D, imageIndex)
+  
+#define Fvog_image2DArray(imageIndex) \
+  FvogGetStorageImage(image2DArray, imageIndex)
   
 #define Fvog_image3D(imageIndex) \
   FvogGetStorageImage(image3D, imageIndex)
@@ -177,6 +183,9 @@
 
 #define Fvog_texture2D(textureIndex) \
   FvogGetSampledImage(texture2D, textureIndex)
+
+#define Fvog_texture2DArray(textureIndex) \
+  FvogGetSampledImage(texture2DArray, textureIndex)
 
 #define Fvog_texture3D(textureIndex) \
   FvogGetSampledImage(texture3D, textureIndex)
@@ -216,12 +225,22 @@ struct UTexture2D
   FVOG_UINT32 texIdx;
 };
 
+struct Texture2DArray
+{
+  FVOG_UINT32 texIdx;
+};
+
 struct Texture3D
 {
   FVOG_UINT32 texIdx;
 };
 
 struct Image2D
+{
+  FVOG_UINT32 imgIdx;
+};
+
+struct Image2DArray
 {
   FVOG_UINT32 imgIdx;
 };
@@ -251,10 +270,12 @@ FVOG_DECLARE_SAMPLERS;
 FVOG_DECLARE_SAMPLED_IMAGES(utexture2D);
 FVOG_DECLARE_SAMPLED_IMAGES(texture2D);
 FVOG_DECLARE_SAMPLED_IMAGES(texture3D);
+FVOG_DECLARE_SAMPLED_IMAGES(texture2DArray);
 FVOG_DECLARE_SAMPLED_IMAGES(utexture2DArray);
 
 FVOG_DECLARE_STORAGE_IMAGES(image2D);
 FVOG_DECLARE_STORAGE_IMAGES(image3D);
+FVOG_DECLARE_STORAGE_IMAGES(image2DArray);
 FVOG_DECLARE_STORAGE_IMAGES(uimage2DArray);
 
 #ifdef FROGRENDER_RAYTRACING_ENABLE
@@ -272,6 +293,11 @@ vec4 texelFetch(Texture2D tex, ivec2 coord, int level)
   return texelFetch(Fvog_texture2D(tex.texIdx), coord, level);
 }
 
+vec4 texelFetch(Texture2DArray tex, ivec3 coord, int level)
+{
+  return texelFetch(Fvog_texture2DArray(tex.texIdx), coord, level);
+}
+
 uvec4 texelFetch(UTexture2D tex, ivec2 coord, int level)
 {
   return texelFetch(Fvog_utexture2D(tex.texIdx), coord, level);
@@ -282,6 +308,11 @@ vec4 textureLod(Texture2D tex, Sampler sam, vec2 uv, float lod)
   //ASSERT_MSG(tex.type == FVOG_DESCRIPTOR_TYPE_SAMPLED_IMAGE, "textureLod: Invalid texture descriptor type!\n");
   //ASSERT_MSG(sam.type == FVOG_DESCRIPTOR_TYPE_SAMPLER, "textureLod: Invalid sampler descriptor type!\n");
   return textureLod(Fvog_sampler2D(tex.texIdx, sam.samplerIdx), uv, lod);
+}
+
+vec4 textureLod(Texture2DArray tex, Sampler sam, vec3 uvw, float lod)
+{
+  return textureLod(Fvog_sampler2DArray(tex.texIdx, sam.samplerIdx), uvw, lod);
 }
 
 vec4 textureLod(Texture3D tex, Sampler sam, vec3 uvw, float lod)
@@ -297,6 +328,11 @@ ivec2 textureSize(Texture2D tex, int level)
   return textureSize(Fvog_texture2D(tex.texIdx), level);
 }
 
+ivec3 textureSize(Texture2DArray tex, int level)
+{
+  return textureSize(Fvog_texture2DArray(tex.texIdx), level);
+}
+
 ivec3 textureSize(Texture3D tex, int level)
 {
   //ASSERT_MSG(tex.type == FVOG_DESCRIPTOR_TYPE_SAMPLED_IMAGE, "textureSize: Invalid texture descriptor type!\n");
@@ -308,6 +344,11 @@ ivec2 imageSize(Image2D img)
   return imageSize(Fvog_image2D(img.imgIdx));
 }
 
+ivec3 imageSize(Image2DArray img)
+{
+  return imageSize(Fvog_image2DArray(img.imgIdx));
+}
+
 ivec3 imageSize(Image3D img)
 {
   return imageSize(Fvog_image3D(img.imgIdx));
@@ -316,6 +357,11 @@ ivec3 imageSize(Image3D img)
 void imageStore(Image2D img, ivec2 coord, vec4 data)
 {
   imageStore(Fvog_image2D(img.imgIdx), coord, data);
+}
+
+void imageStore(Image2DArray img, ivec3 coord, vec4 data)
+{
+  imageStore(Fvog_image2DArray(img.imgIdx), coord, data);
 }
 
 vec4 imageLoad(Image2D img, ivec2 coord)

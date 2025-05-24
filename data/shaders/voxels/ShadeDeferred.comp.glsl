@@ -53,17 +53,30 @@ void main()
   }
   else if (giMethod == 2)
   {
-    vec3 irradiance_internalNoShadow = vec3(0);
-    const vec3 posProbeSpacePreMod = ((positionWorld - 0.5) / ddgi.gridInfo.baseGridScale) - ddgi.gridInfo.gridOffset;
-    const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo.gridResolution);
-    const ivec3 minProbe = ivec3(floor(posProbeSpace));
-    const ivec3 maxProbe = minProbe + 1;
-    float sumWeights = 0;
-    float sumWeightsNoShadow = 0;
-    // Sample nearest 8 probes and apply trilinear weights.
-    if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridInfo.gridResolution)))
+    // Select lowest possible cascade to sample.
+    int cascade = -1;
+    for (int i = 0; i < DDGI_NUM_CASCADES; i++)
     {
+      const vec3 posProbeSpacePreMod = ((positionWorld - 0.5) / ddgi.gridInfo[i].baseGridScale) - ddgi.gridInfo[i].gridOffset;
+      if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridInfo[i].gridResolution - 1)))
+      {
+        cascade = i;
+        break;
+      }
+    }
+
+    // Sample nearest 8 probes and apply trilinear weights.
+    if (cascade != -1)
+    {
+      float sumWeights = 0;
+      float sumWeightsNoShadow = 0;
+      vec3 irradiance_internalNoShadow = vec3(0);
       //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
+
+      const vec3 posProbeSpacePreMod = ((positionWorld - 0.5) / ddgi.gridInfo[cascade].baseGridScale) - ddgi.gridInfo[cascade].gridOffset;
+      const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+      const ivec3 minProbe = ivec3(floor(posProbeSpace));
+      const ivec3 maxProbe = minProbe + 1;
 
       for (int z = minProbe.z; z <= maxProbe.z; z++)
       for (int y = minProbe.y; y <= maxProbe.y; y++)
@@ -71,7 +84,7 @@ void main()
       {
         //const ivec3 p = ivec3(round(probeCoord));
         const vec3 probePos = vec3(x, y, z);
-        const vec3 probePosWS = (probePos + ddgi.gridInfo.gridOffset) * ddgi.gridInfo.baseGridScale + 0.5;
+        const vec3 probePosWS = (probePos + ddgi.gridInfo[cascade].gridOffset) * ddgi.gridInfo[cascade].baseGridScale + 0.5;
         const float trilinearWeight = TrilinearWeight(probePos, posProbeSpace);
 
         // Give less weight to probes that lie below the plane of the shaded point.
@@ -80,26 +93,26 @@ void main()
         const float backfaceWeight = square(max(1e-4, dot(dirToProbe, normal) * 0.5 + 0.5)) + 0.2; // Wrap shading term
 
         // Sample probe illuminance and depth moments.
-        const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo.gridResolution);
+        const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
 
-        const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
-        const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance);
-        const vec2 uv = ProbeDirectionToUv(normal, probeIndex, imageSize(ddgi.packedProbeIrradiance), ddgi.gridInfo.probeIrradianceResolution);
-        const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, uvOffset + uv, 0).rgb;
+        const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+        const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
+        const vec2 uv = ProbeDirectionToUv(normal, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+        const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, samplerr, vec3(uvOffset + uv, cascade), 0).rgb;
         
         float shadowWeight = 1;
-        const float normalBias = 0.45 * ddgi.gridInfo.baseGridScale;
+        const float normalBias = 0.45 * ddgi.gridInfo[cascade].baseGridScale;
         //const vec3 probeToPointBiasedWS = positionWorld - probePosWS + (normal + 3.0 * viewDirWS) * normalBias;
         const vec3 probeToPointBiasedWS = (positionWorld + normal * normalBias) - probePosWS;
         const vec3 dirToProbeBiased = normalize(-probeToPointBiasedWS);
         const float distToProbeWS = length(probeToPointBiasedWS);
         //const float distToProbeWS = length(probePos - posProbeSpace) * ddgi.gridInfo.baseGridScale;
 
-#if 1
-        const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
-        const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments);
-        const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments), ddgi.gridInfo.probeDepthMomentsResolution);
-        const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, samplerr, uvOffset2 + uv2, 0).xy;
+#if 1 // Chebyshev test.
+        const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+        const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments).xy;
+        const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+        const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, samplerr, vec3(uvOffset2 + uv2, cascade), 0).xy;
         const float mean = depthMoments.x;
         const float mean2 = depthMoments.y;
 

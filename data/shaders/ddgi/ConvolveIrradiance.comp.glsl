@@ -5,9 +5,10 @@ layout(local_size_x = 128, local_size_y = 1) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
+  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridInfo.gridResolution.x * args.gridInfo.gridResolution.y * args.gridInfo.gridResolution.z;
-  const int numTexels = args.gridInfo.probeIrradianceResolution.x * args.gridInfo.probeIrradianceResolution.y;
+  const int numProbes = args.gridInfo[cascade].gridResolution.x * args.gridInfo[cascade].gridResolution.y * args.gridInfo[cascade].gridResolution.z;
+  const int numTexels = args.gridInfo[cascade].probeIrradianceResolution.x * args.gridInfo[cascade].probeIrradianceResolution.y;
   const int probeIndex = gid / numTexels;
 
   if (probeIndex >= numProbes)
@@ -15,8 +16,8 @@ void main()
     return;
   }
 
-  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo.probeIrradianceResolution);
-  const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeIrradianceResolution);
+  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo[cascade].probeIrradianceResolution);
+  const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeIrradianceResolution);
 
   vec3 irradiance = vec3(0);
 
@@ -38,13 +39,13 @@ void main()
     }
     const float pdf = cosine_weighted_hemisphere_PDF(cosTheta);
 
-    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
-    const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance);
-    const vec2 uv = ProbeDirectionToUv(sampleDir, probeIndex, imageSize(args.packedProbeRadiance), args.gridInfo.probeRadianceResolution);
+    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance).xy;
+    const vec2 uv = ProbeDirectionToUv(sampleDir, probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
 
-    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, uvOffset + uv, 0).rgb * cosTheta / pdf / M_PI;
+    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb * cosTheta / pdf / M_PI;
   }
   irradiance += tempAccum / SHRIMPLES;
 
-  WriteToProbeWithBorder(args.packedProbeIrradiance, probeIndex, args.gridInfo.probeIrradianceResolution, texelCoord, vec4(irradiance, 0));
+  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, probeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(irradiance, 0));
 }

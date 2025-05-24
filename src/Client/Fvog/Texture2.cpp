@@ -339,6 +339,21 @@ namespace Fvog
     return Texture(createInfo, std::move(name));
   }
 
+  Texture CreateTexture2DArray(VkExtent2D size, uint32_t arrayLayers, Format format, TextureUsage usage, std::string name)
+  {
+    ZoneScoped;
+    TextureCreateInfo createInfo{
+      .viewType    = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+      .format      = format,
+      .extent      = {size.width, size.height, 1},
+      .mipLevels   = 1,
+      .arrayLayers = arrayLayers,
+      .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+      .usage       = usage,
+    };
+    return Texture(createInfo, std::move(name));
+  }
+
   Texture CreateTexture2DMip(VkExtent2D size, Format format, uint32_t mipLevels, TextureUsage usage, std::string name)
   {
     ZoneScoped;

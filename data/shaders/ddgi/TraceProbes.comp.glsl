@@ -6,9 +6,10 @@ layout(local_size_x = 128, local_size_y = 1) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
+  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridInfo.gridResolution.x * args.gridInfo.gridResolution.y * args.gridInfo.gridResolution.z;
-  const int numTexels = args.gridInfo.probeRadianceResolution.x * args.gridInfo.probeRadianceResolution.y;
+  const int numProbes = args.gridInfo[cascade].gridResolution.x * args.gridInfo[cascade].gridResolution.y * args.gridInfo[cascade].gridResolution.z;
+  const int numTexels = args.gridInfo[cascade].probeRadianceResolution.x * args.gridInfo[cascade].probeRadianceResolution.y;
   const int probeIndex = gid / numTexels;
   const int texelIndex = gid % numTexels;
 
@@ -19,9 +20,9 @@ void main()
 
   vx_Init(args.voxels);
 
-  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo.probeRadianceResolution);
+  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo[cascade].probeRadianceResolution);
 
-  vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo.probeRadianceResolution);
+  vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeRadianceResolution);
   rayDir = normalize(rayDir + vec3(1e-4, 0, 0)); // HACK: perfectly 45-degree ray directions are not liked by DDA.
   
   vec3 radiance = {0, 0, 0};
@@ -29,7 +30,7 @@ void main()
 
   uint randState = PCG_Hash(gid);
 
-  const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo.gridResolution) + args.gridInfo.gridOffset) * args.gridInfo.baseGridScale + 0.5;
+  const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
   HitSurfaceParameters hit;
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 8, hit))
   {
@@ -44,8 +45,6 @@ void main()
       const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
       radiance += albedo * TraceIndirectLighting(texelCoord, hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
-      //const vec4 posClip = uniforms.viewProj * vec4(hit.positionWorld, 1.0);
-      //gl_FragDepth = posClip.z / posClip.w;
       
       // Sun
       const vec3 sunDir = normalize(vec3(.7, 1, .3));
@@ -102,8 +101,8 @@ void main()
     }
   }
 
-  depth = min(depth, args.gridInfo.baseGridScale * M_SQRT_3);
+  depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
-  WriteToProbeWithBorder(args.packedProbeRadiance, probeIndex, args.gridInfo.probeRadianceResolution, texelCoord, vec4(radiance, 0));
-  WriteToProbeWithBorder(args.packedProbeRawDepth, probeIndex, args.gridInfo.probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
+  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
 }

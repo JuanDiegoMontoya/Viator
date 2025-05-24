@@ -1060,7 +1060,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         ddgiDebugView_ = DDGIDebugView::DepthMoments;
       }
-      ImGui::SliderFloat("Grid Scale", &ddgi.args.gridInfo.baseGridScale, 1, 32, "%.0f");
+      ImGui::SliderFloat("Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);

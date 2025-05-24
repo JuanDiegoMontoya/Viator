@@ -180,6 +180,7 @@ private:
     PipelineManager::GraphicsPipelineKey debugProbesPipeline;
   } ddgi;
 
+  // Successive cascades will have 2x the scale of the previous.
   void InitDDGI(const DDGIProbeGridInfo& probeGridInfo);
 
   enum class DDGIDebugView

@@ -4,6 +4,8 @@
 #include "../voxels/Voxels.h.glsl"
 #include "../Resources.h.glsl"
 
+#define DDGI_NUM_CASCADES 6
+
 struct DDGIProbeGridInfo
 {
   FVOG_IVEC2 probeRadianceResolution;
@@ -28,15 +30,15 @@ struct DDGIArgs
   FVOG_UINT32 bounces;
 
   // Probe info
-  DDGIProbeGridInfo gridInfo;
-  FVOG_SHARED Image2D packedProbeRadiance;
-  FVOG_SHARED Image2D packedProbeIrradiance;
-  FVOG_SHARED Image2D packedProbeRawDepth;
-  FVOG_SHARED Image2D packedProbeDepthMoments;
-  FVOG_SHARED Texture2D packedProbeRadianceTex;
-  FVOG_SHARED Texture2D packedProbeIrradianceTex;
-  FVOG_SHARED Texture2D packedProbeRawDepthTex;
-  FVOG_SHARED Texture2D packedProbeDepthMomentsTex;
+  DDGIProbeGridInfo gridInfo[DDGI_NUM_CASCADES];
+  FVOG_SHARED Image2DArray packedProbeRadiance;
+  FVOG_SHARED Image2DArray packedProbeIrradiance;
+  FVOG_SHARED Image2DArray packedProbeRawDepth;
+  FVOG_SHARED Image2DArray packedProbeDepthMoments;
+  FVOG_SHARED Texture2DArray packedProbeRadianceTex;
+  FVOG_SHARED Texture2DArray packedProbeIrradianceTex;
+  FVOG_SHARED Texture2DArray packedProbeRawDepthTex;
+  FVOG_SHARED Texture2DArray packedProbeDepthMomentsTex;
   FVOG_SHARED Sampler linearSampler;
 };
 
@@ -106,60 +108,60 @@ int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
     probeCoord.x;
 }
 
-void WriteToProbeWithBorder(Image2D packedProbeImage, int probeIndex, ivec2 probeResolution, ivec2 texelCoord, vec4 value)
+void WriteToProbeWithBorder(Image2DArray packedProbeImage, int cascade, int probeIndex, ivec2 probeResolution, ivec2 texelCoord, vec4 value)
 {
-  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(packedProbeImage), probeResolution);
-  imageStore(packedProbeImage, texelOffset + texelCoord, value);
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(packedProbeImage).xy, probeResolution);
+  imageStore(packedProbeImage, ivec3(texelOffset + texelCoord, cascade), value);
   
   ///// For work texels on the edge of the probe, write to applicable border texels.
   // Sides
   if (texelCoord.x == 0)
   {
     const ivec2 borderCoord = {-1, probeResolution.y - 1 - texelCoord.y};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
   
   if (texelCoord.x == probeResolution.x - 1)
   {
     const ivec2 borderCoord = {probeResolution.x, probeResolution.y - 1 - texelCoord.y};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
   
   if (texelCoord.y == 0)
   {
     const ivec2 borderCoord = {probeResolution.x - 1 - texelCoord.x, -1};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
   
   if (texelCoord.y == probeResolution.y - 1)
   {
     const ivec2 borderCoord = {probeResolution.x - 1 - texelCoord.x, probeResolution.y};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
 
   // Corners
   if (texelCoord == ivec2(0, 0))
   {
     const ivec2 borderCoord = probeResolution;
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
   
   if (texelCoord == probeResolution - 1)
   {
     const ivec2 borderCoord = {-1, -1};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
   
   if (texelCoord == ivec2(0, probeResolution.y - 1))
   {
     const ivec2 borderCoord = {probeResolution.x, -1};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
 
   if (texelCoord == ivec2(probeResolution.x - 1, 0))
   {
     const ivec2 borderCoord = {-1, probeResolution.y};
-    imageStore(packedProbeImage, texelOffset + borderCoord, value);
+    imageStore(packedProbeImage, ivec3(texelOffset + borderCoord, cascade), value);
   }
 }
 

@@ -3,6 +3,7 @@
 #include "Descriptor.h"
 #include "shaders/Resources.h.glsl"
 
+#include "Core/Assert2.h"
 #include <vulkan/vulkan_core.h>
 
 #include <array>
@@ -165,19 +166,31 @@ namespace Fvog
 
     [[nodiscard]] shared::Texture2D GetTexture2D() noexcept
     {
-      assert(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      return {sampledDescriptorInfo_.value().GpuResource().index};
+    }
+
+    [[nodiscard]] shared::Texture2DArray GetTexture2DArray() noexcept
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
     [[nodiscard]] shared::Texture3D GetTexture3D() noexcept
     {
-      assert(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
     [[nodiscard]] shared::Image2D GetImage2D() noexcept
     {
-      assert(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      return {storageDescriptorInfo_.value().GpuResource().index};
+    }
+
+    [[nodiscard]] shared::Image2DArray GetImage2DArray() noexcept
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 
@@ -266,5 +279,6 @@ namespace Fvog
 
   // convenience functions
   [[nodiscard]] Texture CreateTexture2D(VkExtent2D size, Format format, TextureUsage usage, std::string name = {});
+  [[nodiscard]] Texture CreateTexture2DArray(VkExtent2D size, uint32_t arrayLayers, Format format, TextureUsage usage, std::string name = {});
   [[nodiscard]] Texture CreateTexture2DMip(VkExtent2D size, Format format, uint32_t mipLevels, TextureUsage usage, std::string name = {});
 }

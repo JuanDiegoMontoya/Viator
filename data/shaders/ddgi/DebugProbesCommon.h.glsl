@@ -36,6 +36,7 @@ FVOG_DECLARE_ARGUMENTS(DebugProbesArguments)
   FVOG_SHARED Sampler samplerr;
   FVOG_UINT32 debugMode; // 1 == radiance. 2 == irradiance. 3 == raw depth. 4 == depth moments.
   FVOG_FLOAT probeSize;
+  FVOG_INT32 cascade;
 }
 #ifndef __cplusplus
 args
