@@ -1029,7 +1029,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   {
     ShowEditor(dt, world);
 
-    if (ImGui::Begin("Context"))
+    if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
       auto& ctx   = world.GetRegistry().ctx();
       auto& debug = ctx.get<Debugging>();
@@ -1082,7 +1082,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    if (ImGui::Begin("TEST PROBULUS"))
+    if (ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
       static glm::vec3 probePos  = {0, 60, 0};
       static glm::vec3 probePos2 = {0, 61, 0};
@@ -1129,7 +1129,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     auto&& [playerEntity, p, inventory, gt] = *range.begin();
 
-    if (ImGui::Begin("It's free real estate"))
+    
+    if (ImGui::Begin("It's free real estate", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
       const auto& itemRegistry = world.GetRegistry().ctx().get<ItemRegistry>();
       for (int i = 0; const auto& itemDefinition : itemRegistry.GetAllItemDefinitions())
