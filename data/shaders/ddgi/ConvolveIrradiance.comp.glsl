@@ -47,5 +47,8 @@ void main()
   }
   irradiance += tempAccum / SHRIMPLES;
 
-  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, probeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(irradiance, 0));
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeIrradiance).xy, args.gridInfo[cascade].probeIrradianceResolution);
+  const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
+  const vec3 newIrradiance = mix(oldIrradiance, irradiance, 0.03);
+  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, probeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
 }

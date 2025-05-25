@@ -30,6 +30,7 @@ FVOG_DECLARE_STORAGE_BUFFERS(restrict readonly PerFrameUniformsBuffer)
   float bindlessSamplerLodBias;
   uint flags;
   float alphaHashScale;
+  uint frameNumber;
 } perFrameUniformsBuffers[];
 
 #endif // GLOBAL_UNIFORMS_H

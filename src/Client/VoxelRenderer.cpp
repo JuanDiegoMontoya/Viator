@@ -718,6 +718,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .bindlessSamplerLodBias = 0,
       .flags                  = 0,
       .alphaHashScale         = 0,
+      .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
     });
 
   auto drawCalls       = std::vector<GpuMesh*>();
@@ -875,6 +876,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .noiseTexture               = noiseTexture->ImageView().GetTexture2D(),
         .samples                    = 1,
         .bounces                    = 2,
+        .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         //.gridInfo                   = ddgi.args.gridInfo,
         .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2DArray(),
         .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2DArray(),
@@ -893,12 +895,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       }
 
       ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
-
-      // TODO: Do not use discard barriers here since we will want to have some form of hysteresis/staggered updates.
-      ctx.ImageBarrierDiscard(ddgi.packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
-      ctx.ImageBarrierDiscard(ddgi.packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
-      ctx.ImageBarrierDiscard(ddgi.packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
-      ctx.ImageBarrierDiscard(ddgi.packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
 
       ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
 
@@ -1176,6 +1172,7 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name,
 
 void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
 {
+  ZoneScoped;
   ASSERT(probeGridInfo.probeRadianceResolution.x > 0);
   ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
   ddgi.traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
@@ -1254,4 +1251,18 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
     Fvog::Format::R32G32_SFLOAT,
     Fvog::TextureUsage::GENERAL,
     "DDGI Probe Depth Moments");
+
+  Fvog::GetDevice().ImmediateSubmit(
+    [&](VkCommandBuffer cmd)
+    {
+      auto ctx = Fvog::Context(cmd);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(ddgi.packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ClearTexture(ddgi.packedProbeRadiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+      ctx.ClearTexture(ddgi.packedProbeIrradiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+      ctx.ClearTexture(ddgi.packedProbeRawDepth.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+      ctx.ClearTexture(ddgi.packedProbeDepthMoments.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+    });
 }

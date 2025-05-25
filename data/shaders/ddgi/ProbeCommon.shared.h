@@ -28,6 +28,7 @@ struct DDGIArgs
   FVOG_SHARED Texture2D noiseTexture;
   FVOG_UINT32 samples;
   FVOG_UINT32 bounces;
+  FVOG_UINT32 globalUniformsIndex;
 
   // Probe info
   DDGIProbeGridInfo gridInfo[DDGI_NUM_CASCADES];

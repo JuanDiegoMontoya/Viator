@@ -28,8 +28,9 @@ void main()
   vec3 radiance = {0, 0, 0};
   float depth = 1234;
 
-  uint randState = PCG_Hash(gid);
-
+  const uint frameNumber = perFrameUniformsBuffers[args.globalUniformsIndex].frameNumber;
+  uint randState = PCG_Hash(gid + frameNumber);
+  
   const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
   HitSurfaceParameters hit;
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 8, hit))
@@ -44,7 +45,7 @@ void main()
       
       const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
-      radiance += albedo * TraceIndirectLighting(texelCoord, hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
+      radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
       
       // Sun
       const vec3 sunDir = normalize(vec3(.7, 1, .3));
@@ -103,6 +104,9 @@ void main()
 
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
+  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+  const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
+  const vec3 newRadiance = mix(oldRadiance, radiance, 0.03);
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
   WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
 }

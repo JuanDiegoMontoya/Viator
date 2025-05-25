@@ -41,6 +41,7 @@ namespace Temp
     float bindlessSamplerLodBias;
     glm::uint flags;
     float alphaHashScale;
+    glm::uint frameNumber;
   };
 
   FVOG_DECLARE_ARGUMENTS(PushConstants)

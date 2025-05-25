@@ -369,6 +369,11 @@ vec4 imageLoad(Image2D img, ivec2 coord)
   return imageLoad(Fvog_image2D(img.imgIdx), coord);
 }
 
+vec4 imageLoad(Image2DArray img, ivec3 coord)
+{
+  return imageLoad(Fvog_image2DArray(img.imgIdx), coord);
+}
+
 #endif // !__cplusplus
 
 #endif // RESOURCES_H_GLSL
