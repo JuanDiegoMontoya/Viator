@@ -168,7 +168,8 @@ private:
   // DDGI
   struct DDGI
   {
-    static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
+    //static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
+    static constexpr Fvog::Format radianceFormat = Fvog::Format::R32G32B32A32_SFLOAT; // TODO: TEMP until quantization with smaller formats is dealt with.
     std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;
     std::optional<Fvog::Texture> packedProbeRadiance;
     std::optional<Fvog::Texture> packedProbeRawDepth; // Same resolution as radiance

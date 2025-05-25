@@ -45,8 +45,9 @@ void main()
       
       const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
-      radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
-      
+      //radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
+      radiance += albedo * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, args.linearSampler, args);
+
       // Sun
       const vec3 sunDir = normalize(vec3(.7, 1, .3));
       const float NoL = max(0, dot(hit.flatNormalWorld, sunDir));
@@ -104,9 +105,6 @@ void main()
 
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
-  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
-  const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const vec3 newRadiance = mix(oldRadiance, radiance, 0.03);
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
   WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
 }
