@@ -26,6 +26,7 @@
 #include "tracy/TracyVulkan.hpp"
 #include "stb_image.h"
 
+#include <format>
 #include <memory>
 #include <numeric>
 #include <type_traits>
@@ -858,13 +859,14 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       // Successive cascades are 2x the scale of the previous.
       for (int i = 0; i < DDGI_NUM_CASCADES; i++)
       {
-        ddgi.args.gridInfo[i]               = ddgi.args.gridInfo[0];
         ddgi.args.gridInfo[i].baseGridScale = ddgi.args.gridInfo[0].baseGridScale * float(glm::exp2(i));
       }
 
       DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
       for (int i = 0; i < DDGI_NUM_CASCADES; i++)
       {
+        ddgi.args.gridInfo[i].probes        = ddgi.probeDataBuffers[i].value().GetDeviceAddress();
+        ddgi.args.gridInfo[i].oldGridOffset = ddgi.args.gridInfo[i].gridOffset;
         ddgi.args.gridInfo[i].gridOffset =
           glm::round((position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
                      ddgi.args.gridInfo[i].baseGridScale);
@@ -898,6 +900,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
       ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
 
+      ctx.BindComputePipeline(ddgi.resetNewProbesPipeline.GetPipeline());
+      const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.z * ddgi.args.gridInfo[0].gridResolution.z;
+      ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+
+      // As long as probe validity is unused here, a barrier is not needed.
       ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
       const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
       ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
@@ -1202,6 +1209,15 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
       },
   });
 
+  ddgi.resetNewProbesPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Reset New Probes",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "ddgi/ResetNewProbes.comp.glsl",
+      },
+  });
+
   ddgi.debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Debug Probes",
     .vertexModuleInfo =
@@ -1229,8 +1245,28 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
   g_meshes.emplace("icosphere_3", LoadObjFile(GetAssetDirectory() / "models/icosphere_3.obj"));
 
   ddgi.args.gridInfo[0] = probeGridInfo;
+  for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+  {
+    ddgi.args.gridInfo[i] = ddgi.args.gridInfo[0];
+  }
   ddgi.argsBuffer.emplace(1, "DDGI Arguments");
   const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
+
+  ddgi.probeDataBuffers = std::make_unique<decltype(ddgi.probeDataBuffers)::element_type[]>(DDGI_NUM_CASCADES);
+  for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+  {
+    ddgi.probeDataBuffers[i].emplace(Fvog::TypedBufferCreateInfo{uint32_t(numProbes)}, std::format("Probe Data (cascade {})", i));
+  }
+
+  Fvog::GetDevice().ImmediateSubmit(
+    [&](VkCommandBuffer cmd)
+    {
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        ddgi.probeDataBuffers[i]->FillData(cmd);
+      }
+    });
+
   // Probe sizes are dilated to include a 1-texel border.
   const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
   const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);

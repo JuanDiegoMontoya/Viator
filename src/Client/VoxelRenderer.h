@@ -175,10 +175,12 @@ private:
     std::optional<Fvog::Texture> packedProbeRawDepth; // Same resolution as radiance
     std::optional<Fvog::Texture> packedProbeIrradiance;
     std::optional<Fvog::Texture> packedProbeDepthMoments; // Filtered depth and depth^2
+    std::unique_ptr<std::optional<Fvog::TypedBuffer<ProbeData>>[]> probeDataBuffers;
     DDGIArgs args{};
     PipelineManager::ComputePipelineKey traceRaysPipeline;
     PipelineManager::ComputePipelineKey convolveIrradiancePipeline;
     PipelineManager::ComputePipelineKey downsampleDepthPipeline;
+    PipelineManager::ComputePipelineKey resetNewProbesPipeline;
     PipelineManager::GraphicsPipelineKey debugProbesPipeline;
   } ddgi;
 

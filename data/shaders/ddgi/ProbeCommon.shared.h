@@ -6,6 +6,18 @@
 
 #define DDGI_NUM_CASCADES 6
 
+struct ProbeData
+{
+  float validity;
+};
+
+#ifndef __cplusplus
+FVOG_DECLARE_BUFFER_REFERENCE(ProbeInfo)
+{
+  ProbeData data[];
+};
+#endif
+
 struct DDGIProbeGridInfo
 {
   FVOG_IVEC2 probeRadianceResolution;
@@ -14,6 +26,12 @@ struct DDGIProbeGridInfo
   FVOG_IVEC3 gridResolution;
   FVOG_FLOAT baseGridScale; // Scale of smallest cascade. Successive cascades have 2x the scale as the last.
   FVOG_IVEC3 gridOffset; // Offset of the grid, in baseGridScale units, from the origin.
+  FVOG_IVEC3 oldGridOffset; // Previous frame's gridOffset. Used to determine which probes to reset.
+#ifdef __cplusplus
+  VkDeviceAddress probes;
+#else
+  ProbeInfo probes;
+#endif
 };
 
 #ifndef __cplusplus
@@ -107,6 +125,15 @@ int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
   return (probeCoord.z * gridResolution.x * gridResolution.y) + 
     (probeCoord.y * gridResolution.x) + 
     probeCoord.x;
+}
+
+// Stable index for a world-space position.
+int ProbeIndexToStableIndex(int probeIndex, DDGIProbeGridInfo gridInfo)
+{
+  const vec3 probePos = ProbeIndexToCoord(probeIndex, gridInfo.gridResolution);
+  const vec3 probePosKindaWS = probePos + gridInfo.gridOffset;
+  const vec3 probePosKindaWSWrapped = mod(probePosKindaWS, gridInfo.gridResolution);
+  return ProbeCoordToIndex(ivec3(probePosKindaWSWrapped), gridInfo.gridResolution);
 }
 
 void WriteToProbeWithBorder(Image2DArray packedProbeImage, int cascade, int probeIndex, ivec2 probeResolution, ivec2 texelCoord, vec4 value)
@@ -209,7 +236,8 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
       const float backfaceWeight = square(max(1e-4, dot(dirToProbe, normalWS) * 0.5 + 0.5)) + 0.2; // Wrap shading term
 
       // Sample probe illuminance and depth moments.
-      const int probeIndex = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
+      const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
+      const int probeIndex = ProbeIndexToStableIndex(probeIndexA, ddgi.gridInfo[cascade]);
 
       const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
       const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
@@ -249,8 +277,9 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
       }
 #endif
 
-      float weightNoTrilinear = backfaceWeight * shadowWeight;
-      float weightNoTrilinearNoShadow = backfaceWeight;
+      const float validityWeight = min(1.0, ddgi.gridInfo[cascade].probes.data[probeIndex].validity / 100);
+      float weightNoTrilinear = backfaceWeight * shadowWeight * validityWeight;
+      float weightNoTrilinearNoShadow = backfaceWeight * validityWeight;
       
       weightNoTrilinear = max(1e-5, weightNoTrilinear);
       weightNoTrilinearNoShadow = max(1e-5, weightNoTrilinearNoShadow);
@@ -292,10 +321,14 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
     {
       irradiance_internal = irradiance_internalNoShadow;
     }
-    return irradiance_internal;
+  
+    // DDGI uses this artificial energy-reducing term to mitigate the perception of light leaks in dark rooms.
+    // The chosen constant is arbitrary and must be in [0, 1].
+    const float ENERGY_PRESERVATION = 0.8;
+    return ENERGY_PRESERVATION * irradiance_internal;
   }
 
-  return vec3(1, 0, 0); // No available cascade
+  return vec3(0, 0, 0); // No available cascade
 }
 
 #endif // !__cplusplus

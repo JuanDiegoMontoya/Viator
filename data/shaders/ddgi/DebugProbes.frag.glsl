@@ -13,6 +13,7 @@ const bool gUseNearestNeighbor = true;
 
 void main()
 {
+  const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, args.ddgi.gridInfo[v_cascade]);
   if (v_cascade != 0)
   {
     //discard;
@@ -44,10 +45,10 @@ void main()
     tex = args.ddgi.packedProbeDepthMomentsTex;
   }
 
-  const ivec2 texelOffset = GetProbeTexelOffset(v_probeIndex, probeImageSize, probeGridResolution);
+  const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, probeImageSize, probeGridResolution);
 
   const vec2 uvOffset = vec2(texelOffset) / probeImageSize;
-  const vec2 uv = ProbeDirectionToUv(normalize(v_normal), v_probeIndex, probeImageSize, probeGridResolution);
+  const vec2 uv = ProbeDirectionToUv(normalize(v_normal), stableProbeIndex, probeImageSize, probeGridResolution);
   const vec2 texelPos = (uvOffset + uv) * textureSize(tex, 0).xy;
   
   vec3 sampled;

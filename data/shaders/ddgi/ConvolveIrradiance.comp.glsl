@@ -10,6 +10,7 @@ void main()
   const int numProbes = args.gridInfo[cascade].gridResolution.x * args.gridInfo[cascade].gridResolution.y * args.gridInfo[cascade].gridResolution.z;
   const int numTexels = args.gridInfo[cascade].probeIrradianceResolution.x * args.gridInfo[cascade].probeIrradianceResolution.y;
   const int probeIndex = gid / numTexels;
+  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
 
   if (probeIndex >= numProbes)
   {
@@ -39,16 +40,18 @@ void main()
     }
     const float pdf = cosine_weighted_hemisphere_PDF(cosTheta);
 
-    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+    const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance).xy;
-    const vec2 uv = ProbeDirectionToUv(sampleDir, probeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uv = ProbeDirectionToUv(sampleDir, stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
 
     tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb * cosTheta / pdf / M_PI;
   }
   irradiance += tempAccum / SHRIMPLES;
 
-  const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeIrradiance).xy, args.gridInfo[cascade].probeIrradianceResolution);
+  const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeIrradiance).xy, args.gridInfo[cascade].probeIrradianceResolution);
   const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const vec3 newIrradiance = mix(oldIrradiance, irradiance, 0.03);
-  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, probeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
+  const float validity = args.gridInfo[cascade].probes.data[stableProbeIndex].validity;
+  const float alpha = max(0.03, 1.0 / validity);
+  const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
+  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
 }

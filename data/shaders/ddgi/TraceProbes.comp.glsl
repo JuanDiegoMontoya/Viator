@@ -105,6 +105,7 @@ void main()
 
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
-  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, probeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
+  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
+  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
 }
