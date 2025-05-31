@@ -1060,6 +1060,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         ddgiDebugView_ = DDGIDebugView::DepthMoments;
       }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Validity", ddgiDebugView_ == DDGIDebugView::Validity))
+      {
+        ddgiDebugView_ = DDGIDebugView::Validity;
+      }
+      ImGui::SliderInt("Show Cascade", &ddgiDebugShowOnlyThisCascade_, -1, DDGI_NUM_CASCADES - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::Checkbox("Pause Updates", &ddgiDebugPauseUpdates_);
       ImGui::SliderFloat("Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();

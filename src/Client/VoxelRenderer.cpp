@@ -852,7 +852,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     };
 
     // DDGI- good candidate for async compute or overlapped work.
-    if (giMethod_ == GIMethod::DDGI)
+    if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
     {
       auto marker = ctx.MakeScopedDebugMarker("DDGI");
 
@@ -1094,18 +1094,21 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     const auto& icosphere_3 = g_meshes.at("icosphere_3");
     for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
     {
-      ctx.SetPushConstants(DebugProbesArguments{
-        .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
-        .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
-        .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .samplerr            = linearClampSampler,
-        .debugMode           = uint32_t(ddgiDebugView_),
-        .probeSize           = ddgiDebugProbeSize_,
-        .cascade             = cascade,
-      });
-      ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-      const auto& res = ddgi.args.gridInfo[cascade].gridResolution;
-      ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+      if (ddgiDebugShowOnlyThisCascade_ < 0 || ddgiDebugShowOnlyThisCascade_ == cascade)
+      {
+        ctx.SetPushConstants(DebugProbesArguments{
+          .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
+          .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .samplerr            = linearClampSampler,
+          .debugMode           = uint32_t(ddgiDebugView_),
+          .probeSize           = ddgiDebugProbeSize_,
+          .cascade             = cascade,
+        });
+        ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+        const auto& res = ddgi.args.gridInfo[cascade].gridResolution;
+        ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+      }
     }
 
     ctx.EndRendering();

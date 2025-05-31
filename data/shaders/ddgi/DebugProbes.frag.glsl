@@ -14,9 +14,10 @@ const bool gUseNearestNeighbor = true;
 void main()
 {
   const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, args.ddgi.gridInfo[v_cascade]);
-  if (v_cascade != 0)
+  if (args.debugMode == 5) // Validity
   {
-    //discard;
+    o_sceneColor.rgb = vec3(min(10, args.ddgi.gridInfo[v_cascade].probes.data[stableProbeIndex].validity / 100));
+    return;
   }
   ivec3 swizzle = {0, 1, 2};
   float scale = 1;

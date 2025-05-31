@@ -187,17 +187,20 @@ private:
   // Successive cascades will have 2x the scale of the previous.
   void InitDDGI(const DDGIProbeGridInfo& probeGridInfo);
 
-  enum class DDGIDebugView
+  enum class DDGIDebugView : uint32_t
   {
     None,
     Luminance,
     Illuminance,
     RawDepth,
     DepthMoments,
+    Validity,
   };
 
   DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
   float ddgiDebugProbeSize_    = 1;
+  bool ddgiDebugPauseUpdates_  = false;
+  int ddgiDebugShowOnlyThisCascade_ = -1; // <0: show all cascades
 
   enum class GIMethod
   {
