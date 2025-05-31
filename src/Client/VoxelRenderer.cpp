@@ -867,9 +867,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       {
         ddgi.args.gridInfo[i].probes        = ddgi.probeDataBuffers[i].value().GetDeviceAddress();
         ddgi.args.gridInfo[i].oldGridOffset = ddgi.args.gridInfo[i].gridOffset;
-        ddgi.args.gridInfo[i].gridOffset =
-          glm::round((position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
-                     ddgi.args.gridInfo[i].baseGridScale);
+        const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
+                            ddgi.args.gridInfo[i].baseGridScale;
+        ddgi.args.gridInfo[i].gridOffset = glm::floor(offset);
+        ddgi.args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
         tempGridInfos[i] = ddgi.args.gridInfo[i];
       }
       ddgi.args = DDGIArgs{
@@ -901,7 +902,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
 
       ctx.BindComputePipeline(ddgi.resetNewProbesPipeline.GetPipeline());
-      const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.z * ddgi.args.gridInfo[0].gridResolution.z;
+      const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.y * ddgi.args.gridInfo[0].gridResolution.z;
       ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
 
       // As long as probe validity is unused here, a barrier is not needed.

@@ -3,8 +3,10 @@
 
 #include "../voxels/Voxels.h.glsl"
 #include "../Resources.h.glsl"
-#include "../DistanceFunctions.h.glsl"
+#ifndef __cplusplus
 #include "../Math.h.glsl"
+#include "../DistanceFunctions.h.glsl"
+#endif
 
 #define DDGI_NUM_CASCADES 6
 
@@ -29,6 +31,7 @@ struct DDGIProbeGridInfo
   FVOG_FLOAT baseGridScale; // Scale of smallest cascade. Successive cascades have 2x the scale as the last.
   FVOG_IVEC3 gridOffset; // Offset of the grid, in baseGridScale units, from the origin.
   FVOG_IVEC3 oldGridOffset; // Previous frame's gridOffset. Used to determine which probes to reset.
+  FVOG_VEC3 gridOffsetFraction;
 #ifdef __cplusplus
   VkDeviceAddress probes;
 #else
@@ -197,6 +200,7 @@ void WriteToProbeWithBorder(Image2DArray packedProbeImage, int cascade, int prob
 
 vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSampler, DDGIArgs ddgi, int cascade)
 {
+  //return TurboColormap(float(cascade) / (DDGI_NUM_CASCADES - 1.0));
   float sumWeights = 0;
   float sumWeightsNoShadow = 0;
   vec3 irradiance_internal = vec3(0);
@@ -322,6 +326,7 @@ int SelectMinimumCascade(vec3 positionWS, DDGIArgs ddgi, out vec3 posProbeSpaceP
   for (int i = 0; i < DDGI_NUM_CASCADES; i++)
   {
     posProbeSpacePreMod = ((positionWS - 0.5) / ddgi.gridInfo[i].baseGridScale) - ddgi.gridInfo[i].gridOffset;
+    posProbeSpacePreMod -= ddgi.gridInfo[i].gridOffsetFraction;
     if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridInfo[i].gridResolution - 1)))
     {
       return i;
@@ -344,7 +349,9 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
   const float MAGIC_IDK_WHY = 0.9999; // Chosen after visualizing with TurboColorMap. The exact value 1 does not work!
   const vec3 halfGridExtent = (ddgi.gridInfo[cascade].gridResolution - MAGIC_IDK_WHY) / 2;
   const vec3 centeredPos = posProbeSpace - halfGridExtent;
-  const float distFromEdge = abs(sd_Box(centeredPos, halfGridExtent));
+  const float distFromEdgeA = sd_Box(centeredPos, halfGridExtent);
+  // Decrease the distance if negative. This gives some room for gridOffsetFraction to move the space around.
+  const float distFromEdge = clamp(distFromEdgeA < 0 ? -distFromEdgeA - 1 : distFromEdgeA, 0, 1);
 
   const vec3 lowerCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade);
   if (distFromEdge > 1 || cascade + 1 >= DDGI_NUM_CASCADES)
