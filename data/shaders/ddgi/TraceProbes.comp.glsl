@@ -2,7 +2,6 @@
 
 layout(local_size_x = 128, local_size_y = 1) in;
 
-
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);

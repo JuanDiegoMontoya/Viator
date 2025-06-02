@@ -200,7 +200,9 @@ private:
   DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
   float ddgiDebugProbeSize_    = 1;
   bool ddgiDebugPauseUpdates_  = false;
+  bool ddgiDebugFreezeGrid_    = false; // Pauses only grid movement- probes still update.
   int ddgiDebugShowOnlyThisCascade_ = -1; // <0: show all cascades
+  bool ddgiDebugShowCascadeIndexAsColor_ = false;
 
   enum class GIMethod
   {

@@ -460,7 +460,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
     .probeRadianceResolution     = {16, 16},
     .probeIrradianceResolution   = {10, 10},
     .probeDepthMomentsResolution = {10, 10},
-    .gridResolution              = {10, 10, 10},
+    .gridResolution              = {10, 10, 10}, // TODO: FIXME: certain sizes (such as 12^3) have unexpected black probes.
     .baseGridScale               = 2,
   });
 
@@ -865,12 +865,15 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
       for (int i = 0; i < DDGI_NUM_CASCADES; i++)
       {
-        ddgi.args.gridInfo[i].probes        = ddgi.probeDataBuffers[i].value().GetDeviceAddress();
-        ddgi.args.gridInfo[i].oldGridOffset = ddgi.args.gridInfo[i].gridOffset;
-        const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
-                            ddgi.args.gridInfo[i].baseGridScale;
-        ddgi.args.gridInfo[i].gridOffset = glm::floor(offset);
-        ddgi.args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+        if (!ddgiDebugFreezeGrid_)
+        {
+          ddgi.args.gridInfo[i].probes        = ddgi.probeDataBuffers[i].value().GetDeviceAddress();
+          ddgi.args.gridInfo[i].oldGridOffset = ddgi.args.gridInfo[i].gridOffset;
+          const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
+                                       ddgi.args.gridInfo[i].baseGridScale;
+          ddgi.args.gridInfo[i].gridOffset         = glm::floor(offset);
+          ddgi.args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+        }
         tempGridInfos[i] = ddgi.args.gridInfo[i];
       }
       ddgi.args = DDGIArgs{
@@ -880,6 +883,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .samples                    = 1,
         .bounces                    = 2,
         .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .showCascadeIndexAsColor    = ddgiDebugShowCascadeIndexAsColor_,
         //.gridInfo                   = ddgi.args.gridInfo,
         .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2DArray(),
         .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2DArray(),

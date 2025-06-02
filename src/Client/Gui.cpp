@@ -1066,8 +1066,25 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         ddgiDebugView_ = DDGIDebugView::Validity;
       }
       ImGui::SliderInt("Show Cascade", &ddgiDebugShowOnlyThisCascade_, -1, DDGI_NUM_CASCADES - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::Checkbox("Pause Updates", &ddgiDebugPauseUpdates_);
-      ImGui::SliderFloat("Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
+      ImGui::Checkbox("Cascades as Color", &ddgiDebugShowCascadeIndexAsColor_);
+      if (ImGui::RadioButton("None##Updates", !ddgiDebugPauseUpdates_ && !ddgiDebugFreezeGrid_))
+      {
+        ddgiDebugPauseUpdates_ = false;
+        ddgiDebugFreezeGrid_ = false;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Pause Updates", ddgiDebugPauseUpdates_))
+      {
+        ddgiDebugPauseUpdates_ = true;
+        ddgiDebugFreezeGrid_   = false;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("Freeze Grid", ddgiDebugFreezeGrid_))
+      {
+        ddgiDebugPauseUpdates_ = false;
+        ddgiDebugFreezeGrid_   = true;
+      }
+      ImGui::SliderFloat("Base Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);

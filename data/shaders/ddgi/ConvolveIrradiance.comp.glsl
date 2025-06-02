@@ -51,7 +51,7 @@ void main()
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeIrradiance).xy, args.gridInfo[cascade].probeIrradianceResolution);
   const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
   const float validity = args.gridInfo[cascade].probes.data[stableProbeIndex].validity;
-  const float alpha = max(0.03, 1.0 / validity);
+  const float alpha = max(0.05, 1.0 / validity);
   const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
   WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
 }

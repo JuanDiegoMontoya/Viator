@@ -52,6 +52,7 @@ struct DDGIArgs
   FVOG_UINT32 samples;
   FVOG_UINT32 bounces;
   FVOG_UINT32 globalUniformsIndex;
+  FVOG_BOOL32 showCascadeIndexAsColor;
 
   // Probe info
   DDGIProbeGridInfo gridInfo[DDGI_NUM_CASCADES];
@@ -198,9 +199,19 @@ void WriteToProbeWithBorder(Image2DArray packedProbeImage, int cascade, int prob
   }
 }
 
-vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSampler, DDGIArgs ddgi, int cascade)
+vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSampler, DDGIArgs ddgi, int cascade, out float outWeight)
 {
-  //return TurboColormap(float(cascade) / (DDGI_NUM_CASCADES - 1.0));
+  if (bool(ddgi.showCascadeIndexAsColor))
+  {
+    outWeight = 1;
+    return TurboColormap(float(cascade) / (DDGI_NUM_CASCADES - 1.0));
+  }
+
+  if (cascade >= DDGI_NUM_CASCADES)
+  {
+    return vec3(0);
+  }
+
   float sumWeights = 0;
   float sumWeightsNoShadow = 0;
   vec3 irradiance_internal = vec3(0);
@@ -258,10 +269,10 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
       shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
     }
 #else // Regular shadow test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
-    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth);
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth), ddgi.gridInfo.probeRadianceResolution);
-    const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, samplerr, uvOffset2 + uv2, 0).x;
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
 
     if (distToProbeWS > rawDepth)
     {
@@ -308,11 +319,8 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
   irradiance_internalNoShadow *= irradiance_internalNoShadow;
 #endif
 
-  // TODO: Smooth blend (mix + smoothstep) when sumWeights is small.
-  if (sumWeights < 1e-4)
-  {
-    irradiance_internal = irradiance_internalNoShadow;
-  }
+  outWeight = sumWeights;
+  irradiance_internal = mix(irradiance_internalNoShadow, irradiance_internal, smoothstep(0, 1e-5, sumWeights));
 
   // DDGI uses this artificial energy-reducing term to mitigate the perception of light leaks in dark rooms.
   // The chosen constant is arbitrary and must be in [0, 1].
@@ -353,14 +361,28 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
   // Decrease the distance if negative. This gives some room for gridOffsetFraction to move the space around.
   const float distFromEdge = clamp(distFromEdgeA < 0 ? -distFromEdgeA - 1 : distFromEdgeA, 0, 1);
 
-  const vec3 lowerCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade);
+  float sumWeight;
+  const vec3 lowerCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade, sumWeight);
   if (distFromEdge > 1 || cascade + 1 >= DDGI_NUM_CASCADES)
   {
     return lowerCascadeIlluminance;
   }
 
-  const vec3 upperCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade + 1);
+  float sumWeight2;
+  const vec3 upperCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade + 1, sumWeight2);
 
+  // These checks mitigate black spots that are caused by one of the two selected cascades being 
+  // totally invalid (all eight probes in the cage are inside opaque blocks). However, they do 
+  // not fix situations in which both cascades are invalid. These checks also add a visible discontinuity.
+  if (sumWeight < 1e-4)
+  {
+    return upperCascadeIlluminance;
+  }
+  if (sumWeight2 < 1e-4)
+  {
+    return lowerCascadeIlluminance;
+  }
+  
   return mix(lowerCascadeIlluminance, upperCascadeIlluminance, 1 - distFromEdge);
 }
 

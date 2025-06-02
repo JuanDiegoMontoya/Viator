@@ -17,6 +17,7 @@ void main()
   if (args.debugMode == 5) // Validity
   {
     o_sceneColor.rgb = vec3(min(10, args.ddgi.gridInfo[v_cascade].probes.data[stableProbeIndex].validity / 100));
+    o_sceneColor.a = 1;
     return;
   }
   ivec3 swizzle = {0, 1, 2};
