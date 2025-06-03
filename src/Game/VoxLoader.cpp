@@ -286,4 +286,30 @@ namespace Vox
 
     return processed;
   }
+
+  std::optional<VoxMaterialEmissionInfo> ParseEmissionInfoFromDict(const Dict& attribs)
+  {
+    auto info = VoxMaterialEmissionInfo{
+      .emission = 0,
+      .power = 0,
+      .ldr = 0,
+    };
+
+    for (uint32_t i = 0; i < attribs.count; i++)
+    {
+      const auto& attrib = attribs.pairs[i];
+      auto key           = std::string_view(attrib.key.data.get(), attrib.key.sizeBytes);
+      auto value         = std::string_view(attrib.value.data.get(), attrib.value.sizeBytes);
+      if (key == "_emit")
+      {
+        info.emission = std::stof(std::string(value));
+      }
+      if (key == "_flux")
+      {
+        info.power = std::stof(std::string(value));
+      }
+    }
+
+    return info;
+  }
 } // namespace Vox

@@ -158,4 +158,12 @@ namespace Vox
 
   // Locates important (for our purposes) chunks in the model.
   ProcessedModel ProcessModel(const Chunk& root);
+
+  struct VoxMaterialEmissionInfo
+  {
+    float emission; // [0, 1]. _emit
+    float power; // [0, 4]. _flux
+    float ldr; // [0, 1]. ???
+  };
+  std::optional<VoxMaterialEmissionInfo> ParseEmissionInfoFromDict(const Dict& attribs);
 } // namespace Vox

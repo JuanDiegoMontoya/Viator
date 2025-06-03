@@ -134,6 +134,7 @@ struct TwoLevelGrid
   struct SubVoxelMaterial
   {
     glm::vec4 colorSrgb;
+    glm::vec4 emissionSrgb;
   };
 
   // Describes a block composed of a grid of sub-blocks.

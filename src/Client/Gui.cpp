@@ -1093,6 +1093,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
       ImGui::Text("Game state: %s", Core::Reflection::EnumToString(ctx.get<GameState>()));
       ImGui::Text("Time: %f", ctx.get<float>("time"_hs));
+      ImGui::Checkbox("Spawn NPCs", &world.GetRegistry().ctx().get<bool>("UpdateNPCSpawnDirector"_hs));
 
       ImGui::SliderFloat("Time Scale", &ctx.get<TimeScale>().scale, 0, 4, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
       auto min = uint32_t(5);

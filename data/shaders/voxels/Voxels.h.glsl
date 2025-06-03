@@ -113,6 +113,7 @@ lightsBuffers[];
 struct SubVoxelMaterial
 {
   vec4 colorSrgb;
+  vec4 emissionSrgb;
 };
 
 struct GpuSubGrid
@@ -965,7 +966,7 @@ vec3 GetHitEmission(HitSurfaceParameters hit)
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
   if (bool(material.materialFlags & IS_SUBGRID))
   {
-    return vec3(0);
+    return SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].emissionSrgb.rgb;
   }
   vec3 emission             = material.emissionFactor;
   if (bool(material.materialFlags & HAS_EMISSION_TEXTURE))

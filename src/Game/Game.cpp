@@ -16,6 +16,7 @@
 #include "Core/Serialization.h"
 #include "Core/Logging.h"
 #include "Core/Assert2.h"
+#include "Game/Assets.h"
 #include "Networking/Client.h"
 #include "Networking/Server.h"
 #include "Networking/RPC.h"
@@ -384,6 +385,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<Head*>() = gHead_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<std::unique_ptr<Networking::Interface>*>() = gNetworking_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<NpcSpawnDirector>(world);
+  registry.ctx().emplace<bool>("UpdateNPCSpawnDirector"_hs) = true;
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();
@@ -1098,7 +1100,7 @@ void World::FixedUpdate(float dt)
       UpdateLocalTransform(entity);
     }
 
-    if (IsServer())
+    if (IsServer() && registry_.ctx().get<bool>("UpdateNPCSpawnDirector"_hs))
     {
       registry_.ctx().get<NpcSpawnDirector>().Update(dt);
     }
@@ -2096,6 +2098,7 @@ void World::InitializeGameState()
   }
 
   registry_.ctx().insert_or_assign<NpcSpawnDirector>(NpcSpawnDirector{*this});
+  registry_.ctx().insert_or_assign<bool>("UpdateNPCSpawnDirector"_hs, true);
 
   // Reset RNG
   registry_.ctx().insert_or_assign<PCG::Rng>(1234);
@@ -2274,6 +2277,19 @@ void World::InitializeGameDefinitions()
         .baseColorFactor = {0.39f, 0.24f, 0.08f},
       },
   }));
+
+  {
+    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "models" / "test.vox");
+
+    [[maybe_unused]] const auto subBlockId = blocks.Add(new BlockDefinition({
+      .name          = "Vox",
+      .initialHealth = 100,
+      .voxelMaterialDesc =
+        VoxelMaterialDesc{
+          .subGrid = VoxToSubGrid(*vox),
+        },
+    }));
+  }
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -3386,13 +3402,13 @@ glm::vec3 GetRight(glm::quat rotation)
 
 std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
 {
-  auto processed  = Vox::ProcessModel(root);
+  auto processed = Vox::ProcessModel(root);
   ASSERT(processed.voxelChunk);
   ASSERT(processed.sizeChunk);
   ASSERT(processed.paletteChunk);
   ASSERT(!processed.iMapChunk, "TODO: IMAP chunk");
   const auto dims = glm::ivec3(processed.sizeChunk->sizeX, processed.sizeChunk->sizeZ, processed.sizeChunk->sizeY); // Z-up
-  auto subVoxels    = std::make_unique<TwoLevelGrid::SubVoxel[]>(dims.x * dims.y * dims.z);
+  auto subVoxels  = std::make_unique<TwoLevelGrid::SubVoxel[]>(dims.x * dims.y * dims.z);
 
   for (uint32_t i = 0; i < processed.voxelChunk->numVoxels; i++)
   {
@@ -3409,8 +3425,16 @@ std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
 
   for (int i = 0; i < 255; i++)
   {
-    const auto color                 = processed.paletteChunk->colors[i];
+    const auto color                = processed.paletteChunk->colors[i];
     subGrid->materials[i].colorSrgb = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1};
+    if (i < processed.materials.size())
+    {
+      if (const auto emissionInfo = Vox::ParseEmissionInfoFromDict(processed.materials[i]->attributes))
+      {
+        // TODO: Fix color space.
+        subGrid->materials[i].emissionSrgb = subGrid->materials[i].colorSrgb * emissionInfo->emission * exp2(emissionInfo->power);
+      }
+    }
   }
 
   return subGrid;
