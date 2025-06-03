@@ -30,6 +30,7 @@
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
+#include "Game/Item.h"
 #include "toml++/toml.hpp"
 
 #include <array>

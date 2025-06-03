@@ -126,6 +126,15 @@ add_executable(frogRender
     src/Core/Exception.h
     src/Game/VoxLoader.h
     src/Game/VoxLoader.cpp
+    src/Game/EntityPrefab.h
+    src/Game/EntityPrefab.cpp
+    src/Game/Item.h
+    src/Game/Item.cpp
+    src/Game/Block.h
+    src/Game/Block.cpp
+    src/Game/BlockFwd.h
+    src/Game/ItemFwd.h
+    src/Game/EntityPrefabFwd.h
 )
 
 # Precompiled headers for standard library

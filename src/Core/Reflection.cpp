@@ -6,6 +6,7 @@
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"
 #include "Game/Networking/Client.h"
+#include "shaders/Light.h.glsl" // "TEMP"
 
 #include "imgui.h"
 #include "entt/meta/container.hpp"
