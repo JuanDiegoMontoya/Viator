@@ -4,7 +4,6 @@
 #include "Core/Assert2.h"
 #include "Networking/RPC.h"
 
-
 BlockDefinition::BlockDefinition(const CreateInfo& info) : createInfo_(info) {}
 
 bool BlockDefinition::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition) const

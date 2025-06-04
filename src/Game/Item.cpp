@@ -2,14 +2,14 @@
 
 #include "Block.h"
 #include "EntityPrefab.h"
-#include "Game.h"
+#include "World.h"
 #include "Core/Assert2.h"
-#include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
-#include "Jolt/Physics/Collision/Shape/BoxShape.h"
-#include "Jolt/Physics/Collision/Shape/SphereShape.h"
 #include "Physics/Physics.h"
 #include "Physics/PhysicsUtils.h"
 
+#include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
+#include "Jolt/Physics/Collision/Shape/BoxShape.h"
+#include "Jolt/Physics/Collision/Shape/SphereShape.h"
 
 void SpawnBossItemDefinition::UsePrimary(float, World& world, entt::entity self, ItemState& state) const
 {

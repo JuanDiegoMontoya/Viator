@@ -1,10 +1,11 @@
 #include "EntityPrefab.h"
 
 #include "Pathfinding.h"
-#include "Game/Game.h"
-#include "Jolt/Physics/Constraints/DistanceConstraint.h"
+#include "Game/World.h"
 #include "Physics/Physics.h"
 #include "shaders/Light.h.glsl" // "TEMP"
+
+#include "Jolt/Physics/Constraints/DistanceConstraint.h"
 
 entt::entity MeleeFrogDefinition::Spawn(World& world, glm::vec3 position, [[maybe_unused]] glm::quat rotation) const
 {

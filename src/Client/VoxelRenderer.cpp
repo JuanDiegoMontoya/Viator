@@ -1,5 +1,6 @@
 #include "VoxelRenderer.h"
 
+#include "Game/World.h"
 #include "Game/Assets.h"
 #include "MathUtilities.h"
 #include "PipelineManager.h"

@@ -1,5 +1,6 @@
 #include "Prefab.h"
-#include "Game.h"
+#include "World.h"
+#include "Block.h"
 
 void SimplePrefab::Instantiate(World& world, glm::ivec3 worldPos) const
 {

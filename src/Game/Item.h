@@ -237,16 +237,18 @@ public:
   voxel_t voxel;
 };
 
+// Workaround: GCC and Clang generate a spurious error when this is a sub-class of Spear.
+struct SpearCreateInfo
+{
+  float useDt     = 0.55f;
+  float damage    = 15;
+  float knockback = 5;
+  glm::vec3 tint  = {1, 1, 1};
+};
+
 class Spear : public ItemDefinition
 {
 public:
-  struct SpearCreateInfo
-  {
-    float useDt     = 0.55f;
-    float damage    = 15;
-    float knockback = 5;
-    glm::vec3 tint  = {1, 1, 1};
-  };
   Spear(std::string_view name, const SpearCreateInfo& info = {}) : ItemDefinition(name), createInfo_(info) {}
 
   void UsePrimary(float dt, World&, entt::entity, ItemState&) const override;

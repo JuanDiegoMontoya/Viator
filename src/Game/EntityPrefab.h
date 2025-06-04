@@ -11,20 +11,21 @@
 
 class World;
 
+// Workaround: this would normally be a sub-class of EntityPrefabDefinition, but GCC and Clang cannot compile it.
+struct EntityPrefabDefinitionCreateInfo
+{
+  std::string name       = "entity";
+  float spawnChance      = 0;
+  float minSpawnDistance = 30;
+  float maxSpawnDistance = 90;
+  bool canSpawnFloating  = false;
+  bool isVisible         = true;
+};
+
 class EntityPrefabDefinition
 {
 public:
-  struct CreateInfo
-  {
-    std::string name       = "entity";
-    float spawnChance      = 0;
-    float minSpawnDistance = 30;
-    float maxSpawnDistance = 90;
-    bool canSpawnFloating  = false;
-    bool isVisible         = true;
-  };
-
-  explicit EntityPrefabDefinition(const CreateInfo& createInfo = {}) : info_(createInfo) {}
+  explicit EntityPrefabDefinition(const EntityPrefabDefinitionCreateInfo& createInfo = {}) : info_(createInfo) {}
   DEFAULT_MOVE(EntityPrefabDefinition);
   NO_COPY(EntityPrefabDefinition);
 
@@ -32,13 +33,13 @@ public:
 
   virtual entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation = glm::identity<glm::quat>()) const = 0;
 
-  [[nodiscard]] const CreateInfo& GetCreateInfo() const
+  [[nodiscard]] const EntityPrefabDefinitionCreateInfo& GetCreateInfo() const
   {
     return info_;
   }
 
 protected:
-  CreateInfo info_;
+  EntityPrefabDefinitionCreateInfo info_;
 };
 
 class EntityPrefabRegistry
@@ -137,7 +138,7 @@ public:
 class ShrimpleMeshPrefabDefinition : public EntityPrefabDefinition
 {
 public:
-  explicit ShrimpleMeshPrefabDefinition(std::string_view model, glm::vec3 tint = {1, 1, 1}, const CreateInfo& createInfo = {})
+  explicit ShrimpleMeshPrefabDefinition(std::string_view model, glm::vec3 tint = {1, 1, 1}, const EntityPrefabDefinitionCreateInfo& createInfo = {})
     : EntityPrefabDefinition(createInfo), modelName_(model), tint_(tint)
   {
   }

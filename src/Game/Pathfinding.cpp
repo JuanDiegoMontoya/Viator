@@ -6,7 +6,7 @@
 #include "Client/debug/Shapes.h"
 #endif
 
-#include "Game.h"
+#include "World.h"
 #include "HashUtilities.h"
 
 #define GLM_ENABLE_EXPERIMENTAL

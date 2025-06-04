@@ -1,4 +1,5 @@
 #include "VoxelRenderer.h"
+#include "Game/World.h"
 #include "imgui.h"
 #include "Core/Assert2.h"
 #include "entt/meta/resolve.hpp"

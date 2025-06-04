@@ -1,7 +1,7 @@
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Game/TwoLevelGrid.h"
-#include "Game/Game.h"
+#include "Game/World.h"
 #include "Core/Assert2.h"
 
 #include "entt/meta/container.hpp"

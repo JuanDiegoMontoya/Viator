@@ -135,6 +135,12 @@ add_executable(frogRender
     src/Game/BlockFwd.h
     src/Game/ItemFwd.h
     src/Game/EntityPrefabFwd.h
+    src/Game/World.h
+    src/Game/World.cpp
+    src/Game/RegistryProxy.h
+    src/Game/WorldInit.cpp
+    src/Game/Head.h
+    src/Game/Head.cpp
 )
 
 # Precompiled headers for standard library
@@ -176,6 +182,7 @@ target_compile_options(frogRender
     -Wno-old-style-cast
     -Wno-unused-result
     -ftime-trace
+    -march=native # zstd requires BMI2 for precisely one function
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     -DFROG_DEBUG
     -DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG

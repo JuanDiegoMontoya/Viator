@@ -3,6 +3,7 @@
 #include "Assert2.h"
 #include "Serialization.h"
 #include "Game/TwoLevelGrid.h"
+#include "Game/World.h"
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"
 #include "Game/Networking/Client.h"

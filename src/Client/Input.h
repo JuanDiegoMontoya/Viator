@@ -1,6 +1,9 @@
 #pragma once
-#include "Game/Game.h"
+#include "Game/ClassImplMacros.h"
 #include "glm/vec2.hpp"
+
+class World;
+struct DeltaTime;
 
 class InputSystem
 {

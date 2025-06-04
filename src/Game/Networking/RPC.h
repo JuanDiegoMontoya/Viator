@@ -1,6 +1,6 @@
 #pragma once
 #include "Interface.h"
-#include "../Game.h"
+#include "Game/World.h"
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Core/Assert2.h"

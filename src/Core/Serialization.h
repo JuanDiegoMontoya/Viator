@@ -1,6 +1,6 @@
 #pragma once
 #include "Assert2.h"
-#include "Game/Game.h" // TODO: Remove
+#include "Game/RegistryProxy.h"
 
 #include "entt/fwd.hpp"
 #include "entt/meta/resolve.hpp"
