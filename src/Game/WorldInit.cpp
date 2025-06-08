@@ -1,10 +1,10 @@
 #include "Assets.h"
+#include "Core/Assert2.h"
 #include "Item.h"
+#include "Physics/Physics.h"
 #include "Prefab.h"
 #include "VoxLoader.h"
 #include "World.h"
-#include "Core/Assert2.h"
-#include "Physics/Physics.h"
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
@@ -264,18 +264,30 @@ void World::InitializeGameDefinitions()
       },
   }));
 
+  auto RegisterFoliageBlock = [&](const char* name, bool dropsSelf) -> BlockId
   {
-    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "test.vox");
-
-    [[maybe_unused]] const auto subBlockId = blocks.Add(new BlockDefinition({
-      .name          = "Vox",
-      .initialHealth = 100,
+    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(name) + ".vox"));
+    return blocks.Add(new BlockDefinition({
+      .name          = name,
+      .initialHealth = 10,
+      .lootDrop = dropsSelf ? decltype(BlockDefinition::CreateInfo::lootDrop)(DropSelf{}) : decltype(BlockDefinition::CreateInfo::lootDrop)(std::monostate{}),
       .voxelMaterialDesc =
         VoxelMaterialDesc{
           .subGrid = VoxToSubGrid(*vox),
         },
+      .isSolid = false,
     }));
-  }
+  };
+
+  RegisterFoliageBlock("test", true);
+  RegisterFoliageBlock("grass_long", false);
+  RegisterFoliageBlock("grass_medium", false);
+  RegisterFoliageBlock("grass_short", false);
+  RegisterFoliageBlock("mushroom", true);
+  RegisterFoliageBlock("rock_small", false);
+  RegisterFoliageBlock("vines_end", false);
+  RegisterFoliageBlock("vines_main", false);
+  RegisterFoliageBlock("bush_01", false);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
