@@ -1,18 +1,18 @@
 #include "Assets.h"
 #include <optional>
 
-std::filesystem::path GetAssetDirectory()
+std::filesystem::path GetDataDirectory()
 {
-  static std::optional<std::filesystem::path> assetsPath;
-  if (!assetsPath)
+  static std::optional<std::filesystem::path> dataPath;
+  if (!dataPath)
   {
     auto dir = std::filesystem::current_path();
     while (!dir.empty())
     {
-      auto maybeAssets = dir / "data";
-      if (exists(maybeAssets) && is_directory(maybeAssets))
+      auto maybeData = dir / "data";
+      if (exists(maybeData) && is_directory(maybeData))
       {
-        assetsPath = maybeAssets;
+        dataPath = maybeData;
         break;
       }
 
@@ -24,12 +24,18 @@ std::filesystem::path GetAssetDirectory()
       dir = dir.parent_path();
     }
   }
-  return assetsPath.value(); // Will throw if asset directory wasn't found.
+  return dataPath.value(); // Will throw if data directory wasn't found.
+}
+
+std::filesystem::path GetAssetDirectory()
+{
+  // Assets directory is expected to be a submodule.
+  return GetDataDirectory() / "assets";
 }
 
 std::filesystem::path GetShaderDirectory()
 {
-  return GetAssetDirectory() / "shaders";
+  return GetDataDirectory() / "shaders";
 }
 
 std::filesystem::path GetTextureDirectory()
@@ -39,5 +45,5 @@ std::filesystem::path GetTextureDirectory()
 
 std::filesystem::path GetConfigDirectory()
 {
-  return GetAssetDirectory() / "config";
+  return GetDataDirectory() / "config";
 }

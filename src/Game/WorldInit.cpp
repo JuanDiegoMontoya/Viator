@@ -265,7 +265,7 @@ void World::InitializeGameDefinitions()
   }));
 
   {
-    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "models" / "test.vox");
+    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "test.vox");
 
     [[maybe_unused]] const auto subBlockId = blocks.Add(new BlockDefinition({
       .name          = "Vox",

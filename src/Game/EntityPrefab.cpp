@@ -46,10 +46,11 @@ entt::entity MeleeFrogDefinition::Spawn(World& world, glm::vec3 position, [[mayb
       .layer         = Physics::Layers::CHARACTER,
     });
 
-  auto e2                         = world.CreateRenderableEntity({1.0f, 0.3f, -0.8f}, {1, 0, 0, 0}, 1.5f);
-  registry.emplace<Name>(e2).name = "Child";
-  registry.emplace<Mesh>(e2).name = "ar15";
-  world.SetParent(e2, e);
+  // Make the frog hold something.
+  //auto e2                         = world.CreateRenderableEntity({1.0f, 0.3f, -0.8f}, {1, 0, 0, 0}, 1.5f);
+  //registry.emplace<Name>(e2).name = "Child";
+  //registry.emplace<Mesh>(e2).name = "ar15";
+  //world.SetParent(e2, e);
 
   // Make hitbox/hurtbox collider.
   auto eHitbox                         = registry.create();

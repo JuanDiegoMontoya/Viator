@@ -41,13 +41,13 @@
 #include <atomic>
 #include <fstream>
 #include <filesystem>
-
+ 
 namespace
 {
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
   const auto sRendererSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
   const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
-  const auto sSavesDirectory = GetAssetDirectory() / "saves";
+  const auto sSavesDirectory = GetDataDirectory() / "saves";
   const auto sWorldSavesDirectory  = sSavesDirectory / "worlds";
   const auto sCharacterSavesDirectory = sSavesDirectory / "characters";
   std::string sNewWorldName           = std::string(256, '\0');

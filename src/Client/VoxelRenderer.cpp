@@ -156,8 +156,8 @@ namespace
     stbi_set_flip_vertically_on_load(true);
     int x            = 0;
     int y            = 0;
-    const auto pixels = stbi_load((GetTextureDirectory() / path).string().c_str(), &x, &y, nullptr, 4);
-    assert(pixels);
+    const auto pixels = stbi_load(path.string().c_str(), &x, &y, nullptr, 4);
+    ASSERT(pixels);
     const auto format = srgb ? Fvog::Format::R8G8B8A8_SRGB : Fvog::Format::R8G8B8A8_UNORM;
     auto texture = Fvog::CreateTexture2D({static_cast<uint32_t>(x), static_cast<uint32_t>(y)}, format, Fvog::TextureUsage::READ_ONLY, path.string());
     texture.UpdateImageSLOW({
@@ -234,8 +234,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   ZoneScoped;
   
   g_meshes.emplace("frog", LoadObjFile(GetAssetDirectory() / "models/frog.obj"));
-  g_meshes.emplace("ar15", LoadObjFile(GetAssetDirectory() / "models/ar15.obj"));
-  g_meshes.emplace("tracer", LoadObjFile(GetAssetDirectory() / "models/tracer.obj"));
+  g_meshes.emplace("ar15", LoadObjFile(GetAssetDirectory() / "models/frog.obj"));
+  //g_meshes.emplace("tracer", LoadObjFile(GetAssetDirectory() / "models/tracer.obj"));
   g_meshes.emplace("cube", LoadObjFile(GetAssetDirectory() / "models/cube.obj"));
   g_meshes.emplace("spear", LoadObjFile(GetAssetDirectory() / "models/spear.obj"));
   g_meshes.emplace("pickaxe", LoadObjFile(GetAssetDirectory() / "models/pickaxe.obj"));
@@ -447,9 +447,9 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
       },
   });
 
-  noiseTexture = LoadImageFile("bluenoise256.png", false);
+  noiseTexture = LoadImageFile(GetTextureDirectory() / "bluenoise256.png", false);
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
-  backgroundTexture = LoadImageFile("background.png", false);
+  backgroundTexture = LoadImageFile(GetTextureDirectory() / "background.png", false);
 
   tonemapUniforms.tonemapper                = 1;
   tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
@@ -1181,7 +1181,7 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name,
   }
 
   // Make a very sketchy and unscalable assumption about the path.
-  auto texture = LoadImageFile(std::filesystem::path("voxels") / (name + ".png"), srgb);
+  auto texture = LoadImageFile(GetAssetDirectory() / "voxels" / "textures" / (name + ".png"), srgb);
 
   return stringToTexture.emplace(name, std::move(texture)).first->second;
 }
