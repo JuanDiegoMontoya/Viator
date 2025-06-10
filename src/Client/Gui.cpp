@@ -31,7 +31,11 @@
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
 #include "Game/Item.h"
+
+// toml contains two instances of unreachable code in release mode.
+#include "platform/choc_DisableAllWarnings.h"
 #include "toml++/toml.hpp"
+#include "platform/choc_ReenableAllWarnings.h"
 
 #include <array>
 #include <memory>
@@ -735,7 +739,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       static int selectedWorldSize = 0;
       auto MakeWorld = [&]
       {
-        constexpr auto worldSizes = std::array{glm::ivec3{2, 5, 2}, glm::ivec3{4, 5, 4}, glm::ivec3{8, 5, 8}, glm::ivec3{10, 5, 10}};
+        constexpr auto worldSizes = std::array{glm::ivec3{2, 10, 2}, glm::ivec3{4, 10, 4}, glm::ivec3{8, 10, 8}, glm::ivec3{10, 10, 10}, glm::ivec3{20, 10, 20}};
         world.InitializeGameState();
         world.CreateGrid(worldSizes.at(selectedWorldSize));
         world.CreateInitialEntities();
@@ -773,9 +777,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         {
           selectedWorldSize = 0;
         }
-        // TODO: Larger sizes crash the game because they overflow voxel memory during world generation. The fix is to compress chunks after generating them.
-        //ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium\0Big");
-        ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small");
+
+        ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium");
 
         ImGui::Separator();
 

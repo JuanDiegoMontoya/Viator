@@ -1283,7 +1283,7 @@ entt::entity World::CreatePlayer()
   registry_.emplace<TeamFlags>(p, TeamFlagBits::FRIENDLY);
 
   auto& tp    = registry_.emplace<LocalTransform>(p);
-  tp.position = {60, 270, 60};
+  tp.position = {60, 430, 60};
   tp.rotation = glm::identity<glm::quat>();
   tp.scale    = 1;
 
@@ -1391,7 +1391,7 @@ void World::KillPlayer(entt::entity playerEntity)
 void World::RespawnPlayer(entt::entity playerEntity)
 {
   registry_.remove<GhostPlayer>(playerEntity);
-  Networking::CallRPC2("TeleportPlayerRPC"_hs, playerEntity, *this, playerEntity, LocalTransform{{60, 278, 60}, glm::identity<glm::quat>(), 1});
+  Networking::CallRPC2("TeleportPlayerRPC"_hs, playerEntity, *this, playerEntity, LocalTransform{{60, 430, 60}, glm::identity<glm::quat>(), 1});
   UpdateLocalTransform(playerEntity);
 
   registry_.get_or_emplace<Health>(playerEntity)                           = {100, 100};

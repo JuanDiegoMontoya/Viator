@@ -285,6 +285,21 @@ void TwoLevelGrid::CoalesceTopLevelBrick(TopLevelBrickPtr& topLevelBrickPtr)
 #endif
 }
 
+void TwoLevelGrid::CoalesceTopLevelBrickAndChildren(TopLevelBrickPtr& topLevelBrickPtr)
+{
+  ZoneScoped;
+
+  if (topLevelBrickPtr.voxelsDoBeAllSame)
+  {
+    return;
+  }
+
+  for (auto& bottomLevelBrickPtr : buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
+  {
+    CoalesceBottomLevelBrick(bottomLevelBrickPtr);
+  }
+}
+
 void TwoLevelGrid::CoalesceBottomLevelBrick(BottomLevelBrickPtr& bottomLevelBrickPtr)
 {
   ZoneScoped;
@@ -308,6 +323,7 @@ void TwoLevelGrid::CoalesceBottomLevelBrick(BottomLevelBrickPtr& bottomLevelBric
   bottomLevelBrickPtr.voxelsDoBeAllSame = true;
   bottomLevelBrickPtr.voxelIfAllSame    = firstVoxel;
 #ifndef GAME_HEADLESS
+  auto lk = std::unique_lock(*mutex_);
   buffer.MarkDirtyPages(&bottomLevelBrickPtr);
 #endif
 }
@@ -419,6 +435,8 @@ uint32_t TwoLevelGrid::AllocateBottomLevelBrick(voxel_t initialVoxel)
 
 void TwoLevelGrid::FreeTopLevelBrick(uint32_t index)
 {
+  ZoneScoped;
+  auto lk = std::unique_lock(*mutex_);
   auto it = topLevelBrickIndexToAlloc.find(index);
   assert(it != topLevelBrickIndexToAlloc.end());
   buffer.Free(it->second);
@@ -427,6 +445,8 @@ void TwoLevelGrid::FreeTopLevelBrick(uint32_t index)
 
 void TwoLevelGrid::FreeBottomLevelBrick(uint32_t index)
 {
+  ZoneScoped;
+  auto lk = std::unique_lock(*mutex_);
   auto it = bottomLevelBrickIndexToAlloc.find(index);
   assert(it != bottomLevelBrickIndexToAlloc.end());
   buffer.Free(it->second);
@@ -612,4 +632,11 @@ void TwoLevelGrid::MarkAllBricksDirty()
       }
     }
   }
+}
+
+TwoLevelGrid::TopLevelBrickPtr& TwoLevelGrid::GetTopLevelBrickPointerFromTopLevelPosition(glm::ivec3 topLevelCoord)
+{
+  const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
+  DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
+  return buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 }

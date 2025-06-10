@@ -100,6 +100,7 @@ struct TwoLevelGrid
   void CoalesceBricksSLOW();
   void CoalesceDirtyBricks();
   void CoalesceTopLevelBrick(TopLevelBrickPtr& topLevelBrickPtr);
+  void CoalesceTopLevelBrickAndChildren(TopLevelBrickPtr& topLevelBrickPtr);
   void CoalesceBottomLevelBrick(BottomLevelBrickPtr& bottomLevelBrickPtr);
 
   int FlattenTopLevelBrickCoord(glm::ivec3 coord) const;
@@ -186,6 +187,7 @@ public:
   [[nodiscard]] uint32_t AllocateBottomLevelBrickNoDirty(voxel_t initialVoxel);
   void MarkTopLevelBrickAndChildrenDirty(glm::ivec3 topLevelBrickPos);
   void MarkAllBricksDirty();
+  [[nodiscard]] TopLevelBrickPtr& GetTopLevelBrickPointerFromTopLevelPosition(glm::ivec3 topLevelCoord);
 
   SketchyBuffer buffer;
   SketchyBuffer::Alloc topLevelBrickPtrs{};

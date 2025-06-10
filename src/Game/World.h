@@ -49,6 +49,9 @@ public:
 
   struct MapGenInfo
   {
+    int seed        = 1234;
+    int worldHeight = 600;
+    int seaLevel    = 400;
   };
 
   void CreateGrid(glm::ivec3 numChunks);

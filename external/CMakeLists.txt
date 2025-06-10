@@ -32,7 +32,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     fastNoise2
     GIT_REPOSITORY https://github.com/Auburn/FastNoise2.git
-    GIT_TAG        v0.10.0-alpha
+    GIT_TAG        89bd7272415a2b3465f519c39b968aeedc75fae8
 )
 
 FetchContent_Declare(
