@@ -52,6 +52,7 @@ public:
     int seed        = 1234;
     int worldHeight = 600;
     int seaLevel    = 400;
+    int surfaceThickness = 80;
   };
 
   void CreateGrid(glm::ivec3 numChunks);

@@ -688,14 +688,17 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     terrainHeight2D->SetSource(terrainHeight2Da);
     terrainHeight2D->SetScaling(1.0f / sampleScale);
 
-    auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgUL@BoEEEAACAPwg@CDAM@AD/AwY@BsQQTNzEy+C@AoED//w==");
+    auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgUL@BIEEEAACAPwg@CDAM@AD/AwY@BgQQTNzEy+C@AoED//w==");
     auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
     stoneInDirt->SetSource(stoneInDirtA);
     stoneInDirt->SetScaling(1.0f / sampleScale);
 
+    auto white = FastNoise::New<FastNoise::White>();
+    white->SetOutputMin(0);
+
 #ifndef GAME_HEADLESS
     total.store((int32_t)grid.numTopLevelBricks_);
-    progressText.store("Generating surface");
+    progressText.store("Surface");
 #endif
 
     // Column of top level bricks
@@ -728,6 +731,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             16,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Linear);
+
+          auto fadeImage = GenerateAndUpscale3D(white,
+            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+            mapGenInfo.seed + 2,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Nearest);
+
           const auto tl = glm::ivec3{i, j, k};
 
           ForEachPositionInTLBrick(tl,
@@ -738,32 +749,41 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               const auto noiseUv3 = (glm::vec3(pModTl) + 0.5f) / float(TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE + 1);
               const auto noiseUv2 = glm::vec2(noiseUv3.x, noiseUv3.z);
               const auto height   = (int)(SampleImage2D(terrainHeight, samplesPerAxis + 1, noiseUv2) * 15 + mapGenInfo.seaLevel);
+
+              auto blockTypeToSet = voxel_t::Air;
               if (positionWS.y < height)
               {
+                // 0 at sea level. 1 at cavern level.
+                const auto alphaCaverns = glm::clamp((mapGenInfo.seaLevel - positionWS.y) / float(mapGenInfo.surfaceThickness), 0.0f, 1.0f);
+
                 if (positionWS.y == height - 1)
                 {
-                  grid.SetVoxelAtNoDirty(positionWS, grass.GetBlockId());
+                  blockTypeToSet = grass.GetBlockId();
                 }
-                else if (positionWS.y >= height - 60)
+                // Surface and underground biomes' substrate is dirt
+                else if (positionWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
                 {
-                  if (TexelFetch3D(stoneInDirtImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, (height - positionWS.y) / 60.0f))
+                  blockTypeToSet = dirt.GetBlockId();
+
+                  // Add stone blobs with increasing size as they get closer to caverns.
+                  if (TexelFetch3D(stoneInDirtImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, alphaCaverns))
                   {
-                    grid.SetVoxelAtNoDirty(positionWS, voxel_t(1));
+                    blockTypeToSet = voxel_t(1);
                   }
-                  else
+                  // Dithered fade from dirt to stone, beginning 1/3 from the underground-cavern transition point.
+                  else if (TexelFetch3D(fadeImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < alphaCaverns * 3 - 2)
                   {
-                    grid.SetVoxelAtNoDirty(positionWS, dirt.GetBlockId());
+                    blockTypeToSet = voxel_t(1);
                   }
                 }
+                // Cavern biome substrate is stone
                 else
                 {
-                  grid.SetVoxelAtNoDirty(positionWS, voxel_t(1));
+                  blockTypeToSet = voxel_t(1);
                 }
               }
-              else
-              {
-                grid.SetVoxelAtNoDirty(positionWS, voxel_t::Air);
-              }
+
+              grid.SetVoxelAtNoDirty(positionWS, blockTypeToSet);
             });
 
           grid.MarkTopLevelBrickAndChildrenDirty(tl);
@@ -814,10 +834,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               if (grid.GetVoxelAt(positionWS) != voxel_t::Air)
               {
                 const auto pModTl = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
-
-                //const auto noiseUv3 = (glm::vec3(pModTl) + 0.5f) / float(TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE + 1);
-                //const auto density  = (int)(SampleImage3D(densities, samplesPerAxis + 1, noiseUv3));
-                //const auto density = surfaceCaves->GenSingle3D((float)positionWS.x, (float)positionWS.y, (float)positionWS.z, 1234);
+                
                 const auto density = TexelFetch3D(densities, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
                 if (density >= 0.0f)
                 {

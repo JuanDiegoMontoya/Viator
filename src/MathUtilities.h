@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Assert2.h"
 #include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec2.hpp>
@@ -204,4 +205,12 @@ namespace Math
   float EaseInOutBack(float t);
   float EaseInCubic(float t);
   float EaseOutCubic(float t);
+
+  inline float Remap(float x, float start1, float end1, float start2, float end2)
+  {
+    DEBUG_ASSERT(start1 != end1);
+    DEBUG_ASSERT(start2 != end2);
+    const auto norm = (x - start1) / (end1 - start1);
+    return norm * (end2 - start2) + start2;
+  }
 } // namespace Math
