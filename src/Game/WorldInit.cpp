@@ -157,16 +157,28 @@ void World::InitializeGameDefinitions()
 
   auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
 
-  const auto& stoneBlock                   = blocks.Get(blocks.Add(new BlockDefinition({
-                      .name        = "Stone",
-                      .damageTier  = 2,
-                      .damageFlags = BlockDamageFlagBit::PICKAXE,
-                      .voxelMaterialDesc =
+  const auto& stoneBlock = blocks.Get(blocks.Add(new BlockDefinition({
+    .name        = "Stone",
+    .damageTier  = 2,
+    .damageFlags = BlockDamageFlagBit::PICKAXE,
+    .voxelMaterialDesc =
       {
-                          .randomizeTexcoordRotation = true,
-                          .baseColorTexture          = "stone_albedo",
+        .randomizeTexcoordRotation = true,
+        .baseColorTexture          = "stone_albedo",
       },
   })));
+
+  [[maybe_unused]] const auto& dirtBlock = blocks.Get(blocks.Add(new BlockDefinition({
+    .name        = "Dirt",
+    .damageTier  = 2,
+    .damageFlags = BlockDamageFlagBit::PICKAXE,
+    .voxelMaterialDesc =
+      {
+        .randomizeTexcoordRotation = true,
+        .baseColorTexture          = "dirt_albedo",
+      },
+  })));
+
   [[maybe_unused]] const auto stoneBlockId = stoneBlock.GetItemId();
 
   [[maybe_unused]] const auto frogLightId = blocks
@@ -646,6 +658,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 #endif
   auto& blocks          = registry_.ctx().get<BlockRegistry>();
   const auto& grass     = blocks.Get("Grass");
+  const auto& dirt     = blocks.Get("Dirt");
 //  const auto& malachite = blocks.Get("Malachite");
 
   constexpr auto samplesPerAxis = 16;
@@ -675,6 +688,11 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     terrainHeight2D->SetSource(terrainHeight2Da);
     terrainHeight2D->SetScaling(1.0f / sampleScale);
 
+    auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgUL@BoEEEAACAPwg@CDAM@AD/AwY@BsQQTNzEy+C@AoED//w==");
+    auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
+    stoneInDirt->SetSource(stoneInDirtA);
+    stoneInDirt->SetScaling(1.0f / sampleScale);
+
 #ifndef GAME_HEADLESS
     total.store((int32_t)grid.numTopLevelBricks_);
     progressText.store("Generating surface");
@@ -703,7 +721,15 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
         {
           ZoneScopedN("Top level brick");
+
+          auto stoneInDirtImage = GenerateAndUpscale3D(stoneInDirt,
+            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+            mapGenInfo.seed + 1,
+            16,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Linear);
           const auto tl = glm::ivec3{i, j, k};
+
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
@@ -711,12 +737,23 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
               const auto noiseUv3 = (glm::vec3(pModTl) + 0.5f) / float(TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE + 1);
               const auto noiseUv2 = glm::vec2(noiseUv3.x, noiseUv3.z);
-              const auto height   = (int)(SampleImage2D(terrainHeight, samplesPerAxis + 1, noiseUv2) * 10 + mapGenInfo.seaLevel);
+              const auto height   = (int)(SampleImage2D(terrainHeight, samplesPerAxis + 1, noiseUv2) * 15 + mapGenInfo.seaLevel);
               if (positionWS.y < height)
               {
                 if (positionWS.y == height - 1)
                 {
                   grid.SetVoxelAtNoDirty(positionWS, grass.GetBlockId());
+                }
+                else if (positionWS.y >= height - 60)
+                {
+                  if (TexelFetch3D(stoneInDirtImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, (height - positionWS.y) / 60.0f))
+                  {
+                    grid.SetVoxelAtNoDirty(positionWS, voxel_t(1));
+                  }
+                  else
+                  {
+                    grid.SetVoxelAtNoDirty(positionWS, dirt.GetBlockId());
+                  }
                 }
                 else
                 {
@@ -745,8 +782,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     progress.store(0);
 #endif
 
-    auto surfaceCavesA = FastNoise::NewFromEncodedNodeTree(
-      "FAAC@BB@A4EAFEg@ACBCBRwFIwUlBQs@BlRATNzMw9C@AIMAMAw@ABAC@BFAM@BYAg@BcJ@CEIEH4XrPgiF61E//////wP/AQAG7FE4Pv8C@AgQf8CmpmZPgbNzEw//w==");
+    auto surfaceCavesA = FastNoise::NewFromEncodedNodeTree("HAUNBQY@ABSQgg@B///8DDwUXBQgAAIDIQv8C@BwP///w==");
     auto surfaceCaves = FastNoise::New<FastNoise::DomainScale>();
     surfaceCaves->SetSource(surfaceCavesA);
     surfaceCaves->SetScaling(1.5f / sampleScale);
