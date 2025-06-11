@@ -534,11 +534,23 @@ namespace
     return image[p.x + p.y * imageSize + p.z * imageSize * imageSize];
   }
 
+  void ImageStore3D(auto& image, int imageSize, glm::ivec3 p, float value)
+  {
+    DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, glm::ivec3(0))) && glm::all(glm::lessThan(p, glm::ivec3(imageSize))));
+    image[p.x + p.y * imageSize + p.z * imageSize * imageSize] = value;
+  }
+
   float TexelFetch2D(const auto& image, int imageSize, glm::ivec2 p)
   {
     p = glm::clamp(p, glm::ivec2(0), glm::ivec2(imageSize - 1));
     return image[p.x + p.y * imageSize];
-  };
+  }
+
+  void ImageStore2D(auto& image, int imageSize, glm::ivec2 p, float value)
+  {
+    DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, glm::ivec2(0))) && glm::all(glm::lessThan(p, glm::ivec2(imageSize))));
+    image[p.x + p.y * imageSize] = value;
+  }
 
   enum class Filter
   {
@@ -646,6 +658,32 @@ namespace
 
     return out;
   }
+
+  std::unique_ptr<float[]> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Filter filter)
+  {
+    ZoneScoped;
+    const int genCount = (inSideLength == outSideLength) ? inSideLength * inSideLength : (inSideLength + 1) * (inSideLength + 1);
+    auto raw = std::make_unique_for_overwrite<float[]>(genCount);
+
+    const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
+    node->GenUniformGrid2D(raw.get(), start.x, start.y, sideCount, sideCount, seed);
+
+    if (inSideLength == outSideLength)
+    {
+      return raw;
+    }
+
+    auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength);
+    int i    = 0;
+    for (int y = 0; y < outSideLength; y++)
+    for (int x = 0; x < outSideLength; x++)
+    {
+      const auto uv = (glm::vec2(x, y) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
+      out[i++]      = SampleImage2D(raw, inSideLength + 1, uv, filter);
+    }
+
+    return out;
+  }
 } // namespace
 
 void World::GenerateMap(const MapGenInfo& mapGenInfo)
@@ -679,7 +717,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto treePositions    = std::vector<glm::ivec3>();
   auto dungeonPositions = std::vector<glm::ivec3>();
 
-  //auto surfaceHeights = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
+  auto globalSurfaceHeights = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
 
   {
     ZoneScopedN("Surface");
@@ -711,14 +749,23 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int k = tlBrickColCoord[0];
         const int i = tlBrickColCoord[1];
 
-        // The +1's are to generate a single noise sample in the next chunk, allowing us to seamlessly blend between the two.
-        auto terrainHeight = std::vector<float>((samplesPerAxis + 1) * (samplesPerAxis + 1));
-        terrainHeight2D->GenUniformGrid2D(terrainHeight.data(),
-          int(sampleScale * (i * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-          int(sampleScale * (k * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-          samplesPerAxis + 1,
-          samplesPerAxis + 1,
-          mapGenInfo.seed);
+        auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
+          glm::ivec2(sampleScale * (glm::vec2(i, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+          mapGenInfo.seed,
+          samplesPerAxis,
+          TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+          Filter::Linear);
+
+        for (int y = 0; y < TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE; y++)
+        for (int x = 0; x < TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE; x++)
+        {
+          const auto pModTl = glm::ivec2(x, y);
+          const auto positionWS = pModTl + glm::ivec2(i, k) * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
+          
+          const auto height = glm::floor(mapGenInfo.seaLevel + 15 * TexelFetch2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl));
+          ImageStore2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl, height);
+          ImageStore2D(globalSurfaceHeights, grid.topLevelBricksDims_.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
+        }
 
         // Top level bricks
         for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
@@ -745,10 +792,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             [&](glm::ivec3 positionWS)
             {
               const auto pModTl = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
-
-              const auto noiseUv3 = (glm::vec3(pModTl) + 0.5f) / float(TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE + 1);
-              const auto noiseUv2 = glm::vec2(noiseUv3.x, noiseUv3.z);
-              const auto height   = (int)(SampleImage2D(terrainHeight, samplesPerAxis + 1, noiseUv2) * 15 + mapGenInfo.seaLevel);
+              
+              const auto height = TexelFetch2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {pModTl.x, pModTl.z});
 
               auto blockTypeToSet = voxel_t::Air;
               if (positionWS.y < height)
@@ -787,7 +832,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             });
 
           grid.MarkTopLevelBrickAndChildrenDirty(tl);
-          // auto lock = std::unique_lock(coalesceMutex);
           grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
 #ifndef GAME_HEADLESS
           progress.fetch_add(1);
@@ -844,7 +888,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             });
 
           grid.MarkTopLevelBrickAndChildrenDirty(tl);
-          // auto lock = std::unique_lock(coalesceMutex);
           grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
 #ifndef GAME_HEADLESS
           progress.fetch_add(1);
@@ -852,134 +895,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         }
       });
   }
-
-#if 0
-  // Top level bricks
-  std::for_each(std::execution::par,
-    tlBrickColCoords.begin(),
-    tlBrickColCoords.end(),
-    [&](glm::ivec2 tlBrickColCoord)
-    // for (int k = 0; k < grid.topLevelBricksDims_.z; k++)
-    //{
-    //   for (int i = 0; i < grid.topLevelBricksDims_.x; i++)
-    {
-      const int k = tlBrickColCoord[0];
-      const int i = tlBrickColCoord[1];
-
-      auto tlTerrainHeight = std::vector<float>(samplesPerAxis * samplesPerAxis);
-      {
-        ZoneScopedN("terrainHeight");
-
-        terrainHeight2D->GenUniformGrid2D(tlTerrainHeight.data(),
-          int(sampleScale * (i * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-          int(sampleScale * (k * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-          samplesPerAxis,
-          samplesPerAxis,
-          1234);
-      }
-      for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
-      {
-        const auto tl      = glm::ivec3{i, j, k};
-        auto tlCellNoise   = std::vector<float>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
-        auto tlCopperNoise = std::vector<float>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
-        {
-          ZoneScopedN("noiseGraph->GenUniformGrid3D");
-          surfaceCaves->GenUniformGrid3D(tlCellNoise.data(),
-            int(sampleScale * (tl.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-            int(sampleScale * (tl.y * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE - 180)),
-            int(sampleScale * (tl.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-            samplesPerAxis,
-            samplesPerAxis,
-            samplesPerAxis,
-            1234);
-
-          copperGraph->GenUniformGrid3D(tlCopperNoise.data(),
-            int(sampleScale * (tl.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-            int(sampleScale * (tl.y * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE - 180)),
-            int(sampleScale * (tl.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
-            samplesPerAxis,
-            samplesPerAxis,
-            samplesPerAxis,
-            1234);
-        }
-
-        // Bottom level bricks
-        for (int c = 0; c < TwoLevelGrid::TL_BRICK_SIDE_LENGTH; c++)
-        {
-          for (int b = 0; b < TwoLevelGrid::TL_BRICK_SIDE_LENGTH; b++)
-          {
-            for (int a = 0; a < TwoLevelGrid::TL_BRICK_SIDE_LENGTH; a++)
-            {
-              const auto bl = glm::ivec3{a, b, c};
-
-              // Voxels
-              for (int z = 0; z < TwoLevelGrid::BL_BRICK_SIDE_LENGTH; z++)
-              {
-                for (int y = 0; y < TwoLevelGrid::BL_BRICK_SIDE_LENGTH; y++)
-                {
-                  for (int x = 0; x < TwoLevelGrid::BL_BRICK_SIDE_LENGTH; x++)
-                  {
-                    const auto local  = glm::ivec3{x, y, z};
-                    const auto p      = tl * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE + bl * TwoLevelGrid::BL_BRICK_SIDE_LENGTH + local;
-                    const auto pModTl = p % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
-                    // if (de2(glm::vec3(p) / 10.f + 2.0f) < 0.011f)
-                    // if (de2(glm::vec3(p) / 10.f + 2.0f) < 0.011f)
-                    //  if (de3(p) < 0.011f)
-                    // if (tlCellNoise[pModTl.x + pModTl.y * 64 + pModTl.z * 64 * 64] < 0)
-                    const auto noiseUv3 = (glm::vec3(pModTl) + 0.5f) / (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
-                    const auto noiseUv2 = glm::vec2(noiseUv3.x, noiseUv3.z);
-                    const auto height   = (int)(SampleNoise2D(tlTerrainHeight, samplesPerAxis, noiseUv2) * 10 + 260);
-                    if (p.y < height && SampleNoise3D(tlCellNoise, samplesPerAxis, noiseUv3) < 0)
-                    // if (p.y < height)
-                    {
-                      if (p.y == height - 1 && trees->GenSingle2D((float)p.x, (float)p.z, 123456) > 0.98f)
-                      {
-                        auto lock = std::unique_lock(coalesceMutex);
-                        treePositions.emplace_back(p);
-                      }
-                      else if (p.y > height - 2)
-                      {
-                        grid.SetVoxelAtNoDirty(p, grass.GetBlockId());
-                      }
-                      else
-                      {
-                        const auto pf = glm::vec3(p) * 0.018f;
-                        if (SampleNoise3D(tlCopperNoise, samplesPerAxis, noiseUv3) + 0.81f < 0)
-                        {
-                          grid.SetVoxelAtNoDirty(p, malachite.GetBlockId());
-                        }
-                        else
-                        {
-                          grid.SetVoxelAtNoDirty(p, voxel_t(1));
-                        }
-                        if (trees->GenSingle3D((float)p.x, (float)p.y, (float)p.z, 123321) > 0.99999f)
-                        {
-                          auto lock = std::unique_lock(coalesceMutex);
-                          dungeonPositions.emplace_back(p);
-                        }
-                      }
-                    }
-                    else
-                    {
-                      grid.SetVoxelAtNoDirty(p, voxel_t::Air);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        grid.MarkTopLevelBrickAndChildrenDirty(tl);
-      // TODO: coalesce top-level brick
-#ifndef GAME_HEADLESS
-        progress.fetch_add(1);
-#endif
-        // auto lock = std::unique_lock(coalesceMutex);
-      }
-    });
-  //}
-#endif
 
   // constexpr int MAX_MUSHROOMS = 50'000;
   constexpr int MAX_MUSHROOMS = 1;
