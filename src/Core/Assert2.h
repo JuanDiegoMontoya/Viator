@@ -27,23 +27,23 @@ namespace Assert::detail
   #endif
 #endif
 
-#define PANIC                                      \
-  do                                               \
-  {                                                \
-    Assert::detail::LogPanic(__FILE__, __LINE__);  \
-    Assert::detail::Panic(__FILE__, __LINE__); \
+#define PANIC                                     \
+  do                                              \
+  {                                               \
+    Assert::detail::LogPanic(__FILE__, __LINE__); \
+    Assert::detail::Panic(__FILE__, __LINE__);    \
   } while (0)
 
 // Aborts in debug, does nothing in release.
 #ifdef FROG_DEBUG
-  #define DEBUG_ASSERT(x, ...)                                                        \
-    do                                                                                \
-    {                                                                                 \
-      if (!(x))                                                                       \
-      {                                                                               \
+  #define DEBUG_ASSERT(x, ...)                                                       \
+    do                                                                               \
+    {                                                                                \
+      if (!(x)) [[unlikely]]                                                         \
+      {                                                                              \
         Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
-        Assert::detail::Abort();                                                      \
-      }                                                                               \
+        Assert::detail::Abort();                                                     \
+      }                                                                              \
     } while (0)
 #else
   #define DEBUG_ASSERT(x, ...)               \
@@ -55,12 +55,12 @@ namespace Assert::detail
 #endif
 
 // Aborts in debug, throws PanicException in release.
-#define ASSERT(x, ...)                                                              \
-  do                                                                                \
-  {                                                                                 \
-    if (!(x))                                                                       \
-    {                                                                               \
+#define ASSERT(x, ...)                                                             \
+  do                                                                               \
+  {                                                                                \
+    if (!(x)) [[unlikely]]                                                         \
+    {                                                                              \
       Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
-      Assert::detail::Panic(__FILE__, __LINE__);                              \
-    }                                                                               \
+      Assert::detail::Panic(__FILE__, __LINE__);                                   \
+    }                                                                              \
   } while (0)
