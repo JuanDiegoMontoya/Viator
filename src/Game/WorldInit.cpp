@@ -300,6 +300,9 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("vines_end", false);
   RegisterFoliageBlock("vines_main", false);
   RegisterFoliageBlock("bush_01", false);
+  RegisterFoliageBlock("grass_double_base", false);
+  RegisterFoliageBlock("grass_double_top", false);
+  RegisterFoliageBlock("leaves_01", false);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -368,8 +371,22 @@ void World::InitializeGameDefinitions()
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();
 
+  auto* tallGrass = new SimplePrefab({.name = "Double Grass"});
+  tallGrass->voxels.emplace_back(glm::ivec3(0, 0, 0), blocks.Get("grass_double_base").GetBlockId());
+  tallGrass->voxels.emplace_back(glm::ivec3(0, 1, 0), blocks.Get("grass_double_top").GetBlockId());
+  prefabs.Add(tallGrass);
+
   auto* testTree = new SimplePrefab({.name = "Tree"});
   auto& binky    = testTree->voxels;
+  for (int z = -3; z <= 3; z++)
+  for (int y = -1; y <= 3; y++)
+  for (int x = -3; x <= 3; x++)
+  {
+    if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
+    {
+      binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01").GetBlockId());
+    }
+  }
   binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
   binky.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
   binky.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
@@ -717,7 +734,23 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto treePositions    = std::vector<glm::ivec3>();
   auto dungeonPositions = std::vector<glm::ivec3>();
 
-  auto globalSurfaceHeights = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
+  auto globalSurfaceHeightImage = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
+
+  auto whiteNoise = FastNoise::New<FastNoise::White>();
+  whiteNoise->SetOutputMin(0);
+  auto whiteNoise2 = FastNoise::New<FastNoise::White>();
+
+  auto valueNoise = FastNoise::New<FastNoise::Value>();
+  valueNoise->SetOutputMin(0);
+  valueNoise->SetScale(10);
+
+  auto shrimplex = FastNoise::New<FastNoise::Simplex>();
+  shrimplex->SetScale(25);
+  shrimplex->SetOutputMin(0);
+
+  auto shrimplex2 = FastNoise::New<FastNoise::Simplex>();
+  shrimplex2->SetScale(8);
+  shrimplex2->SetOutputMin(0);
 
   {
     ZoneScopedN("Surface");
@@ -730,9 +763,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
     stoneInDirt->SetSource(stoneInDirtA);
     stoneInDirt->SetScaling(1.0f / sampleScale);
-
-    auto white = FastNoise::New<FastNoise::White>();
-    white->SetOutputMin(0);
 
 #ifndef GAME_HEADLESS
     total.store((int32_t)grid.numTopLevelBricks_);
@@ -764,7 +794,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           
           const auto height = glm::floor(mapGenInfo.seaLevel + 15 * TexelFetch2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl));
           ImageStore2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl, height);
-          ImageStore2D(globalSurfaceHeights, grid.topLevelBricksDims_.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
+          ImageStore2D(globalSurfaceHeightImage, grid.topLevelBricksDims_.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
         }
 
         // Top level bricks
@@ -779,7 +809,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Linear);
 
-          auto fadeImage = GenerateAndUpscale3D(white,
+          auto fadeImage = GenerateAndUpscale3D(whiteNoise,
             glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
             mapGenInfo.seed + 2,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
@@ -920,7 +950,65 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
 #ifndef GAME_HEADLESS
   progressText.store("Prefabs");
+  total.store(grid.dimensions_.x * grid.dimensions_.z);
+  progress.store(0);
 #endif
+  for (int z = 0; z < grid.dimensions_.z; z++)
+  for (int x = 0; x < grid.dimensions_.x; x++)
+  {
+    const auto y = (int)TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {x, z});
+    
+    if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) < 0.01f)
+    {
+      if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+      {
+        registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
+      }
+    }
+    else
+    {
+      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
+      {
+        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAt({x, y, z}, blocks.Get("bush_01").GetBlockId());
+        }
+      }
+
+      const auto grasss = shrimplex2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.3f;
+
+      if (grasss > 0.6f)
+      {
+        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_short").GetBlockId());
+        }
+      }
+      if (grasss > 0.7f)
+      {
+        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_medium").GetBlockId());
+        }
+      }
+      if (grasss > 0.8f)
+      {
+        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_long").GetBlockId());
+        }
+      }
+      if (grasss > 0.9f)
+      {
+        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        {
+          registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(*this, {x, y, z});
+        }
+      }
+    }
+
+    progress.fetch_add(1);
+  }
   for (auto treePos : treePositions)
   {
     registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, treePos);
