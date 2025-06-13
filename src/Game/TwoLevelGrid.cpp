@@ -94,7 +94,7 @@ TwoLevelGrid::TwoLevelGrid(glm::ivec3 topLevelBrickDims)
 {
   ZoneScoped;
   numTopLevelBricks_ = topLevelBricksDims_.x * topLevelBricksDims_.y * topLevelBricksDims_.z;
-  assert(topLevelBricksDims_.x > 0 && topLevelBricksDims_.y > 0 && topLevelBricksDims_.z > 0);
+  DEBUG_ASSERT(topLevelBricksDims_.x > 0 && topLevelBricksDims_.y > 0 && topLevelBricksDims_.z > 0);
 
   topLevelBrickPtrs = buffer.Allocate(sizeof(TopLevelBrickPtr) * numTopLevelBricks_, sizeof(TopLevelBrickPtr));
   for (size_t i = 0; i < numTopLevelBricks_; i++)
@@ -117,18 +117,16 @@ TwoLevelGrid::GridHierarchyCoords TwoLevelGrid::GetCoordsOfVoxelAt(glm::ivec3 vo
   const auto bottomLevelCoord = (voxelCoord / BL_BRICK_SIDE_LENGTH) % TL_BRICK_SIDE_LENGTH;
   const auto localVoxelCoord  = voxelCoord % BL_BRICK_SIDE_LENGTH;
 
-  assert(glm::all(glm::lessThan(topLevelCoord, topLevelBricksDims_)));
-  assert(glm::all(glm::lessThan(bottomLevelCoord, glm::ivec3(TL_BRICK_SIDE_LENGTH))));
-  assert(glm::all(glm::lessThan(localVoxelCoord, glm::ivec3(BL_BRICK_SIDE_LENGTH))));
+  DEBUG_ASSERT(glm::all(glm::lessThan(topLevelCoord, topLevelBricksDims_)));
+  DEBUG_ASSERT(glm::all(glm::lessThan(bottomLevelCoord, glm::ivec3(TL_BRICK_SIDE_LENGTH))));
+  DEBUG_ASSERT(glm::all(glm::lessThan(localVoxelCoord, glm::ivec3(BL_BRICK_SIDE_LENGTH))));
 
   return {topLevelCoord, bottomLevelCoord, localVoxelCoord};
 }
 
 voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
 {
-  //assert(glm::all(glm::greaterThanEqual(voxelCoord, glm::ivec3(0))));
-  //assert(glm::all(glm::lessThan(voxelCoord, dimensions_)));
-  if (glm::any(glm::lessThan(voxelCoord, glm::ivec3(0))) || glm::any(glm::greaterThanEqual(voxelCoord, dimensions_)))
+  if (!IsPositionInGrid(voxelCoord))
   {
     return voxel_t::Air;
   }
@@ -136,7 +134,7 @@ voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
-  assert(topLevelIndex < numTopLevelBricks_);
+  DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   const auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
   if (topLevelBrickPtr.voxelsDoBeAllSame)
@@ -145,7 +143,7 @@ voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
   }
 
   const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
-  assert(bottomLevelIndex < CELLS_PER_TL_BRICK);
+  DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
   const auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
   if (bottomLevelBrickPtr.voxelsDoBeAllSame)
@@ -154,19 +152,22 @@ voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
   }
 
   const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
-  assert(localVoxelIndex < CELLS_PER_BL_BRICK);
+  DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
   return buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels[localVoxelIndex];
 }
 
 void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
 {
   // ZoneScoped;
-  assert(IsPositionInGrid(voxelCoord));
+  if (!IsPositionInGrid(voxelCoord))
+  {
+    return;
+  }
 
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
-  assert(topLevelIndex < numTopLevelBricks_);
+  DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
   if (topLevelBrickPtr.voxelsDoBeAllSame)
@@ -179,8 +180,8 @@ void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
   }
 
   const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
-  assert(bottomLevelIndex < CELLS_PER_TL_BRICK);
-  assert(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
+  DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
+  DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
   auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
   if (bottomLevelBrickPtr.voxelsDoBeAllSame)
@@ -193,8 +194,8 @@ void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
   }
 
   const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
-  assert(localVoxelIndex < CELLS_PER_BL_BRICK);
-  assert(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
+  DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
+  DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
   auto& blBrick  = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
   auto& dstVoxel = blBrick.voxels[localVoxelIndex] = voxel;
   blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
@@ -438,7 +439,7 @@ void TwoLevelGrid::FreeTopLevelBrick(uint32_t index)
   ZoneScoped;
   auto lk = std::unique_lock(*mutex_);
   auto it = topLevelBrickIndexToAlloc.find(index);
-  assert(it != topLevelBrickIndexToAlloc.end());
+  DEBUG_ASSERT(it != topLevelBrickIndexToAlloc.end());
   buffer.Free(it->second);
   topLevelBrickIndexToAlloc.erase(it);
 }
@@ -448,7 +449,7 @@ void TwoLevelGrid::FreeBottomLevelBrick(uint32_t index)
   ZoneScoped;
   auto lk = std::unique_lock(*mutex_);
   auto it = bottomLevelBrickIndexToAlloc.find(index);
-  assert(it != bottomLevelBrickIndexToAlloc.end());
+  DEBUG_ASSERT(it != bottomLevelBrickIndexToAlloc.end());
   buffer.Free(it->second);
   bottomLevelBrickIndexToAlloc.erase(it);
 }
@@ -510,13 +511,13 @@ void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
 
 void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
 {
-  assert(glm::all(glm::greaterThanEqual(voxelCoord, glm::ivec3(0))));
-  assert(glm::all(glm::lessThan(voxelCoord, dimensions_)));
+  DEBUG_ASSERT(glm::all(glm::greaterThanEqual(voxelCoord, glm::ivec3(0))));
+  DEBUG_ASSERT(glm::all(glm::lessThan(voxelCoord, dimensions_)));
 
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
-  assert(topLevelIndex < numTopLevelBricks_);
+  DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
   if (topLevelBrickPtr.voxelsDoBeAllSame)
@@ -526,8 +527,8 @@ void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   }
 
   const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
-  assert(bottomLevelIndex < CELLS_PER_TL_BRICK);
-  assert(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
+  DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
+  DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
   auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
   if (bottomLevelBrickPtr.voxelsDoBeAllSame)
@@ -537,8 +538,8 @@ void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   }
 
   const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
-  assert(localVoxelIndex < CELLS_PER_BL_BRICK);
-  assert(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
+  DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
+  DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
   auto& blBrick  = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
   blBrick.voxels[localVoxelIndex] = voxel;
   blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
@@ -590,7 +591,7 @@ void TwoLevelGrid::MarkTopLevelBrickAndChildrenDirty(glm::ivec3 topLevelBrickPos
 {
   ZoneScoped;
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelBrickPos);
-  assert(topLevelIndex < numTopLevelBricks_);
+  DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
   auto lk = std::unique_lock(*mutex_);
