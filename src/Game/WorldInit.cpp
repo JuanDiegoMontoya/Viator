@@ -64,6 +64,82 @@ public:
   }
 };
 
+class VinePrefab : public PrefabDefinition
+{
+public:
+  using PrefabDefinition::PrefabDefinition;
+
+  void Instantiate(World& world, glm::ivec3 worldPos) const override
+  {
+    const auto& blocks    = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& vinesMain = blocks.Get("vines_main");
+    const auto& vinesEnd  = blocks.Get("vines_end");
+
+    // Count number of air blocks starting from worldPos.
+    auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    int freeRealEstate = 0;
+    for (int y = 0; y > -5; y--)
+    {
+      const auto testPos = worldPos + glm::ivec3{0, y, 0};
+      if (!grid.IsPositionInGrid(testPos) || grid.GetVoxelAt(testPos) != voxel_t::Air)
+      {
+        break;
+      }
+      freeRealEstate++;
+    }
+
+    if (freeRealEstate <= 0)
+    {
+      return;
+    }
+
+    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, vinesEnd.GetBlockId());
+
+    for (int y = 0; y > -(freeRealEstate - 1); y--)
+    {
+      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, vinesMain.GetBlockId());
+    }
+  }
+};
+
+class RootPrefab : public PrefabDefinition
+{
+public:
+  using PrefabDefinition::PrefabDefinition;
+
+  void Instantiate(World& world, glm::ivec3 worldPos) const override
+  {
+    const auto& blocks    = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& rootsMain = blocks.Get("roots_main");
+    const auto& rootsEnd  = blocks.Get("roots_end");
+
+    // Count number of air blocks starting from worldPos.
+    auto& grid         = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    int freeRealEstate = 0;
+    for (int y = 0; y > -3; y--)
+    {
+      const auto testPos = worldPos + glm::ivec3{0, y, 0};
+      if (!grid.IsPositionInGrid(testPos) || grid.GetVoxelAt(testPos) != voxel_t::Air)
+      {
+        break;
+      }
+      freeRealEstate++;
+    }
+
+    if (freeRealEstate <= 0)
+    {
+      return;
+    }
+
+    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, rootsEnd.GetBlockId());
+
+    for (int y = 0; y > -(freeRealEstate - 1); y--)
+    {
+      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, rootsMain.GetBlockId());
+    }
+  }
+};
+
 void World::InitializeGameState()
 {
   ticks_ = 0;
@@ -299,6 +375,8 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("rock_small", false);
   RegisterFoliageBlock("vines_end", false);
   RegisterFoliageBlock("vines_main", false);
+  RegisterFoliageBlock("roots_end", false);
+  RegisterFoliageBlock("roots_main", false);
   RegisterFoliageBlock("bush_01", false);
   RegisterFoliageBlock("grass_double_base", false);
   RegisterFoliageBlock("grass_double_top", false);
@@ -396,6 +474,9 @@ void World::InitializeGameDefinitions()
 
   auto* testDungeon = new DungeonPrefab({.name = "Dungeon"});
   prefabs.Add(testDungeon);
+
+  prefabs.Add(new VinePrefab({.name = "Vine"}));
+  prefabs.Add(new RootPrefab({.name = "Root"}));
 
   auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
   crafting.recipes.emplace_back(Crafting::Recipe{
@@ -655,25 +736,31 @@ namespace
     const int genCount = (inSideLength == outSideLength) ? inSideLength * inSideLength * inSideLength : (inSideLength + 1) * (inSideLength + 1) * (inSideLength + 1);
     auto raw = std::make_unique_for_overwrite<float[]>(genCount);
 
-    const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-    node->GenUniformGrid3D(raw.get(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
+    {
+      ZoneScopedN("GenUniformGrid3D");
+      const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
+      node->GenUniformGrid3D(raw.get(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
+    }
 
     if (inSideLength == outSideLength)
     {
       return raw;
     }
 
-    auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength * outSideLength);
-    int i    = 0;
-    for (int z = 0; z < outSideLength; z++)
-    for (int y = 0; y < outSideLength; y++)
-    for (int x = 0; x < outSideLength; x++)
     {
-      const auto uv = (glm::vec3(x, y, z) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
-      out[i++]      = SampleImage3D(raw, inSideLength + 1, uv, filter);
-    }
+      ZoneScopedN("Upscale 3D");
+      auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength * outSideLength);
+      int i    = 0;
+      for (int z = 0; z < outSideLength; z++)
+      for (int y = 0; y < outSideLength; y++)
+      for (int x = 0; x < outSideLength; x++)
+      {
+        const auto uv = (glm::vec3(x, y, z) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
+        out[i++]      = SampleImage3D(raw, inSideLength + 1, uv, filter);
+      }
 
-    return out;
+      return out;
+    }
   }
 
   std::unique_ptr<float[]> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Filter filter)
@@ -682,24 +769,30 @@ namespace
     const int genCount = (inSideLength == outSideLength) ? inSideLength * inSideLength : (inSideLength + 1) * (inSideLength + 1);
     auto raw = std::make_unique_for_overwrite<float[]>(genCount);
 
-    const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-    node->GenUniformGrid2D(raw.get(), start.x, start.y, sideCount, sideCount, seed);
+    {
+      ZoneScopedN("GenUniformGrid2D");
+      const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
+      node->GenUniformGrid2D(raw.get(), start.x, start.y, sideCount, sideCount, seed);
+    }
 
     if (inSideLength == outSideLength)
     {
       return raw;
     }
 
-    auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength);
-    int i    = 0;
-    for (int y = 0; y < outSideLength; y++)
-    for (int x = 0; x < outSideLength; x++)
     {
-      const auto uv = (glm::vec2(x, y) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
-      out[i++]      = SampleImage2D(raw, inSideLength + 1, uv, filter);
-    }
+      ZoneScopedN("Upscale 2D");
+      auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength);
+      int i    = 0;
+      for (int y = 0; y < outSideLength; y++)
+      for (int x = 0; x < outSideLength; x++)
+      {
+        const auto uv = (glm::vec2(x, y) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
+        out[i++]      = SampleImage2D(raw, inSideLength + 1, uv, filter);
+      }
 
-    return out;
+      return out;
+    }
   }
 } // namespace
 
@@ -716,7 +809,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   const auto& dirt     = blocks.Get("Dirt");
 //  const auto& malachite = blocks.Get("Malachite");
 
-  constexpr auto samplesPerAxis = 16;
+  constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
 
   auto& grid = registry_.ctx().get<TwoLevelGrid>();
@@ -729,10 +822,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
       tlBrickColCoords.emplace_back(k, i);
     }
   }
-
-  std::mutex coalesceMutex;
-  auto treePositions    = std::vector<glm::ivec3>();
-  auto dungeonPositions = std::vector<glm::ivec3>();
 
   auto globalSurfaceHeightImage = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
 
@@ -805,7 +894,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           auto stoneInDirtImage = GenerateAndUpscale3D(stoneInDirt,
             glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
             mapGenInfo.seed + 1,
-            16,
+            samplesPerAxis,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Linear);
 
@@ -872,7 +961,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
   {
 #ifndef GAME_HEADLESS
-    progressText.store("Surface caves");
+    progressText.store("Caves");
     progress.store(0);
 #endif
 
@@ -897,7 +986,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           auto densities = GenerateAndUpscale3D(surfaceCaves,
             glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
             mapGenInfo.seed,
-            16,
+            samplesPerAxis,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Linear);
 
@@ -905,7 +994,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
-              if (grid.GetVoxelAt(positionWS) != voxel_t::Air)
+              if (grid.GetVoxelAtUnchecked(positionWS) != voxel_t::Air)
               {
                 const auto pModTl = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
                 
@@ -949,7 +1038,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   }
 
 #ifndef GAME_HEADLESS
-  progressText.store("Prefabs");
+  progressText.store("Surface foliage");
   total.store(grid.dimensions_.x * grid.dimensions_.z);
   progress.store(0);
 #endif
@@ -960,7 +1049,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     
     if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) < 0.01f)
     {
-      if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+      if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
       {
         registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
       }
@@ -969,9 +1058,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     {
       if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
       {
-        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
-          grid.SetVoxelAt({x, y, z}, blocks.Get("bush_01").GetBlockId());
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01").GetBlockId());
         }
       }
 
@@ -979,28 +1068,28 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
       if (grasss > 0.6f)
       {
-        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
-          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_short").GetBlockId());
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short").GetBlockId());
         }
       }
       if (grasss > 0.7f)
       {
-        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
-          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_medium").GetBlockId());
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium").GetBlockId());
         }
       }
       if (grasss > 0.8f)
       {
-        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
-          grid.SetVoxelAt({x, y, z}, blocks.Get("grass_long").GetBlockId());
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long").GetBlockId());
         }
       }
       if (grasss > 0.9f)
       {
-        if (grid.GetVoxelAt({x, y - 1, z}) != voxel_t::Air)
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
           registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(*this, {x, y, z});
         }
@@ -1009,14 +1098,100 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
     progress.fetch_add(1);
   }
-  for (auto treePos : treePositions)
+
+#ifndef GAME_HEADLESS
+  progressText.store("Vines");
+  total.store(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.y * grid.topLevelBricksDims_.z);
+  progress.store(0);
+#endif
+
+  struct PrefabAndPosition
   {
-    registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, treePos);
+    const PrefabDefinition* prefab;
+    glm::ivec3 positionWS;
+  };
+
+  auto prefabs = std::vector<PrefabAndPosition>();
+  prefabs.reserve(100'000);
+  auto mutex = std::mutex();
+
+  {
+    ZoneScopedN("Generate vine positions");
+    std::for_each(std::execution::par,
+      tlBrickColCoords.begin(),
+      tlBrickColCoords.end(),
+      [&](glm::ivec2 tlBrickColCoord)
+      {
+        ZoneScopedN("Top level brick column");
+        const int k = tlBrickColCoord[0];
+        const int i = tlBrickColCoord[1];
+
+        for (int j = 0; j < grid.topLevelBricksDims_.y; j++)
+        {
+          ZoneScopedN("Top level brick");
+
+          const auto tl = glm::ivec3{i, j, k};
+
+          auto simplexImage = GenerateAndUpscale3D(shrimplex2,
+            tl * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            mapGenInfo.seed + 15,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Nearest);
+
+          auto whiteImage = GenerateAndUpscale3D(whiteNoise2,
+            tl * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            mapGenInfo.seed + 16,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Nearest);
+
+          ForEachPositionInTLBrick(tl,
+            [&](glm::ivec3 positionWS)
+            {
+              const auto tlLocal = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
+              const auto aboveWS = positionWS + glm::ivec3(0, 1, 0);
+              if (aboveWS.y < grid.dimensions_.y - 1 && grid.GetVoxelAtUnchecked(positionWS) == voxel_t::Air)
+              {
+                const auto aboveBlock = grid.GetVoxelAtUnchecked(aboveWS);
+                if (aboveBlock != voxel_t::Air)
+                {
+                  if (TexelFetch3D(simplexImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) +
+                        TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) * 0.3f <
+                      0.05f)
+                  {
+                    auto lk = std::unique_lock(mutex);
+                    if (aboveBlock == dirt.GetBlockId())
+                    {
+                      prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Root"), positionWS);
+                    }
+                    else
+                    {
+                      prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Vine"), positionWS);
+                    }
+                  }
+                }
+              }
+            });
+
+          progress.fetch_add(1);
+        }
+      });
   }
 
-  for (auto dungeonPos : dungeonPositions)
   {
-    registry_.ctx().get<PrefabRegistry>().Get("Dungeon").Instantiate(*this, dungeonPos);
+#ifndef GAME_HEADLESS
+    progressText.store("Instantiate prefabs");
+    total.store(int(prefabs.size()));
+    progress.store(0);
+#endif
+
+    ZoneScopedN("Instantiate Prefabs");
+    for (const auto& [prefab, positionWS] : prefabs)
+    {
+      prefab->Instantiate(*this, positionWS);
+      progress.fetch_add(1);
+    }
   }
 
   grid.CoalesceDirtyBricks();

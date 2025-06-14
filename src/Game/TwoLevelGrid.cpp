@@ -113,31 +113,38 @@ TwoLevelGrid::TwoLevelGrid(glm::ivec3 topLevelBrickDims)
 
 TwoLevelGrid::GridHierarchyCoords TwoLevelGrid::GetCoordsOfVoxelAt(glm::ivec3 voxelCoord) const
 {
+  //ZoneScoped;
   const auto topLevelCoord    = voxelCoord / TL_BRICK_VOXELS_PER_SIDE;
   const auto bottomLevelCoord = (voxelCoord / BL_BRICK_SIDE_LENGTH) % TL_BRICK_SIDE_LENGTH;
   const auto localVoxelCoord  = voxelCoord % BL_BRICK_SIDE_LENGTH;
 
-  DEBUG_ASSERT(glm::all(glm::lessThan(topLevelCoord, topLevelBricksDims_)));
-  DEBUG_ASSERT(glm::all(glm::lessThan(bottomLevelCoord, glm::ivec3(TL_BRICK_SIDE_LENGTH))));
-  DEBUG_ASSERT(glm::all(glm::lessThan(localVoxelCoord, glm::ivec3(BL_BRICK_SIDE_LENGTH))));
+  //DEBUG_ASSERT(glm::all(glm::lessThan(topLevelCoord, topLevelBricksDims_)));
+  //DEBUG_ASSERT(glm::all(glm::lessThan(bottomLevelCoord, glm::ivec3(TL_BRICK_SIDE_LENGTH))));
+  //DEBUG_ASSERT(glm::all(glm::lessThan(localVoxelCoord, glm::ivec3(BL_BRICK_SIDE_LENGTH))));
 
   return {topLevelCoord, bottomLevelCoord, localVoxelCoord};
 }
 
 voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
 {
-  if (!IsPositionInGrid(voxelCoord))
+  //ZoneScoped;
+  if (!IsPositionInGrid(voxelCoord)) [[unlikely]]
   {
     return voxel_t::Air;
   }
 
+  return GetVoxelAtUnchecked(voxelCoord);
+}
+
+voxel_t TwoLevelGrid::GetVoxelAtUnchecked(glm::ivec3 voxelCoord) const
+{
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
   DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   const auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
-  if (topLevelBrickPtr.voxelsDoBeAllSame)
+  if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     return topLevelBrickPtr.voxelIfAllSame;
   }
@@ -146,7 +153,7 @@ voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
   DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
   const auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
-  if (bottomLevelBrickPtr.voxelsDoBeAllSame)
+  if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     return bottomLevelBrickPtr.voxelIfAllSame;
   }
@@ -158,19 +165,24 @@ voxel_t TwoLevelGrid::GetVoxelAt(glm::ivec3 voxelCoord) const
 
 void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
 {
-  // ZoneScoped;
+  //ZoneScoped;
   if (!IsPositionInGrid(voxelCoord))
   {
     return;
   }
 
+  SetVoxelAtUnchecked(voxelCoord, voxel);
+}
+
+void TwoLevelGrid::SetVoxelAtUnchecked(glm::ivec3 voxelCoord, voxel_t voxel)
+{
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
   const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
   DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
-  if (topLevelBrickPtr.voxelsDoBeAllSame)
+  if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     // Make a top-level brick
     topLevelBrickPtr = TopLevelBrickPtr{.voxelsDoBeAllSame = false, .topLevelBrick = AllocateTopLevelBrick(topLevelBrickPtr.voxelIfAllSame)};
@@ -184,7 +196,7 @@ void TwoLevelGrid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
   DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
   auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
-  if (bottomLevelBrickPtr.voxelsDoBeAllSame)
+  if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     // Make a bottom-level brick
     bottomLevelBrickPtr = BottomLevelBrickPtr{.voxelsDoBeAllSame = false, .bottomLevelBrick = AllocateBottomLevelBrick(bottomLevelBrickPtr.voxelIfAllSame)};
@@ -511,8 +523,8 @@ void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
 
 void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
 {
-  DEBUG_ASSERT(glm::all(glm::greaterThanEqual(voxelCoord, glm::ivec3(0))));
-  DEBUG_ASSERT(glm::all(glm::lessThan(voxelCoord, dimensions_)));
+  //ZoneScoped;
+  DEBUG_ASSERT(IsPositionInGrid(voxelCoord));
 
   auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
@@ -520,7 +532,7 @@ void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
   auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
-  if (topLevelBrickPtr.voxelsDoBeAllSame)
+  if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     // Make a top-level brick
     topLevelBrickPtr = TopLevelBrickPtr{.voxelsDoBeAllSame = false, .topLevelBrick = AllocateTopLevelBrickNoDirty(topLevelBrickPtr.voxelIfAllSame)};
@@ -531,7 +543,7 @@ void TwoLevelGrid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
   auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
-  if (bottomLevelBrickPtr.voxelsDoBeAllSame)
+  if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
   {
     // Make a bottom-level brick
     bottomLevelBrickPtr = BottomLevelBrickPtr{.voxelsDoBeAllSame = false, .bottomLevelBrick = AllocateBottomLevelBrickNoDirty(bottomLevelBrickPtr.voxelIfAllSame)};

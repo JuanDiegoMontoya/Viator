@@ -96,7 +96,9 @@ struct TwoLevelGrid
   };
   GridHierarchyCoords GetCoordsOfVoxelAt(glm::ivec3 voxelCoord) const;
   voxel_t GetVoxelAt(glm::ivec3 voxelCoord) const;
+  voxel_t GetVoxelAtUnchecked(glm::ivec3 voxelCoord) const;
   void SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel);
+  void SetVoxelAtUnchecked(glm::ivec3 voxelCoord, voxel_t voxel);
   void CoalesceBricksSLOW();
   void CoalesceDirtyBricks();
   void CoalesceTopLevelBrick(TopLevelBrickPtr& topLevelBrickPtr);
