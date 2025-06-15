@@ -372,6 +372,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("grass_medium", false);
   RegisterFoliageBlock("grass_short", false);
   RegisterFoliageBlock("mushroom", true);
+  RegisterFoliageBlock("mushroom_glowing", true);
   RegisterFoliageBlock("rock_small", false);
   RegisterFoliageBlock("vines_end", false);
   RegisterFoliageBlock("vines_main", false);
@@ -381,6 +382,8 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("grass_double_base", false);
   RegisterFoliageBlock("grass_double_top", false);
   RegisterFoliageBlock("leaves_01", false);
+  RegisterFoliageBlock("dandelion", true);
+  RegisterFoliageBlock("rose", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -700,7 +703,7 @@ namespace
 
     const auto weight = unnormalized - glm::vec2(intCoord);
     return glm::mix(glm::mix(bl, br, weight.x), glm::mix(tl, tr, weight.x), weight.y);
-  };
+  }
 
   void ForEachPositionInTLBrick(glm::ivec3 topLevelBrickPos, const auto& function)
   {
@@ -729,7 +732,10 @@ namespace
       }
     }
   }
+
   // Generate inSideLength^3 chunk of noise, then upscale it to outSideLength^3 with Filter.
+  // Note: this upscaling is actually considerably less efficient than simply generating the equivalent volume of noise,
+  // except in the case of very complex noise graphs.
   std::unique_ptr<float[]> GenerateAndUpscale3D(const FastNoise::SmartNode<>& node, glm::ivec3 start, int seed, int inSideLength, int outSideLength, Filter filter)
   {
     ZoneScoped;
@@ -825,6 +831,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
   auto globalSurfaceHeightImage = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
 
+  // Used to determine where meadows are. These are flatter areas with fewer trees.
+  auto globalMeadowImage = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE);
+
   auto whiteNoise = FastNoise::New<FastNoise::White>();
   whiteNoise->SetOutputMin(0);
   auto whiteNoise2 = FastNoise::New<FastNoise::White>();
@@ -847,6 +856,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto terrainHeight2D  = FastNoise::New<FastNoise::DomainScale>();
     terrainHeight2D->SetSource(terrainHeight2Da);
     terrainHeight2D->SetScaling(1.0f / sampleScale);
+
+    auto meadowNoise = FastNoise::NewFromEncodedNodeTree("GgUbBRwFHQUXBRgDFgMdBRYCAACAPwcfAwsAAIDHQgQ@CGAQ@BHC@BKJBBB+F6z7//wbsUTg///8DAACamVk///8H/wQA/wcWAgAAgD8H/wQA//8CrkchQP//AgAAgD8GXI/CPv//AgAAgD//");
 
     auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgUL@BIEEEAACAPwg@CDAM@AD/AwY@BgQQTNzEy+C@AoED//w==");
     auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
@@ -875,15 +886,26 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
           Filter::Linear);
 
+        auto meadowImage = GenerateAndUpscale2D(meadowNoise,
+          glm::ivec2((glm::vec2(i, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+          mapGenInfo.seed * 21,
+          TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+          TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+          Filter::Nearest);
+
         for (int y = 0; y < TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE; y++)
         for (int x = 0; x < TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE; x++)
         {
           const auto pModTl = glm::ivec2(x, y);
           const auto positionWS = pModTl + glm::ivec2(i, k) * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
           
-          const auto height = glm::floor(mapGenInfo.seaLevel + 15 * TexelFetch2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl));
+          const auto meadowness = TexelFetch2D(meadowImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+          //float meadowness       = 0.1f;
+          const auto heightScale = glm::mix(15, 4,  meadowness);
+          const auto height = glm::floor(mapGenInfo.seaLevel + heightScale * TexelFetch2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl));
           ImageStore2D(terrainHeightImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl, height);
           ImageStore2D(globalSurfaceHeightImage, grid.topLevelBricksDims_.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
+          ImageStore2D(globalMeadowImage, grid.topLevelBricksDims_.x * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, meadowness);
         }
 
         // Top level bricks
@@ -1015,39 +1037,19 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
       });
   }
 
-  // constexpr int MAX_MUSHROOMS = 50'000;
-  constexpr int MAX_MUSHROOMS = 1;
-#ifndef GAME_HEADLESS
-  progressText.store("MUSHROOM");
-  progress.store(0);
-  total.store(MAX_MUSHROOMS);
-#endif
-  const auto& MUSHROOM = blocks.Get("Shroom");
-  for (int i = 0; i < MAX_MUSHROOMS; i++)
-  {
-    const auto numVoxels = grid.topLevelBricksDims_ * grid.TL_BRICK_VOXELS_PER_SIDE;
-    const auto pos       = glm::ivec3(Rng().RandU32() % numVoxels.x, Rng().RandU32() % numVoxels.y, Rng().RandU32() % numVoxels.z);
-    const auto testPos   = pos - glm::ivec3(0, 1, 0);
-    if (grid.IsPositionInGrid(testPos) && grid.GetVoxelAt(pos) == voxel_t::Air && grid.GetVoxelAt(testPos) != voxel_t::Air)
-    {
-      MUSHROOM.OnTryPlaceBlock(*this, pos);
-    }
-#ifndef GAME_HEADLESS
-    progress.fetch_add(1);
-#endif
-  }
-
 #ifndef GAME_HEADLESS
   progressText.store("Surface foliage");
   total.store(grid.dimensions_.x * grid.dimensions_.z);
   progress.store(0);
 #endif
+
   for (int z = 0; z < grid.dimensions_.z; z++)
   for (int x = 0; x < grid.dimensions_.x; x++)
   {
     const auto y = (int)TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {x, z});
-    
-    if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) < 0.01f)
+    const auto meadowness = TexelFetch2D(globalMeadowImage, grid.dimensions_.x, {x, z});
+
+    if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) > glm::mix(0.99f, 0.998f, meadowness))
     {
       if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
       {
@@ -1064,34 +1066,62 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         }
       }
 
-      const auto grasss = shrimplex2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.3f;
+      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 16) * 0.7f + whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 17) * 0.3f > 0.93f)
+      {
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom").GetBlockId());
+        }
+      }
+      else if (meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) * 0.7f +
+                 whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 25) * 0.3f >
+               0.95f)
+      {
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose").GetBlockId());
+        }
+      }
+      else if (meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 22) * 0.7f + whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 23) * 0.3f >
+               0.93f)
+      {
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion").GetBlockId());
+        }
+      }
+      else // Because it's low priority, grass shouldn't override other foliage.
+      {
+        const auto grasss = meadowness * 0.1f + shrimplex2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) +
+                            whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.3f;
 
-      if (grasss > 0.6f)
-      {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        if (grasss > 0.6f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short").GetBlockId());
+          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          {
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short").GetBlockId());
+          }
         }
-      }
-      if (grasss > 0.7f)
-      {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        if (grasss > 0.7f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium").GetBlockId());
+          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          {
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium").GetBlockId());
+          }
         }
-      }
-      if (grasss > 0.8f)
-      {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        if (grasss > 0.8f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long").GetBlockId());
+          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          {
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long").GetBlockId());
+          }
         }
-      }
-      if (grasss > 0.9f)
-      {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        if (grasss > 0.9f)
         {
-          registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(*this, {x, y, z});
+          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          {
+            registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(*this, {x, y, z});
+          }
         }
       }
     }
