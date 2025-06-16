@@ -1189,25 +1189,38 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             [&](glm::ivec3 positionWS)
             {
               const auto tlLocal = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
-              const auto aboveWS = positionWS + glm::ivec3(0, 1, 0);
-              if (aboveWS.y < grid.dimensions_.y - 1 && grid.GetVoxelAtUnchecked(positionWS) == voxel_t::Air)
+              if (grid.GetVoxelAtUnchecked(positionWS) == voxel_t::Air)
               {
-                const auto aboveBlock = grid.GetVoxelAtUnchecked(aboveWS);
-                if (aboveBlock != voxel_t::Air)
+                const auto aboveWS = positionWS + glm::ivec3(0, 1, 0);
+                const auto belowWS = positionWS + glm::ivec3(0, -1, 0);
+                if (aboveWS.y < grid.dimensions_.y - 1)
                 {
-                  if (TexelFetch3D(simplexImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) +
-                        TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) * 0.3f <
-                      0.05f)
+                  const auto aboveBlock = grid.GetVoxelAtUnchecked(aboveWS);
+                  if (aboveBlock != voxel_t::Air)
                   {
-                    auto lk = std::unique_lock(mutex);
-                    if (aboveBlock == dirt.GetBlockId())
+                    if (TexelFetch3D(simplexImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) +
+                          TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) * 0.3f <
+                        0.05f)
                     {
-                      prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Root"), positionWS);
+                      auto lk = std::unique_lock(mutex);
+                      if (aboveBlock == dirt.GetBlockId())
+                      {
+                        prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Root"), positionWS);
+                      }
+                      else
+                      {
+                        prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Vine"), positionWS);
+                      }
                     }
-                    else
-                    {
-                      prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Vine"), positionWS);
-                    }
+                  }
+                }
+
+                if (belowWS.y > 0)
+                {
+                  const auto belowBlock = grid.GetVoxelAtUnchecked(belowWS);
+                  if (belowBlock == dirt.GetBlockId() && TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) > 0.98f)
+                  {
+                    grid.SetVoxelAtUnchecked(positionWS, blocks.Get("pot").GetBlockId());
                   }
                 }
               }
