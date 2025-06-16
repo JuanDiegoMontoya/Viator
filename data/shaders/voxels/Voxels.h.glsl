@@ -22,6 +22,7 @@ struct Voxels
 #include "../Math.h.glsl"
 #include "../Pbr.h.glsl"
 #include "../Utility.h.glsl"
+#include "../Color.h.glsl"
 
 
 const int BL_BRICK_SIDE_LENGTH = 8;
@@ -944,7 +945,8 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 
   if (bool(material.materialFlags & IS_SUBGRID))
   {
-    return SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
+    const vec3 albedo_srgb_nonlinear = SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
+    return color_sRGB_EOTF(albedo_srgb_nonlinear);
   }
 
   vec3 albedo = material.baseColorFactor;

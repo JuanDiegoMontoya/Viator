@@ -384,6 +384,8 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("leaves_01", false);
   RegisterFoliageBlock("dandelion", true);
   RegisterFoliageBlock("rose", true);
+  RegisterFoliageBlock("pot", true);
+  RegisterFoliageBlock("SM_Deccer_Cubes_Small", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -1088,6 +1090,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
           grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion").GetBlockId());
+        }
+      }
+      else if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) > 0.999f)
+      {
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small").GetBlockId());
         }
       }
       else // Because it's low priority, grass shouldn't override other foliage.
