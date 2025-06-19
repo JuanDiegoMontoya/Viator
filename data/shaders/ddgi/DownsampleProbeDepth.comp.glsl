@@ -3,7 +3,7 @@
 layout(local_size_x = 128) in;
 
 void main()
-{ 
+{
   const int gid = int(gl_GlobalInvocationID.x);
   const int cascade = int(gl_GlobalInvocationID.z);
 
