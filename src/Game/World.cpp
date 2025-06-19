@@ -1109,9 +1109,10 @@ void World::FixedUpdate(float dt)
 
       if (auto* h = registry_.try_get<Hierarchy>(entity))
       {
-        for (auto child : h->children)
+        while (!h->children.empty())
         {
-          registry_.emplace_or_replace<DeferredDelete>(child);
+          auto child = h->children.back();
+          registry_.emplace_or_replace<DeferredDelete>(child); // Removes child from h->children.
           entitiesToDestroy.push(child);
         }
       }
