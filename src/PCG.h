@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Assert2.h"
 #define PCG_USE_UB_OPT
 #include <cstdint>
 
@@ -49,6 +50,12 @@ namespace PCG
     constexpr std::uint32_t RandU32()
     {
       return PCG::RandU32(seed);
+    }
+
+    constexpr std::uint32_t RandU32(std::uint32_t min, std::uint32_t max)
+    {
+      DEBUG_ASSERT(max > min);
+      return RandU32() % (max - min) + min;
     }
 
     constexpr float RandFloat(float min = 0, float max = 1)

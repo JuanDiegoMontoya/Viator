@@ -47,7 +47,7 @@ public:
   // Weakly attempt to place the block at the given position.
   // Returns whether the attempt succeeded (could fail due to
   // insufficient space, e.g. for multiblock structures or if
-  // there's an entity in the way.
+  // there's an entity in the way).
   virtual bool OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition) const;
 
   virtual void OnDestroyBlock(World& world, glm::ivec3 voxelPosition) const;

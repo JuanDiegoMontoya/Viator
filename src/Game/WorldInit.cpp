@@ -21,7 +21,7 @@ public:
     const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
     const auto& items  = world.GetRegistry().ctx().get<ItemRegistry>();
     const auto& air    = blocks.Get("Air");
-    const auto& wood   = blocks.Get("Wood");
+    const auto& wood   = blocks.Get("Wood Plank");
     const auto& chest  = blocks.Get("Cheste");
     const auto& light  = blocks.Get("Light");
 
@@ -140,6 +140,102 @@ public:
   }
 };
 
+class AbandonedHousePrefab : public PrefabDefinition
+{
+public:
+  using PrefabDefinition::PrefabDefinition;
+
+  void Instantiate(World& world, glm::ivec3 worldPos) const override
+  {
+    ZoneScoped;
+    auto& grid         = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& items  = world.GetRegistry().ctx().get<ItemRegistry>();
+    const auto& air    = blocks.Get("Air");
+    const auto& wood   = blocks.Get("Wood Plank");
+    
+    constexpr int MIN_ROOM_DIM = 4;
+    constexpr int MAX_ROOM_DIM = 8;
+    constexpr int ROOM_HEIGHT  = 6;
+    constexpr int MAX_SUPPORT_LENGTH = 10;
+
+    auto& rng             = world.GetRegistry().ctx().get<PCG::Rng>();
+    const auto roomWidth  = rng.RandU32(MIN_ROOM_DIM, MAX_ROOM_DIM + 1);
+    const auto roomLength = rng.RandU32(MIN_ROOM_DIM, MAX_ROOM_DIM + 1);
+    for (uint32_t zl = 0; zl < roomLength; zl++)
+    for (uint32_t xl = 0; xl < roomWidth; xl++)
+    {
+      wood.OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 0, zl));
+      const auto& block = xl == 0 || xl == roomWidth - 1 || zl == 0 || zl == roomLength - 1 ? wood : air;
+      for (uint32_t yl = 1; yl < rng.RandU32(block.GetBlockId() == air.GetBlockId() ? 2 : 1, ROOM_HEIGHT); yl++)
+      {
+        // Fill edges with wood, interior with air.
+        block.OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, yl, zl));
+      }
+
+      // Supporting column
+      if ((xl == 0 || xl == roomWidth - 1) && (zl == 0 || zl == roomLength - 1))
+      {
+        for (int yl = -1; yl > -MAX_SUPPORT_LENGTH; yl--)
+        {
+          const auto pos = worldPos + glm::ivec3(xl, yl, zl);
+          const auto voxel = grid.GetVoxelAt(pos);
+          if (voxel == voxel_t::Air)
+          {
+            wood.OnTryPlaceBlock(world, pos);
+          }
+          else
+          {
+            break;
+          }
+        }
+      }
+    }
+
+    // Furniture and loot
+    if (rng.RandFloat() < 0.75f)
+    {
+      const auto xl = rng.RandU32(1, roomWidth - 1);
+      const auto zl = rng.RandU32(1, roomLength - 1);
+      blocks.Get("table").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+    }
+    
+    if (rng.RandFloat() < 0.75f)
+    {
+      const auto xl = rng.RandU32(1, roomWidth - 1);
+      const auto zl = rng.RandU32(1, roomLength - 1);
+      blocks.Get("chair").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+    }
+
+    for (int i = 0; i < 2; i++)
+    {
+      if (rng.RandFloat() < 0.75f)
+      {
+        const auto xl = rng.RandU32(1, roomWidth - 1);
+        const auto zl = rng.RandU32(1, roomLength - 1);
+        blocks.Get("pot").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+      }
+    }
+
+    if (rng.RandFloat() < 0.65f)
+    {
+      const auto xl = rng.RandU32(1, roomWidth - 1);
+      const auto zl = rng.RandU32(1, roomLength - 1);
+      const auto blockPos = worldPos + glm::ivec3(xl, 1, zl);
+      if (blocks.Get("Cheste").OnTryPlaceBlock(world, blockPos))
+      {
+        auto chestEntity = world.GetBlockEntity(blockPos);
+        ASSERT(chestEntity != entt::null);
+        if (auto [e, i] = world.GetComponentFromDescendant<Inventory>(chestEntity); i)
+        {
+          i->slots[0][0] = {.id = items.GetId("Electrum"), .count = rng.RandU32(1, 20)};
+          i->slots[0][1] = {.id = items.GetId("Suspicious Coin"), .count = 1};
+        }
+      }
+    }
+  }
+};
+
 void World::InitializeGameState()
 {
   ticks_ = 0;
@@ -246,6 +342,7 @@ void World::InitializeGameDefinitions()
 
   [[maybe_unused]] const auto& dirtBlock = blocks.Get(blocks.Add(new BlockDefinition({
     .name        = "Dirt",
+    .initialHealth = 75,
     .damageTier  = 2,
     .damageFlags = BlockDamageFlagBit::PICKAXE,
     .voxelMaterialDesc =
@@ -352,6 +449,17 @@ void World::InitializeGameDefinitions()
       },
   }));
 
+  blocks.Add(new BlockDefinition({
+    .name          = "Wood Plank",
+    .initialHealth = 75,
+    .damageTier    = 1,
+    .damageFlags   = BlockDamageFlagBit::AXE,
+    .voxelMaterialDesc =
+      {
+        .baseColorTexture = "wood_plank_albedo",
+      },
+  }));
+
   auto RegisterFoliageBlock = [&](const char* name, bool dropsSelf) -> BlockId
   {
     auto vox = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(name) + ".vox"));
@@ -386,6 +494,8 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("rose", true);
   RegisterFoliageBlock("pot", true);
   RegisterFoliageBlock("SM_Deccer_Cubes_Small", true);
+  RegisterFoliageBlock("chair", true);
+  RegisterFoliageBlock("table", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -482,6 +592,7 @@ void World::InitializeGameDefinitions()
 
   prefabs.Add(new VinePrefab({.name = "Vine"}));
   prefabs.Add(new RootPrefab({.name = "Root"}));
+  prefabs.Add(new AbandonedHousePrefab({.name = "AbandonedHouse"}));
 
   auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
   crafting.recipes.emplace_back(Crafting::Recipe{
@@ -1153,7 +1264,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto prefabs = std::vector<PrefabAndPosition>();
   prefabs.reserve(100'000);
   auto mutex = std::mutex();
-
+  
   {
     ZoneScopedN("Generate vine positions");
     std::for_each(std::execution::par,
@@ -1245,6 +1356,41 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     {
       prefab->Instantiate(*this, positionWS);
       progress.fetch_add(1);
+    }
+  }
+
+  {
+    constexpr int DUNGEON_CELL_SIZE = 16; // One attempt per cell.
+#ifndef GAME_HEADLESS
+    progressText.store("Ruins");
+    total.store((grid.dimensions_.x / DUNGEON_CELL_SIZE) * (grid.dimensions_.y / DUNGEON_CELL_SIZE) * (grid.dimensions_.z / DUNGEON_CELL_SIZE));
+    progress.store(0);
+#endif
+
+    auto rng = PCG::Rng(mapGenInfo.seed);
+    for (int zt = 0; zt < grid.dimensions_.z / DUNGEON_CELL_SIZE; zt++)
+    for (int yt = 0; yt < grid.dimensions_.y / DUNGEON_CELL_SIZE; yt++)
+    for (int xt = 0; xt < grid.dimensions_.x / DUNGEON_CELL_SIZE; xt++)
+    {
+      progress.fetch_add(1);
+      if (rng.RandFloat() < 0.15f)
+      {
+        const auto posCell = glm::ivec3(xt, yt, zt);
+
+        // Spawn prefab somewhere within the cell.
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+          const auto posSub = glm::ivec3(rng.RandU32() % DUNGEON_CELL_SIZE, rng.RandU32() % DUNGEON_CELL_SIZE, rng.RandU32() % DUNGEON_CELL_SIZE);
+          const auto posWS  = posCell * DUNGEON_CELL_SIZE + posSub;
+
+          const auto surfaceHeight = int(TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {posWS.x, posWS.z}));
+          if (posWS.y <= surfaceHeight - 8 && posWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
+          {
+            registry_.ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(*this, posWS);
+            break;
+          }
+        }
+      }
     }
   }
 
