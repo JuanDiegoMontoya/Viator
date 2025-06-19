@@ -1220,13 +1220,15 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                   const auto belowBlock = grid.GetVoxelAtUnchecked(belowWS);
                   if (belowBlock == dirt.GetBlockId() && TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) > 0.98f)
                   {
-                    grid.SetVoxelAtUnchecked(positionWS, blocks.Get("pot").GetBlockId());
+                    grid.SetVoxelAtNoDirty(positionWS, blocks.Get("pot").GetBlockId());
                   }
                 }
               }
             });
 
           progress.fetch_add(1);
+          grid.MarkTopLevelBrickAndChildrenDirty(tl);
+          grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
         }
       });
   }
