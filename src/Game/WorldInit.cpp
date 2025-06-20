@@ -154,7 +154,7 @@ public:
     const auto& air    = blocks.Get("Air");
     const auto& wood   = blocks.Get("Wood Plank");
     
-    constexpr int MIN_ROOM_DIM = 4;
+    constexpr int MIN_ROOM_DIM = 5;
     constexpr int MAX_ROOM_DIM = 8;
     constexpr int ROOM_HEIGHT  = 6;
     constexpr int MAX_SUPPORT_LENGTH = 10;
@@ -228,7 +228,7 @@ public:
         ASSERT(chestEntity != entt::null);
         if (auto [e, i] = world.GetComponentFromDescendant<Inventory>(chestEntity); i)
         {
-          i->slots[0][0] = {.id = items.GetId("Electrum"), .count = rng.RandU32(1, 20)};
+          i->slots[0][0] = {.id = items.GetId("Electrum"), .count = int(rng.RandU32(1, 20))};
           i->slots[0][1] = {.id = items.GetId("Suspicious Coin"), .count = 1};
         }
       }
