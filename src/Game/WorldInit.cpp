@@ -236,6 +236,55 @@ public:
   }
 };
 
+class FloatingIslandPrefab : public PrefabDefinition
+{
+public:
+  using PrefabDefinition::PrefabDefinition;
+
+  void Instantiate(World& world, glm::ivec3 worldPos) const override
+  {
+    ZoneScoped;
+    auto cloudNoise = FastNoise::NewFromEncodedNodeTree(
+      "JQAK@BBRUFFwUOBQsAAIDSQgRI4erACI/C9b7//wMNBQY@ADiQQT2KFw/CNejEED///8DFgMXBQUDFwUE@BgD//AwAAw/UoP///CxcF/wYAAwQIAACAP////wIK1yM8/waPwvU9////");
+    constexpr auto regionSize = glm::ivec3(75, 32, 75);
+    const auto& blocks        = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& grid          = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    const auto& cloudA        = blocks.Get("cloud");
+    const auto& cloudB        = blocks.Get("Cloud B");
+    const auto seed           = int(world.GetRegistry().ctx().get<PCG::Rng>().RandU32(0, 1 << 20));
+
+    // Island shape
+    for (int zl = -regionSize.z / 2; zl <= regionSize.z / 2; zl++)
+    for (int yl = -regionSize.y / 2; yl <= regionSize.y / 2; yl++)
+    for (int xl = -regionSize.x / 2; xl <= regionSize.x / 2; xl++)
+    {
+      const auto localPos = glm::ivec3(xl, yl, zl);
+      const auto pos      = glm::vec3(localPos + worldPos);
+      const auto density  = cloudNoise->GenSingle3D((float)localPos.x, (float)localPos.y, (float)localPos.z, seed);
+      if (density <= -0.3f)
+      {
+        cloudB.OnTryPlaceBlock(world, pos);
+      }
+      else if (density <= 0)
+      {
+        cloudA.OnTryPlaceBlock(world, pos);
+      }
+    }
+
+    // Find solid location to spawn a structure
+    int structureY = 15;
+    for (; structureY > 0; structureY--)
+    {
+      if (grid.GetVoxelAt(worldPos + glm::ivec3(0, structureY, 0)) != voxel_t::Air)
+      {
+        break;
+      }
+    }
+
+    world.GetRegistry().ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(world, worldPos + glm::ivec3(0, structureY, 0));
+  }
+};
+
 void World::InitializeGameState()
 {
   ticks_ = 0;
@@ -351,6 +400,16 @@ void World::InitializeGameDefinitions()
         .baseColorTexture          = "dirt_albedo",
       },
   })));
+
+  blocks.Add(new BlockDefinition({
+    .name          = "Cloud B",
+    .initialHealth = 50,
+    .damageTier    = 1,
+    .voxelMaterialDesc =
+      {
+        .baseColorFactor = {0.85f, 0.85f, 0.85f}
+      },
+  }));
 
   [[maybe_unused]] const auto stoneBlockId = stoneBlock.GetItemId();
 
@@ -496,6 +555,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("SM_Deccer_Cubes_Small", true);
   RegisterFoliageBlock("chair", true);
   RegisterFoliageBlock("table", true);
+  RegisterFoliageBlock("cloud", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -593,6 +653,7 @@ void World::InitializeGameDefinitions()
   prefabs.Add(new VinePrefab({.name = "Vine"}));
   prefabs.Add(new RootPrefab({.name = "Root"}));
   prefabs.Add(new AbandonedHousePrefab({.name = "AbandonedHouse"}));
+  prefabs.Add(new FloatingIslandPrefab({.name = "FloatingIsland"}));
 
   auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
   crafting.recipes.emplace_back(Crafting::Recipe{
@@ -1359,7 +1420,71 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
+  if (mapGenInfo.spawnYggdrasil)
   {
+    ZoneScopedN("Big Tree");
+    auto bigTreeNoise = FastNoise::NewFromEncodedNodeTree(
+      "FgMVBRoFGwUVBRcFBQMs@EFBgAAgAVDB@AoMAIAACgQP//BwQEAACAP/8LLAAC@BBSUF/wAA////AygJAABvEgM8/wAApptEPP8DLAAC@BBSw@EUlAAI@BFBgQ@C/////wY@C//8CAACAv/8CAACAv/8CAACAP/8DFwUbBQQEzcxMvQYAACDC//8DFgMbBQQEzczMvP8DFQUXBRsFGgUVBQQEj8L1PP8DJQAD@BBSwFBg@APZBB@DI@BP/////8CAACAP///AxUFGQU@CgL///wIK1yM8//8DFQUXBQUHBAQAAIA///8CbxKDOv8D/xsA////Bw8FE@BMZCBQY@ADJQv8CmpnKQv//////BxYCAACAPwcaBRsFHAUdBRUFE@AgDBDBSUABg@BUGAACAg0L//wMXBRUFFwUFBnuUFkP/AlJJnTn/AvYokkL/AmZmpkD//wP/LgD/AgrXo7z/AgAAgD//AgrXo7z/AgAAgD////8=");
+
+    auto& rng          = registry_.ctx().get<PCG::Rng>();
+    const auto fractXZ = glm::vec2(rng.RandFloat(0.4f, 0.6f), rng.RandFloat(0.4f, 0.6f));
+    const auto posXZ   = glm::ivec2(fractXZ * glm::vec2(grid.dimensions_.x, grid.dimensions_.z) + 0.5f);
+    const auto posY    = TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, posXZ);
+    const auto pos     = glm::ivec3(posXZ[0], posY, posXZ[1]);
+    const auto bot     = glm::ivec3(glm::vec3(pos / TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE) + 0.5f);
+    const auto top     = bot + 1 + glm::ivec3(0, 1, 0);
+
+#ifndef GAME_HEADLESS
+    progressText.store("Yggdrasil");
+    const auto dif = top - bot + 1;
+    total.store(dif.x * dif.y * dif.z);
+    progress.store(0);
+#endif
+
+    for (int tz = bot.z; tz <= top.z; tz++)
+    for (int ty = bot.y; ty <= top.y; ty++)
+    for (int tx = bot.x; tx <= top.x; tx++)
+    {
+      const auto tl    = glm::ivec3(tx, ty, tz);
+      const auto image = GenerateAndUpscale3D(bigTreeNoise,
+        tl * TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE - pos,
+        mapGenInfo.seed,
+        TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+        TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+        Filter::Nearest);
+
+      ForEachPositionInTLBrick(tl,
+        [&](glm::ivec3 positionWS)
+        {
+          const auto pModTl = positionWS % TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
+          const auto density = TexelFetch3D(image, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+          // Low-altitude behavior
+          if (positionWS.y < mapGenInfo.seaLevel + 80)
+          {
+            if (density <= 0)
+            {
+              grid.SetVoxelAt(positionWS, blocks.Get("Wood").GetBlockId());
+            }
+          }
+          else
+          {
+            if (density <= -0.032f)
+            {
+              grid.SetVoxelAt(positionWS, blocks.Get("Wood").GetBlockId());
+            }
+            else if (density <= 0.0f)
+            {
+              grid.SetVoxelAt(positionWS, blocks.Get("leaves_01").GetBlockId());
+            }
+          }
+        });
+
+      progress.fetch_add(1);
+    }
+  }
+
+  {
+    ZoneScopedN("Ruins");
     constexpr int DUNGEON_CELL_SIZE = 16; // One attempt per cell.
 #ifndef GAME_HEADLESS
     progressText.store("Ruins");
@@ -1387,6 +1512,43 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           if (posWS.y <= surfaceHeight - 8 && posWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
           {
             registry_.ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(*this, posWS);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  {
+    ZoneScopedN("Floating Islands");
+    constexpr int ISLAND_CELL_SIZE = 64; // One attempt per cell.
+#ifndef GAME_HEADLESS
+    progressText.store("Floating islands");
+    total.store((grid.dimensions_.x / ISLAND_CELL_SIZE) * (grid.dimensions_.y / ISLAND_CELL_SIZE) * (grid.dimensions_.z / ISLAND_CELL_SIZE));
+    progress.store(0);
+#endif
+
+    auto rng = PCG::Rng(mapGenInfo.seed);
+    for (int zt = 0; zt < grid.dimensions_.z / ISLAND_CELL_SIZE; zt++)
+    for (int yt = 0; yt < grid.dimensions_.y / ISLAND_CELL_SIZE; yt++)
+    for (int xt = 0; xt < grid.dimensions_.x / ISLAND_CELL_SIZE; xt++)
+    {
+      progress.fetch_add(1);
+      if (rng.RandFloat() < 0.1f)
+      {
+        const auto posCell = glm::ivec3(xt, yt, zt);
+
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+          // Spawn prefab somewhere within the cell.
+          const auto posSub = glm::ivec3(rng.RandU32() % ISLAND_CELL_SIZE, rng.RandU32() % ISLAND_CELL_SIZE, rng.RandU32() % ISLAND_CELL_SIZE);
+          const auto posWS  = posCell * ISLAND_CELL_SIZE + posSub;
+          const auto posFraction = glm::vec3(posWS) / glm::vec3(grid.dimensions_);
+
+          const auto surfaceHeight = int(TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {posWS.x, posWS.z}));
+          if (posWS.y >= surfaceHeight + 125 && posFraction.x < 0.9f && posFraction.y < 0.9f && posFraction.z < 0.9f)
+          {
+            registry_.ctx().get<PrefabRegistry>().Get("FloatingIsland").Instantiate(*this, posWS);
             break;
           }
         }

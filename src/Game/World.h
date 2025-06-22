@@ -53,6 +53,7 @@ public:
     int worldHeight = 600;
     int seaLevel    = 400;
     int surfaceThickness = 80;
+    bool spawnYggdrasil  = false;
   };
 
   void CreateGrid(glm::ivec3 numChunks);
