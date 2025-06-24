@@ -555,7 +555,11 @@ void Core::Reflection::Initialize()
 
   using namespace Physics;
   REFLECT_COMPONENT(CharacterController)
-    .func<[](World* w, entt::entity e) { w->GivePlayerCharacterController(e); }>("add"_hs);
+    .func<[](World* w, entt::entity e) { w->GivePlayerCharacterController(e); }>("add"_hs)
+    DATA(CharacterController, previousGroundState)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(CharacterController, previousPosition)
+    TRAITS(EDITOR_READ_ONLY);
   
   REFLECT_COMPONENT(CharacterControllerShrimple)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterControllerShrimple(e); }>("add"_hs);
@@ -626,6 +630,12 @@ void Core::Reflection::Initialize()
   REFLECT_ENUM(JPH::EMotionQuality)
     ENUMERATOR(JPH::EMotionQuality, Discrete)
     ENUMERATOR(JPH::EMotionQuality, LinearCast);
+
+  REFLECT_ENUM(JPH::CharacterBase::EGroundState)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, OnGround)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, OnSteepGround)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, NotSupported)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, InAir);
 
   REFLECT_ENUM(JPH::EAllowedDOFs)
     ENUMERATOR(JPH::EAllowedDOFs, None)
@@ -777,7 +787,6 @@ void Core::Reflection::Initialize()
     DATA(Tint, color);
 
   REFLECT_COMPONENT(WalkingMovementAttributes, REPLICATED | TRIVIAL)
-    DATA(WalkingMovementAttributes, runBaseSpeed, PROP_MAX(20.0f))
     DATA(WalkingMovementAttributes, walkModifier)
     DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f));
 

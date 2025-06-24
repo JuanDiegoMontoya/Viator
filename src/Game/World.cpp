@@ -682,7 +682,7 @@ void World::FixedUpdate(float dt)
           UpdateLocalTransform(entity);
         }
 
-        if (auto* attribs = registry_.try_get<const WalkingMovementAttributes>(entity);
+        if (auto* attribs = registry_.try_get<WalkingMovementAttributes>(entity);
           attribs && registry_.any_of<Physics::CharacterController, Physics::CharacterControllerShrimple>(entity))
         {
           const auto rot   = glm::mat3_cast(transform.rotation);
@@ -692,35 +692,89 @@ void World::FixedUpdate(float dt)
           const auto forward = glm::normalize(glm::cross(gUp, right));
 
           // Physics engine factors in deltaTime already
-          float tempSpeed = attribs->runBaseSpeed;
+          float tempSpeed = attribs->acceleration * dt;
           // tempSpeed *= input.sprint ? 2.0f : 1.0f;
           tempSpeed *= input.walk ? attribs->walkModifier : 1.0f;
 
           auto deltaVelocity = glm::vec3(0);
-          deltaVelocity += input.forward * forward * tempSpeed;
-          deltaVelocity += input.strafe * right * tempSpeed;
+          deltaVelocity.y = attribs->gravity * dt;
+          attribs->timeSinceJumped += dt;
 
           if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))
           {
             auto& velocity    = registry_.get<LinearVelocity>(entity).v;
-            auto prevVelocity = velocity;
-            if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround)
+            const auto realVelocity = (transform.position - cc->previousPosition) / dt;
+            //printf("VEL: %f, %f, %f\n", velocity.x, velocity.y, velocity.z);
+            //printf("REAL: %f, %f, %f\n\n", realVelocity.x, realVelocity.y, realVelocity.z);
+            //velocity.x              = abs(velocity.x) < abs(realVelocity.x) ?
+            velocity = glm::mix(realVelocity, velocity, glm::lessThan(glm::abs(velocity), glm::abs(realVelocity)));
+            const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+            deltaVelocity += input.forward * forward * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * dt;
+            deltaVelocity += input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * dt;
+
+            if (isOnGround)
             {
-              deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
-              prevVelocity.y = 0;
+              //deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
+              if (input.jump)
+              {
+                velocity.y      = attribs->jumpInitialImpulse;
+                deltaVelocity.y = 0;
+              }
+              attribs->timeSinceJumped = 0;
             }
             else // if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::InAir)
             {
-              const auto prevY = velocity.y;
               // const auto prevY = cc->character->GetPosition().GetY() - cc->previousPosition.y;
-              deltaVelocity += glm::vec3{0, prevY - 15 * dt, 0};
               // velocity += glm::vec3{0, -15 * dt, 0};
+            }
+            if (cc->previousGroundState == JPH::CharacterBase::EGroundState::OnSteepGround)
+            {
+              //velocity.y = 0;
+            }
+            if (input.jump && attribs->timeSinceJumped < attribs->jumpControlTime)
+            {
+              velocity.y += attribs->jumpAcceleration * dt;
+            }
+            //const auto prevY = velocity.y;
+            //deltaVelocity += glm::vec3{0, -15 * dt, 0};
+
+            // Decelerate
+            const auto velocityXZ = glm::vec2(velocity.x, velocity.z);
+            if (input.forward == 0 && input.strafe == 0 && glm::length(velocityXZ) > 1e-3f)
+            {
+              auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
+              deltaXZ += -glm::normalize(velocityXZ) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              if (glm::dot(deltaXZ + velocityXZ, velocityXZ) < 0)
+              { 
+                deltaXZ = -velocityXZ;
+              }
+              deltaVelocity.x = deltaXZ[0];
+              deltaVelocity.z = deltaXZ[1];
             }
 
             // cc->character->CheckCollision(cc->character->GetPosition(), cc->character->GetRotation(), Physics::ToJolt(velocity), 1e-4f, )
-            velocity = deltaVelocity;
+            velocity += deltaVelocity;
+
+            auto xzVel = glm::vec2(velocity.x, velocity.z);
+            const auto xzSpeed = glm::length(xzVel);
+            if (xzSpeed > attribs->runMaxSpeed)
+            {
+              xzVel = xzVel / xzSpeed * attribs->runMaxSpeed;
+              velocity.x = xzVel[0];
+              velocity.z = xzVel[1];
+            }
+
+            //velocity.x *= 0.8f;
+            //velocity.z *= 0.8f;
+
+            velocity.y = glm::max(velocity.y, attribs->terminalVelocity);
             // printf("ground state: %d. height = %f. velocity.y = %f\n", (int)cc->character->GetGroundState(), cc->character->GetPosition().GetY(),
             // velocity.y); cc->character->AddLinearVelocity(Physics::ToJolt(velocity )); cc->character->AddImpulse(Physics::ToJolt(velocity));
+          }
+          else
+          {
+            deltaVelocity += input.forward * forward * tempSpeed;
+            deltaVelocity += input.strafe * right * tempSpeed;
           }
 
           if (auto* cs = registry_.try_get<const Physics::CharacterControllerShrimple>(entity))

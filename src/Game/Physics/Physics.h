@@ -111,6 +111,7 @@ namespace Physics
   {
     JPH::CharacterVirtual* character;
     JPH::CharacterBase::EGroundState previousGroundState;
+    glm::vec3 previousPosition;
   };
 
   struct CharacterControllerShrimpleSettings

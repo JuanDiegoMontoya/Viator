@@ -28,7 +28,7 @@ entt::entity MeleeFrogDefinition::Spawn(World& world, glm::vec3 position, [[mayb
   registry.emplace<AiHearing>(e);
   registry.emplace<AiTarget>(e);
   registry.emplace<AiWanderBehavior>(e);
-  registry.emplace<WalkingMovementAttributes>(e) = {.runBaseSpeed = 3.5f, .runMaxSpeed = 3.5f};
+  registry.emplace<WalkingMovementAttributes>(e) = {.runMaxSpeed = 3.5f};
 
   auto& contactDamage  = registry.emplace<ContactDamage>(e);
   contactDamage.damage = 10;

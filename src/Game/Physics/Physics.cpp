@@ -322,7 +322,7 @@ namespace Physics
     s->characterCollisionInterface->Add(character);
     registry.emplace_or_replace<Shape>(entity, shape);
     registry.emplace_or_replace<LinearVelocity>(entity);
-    registry.emplace_or_replace<CharacterController>(entity, character);
+    registry.emplace_or_replace<CharacterController>(entity, character, JPH::CharacterBase::EGroundState::OnGround, position);
   }
 
   static void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity)
@@ -580,6 +580,7 @@ namespace Physics
     for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, const GlobalTransform, const LinearVelocity>().each())
     {
       cc.previousGroundState = cc.character->GetGroundState();
+      cc.previousPosition    = transform.position;
 
       cc.character->SetPosition(ToJolt(transform.position));
       //cc.character->SetRotation(ToJolt(transform.rotation));
@@ -600,10 +601,11 @@ namespace Physics
     for (auto& character : s->allCharacters)
     {
       ZoneScopedN("CharacterVirtual->ExtendedUpdate");
+
       character->ExtendedUpdate(dt,
         ToJolt(s->gravity),
         JPH::CharacterVirtual::ExtendedUpdateSettings{
-          //.mStickToFloorStepDown             =,
+          .mStickToFloorStepDown             = JPH::Vec3::sZero(),
           //.mWalkStairsStepUp                 =,
           //.mWalkStairsMinStepForward         =,
           //.mWalkStairsStepForwardTest        =,
