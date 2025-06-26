@@ -788,7 +788,18 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(WalkingMovementAttributes, REPLICATED | TRIVIAL)
     DATA(WalkingMovementAttributes, walkModifier)
-    DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f));
+    DATA(WalkingMovementAttributes, runMaxSpeed, PROP_MAX(20.0f))
+    DATA(WalkingMovementAttributes, terminalVelocity, PROP_MIN(-100.0f), PROP_MAX(0.0f))
+    DATA(WalkingMovementAttributes, gravity, PROP_MIN(-50.0f), PROP_MAX(0.0f))
+    DATA(WalkingMovementAttributes, jumpInitialImpulse, PROP_MAX(25.0f))
+    DATA(WalkingMovementAttributes, jumpAcceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, timeSinceJumped)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(WalkingMovementAttributes, jumpControlTime, PROP_MAX(1.0f))
+    DATA(WalkingMovementAttributes, acceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, deceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, airAcceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, airDeceleration, PROP_MAX(100.0f));
 
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 

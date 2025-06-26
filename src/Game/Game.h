@@ -505,19 +505,19 @@ struct WalkingMovementAttributes
 {
   float walkModifier       = 0.35f;
   float runMaxSpeed        = 4.6f;
-  float terminalVelocity   = -30;
+  float terminalVelocity   = -40;
   float gravity            = -20;
   float jumpInitialImpulse = 6;
-  float jumpAcceleration   = 22;
+  float jumpAcceleration   = 25;
   float timeSinceJumped    = 0;
   float jumpControlTime    = 0.15f;
 
   // Acceleration is applied when holding a movement key.
   // Deceleration is applied opposite of the current velocity and only when NOT pressing a movement key.
-  float acceleration = 35;
-  float deceleration = 35;
-  float airAcceleration = 8;
-  float airDeceleration = 0.5f;
+  float acceleration = 55;
+  float deceleration = 55;
+  float airAcceleration = 15;
+  float airDeceleration = 3.5f;
 };
 
 struct KnockbackMultiplier

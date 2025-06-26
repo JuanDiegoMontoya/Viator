@@ -693,7 +693,6 @@ void World::FixedUpdate(float dt)
 
           // Physics engine factors in deltaTime already
           float tempSpeed = attribs->acceleration * dt;
-          // tempSpeed *= input.sprint ? 2.0f : 1.0f;
           tempSpeed *= input.walk ? attribs->walkModifier : 1.0f;
 
           auto deltaVelocity = glm::vec3(0);
@@ -702,19 +701,18 @@ void World::FixedUpdate(float dt)
 
           if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))
           {
-            auto& velocity    = registry_.get<LinearVelocity>(entity).v;
+            auto& velocity          = registry_.get<LinearVelocity>(entity).v;
             const auto realVelocity = (transform.position - cc->previousPosition) / dt;
-            //printf("VEL: %f, %f, %f\n", velocity.x, velocity.y, velocity.z);
-            //printf("REAL: %f, %f, %f\n\n", realVelocity.x, realVelocity.y, realVelocity.z);
-            //velocity.x              = abs(velocity.x) < abs(realVelocity.x) ?
-            velocity = glm::mix(realVelocity, velocity, glm::lessThan(glm::abs(velocity), glm::abs(realVelocity)));
+            velocity                = glm::mix(realVelocity, velocity, glm::lessThan(glm::abs(velocity), glm::abs(realVelocity)));
+
             const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
-            deltaVelocity += input.forward * forward * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * dt;
-            deltaVelocity += input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * dt;
+            deltaVelocity +=
+              input.forward * forward * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
+            deltaVelocity +=
+              input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
 
             if (isOnGround)
             {
-              //deltaVelocity += input.jump ? gUp * 8.0f : glm::vec3(0);
               if (input.jump)
               {
                 velocity.y      = attribs->jumpInitialImpulse;
@@ -722,54 +720,80 @@ void World::FixedUpdate(float dt)
               }
               attribs->timeSinceJumped = 0;
             }
-            else // if (cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::InAir)
-            {
-              // const auto prevY = cc->character->GetPosition().GetY() - cc->previousPosition.y;
-              // velocity += glm::vec3{0, -15 * dt, 0};
-            }
-            if (cc->previousGroundState == JPH::CharacterBase::EGroundState::OnSteepGround)
-            {
-              //velocity.y = 0;
-            }
             if (input.jump && attribs->timeSinceJumped < attribs->jumpControlTime)
             {
               velocity.y += attribs->jumpAcceleration * dt;
             }
-            //const auto prevY = velocity.y;
-            //deltaVelocity += glm::vec3{0, -15 * dt, 0};
 
-            // Decelerate
+            // Reduce acceleration from normal input if it would make the character go over its max speed.
+            auto deltaXZ1           = glm::vec2(deltaVelocity.x, deltaVelocity.z);
+            auto xzVel              = glm::vec2(velocity.x, velocity.z);
+            const auto xzSpeed      = glm::length(xzVel);
+            const auto realMaxSpeed = attribs->runMaxSpeed * (input.walk ? attribs->walkModifier : 1.0f);
+            if (glm::length(deltaXZ1 + xzVel) > realMaxSpeed)
+            {
+              const auto nextXZVel = glm::normalize(deltaXZ1 + xzVel) * glm::max(realMaxSpeed, xzSpeed);
+              deltaXZ1             = nextXZVel - xzVel;
+              deltaVelocity.x      = deltaXZ1[0];
+              deltaVelocity.z      = deltaXZ1[1];
+            }
+
+            // Decelerate when no forward input is present.
             const auto velocityXZ = glm::vec2(velocity.x, velocity.z);
-            if (input.forward == 0 && input.strafe == 0 && glm::length(velocityXZ) > 1e-3f)
+            const auto forwardXZ  = glm::normalize(glm::vec2(forward.x, forward.z));
+            auto forwardVel       = forwardXZ * glm::dot(velocityXZ, forwardXZ);
+            if (input.forward == 0 && glm::length(forwardVel) > 1e-3f)
             {
               auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
-              deltaXZ += -glm::normalize(velocityXZ) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
-              if (glm::dot(deltaXZ + velocityXZ, velocityXZ) < 0)
+              auto offs    = -glm::normalize(forwardVel) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              if (glm::dot(offs + forwardVel, forwardVel) < 0)
               { 
-                deltaXZ = -velocityXZ;
+                offs = -forwardVel;
               }
+              deltaXZ += offs;
               deltaVelocity.x = deltaXZ[0];
               deltaVelocity.z = deltaXZ[1];
             }
 
-            // cc->character->CheckCollision(cc->character->GetPosition(), cc->character->GetRotation(), Physics::ToJolt(velocity), 1e-4f, )
+            // Decelerate when no strafe input is present.
+            const auto rightXZ = glm::normalize(glm::vec2(right.x, right.z));
+            auto rightVel      = rightXZ * glm::dot(velocityXZ, rightXZ);
+            if (input.strafe == 0 && glm::length(rightVel) > 1e-3f)
+            {
+              auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
+              auto offs    = -glm::normalize(rightVel) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              if (glm::dot(offs + rightVel, rightVel) < 0)
+              {
+                offs = -rightVel;
+              }
+              deltaXZ += offs;
+              deltaVelocity.x = deltaXZ[0];
+              deltaVelocity.z = deltaXZ[1];
+            }
+            
             velocity += deltaVelocity;
 
-            auto xzVel = glm::vec2(velocity.x, velocity.z);
-            const auto xzSpeed = glm::length(xzVel);
-            if (xzSpeed > attribs->runMaxSpeed)
+            // Apply penalty force if going over max speed.
+            auto xzVel2 = glm::vec2(velocity.x, velocity.z);
+            const auto xzSpeed2 = glm::length(xzVel2);
+            if (xzSpeed2 > realMaxSpeed)
             {
-              xzVel = xzVel / xzSpeed * attribs->runMaxSpeed;
-              velocity.x = xzVel[0];
-              velocity.z = xzVel[1];
+              xzVel2 += -glm::normalize(xzVel2) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              // Set speed to max if this penalty would put us under it.
+              if (glm::length(xzVel2) < realMaxSpeed)
+              {
+                xzVel2 = glm::normalize(xzVel2) * realMaxSpeed;
+              }
+              // Reverse direction if penalty would make us go backwards (this can happen when the max speed is very low relative to dt).
+              if (glm::dot(glm::vec2(velocity.x, velocity.z), xzVel2) < 0)
+              {
+                xzVel2 *= -1;
+              }
+              velocity.x = xzVel2[0];
+              velocity.z = xzVel2[1];
             }
 
-            //velocity.x *= 0.8f;
-            //velocity.z *= 0.8f;
-
             velocity.y = glm::max(velocity.y, attribs->terminalVelocity);
-            // printf("ground state: %d. height = %f. velocity.y = %f\n", (int)cc->character->GetGroundState(), cc->character->GetPosition().GetY(),
-            // velocity.y); cc->character->AddLinearVelocity(Physics::ToJolt(velocity )); cc->character->AddImpulse(Physics::ToJolt(velocity));
           }
           else
           {
