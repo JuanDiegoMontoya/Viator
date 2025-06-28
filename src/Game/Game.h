@@ -234,9 +234,27 @@ void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol);
 
 void ScrollHotbarRPC(World& world, entt::entity parent, int32_t offset);
 
+struct ArmorAndAccessories
+{
+  enum Slot : int32_t
+  {
+    SLOT_HEAD,
+    SLOT_BODY,
+    SLOT_LEGS,
+
+    SLOT_COUNT,
+  };
+
+  std::array<ItemState, SLOT_COUNT> slots{};
+
+  void OverwriteSlot(World& world, Slot slot, ItemState itemState);
+};
+
 // If necessary, materializes the item. Then, the item is given a RigidBody and is moved into the new entity.
 entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot);
+entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAccessories::Slot slot);
 entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot);
+entt::entity ThrowItemFromArmorRPC(World& world, entt::entity parent, entt::entity thrower, ArmorAndAccessories::Slot slot);
 
 void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recipe);
 
@@ -244,6 +262,8 @@ void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recip
 bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
 
 void TeleportPlayerRPC(World& world, entt::entity player, LocalTransform transform);
+
+bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot);
 
 // Return to desktop
 struct CloseApplication {};

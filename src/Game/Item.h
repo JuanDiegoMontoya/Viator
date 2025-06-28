@@ -59,6 +59,47 @@ public:
     return glm::vec3{0.25f};
   }
 
+  enum class AllowedSlots
+  {
+    Normal,    // The item can only be placed in normal inventory slots.
+    Head,      // Head slot or normal slots.
+    Body,      // Body slot or normal slots.
+    Legs,      // Leg slot or normal slots.
+    Accessory, // Accessory slots or normal slots.
+    Hidden,    // Can ONLY appear in hidden inventory slots (used for temporary effects).
+  };
+
+  virtual AllowedSlots GetAllowedSlot() const
+  {
+    return AllowedSlots::Normal;
+  }
+
+  enum class EffectType
+  {
+    MovementSpeedModifier,
+    JumpImpulseModifier,
+  };
+
+  [[nodiscard]] virtual float GetHeldEffectAdditive([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, [[maybe_unused]] EffectType type) const
+  {
+    return 0;
+  }
+
+  [[nodiscard]] virtual float GetHeldEffectMultiplicative([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, [[maybe_unused]] EffectType type) const
+  {
+    return 1;
+  }
+
+  [[nodiscard]] virtual float GetWornEffectAdditive([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, [[maybe_unused]] EffectType type) const
+  {
+    return 0;
+  }
+
+  [[nodiscard]] virtual float GetWornEffectMultiplicative([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, [[maybe_unused]] EffectType type) const
+  {
+    return 1;
+  }
+
 protected:
   std::string name_;
 };
@@ -263,3 +304,44 @@ public:
 private:
   SpearCreateInfo createInfo_;
 };
+
+class CSKnife : public Spear
+{
+  using Spear::Spear;
+
+  float GetHeldEffectAdditive([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, EffectType type) const override
+  {
+    if (type == EffectType::MovementSpeedModifier)
+    {
+      return 10;
+    }
+    return 0;
+  }
+};
+
+class Boots : public SpriteItem
+{
+  using SpriteItem::SpriteItem;
+
+  float GetWornEffectMultiplicative(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::MovementSpeedModifier)
+    {
+      return 2;
+    }
+
+    if (type == EffectType::JumpImpulseModifier)
+    {
+      return 2;
+    }
+
+    return 1;
+  }
+
+  AllowedSlots GetAllowedSlot() const override
+  {
+    return AllowedSlots::Legs;
+  }
+};
+
+[[nodiscard]] float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::EffectType effect, float base);

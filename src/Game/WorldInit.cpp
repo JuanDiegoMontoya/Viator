@@ -375,6 +375,9 @@ void World::InitializeGameDefinitions()
   [[maybe_unused]] const auto opPickaxeId   = items.Add(new RainbowTool("OP Pickaxe", {"pickaxe", {1, 1, 1}, 1000, 100, BlockDamageFlagBit::ALL_TOOLS, 0.1f}));
   [[maybe_unused]] const auto stoneSpearId  = items.Add(new Spear("Stone Spear", {.tint = {0.2f, 0.2f, 0.2f}}));
   [[maybe_unused]] const auto copperSpearId = items.Add(new Spear("Copper Spear", {.damage = 20, .knockback = 5, .tint = {.78f, .51f, .27f}}));
+  [[maybe_unused]] const auto speedSpearId  = items.Add(new CSKnife("SPEED Spear", {.tint = {0.2f, 0.2f, 0.3f}}));
+
+  items.Add(new Boots("Super Frog Boots", "potion_healing"));
 
   auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
 

@@ -511,6 +511,48 @@ void TeleportPlayerRPC(World& world, entt::entity player, LocalTransform transfo
   world.UpdateLocalTransform(player);
 }
 
+bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot)
+{
+  auto* inventory1 = world.GetRegistry().try_get<Inventory>(parent1);
+  auto* armor2 = world.GetRegistry().try_get<ArmorAndAccessories>(parent2);
+  if (!inventory1 || !armor2)
+  {
+    spdlog::warn("Failed to swap inventory slot and armor slot.");
+    return false;
+  }
+
+  auto item1 = inventory1->slots[parent1Slot.x][parent1Slot.y];
+  auto item2 = armor2->slots[parent2Slot];
+
+  auto item1Target = ItemDefinition::AllowedSlots::Accessory;
+
+  if (parent2Slot == ArmorAndAccessories::SLOT_HEAD)
+  {
+    item1Target = ItemDefinition::AllowedSlots::Head;
+  }
+
+  if (parent2Slot == ArmorAndAccessories::SLOT_BODY)
+  {
+    item1Target = ItemDefinition::AllowedSlots::Body;
+  }
+
+  if (parent2Slot == ArmorAndAccessories::SLOT_LEGS)
+  {
+    item1Target = ItemDefinition::AllowedSlots::Legs;
+  }
+
+  // Check that target for the item being moved into restricted slots is compatible.
+  if (item1.id != nullItem && world.GetRegistry().ctx().get<ItemRegistry>().Get(item1.id).GetAllowedSlot() != item1Target)
+  {
+    return false;
+  }
+
+  inventory1->OverwriteSlot(world, parent1Slot, item2, parent1);
+  armor2->OverwriteSlot(world, parent2Slot, item1);
+
+  return true;
+}
+
 glm::vec3 GetForward(glm::quat rotation)
 {
   return -glm::mat3_cast(rotation)[2];
@@ -660,6 +702,36 @@ entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
   return entity;
 }
 
+entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAccessories::Slot slot)
+{
+  auto* armor = world.GetRegistry().try_get<ArmorAndAccessories>(parent);
+  if (!armor)
+  {
+    spdlog::warn("Could not drop item: missing ArmorAndAccessories");
+    return entt::null;
+  }
+
+  if (slot < 0 || slot >= ArmorAndAccessories::SLOT_COUNT)
+  {
+    spdlog::warn("Could not drop item: bad armor slot");
+    return entt::null;
+  }
+
+  auto& item = armor->slots[slot];
+  if (item.id == nullItem)
+  {
+    return entt::null;
+  }
+
+  const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
+
+  auto entity = def.Materialize(world);
+  def.GiveCollider(world, entity);
+  world.GetRegistry().emplace<DroppedItem>(entity).item = std::exchange(item, {});
+  world.GetRegistry().emplace<CannotBePickedUp>(entity).remainingSeconds = 1.0f;
+  return entity;
+}
+
 entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot)
 {
   auto* userTransform = world.GetRegistry().try_get<const GlobalTransform>(thrower);
@@ -676,6 +748,28 @@ entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity throwe
     const auto pos = userTransform->position + throwdir * 1.0f;
     world.GetRegistry().get<LocalTransform>(dropped).position = pos;
     world.GetRegistry().get<LinearVelocity>(dropped).v = throwdir * 3.0f;
+    world.UpdateLocalTransform(dropped);
+  }
+
+  return dropped;
+}
+
+entt::entity ThrowItemFromArmorRPC(World& world, entt::entity parent, entt::entity thrower, ArmorAndAccessories::Slot slot)
+{
+  auto* userTransform = world.GetRegistry().try_get<const GlobalTransform>(thrower);
+  if (!userTransform)
+  {
+    spdlog::warn("Failed to throw item: thrower does not have global transform");
+    return entt::null;
+  }
+
+  auto dropped = DropItemFromArmorRPC(world, parent, slot);
+  if (dropped != entt::null)
+  {
+    const auto throwdir                                       = GetForward(userTransform->rotation);
+    const auto pos                                            = userTransform->position + throwdir * 1.0f;
+    world.GetRegistry().get<LocalTransform>(dropped).position = pos;
+    world.GetRegistry().get<LinearVelocity>(dropped).v        = throwdir * 3.0f;
     world.UpdateLocalTransform(dropped);
   }
 
@@ -946,4 +1040,9 @@ void NpcSpawnDirector::Update(float dt)
       }
     }
   }
+}
+
+void ArmorAndAccessories::OverwriteSlot([[maybe_unused]] World& world, Slot slot, ItemState itemState)
+{
+  slots[slot] = itemState;
 }

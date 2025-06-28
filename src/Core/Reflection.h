@@ -36,6 +36,10 @@ namespace Core::Reflection
     // The type can be trivially copied (e.g. by memcpy) instead of member-wise copied.
     // Takes precedence over specific serialize functions.
     TRIVIAL = 1 << 6,
+
+    // The type is a base class and owning pointers to it (via std::unique_ptr) will be serialized using the concrete type.
+    // An ID will be serialized along with the concrete type.
+    POLYMORPHIC = 1 << 7,
   };
 
   constexpr Traits operator|(Traits a, Traits b)

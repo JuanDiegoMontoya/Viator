@@ -8,6 +8,8 @@
 #include "entt/meta/meta.hpp"
 #include "entt/meta/resolve.hpp"
 #include "entt/meta/factory.hpp"
+#include "entt/meta/template.hpp"
+#include "entt/meta/pointer.hpp"
 #include "entt/core/hashed_string.hpp"
 
 #include "cereal/cereal.hpp"
@@ -147,6 +149,26 @@ namespace Core::Serialization
         [[maybe_unused]] auto succ = value.assign(value.type().construct(variantTypeInstance));
         ASSERT(succ);
       }
+      return;
+    }
+
+    // Serialize unique ptrs
+    if (value.type().is_template_specialization() && value.type().template_type().info() == entt::type_id<entt::meta_class_template_tag<std::unique_ptr>>())
+    {
+      ASSERT(false, "TODO: Implement.");
+      ASSERT(value.type().is_pointer_like());
+      const auto pointeeType = value.type().remove_pointer();
+      auto ref = *value;
+      if (pointeeType.traits<Traits>() & Traits::POLYMORPHIC)
+      {
+        // Write ID of type first
+        // TODO: Get ID
+      }
+      else
+      {
+        //Serialize<Save>(ar, );
+      }
+
       return;
     }
 

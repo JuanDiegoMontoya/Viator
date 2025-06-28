@@ -386,3 +386,66 @@ entt::entity SpriteItem::Materialize(World& world) const
   world.GetRegistry().emplace<Name>(self, GetName());
   return self;
 }
+
+float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::EffectType effect, float base)
+{
+  // Additive
+  float sum = 0;
+  if (auto* inv = world.GetRegistry().try_get<const Inventory>(entity))
+  {
+    for (size_t rowIdx = 0; rowIdx < inv->slots.size(); rowIdx++)
+    {
+      for (size_t colIdx = 0; colIdx < inv->slots[rowIdx].size(); colIdx++)
+      {
+        const auto& slot = inv->slots[rowIdx][colIdx];
+        if (slot.id != nullItem && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
+        {
+          sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetHeldEffectAdditive(world, entity, effect);
+        }
+      }
+    }
+  }
+
+  if (auto* armor = world.GetRegistry().try_get<const ArmorAndAccessories>(entity))
+  {
+    for (int i = 0; i < ArmorAndAccessories::SLOT_COUNT; i++)
+    {
+      const auto& slot = armor->slots[i];
+      if (slot.id != nullItem)
+      {
+        sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetWornEffectAdditive(world, entity, effect);
+      }
+    }
+  }
+
+  // Multiplicative
+  float product = 1;
+  if (auto* inv = world.GetRegistry().try_get<const Inventory>(entity))
+  {
+    for (size_t rowIdx = 0; rowIdx < inv->slots.size(); rowIdx++)
+    {
+      for (size_t colIdx = 0; colIdx < inv->slots[rowIdx].size(); colIdx++)
+      {
+        const auto& slot = inv->slots[rowIdx][colIdx];
+        if (slot.id != nullItem && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
+        {
+          product *= world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetHeldEffectMultiplicative(world, entity, effect);
+        }
+      }
+    }
+  }
+
+  if (auto* armor = world.GetRegistry().try_get<const ArmorAndAccessories>(entity))
+  {
+    for (int i = 0; i < ArmorAndAccessories::SLOT_COUNT; i++)
+    {
+      const auto& slot = armor->slots[i];
+      if (slot.id != nullItem)
+      {
+        product *= world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetWornEffectMultiplicative(world, entity, effect);
+      }
+    }
+  }
+
+  return (base + sum) * product;
+}

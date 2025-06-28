@@ -1198,6 +1198,7 @@ void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)
            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
            .path  = GetShaderDirectory() / "ddgi/TraceProbes.comp.glsl",
       },
+    .useMinSubgroupSize = true,
   });
 
   ddgi.convolveIrradiancePipeline = GetPipelineManager().EnqueueCompileComputePipeline({

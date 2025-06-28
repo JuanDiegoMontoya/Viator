@@ -715,7 +715,7 @@ void World::FixedUpdate(float dt)
             {
               if (input.jump)
               {
-                velocity.y      = attribs->jumpInitialImpulse;
+                velocity.y      = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }
               attribs->timeSinceJumped = 0;
@@ -729,7 +729,8 @@ void World::FixedUpdate(float dt)
             auto deltaXZ1           = glm::vec2(deltaVelocity.x, deltaVelocity.z);
             auto xzVel              = glm::vec2(velocity.x, velocity.z);
             const auto xzSpeed      = glm::length(xzVel);
-            const auto realMaxSpeed = attribs->runMaxSpeed * (input.walk ? attribs->walkModifier : 1.0f);
+            const auto baseMaxSpeed = attribs->runMaxSpeed * (input.walk ? attribs->walkModifier : 1.0f);
+            const auto realMaxSpeed = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::MovementSpeedModifier, baseMaxSpeed);
             if (glm::length(deltaXZ1 + xzVel) > realMaxSpeed)
             {
               const auto nextXZVel = glm::normalize(deltaXZ1 + xzVel) * glm::max(realMaxSpeed, xzSpeed);
@@ -1381,6 +1382,7 @@ entt::entity World::CreatePlayer()
   inventory.OverwriteSlot(*this, {0, 0}, {items.GetId("Stone Spear")}, p);
   inventory.OverwriteSlot(*this, {0, 1}, {items.GetId("Stone Pickaxe")}, p);
   inventory.OverwriteSlot(*this, {0, 2}, {items.GetId("Stone Axe")}, p);
+  registry_.emplace<ArmorAndAccessories>(p);
 
   GivePlayerColliders(p);
 

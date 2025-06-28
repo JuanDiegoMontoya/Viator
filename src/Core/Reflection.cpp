@@ -13,6 +13,7 @@
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
+#include "entt/meta/template.hpp"
 #include "entt/core/hashed_string.hpp"
 #include "spdlog/spdlog.h"
 
@@ -431,6 +432,13 @@ void Core::Reflection::Initialize()
       std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);    \
       return value;                                                           \
     }>("value"_hs)
+#define PTR_FUNCS(T)                                                           \
+  func<[]() { return new T(); }>("make_raw_ptr"_hs)                            \
+  func<[]() { return std::make_unique<T>(); }>("make_unique_ptr"_hs)           \
+  func<[]() { return std::make_shared<T>(); }>("make_shared_ptr"_hs)           \
+  func<[](T*& p, T* v) { p = v; }>("reset_raw_ptr"_hs)                         \
+  func<[](std::unique_ptr<T>& p, T* v) { p.reset(v); }>("reset_unique_ptr"_hs) \
+  func<[](std::shared_ptr<T>& p, T* v) { p.reset(v); }>("reset_shared_ptr"_hs) \
 
   #define REGISTER_RPC(Function, Traits) \
     entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
@@ -800,7 +808,7 @@ void Core::Reflection::Initialize()
     DATA(WalkingMovementAttributes, deceleration, PROP_MAX(100.0f))
     DATA(WalkingMovementAttributes, airAcceleration, PROP_MAX(100.0f))
     DATA(WalkingMovementAttributes, airDeceleration, PROP_MAX(100.0f));
-
+  
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
   REFLECT_ENUM(Math::Easing)
@@ -875,6 +883,9 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
   REGISTER_RPC(TeleportPlayerRPC, RpcTraits::Client);
   REGISTER_RPC(ScrollHotbarRPC, RpcTraits::Server);
+  REGISTER_RPC(SwapInventorySlotAndArmorSlotRPC, RpcTraits::Server);
+  REGISTER_RPC(ThrowItemFromArmorRPC, RpcTraits::Server);
+  REGISTER_RPC(DropItemFromArmorRPC, RpcTraits::Server);
 
   REFLECT_ENUM(ActionType);
 

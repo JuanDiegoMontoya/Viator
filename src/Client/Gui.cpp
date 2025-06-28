@@ -112,16 +112,22 @@ namespace
     std::filesystem::rename(tempPath, sServerListPath);
   }
 
+  struct InventoryDragDropPayload
+  {
+    glm::ivec2 sourceRowCol;
+    entt::entity sourceEntity;
+  };
+
+  struct ArmorDragDropPayload
+  {
+    ArmorAndAccessories::Slot slot;
+    entt::entity sourceEntity;
+  };
+
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
   void DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
   {
-    struct InventoryDragDropPayload
-    {
-      glm::ivec2 sourceRowCol;
-      entt::entity sourceEntity;
-    };
-
     auto title = "Inventory" + std::to_string(std::underlying_type_t<entt::entity>(parent));
     if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
@@ -167,9 +173,15 @@ namespace
           {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("INVENTORY_SLOT"))
             {
-              assert(payload->DataSize == sizeof(InventoryDragDropPayload));
+              DEBUG_ASSERT(payload->DataSize == sizeof(InventoryDragDropPayload));
               const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
               Networking::CallRPC("SwapInventorySlotsRPC"_hs, world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, currentSlotCoord);
+            }
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ARMOR_SLOT"))
+            {
+              DEBUG_ASSERT(payload->DataSize == sizeof(ArmorDragDropPayload));
+              const auto armorPayload = *static_cast<const ArmorDragDropPayload*>(payload->Data);
+              Networking::CallRPC("SwapInventorySlotAndArmorSlotRPC"_hs, world, parent, currentSlotCoord, armorPayload.sourceEntity, armorPayload.slot);
             }
             ImGui::EndDragDropTarget();
           }
@@ -194,14 +206,68 @@ namespace
         {
           if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("INVENTORY_SLOT"))
           {
-            assert(payload->DataSize == sizeof(InventoryDragDropPayload));
+            DEBUG_ASSERT(payload->DataSize == sizeof(InventoryDragDropPayload));
             const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
-
             Networking::CallRPC("ThrowItemRPC"_hs, world, inventoryPayload.sourceEntity, user, inventoryPayload.sourceRowCol);
+          }
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ARMOR_SLOT"))
+          {
+            DEBUG_ASSERT(payload->DataSize == sizeof(ArmorDragDropPayload));
+            const auto armorPayload = *static_cast<const ArmorDragDropPayload*>(payload->Data);
+            Networking::CallRPC("ThrowItemFromArmorRPC"_hs, world, armorPayload.sourceEntity, user, armorPayload.slot);
           }
           ImGui::EndDragDropTarget();
         }
       }
+      ImGui::PopStyleVar();
+    }
+    ImGui::End();
+  }
+
+  void DrawArmorAndAccessories(World& world, entt::entity parent, [[maybe_unused]] entt::entity user, ArmorAndAccessories& armorAndAccessories)
+  {
+    auto title = "ArmorAndAccessories" + std::to_string(std::underlying_type_t<entt::entity>(parent));
+    if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
+    {
+      ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0.5f, 0.5f});
+      ImGui::BeginTable(title.c_str(), 1, ImGuiTableFlags_Borders);
+      for (size_t i = 0; i < ArmorAndAccessories::SLOT_COUNT; i++)
+      {
+        ImGui::PushID(int(i));
+        ImGui::TableNextColumn();
+        auto& slot          = armorAndAccessories.slots[i];
+        std::string nameStr = "";
+        if (slot.id != nullItem)
+        {
+          const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id);
+          nameStr         = def.GetName();
+        }
+        const auto cursorPos = ImGui::GetCursorPos();
+        ImGui::Selectable(("##" + nameStr).c_str(), false, 0, {50, 50});
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+        {
+          const auto dragDropPayload = ArmorDragDropPayload{
+            .slot = ArmorAndAccessories::Slot(i),
+            .sourceEntity = parent,
+          };
+          ImGui::SetDragDropPayload("ARMOR_SLOT", &dragDropPayload, sizeof(dragDropPayload));
+          ImGui::Text("%s", nameStr.c_str());
+          ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget())
+        {
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("INVENTORY_SLOT"))
+          {
+            DEBUG_ASSERT(payload->DataSize == sizeof(InventoryDragDropPayload));
+            const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
+            Networking::CallRPC("SwapInventorySlotAndArmorSlotRPC"_hs,world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, ArmorAndAccessories::Slot(i));
+          }
+        }
+        ImGui::SetCursorPos(cursorPos);
+        ImGui::TextWrapped("%s", nameStr.c_str());
+        ImGui::PopID();
+      }
+      ImGui::EndTable();
       ImGui::PopStyleVar();
     }
     ImGui::End();
@@ -493,12 +559,21 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     DrawInventory(world, playerEntity, playerEntity, inventory, !p.inventoryIsOpen);
 
+    if (p.inventoryIsOpen)
+    {
+      DrawArmorAndAccessories(world, playerEntity, playerEntity, world.GetRegistry().get<ArmorAndAccessories>(playerEntity));
+    }
+
     if (world.GetRegistry().valid(p.openContainerId))
     {
       if (auto* ip = world.GetRegistry().try_get<Inventory>(p.openContainerId))
       {
         p.inventoryIsOpen = true;
         DrawInventory(world, p.openContainerId, playerEntity, *ip);
+      }
+      if (auto* ap = world.GetRegistry().try_get<ArmorAndAccessories>(p.openContainerId))
+      {
+        DrawArmorAndAccessories(world, p.openContainerId, playerEntity, *ap);
       }
     }
 
