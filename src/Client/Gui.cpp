@@ -9,6 +9,7 @@
 #include "Game/Networking/Server.h"
 #include "Core/Assert2.h"
 #include "GuiHelpers.h"
+#include "Game/Item.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -30,7 +31,6 @@
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
-#include "Game/Item.h"
 
 // toml contains two instances of unreachable code in release mode.
 #include "platform/choc_DisableAllWarnings.h"
@@ -45,6 +45,7 @@
 #include <atomic>
 #include <fstream>
 #include <filesystem>
+#include <format>
  
 namespace
 {
@@ -124,6 +125,119 @@ namespace
     entt::entity sourceEntity;
   };
 
+  void DrawTooltipForItem(World& world, entt::entity parent, const ItemState& item)
+  {
+    if (item.id == nullItem)
+    {
+      return;
+    }
+    const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
+    auto text       = def.GetName();
+
+    auto GetWornEffectTextMul = [&](ItemDefinition::EffectType type, const char* name)
+    {
+      const auto effectAmount = def.GetWornEffectMultiplicative(world, parent, type);
+      if (effectAmount != 1)
+      {
+        return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
+      }
+
+      return std::string();
+    };
+    auto GetWornEffectTextAdd = [&](ItemDefinition::EffectType type, const char* name)
+    {
+      const auto effectAmount = def.GetWornEffectAdditive(world, parent, type);
+      if (effectAmount != 0)
+      {
+        return std::format("+{:.0f} {}\n", effectAmount, name);
+      }
+
+      return std::string();
+    };
+
+    auto GetHeldEffectTextMul = [&](ItemDefinition::EffectType type, const char* name)
+    {
+      const auto effectAmount = def.GetHeldEffectMultiplicative(world, parent, type);
+      if (effectAmount != 1)
+      {
+        return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
+      }
+
+      return std::string();
+    };
+    auto GetHeldEffectTextAdd = [&](ItemDefinition::EffectType type, const char* name)
+    {
+      const auto effectAmount = def.GetHeldEffectAdditive(world, parent, type);
+      if (effectAmount != 0)
+      {
+        return std::format("+{:.0f} {}\n", effectAmount, name);
+      }
+
+      return std::string();
+    };
+
+    auto GetUseEffectText = [&](ItemDefinition::EffectType type, const char* name)
+    {
+      const auto effectAmount = def.GetUseEffect(world, parent, type);
+      if (effectAmount != 0)
+      {
+        return std::format("{:.0f} {}\n", effectAmount, name);
+      }
+
+      return std::string();
+    };
+
+    bool written = false;
+
+    // Use effects
+    auto usedText = std::string();
+    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    {
+      const auto type = ItemDefinition::EffectType(i);
+      const auto name = Core::Reflection::EnumToString(type);
+      usedText += GetUseEffectText(type, name);
+    }
+
+    if (!usedText.empty())
+    {
+      text += "\n\nOn use:\n" + usedText;
+      written = true;
+    }
+
+    // Worn effects
+    auto equippedText = std::string();
+    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    {
+      const auto type = ItemDefinition::EffectType(i);
+      const auto name = Core::Reflection::EnumToString(type);
+      equippedText += GetWornEffectTextAdd(type, name);
+      equippedText += GetWornEffectTextMul(type, name);
+    }
+
+    if (!equippedText.empty())
+    {
+      text += "\n\nWhen equipped:\n" + equippedText;
+      written = true;
+    }
+
+    // Held effects
+    auto heldText = std::string();
+    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    {
+      const auto type = ItemDefinition::EffectType(i);
+      const auto name = Core::Reflection::EnumToString(type);
+      heldText += GetHeldEffectTextAdd(type, name);
+      heldText += GetHeldEffectTextMul(type, name);
+    }
+
+    if (!heldText.empty())
+    {
+      text += std::string(!written ? "\n" : "") + "\nWhen held:\n" + heldText;
+    }
+
+    ImGui::SetTooltip("%s", text.c_str());
+  }
+
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
   void DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
@@ -158,6 +272,10 @@ namespace
           if (ImGui::Selectable(("##" + nameStr).c_str(), inventory.canHaveActiveItem && inventory.activeSlotCoord == currentSlotCoord, 0, {50, 50}))
           {
             Networking::CallRPC("SetActiveSlotRPC"_hs, world, parent, currentSlotCoord);
+          }
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+          {
+            DrawTooltipForItem(world, parent, slot);
           }
           if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
           {
@@ -244,6 +362,10 @@ namespace
         }
         const auto cursorPos = ImGui::GetCursorPos();
         ImGui::Selectable(("##" + nameStr).c_str(), false, 0, {50, 50});
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        {
+          DrawTooltipForItem(world, parent, slot);
+        }
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
         {
           const auto dragDropPayload = ArmorDragDropPayload{
@@ -628,6 +750,10 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           {
             const auto& def = itemRegistry.Get(output.item);
             ImGui::TextWrapped("%s: %d", def.GetName().c_str(), output.count);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+              DrawTooltipForItem(world, playerEntity, {.id = output.item, .count = output.count});
+            }
           }
           ImGui::Unindent();
 
@@ -637,6 +763,10 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           {
             const auto& def = itemRegistry.Get(ingredient.item);
             ImGui::TextWrapped("%s: %d", def.GetName().c_str(), ingredient.count);
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+              DrawTooltipForItem(world, playerEntity, {.id = ingredient.item, .count = ingredient.count});
+            }
           }
           ImGui::Unindent();
           if (recipe.craftingStation != voxel_t::Air)

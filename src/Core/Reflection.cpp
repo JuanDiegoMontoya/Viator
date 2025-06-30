@@ -7,6 +7,7 @@
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"
 #include "Game/Networking/Client.h"
+#include "Game/Item.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 
 #include "imgui.h"
@@ -367,6 +368,15 @@ const char* Core::Reflection::EnumToString(entt::meta_any value)
       dataProps = *mp;
     }
 
+    if (auto it = dataProps.find("display_name"_hs); it != dataProps.end())
+    {
+      auto name = it->second.cast<const char*>();
+      if (value == data.get({}))
+      {
+        return name;
+      }
+    }
+
     if (auto it = dataProps.find("name"_hs); it != dataProps.end())
     {
       auto name = it->second.cast<const char*>();
@@ -408,6 +418,7 @@ void Core::Reflection::Initialize()
 #define PROP_SPEED(Scalar) {"speed"_hs, Scalar}
 #define PROP_MIN(Scalar) {"min"_hs, Scalar}
 #define PROP_MAX(Scalar) {"max"_hs, Scalar}
+#define PROP_DISPLAY_NAME(Name) {"display_name"_hs, Name}
 #define REFLECT_ENUM(T) entt::meta_factory<T>{}\
   .func<[](T value) { return static_cast<std::underlying_type_t<T>>(value); }>("to_underlying"_hs)
 #define ENUMERATOR(E, Member, ...) \
@@ -907,4 +918,11 @@ void Core::Reflection::Initialize()
     ENUMERATOR(GameState, PAUSED_SETTINGS)
     ENUMERATOR(GameState, SERVER_SELECT)
     ENUMERATOR(GameState, SERVER_SELECT_ADD_SERVER);
+
+  REFLECT_ENUM(ItemDefinition::EffectType)
+    ENUMERATOR(ItemDefinition::EffectType, MovementSpeedModifier, PROP_DISPLAY_NAME("Speed"))
+    ENUMERATOR(ItemDefinition::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
+    ENUMERATOR(ItemDefinition::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
+    ENUMERATOR(ItemDefinition::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
+    ENUMERATOR(ItemDefinition::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
 }

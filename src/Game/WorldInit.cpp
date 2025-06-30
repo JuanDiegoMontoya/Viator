@@ -713,6 +713,10 @@ void World::InitializeGameDefinitions()
     {{gunId, 1}, {wormSummonItemId, 1}},
     {{flareGunId, 1}},
   });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {},
+    {{speedSpearId, 1}},
+  });
 
   auto& loot        = registry_.ctx().insert_or_assign<LootRegistry>({});
   auto standardLoot = std::make_unique<LootDrops>();

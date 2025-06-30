@@ -74,11 +74,20 @@ public:
     return AllowedSlots::Normal;
   }
 
-  enum class EffectType
+  enum class EffectType : int32_t
   {
     MovementSpeedModifier,
     JumpImpulseModifier,
+    ArmorModifier,
+    BaseDamage,
+    Knockback,
+    EFFECT_COUNT,
   };
+
+  [[nodiscard]] virtual float GetUseEffect(World&, entt::entity, EffectType) const
+  {
+    return 0;
+  }
 
   [[nodiscard]] virtual float GetHeldEffectAdditive([[maybe_unused]] World& world, [[maybe_unused]] entt::entity parent, [[maybe_unused]] EffectType type) const
   {
@@ -301,6 +310,21 @@ public:
     return createInfo_.useDt;
   }
 
+  float GetUseEffect(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::BaseDamage)
+    {
+      return createInfo_.damage;
+    }
+
+    if (type == EffectType::Knockback)
+    {
+      return createInfo_.knockback;
+    }
+
+    return 0;
+  }
+
 private:
   SpearCreateInfo createInfo_;
 };
@@ -327,7 +351,7 @@ class Boots : public SpriteItem
   {
     if (type == EffectType::MovementSpeedModifier)
     {
-      return 2;
+      return 2.12345f;
     }
 
     if (type == EffectType::JumpImpulseModifier)
@@ -338,9 +362,24 @@ class Boots : public SpriteItem
     return 1;
   }
 
+  float GetHeldEffectAdditive(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::MovementSpeedModifier)
+    {
+      return 1.2345f;
+    }
+
+    return 0;
+  }
+
   AllowedSlots GetAllowedSlot() const override
   {
     return AllowedSlots::Legs;
+  }
+
+  int GetMaxStackSize() const override
+  {
+    return 1;
   }
 };
 
