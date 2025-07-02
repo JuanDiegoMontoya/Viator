@@ -20,6 +20,7 @@
 #include "Fvog/detail/Common.h"
 #include "PipelineManager.h"
 #include "VoxelRenderer.h"
+#include "PlayerAudio.h"
 
 #include "ImGui/imgui_impl_fvog.h"
 #include <imgui.h>
@@ -178,6 +179,7 @@ void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
   ZoneScopedN("PlayerHead::VariableUpdatePre");
   worldThisFrame_   = &world;
 
+  audio_->FreeUnusedResources();
   inputSystem_->VariableUpdatePre(dt, world, swapchainOk);
 }
 
@@ -228,6 +230,24 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
       {
         world.GetRegistry().get<RenderTransform>(entity).transform = transform;
       }
+
+      if (const auto* emitter = world.GetRegistry().try_get<const SoundEmitter>(entity))
+      {
+        if (auto ptr = emitter->handle.lock())
+        {
+          ptr->SetPosition(rtransform.transform.position);
+          if (const auto* velocity = world.GetRegistry().try_get<const LinearVelocity>(entity))
+          {
+            ptr->SetVelocity(velocity->v);
+          }
+        }
+      }
+    }
+
+    if (auto entity = world.TryGetLocalPlayer(); entity != entt::null)
+    {
+      const auto& [transform, velocity] = world.GetRegistry().get<const RenderTransform, const LinearVelocity>(entity);
+      GetAudio()->UpdateListener(transform.transform.position, GetForward(transform.transform.rotation), velocity.v);
     }
   }
 
@@ -257,6 +277,11 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
 void PlayerHead::CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions)
 {
   voxelRenderer_->CreateRenderingMaterials(blockDefinitions);
+}
+
+Audio* PlayerHead::GetAudio()
+{
+  return audio_.get();
 }
 
 PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.presentMode)
@@ -460,6 +485,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
 
   voxelRenderer_ = std::make_unique<VoxelRenderer>(this, *createInfo.world);
   inputSystem_   = std::make_unique<InputSystem>(window);
+  audio_         = std::make_unique<PlayerAudio>();
 
   // Inform the user that the renderer is done loading
   glfwRequestWindowAttention(window);

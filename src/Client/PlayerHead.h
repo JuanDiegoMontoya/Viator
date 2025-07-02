@@ -13,6 +13,7 @@
 struct GLFWwindow;
 
 class VoxelRenderer;
+class PlayerAudio;
 
 namespace tracy
 {
@@ -40,6 +41,7 @@ public:
   void VariableUpdatePre(DeltaTime dt, World& world) override;
   void VariableUpdatePost(DeltaTime dt, World& world) override;
   void CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions) override;
+  Audio* GetAudio() override;
 
   struct CreateInfo
   {
@@ -98,4 +100,5 @@ private:
   bool swapchainOk             = true;
   std::unique_ptr<VoxelRenderer> voxelRenderer_;
   std::unique_ptr<InputSystem> inputSystem_;
+  std::unique_ptr<PlayerAudio> audio_;
 };

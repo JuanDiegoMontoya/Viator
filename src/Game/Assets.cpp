@@ -43,6 +43,11 @@ std::filesystem::path GetTextureDirectory()
   return GetAssetDirectory() / "textures";
 }
 
+std::filesystem::path GetAudioDirectory()
+{
+  return GetAssetDirectory() / "audio";
+}
+
 std::filesystem::path GetConfigDirectory()
 {
   return GetDataDirectory() / "config";

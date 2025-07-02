@@ -72,6 +72,8 @@ set(viator_client_files
     src/Client/GuiHelpers.h
     src/Client/Editor.cpp
     src/Client/Editor.h
+    src/Client/PlayerAudio.h
+    src/Client/PlayerAudio.cpp
 )
 
 add_executable(frogRender
@@ -142,6 +144,8 @@ add_executable(frogRender
     src/Game/WorldInit.cpp
     src/Game/Head.h
     src/Game/Head.cpp
+    src/Game/Audio.h
+    src/Game/Audio.cpp
 )
 
 # Precompiled headers for standard library

@@ -7,9 +7,12 @@
 #include "entt/entity/registry.hpp"
 #include <optional>
 
-namespace PCG {
+namespace PCG
+{
   struct Rng;
 }
+
+class Audio;
 
 class World
 {
@@ -198,6 +201,8 @@ public:
   // True if this process has a networked server. Implies that this process
   // is running the master simulation AND there are one or more remote peers.
   [[nodiscard]] bool IsHosting() const;
+
+  [[nodiscard]] Audio* GetAudio();
 
 private:
   uint64_t ticks_ = 0;

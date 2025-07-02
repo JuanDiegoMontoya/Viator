@@ -1748,6 +1748,11 @@ bool World::IsHosting() const
   return networking->get() && server && server->GetNumberOfConnections();
 }
 
+Audio* World::GetAudio()
+{
+  return registry_.ctx().get<Head*>()->GetAudio();
+}
+
 glm::vec3 World::GetFootPosition(entt::entity entity)
 {
   const auto* t = registry_.try_get<const GlobalTransform>(entity);

@@ -4,3 +4,8 @@
 
 void NullHead::VariableUpdatePre(DeltaTime, World&) {}
 void NullHead::VariableUpdatePost(DeltaTime, World&) {}
+
+Audio* NullHead::GetAudio()
+{
+  return nullptr;
+}
