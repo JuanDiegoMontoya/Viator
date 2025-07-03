@@ -22,13 +22,23 @@ public:
       float decay = 0.01f;
     };
 
+    struct ReverbInfo
+    {
+      float roomSize  = 0.5f; // [0, 1]
+      float damping   = 0.5f; // [0, 1]
+      float dryWetMix = 0.5f; // [0, 1]. 0 = fully dry (no reverb), 1 = fully wet (all reverb)
+    };
+
     std::string name;
-    float pitch = 1; // Pitch factor.
-    float delay = 0;
-    bool highlander = false; // THERE CAN BE ONLY ONE
+    float volume               = 1;
+    float pitch                = 1; // Pitch factor.
+    float delay                = 0;
+    bool highlander            = false; // THERE CAN BE ONLY ONE
+    float maxLifetimeWithNodes = 5;     // Maximum duration the sound can be active (sounds with delay/reverb can last longer than the input sound)
     std::optional<glm::vec3> position; // nullopt = no spatialization
     std::optional<glm::vec3> velocity; // nullopt = no doppler
     std::optional<DelayInfo> delayInfo; // Reverb-ish effect
+    std::optional<ReverbInfo> reverb;
   };
 
   struct SoundHandle

@@ -2,6 +2,7 @@
 #include "Game/Assets.h"
 
 #include "miniaudio.h"
+#include "ma_reverb_node.h"
 
 #include "tracy/Tracy.hpp"
 #include "spdlog/spdlog.h"
@@ -13,6 +14,7 @@ namespace
     NO_COPY_NO_MOVE(Node);
     explicit Node() = default;
     virtual ~Node() = default;
+    virtual const ma_node* GetNode() const = 0;
   };
 
   struct DelayNode : Node
@@ -20,14 +22,19 @@ namespace
     explicit DelayNode(ma_engine* engine, float delay, float decay)
     {
       const auto sampleRate = ma_engine_get_sample_rate(engine);
-      const auto nodeConfig = ma_delay_node_config_init(ma_engine_get_channels(engine), sampleRate, ma_uint32(sampleRate * delay), decay);
+      auto nodeConfig       = new ma_delay_node_config();
+      *nodeConfig = ma_delay_node_config_init(ma_engine_get_channels(engine), sampleRate, ma_uint32(sampleRate * delay), decay);
 
       node = new ma_delay_node();
-      if (ma_delay_node_init(ma_engine_get_node_graph(engine), &nodeConfig, nullptr, node) != MA_SUCCESS)
+      if (ma_delay_node_init(ma_engine_get_node_graph(engine), nodeConfig, nullptr, node) != MA_SUCCESS)
       {
         throw std::runtime_error("Failed to initialize delay node");
       }
-      ma_node_attach_output_bus(node, 0, ma_engine_get_endpoint(engine), 0);
+
+      if (ma_node_attach_output_bus(node, 0, ma_engine_get_endpoint(engine), 0) != MA_SUCCESS)
+      {
+        throw std::runtime_error("Failed to attach delay node to node graph");
+      }
     }
 
     ~DelayNode() override
@@ -36,7 +43,57 @@ namespace
       delete node;
     }
 
+    const ma_node* GetNode() const override
+    {
+      return node;
+    }
+
     ma_delay_node* node;
+  };
+
+  struct ReverbNode : Node
+  {
+    explicit ReverbNode(ma_engine* engine, float roomSize, float damping, float dryWetMix)
+    {
+      const auto sampleRate = ma_engine_get_sample_rate(engine);
+      const auto channelCount = ma_engine_get_channels(engine);
+      auto nodeConfig = ma_reverb_node_config_init(channelCount, sampleRate);
+
+      roomSize = glm::clamp(roomSize, 0.0f, 1.0f);
+      damping = glm::clamp(damping, 0.0f, 1.0f);
+      dryWetMix = glm::clamp(dryWetMix, 0.0f, 1.0f);
+      
+      nodeConfig.roomSize  = roomSize;
+      nodeConfig.damping   = damping;
+      nodeConfig.width     = 1;
+      nodeConfig.wetVolume = dryWetMix;
+      nodeConfig.dryVolume = 1.0f - dryWetMix;
+      nodeConfig.mode      = 0;
+
+      node = new ma_reverb_node();
+      if (ma_reverb_node_init(ma_engine_get_node_graph(engine), &nodeConfig, nullptr, node) != MA_SUCCESS)
+      {
+        throw std::runtime_error("Failed to initialize reverb node");
+      }
+      
+      if (ma_node_attach_output_bus(node, 0, ma_engine_get_endpoint(engine), 0) != MA_SUCCESS)
+      {
+        throw std::runtime_error("Failed to attach reverb node to node graph");
+      }
+    }
+
+    ~ReverbNode() override
+    {
+      ma_reverb_node_uninit(node, nullptr);
+      delete node;
+    }
+
+    const ma_node* GetNode() const override
+    {
+      return node;
+    }
+
+    ma_reverb_node* node;
   };
 
   struct PSoundHandle : Audio::SoundHandle
@@ -65,6 +122,7 @@ namespace
     Audio::Sound createInfo;
     ma_sound* sound{};
     std::vector<std::unique_ptr<Node>> nodes;
+    uint64_t startTime{};
   };
 }
 
@@ -85,6 +143,7 @@ PlayerAudio::PlayerAudio()
   const auto soundsToLoad = std::vector<std::pair<std::string, std::string>>{
     {"coin", "coin.wav"},
     {"shot", "good2.wav"},
+    {"shot2", "good.wav"},
   };
 
   for (const auto& [name, path] : soundsToLoad)
@@ -139,6 +198,7 @@ std::weak_ptr<Audio::SoundHandle> PlayerAudio::PlaySound(const Sound& sound)
 
   auto handle = std::make_shared<PSoundHandle>();
   handle->createInfo = sound;
+  handle->startTime = ma_engine_get_time_in_milliseconds(engine_);
   
   if (ma_sound_init_copy(engine_, soundPrototypes_.at(sound.name), !sound.position ? MA_SOUND_FLAG_NO_SPATIALIZATION : 0, nullptr, handle->sound) != MA_SUCCESS)
   {
@@ -160,14 +220,23 @@ std::weak_ptr<Audio::SoundHandle> PlayerAudio::PlaySound(const Sound& sound)
   if (sound.delayInfo)
   {
     auto delayNode = std::make_unique<DelayNode>(engine_, sound.delayInfo->delay, sound.delayInfo->decay);
+    ma_node_attach_output_bus(handle->sound, 0, delayNode.get()->node, 0);
     handle->nodes.push_back(std::move(delayNode));
-    ma_node_attach_output_bus(handle->sound, 0, delayNode.get(), 0);
   }
 
   if (sound.delay > 0)
   {
     ma_sound_set_start_time_in_milliseconds(handle->sound, ma_engine_get_time_in_milliseconds(engine_) + int(sound.delay * 1000));
   }
+
+  if (sound.reverb)
+  {
+    auto reverbNode = std::make_unique<ReverbNode>(engine_, sound.reverb->roomSize, sound.reverb->damping, sound.reverb->dryWetMix);
+    ma_node_attach_output_bus(handle->sound, 0, reverbNode.get()->node, 0);
+    handle->nodes.push_back(std::move(reverbNode));
+  }
+
+  ma_sound_set_volume(handle->sound, sound.volume);
 
   if (ma_sound_start(handle->sound) != MA_SUCCESS)
   {
@@ -183,12 +252,22 @@ void PlayerAudio::FreeUnusedResources()
 {
   ZoneScoped;
   std::erase_if(activeSounds_,
-    [](const std::shared_ptr<Audio::SoundHandle>& sh)
+    [&](const std::shared_ptr<Audio::SoundHandle>& sh)
     {
       auto* handle = static_cast<PSoundHandle*>(sh.get());
+
+      if (!handle->nodes.empty())
+      {
+        if (ma_engine_get_time_in_milliseconds(engine_) - handle->startTime >= handle->createInfo.maxLifetimeWithNodes * 1000)
+        {
+          return true;
+        }
+      }
+
       if (ma_sound_at_end(handle->sound))
       {
-        return true;
+        // "TEMP": Nodes can extend duration of sound, so having nodes attached means we can't just clean up when the sound stops.
+        return handle->nodes.empty();
       }
       return false;
     });
