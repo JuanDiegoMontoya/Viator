@@ -14,6 +14,7 @@ set(viator_client_files
     vendor/stb_image.cpp
     vendor/tiny_obj_loader.cpp
     vendor/miniaudio.cpp
+    vendor/ma_reverb_node.cpp
     src/Client/techniques/Bloom.h
     src/Client/techniques/Bloom.cpp
     src/Client/RendererUtilities.h
