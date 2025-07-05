@@ -29,8 +29,20 @@ public:
       float dryWetMix = 0.5f; // [0, 1]. 0 = fully dry (no reverb), 1 = fully wet (all reverb)
     };
 
+    enum class AttenuationModel
+    {
+      Inverse,
+      Exponential,
+      Linear,
+    };
+
     std::string name;
     float volume               = 1;
+    AttenuationModel attenuationModel{};
+    float minDistance          = 1;
+    float maxDistance          = FLT_MAX;
+    float rolloff              = 1;
+    bool isLooping             = false;
     float pitch                = 1; // Pitch factor.
     float delay                = 0;
     bool highlander            = false; // THERE CAN BE ONLY ONE
@@ -43,11 +55,12 @@ public:
 
   struct SoundHandle
   {
-    explicit SoundHandle() = default;
     NO_COPY_NO_MOVE(SoundHandle);
-    virtual ~SoundHandle() = default;
+    explicit SoundHandle()                       = default;
+    virtual ~SoundHandle()                       = default;
     virtual void SetPosition(glm::vec3 position) = 0;
     virtual void SetVelocity(glm::vec3 velocity) = 0;
+    virtual void SetIsLooping(bool isLooping)    = 0;
   };
 
   virtual void UpdateListener(glm::vec3 position, glm::vec3 direction, glm::vec3 velocity) = 0;

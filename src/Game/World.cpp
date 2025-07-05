@@ -12,6 +12,7 @@
 #include "Networking/Client.h"
 #include "Networking/RPC.h"
 #include "Networking/Server.h"
+#include "Audio.h"
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
@@ -711,10 +712,35 @@ void World::FixedUpdate(float dt)
             deltaVelocity +=
               input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
 
+            auto* emitter = registry_.try_get<SoundEmitter>(entity);
+            if (isOnGround && glm::length(glm::vec2(velocity.x, velocity.z)) > 3)
+            {
+              if (!emitter || emitter->handle.expired())
+              {
+                registry_.emplace_or_replace<SoundEmitter>(entity,
+                  SoundEmitter{GetAudio()->PlaySound({
+                    .name                 = "walk",
+                    .volume               = 1,
+                    .isLooping            = true,
+                    //.position             =,
+                  })});
+              }
+            }
+            else if (emitter && !emitter->handle.expired())
+            {
+              emitter->handle.lock()->SetIsLooping(false);
+            }
+
+            if (isOnGround && cc->previousGroundState != JPH::CharacterBase::EGroundState::OnGround)
+            {
+              GetAudio()->PlaySound({.name = "walk", .pitch = 0.8f});
+            }
+
             if (isOnGround)
             {
               if (input.jump)
               {
+                GetAudio()->PlaySound({.name = "jump", .volume = 0.5f, .pitch = 0.8f});
                 velocity.y      = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }
@@ -1128,6 +1154,17 @@ void World::FixedUpdate(float dt)
         if (lifetime.remainingSeconds <= 0)
         {
           registry_.emplace<DeferredDelete>(entity);
+        }
+      }
+    }
+
+    // Delete expired sound emitters
+    {
+      for (auto&& [entity, emitter] : registry_.view<const SoundEmitter>().each())
+      {
+        if (emitter.handle.expired())
+        {
+          registry_.remove<SoundEmitter>(entity);
         }
       }
     }

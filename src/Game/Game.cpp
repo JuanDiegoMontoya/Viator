@@ -19,6 +19,7 @@
 #include "Networking/Interface.h"
 #include "VoxLoader.h"
 #include "World.h"
+#include "Game/Audio.h"
 
 #include "tracy/Tracy.hpp"
 #include "entt/signal/dispatcher.hpp"
@@ -94,6 +95,25 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
     }
   }
 
+  // Projectile hit sound
+  TryTwice(pair,
+    [&](entt::entity entity1, entt::entity)
+    {
+      if (world.GetRegistry().all_of<Projectile>(entity1))
+      {
+        if (glm::length(world.GetRegistry().get<LinearVelocity>(entity1).v) > 1.0f)
+        {
+          world.GetAudio()->PlaySound({.name = "land",
+            .attenuationModel                = Audio::Sound::AttenuationModel::Linear,
+            .maxDistance                     = 5,
+            .rolloff                         = 0.25f,
+            .position                        = world.GetRegistry().get<const GlobalTransform>(entity1).position});
+        }
+        return true;
+      }
+      return false;
+    });
+
   // Projectiles hurt creatures
   TryTwice(pair,
     [&](entt::entity entity1, entt::entity entity2)
@@ -113,26 +133,30 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
             const auto energyFraction = glm::length(projVelocity.v) / projectile.initialSpeed;
 
             const auto effectiveKnockback = damage.knockback * energyFraction;
-            world.DamageEntity(entity1, damage.damage * energyFraction);
-            auto pushDir = projVelocity.v;
-            pushDir.y    = 0;
-            if (glm::length(pushDir) > 1e-3f)
+            if (world.DamageEntity(entity1, damage.damage * energyFraction) > 0)
             {
-              pushDir = glm::normalize(pushDir);
-            }
-            pushDir *= effectiveKnockback * 3;
-            pushDir.y = effectiveKnockback;
-            //world.SetLinearVelocity(entity1, pushDir);
-            auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
-            pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
-            if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
-            {
-              pushDir *= m->factor;
-            }
-            velocity.v += pushDir;
-            if (auto* cc = world.GetRegistry().try_get<Physics::CharacterControllerShrimple>(entity1))
-            {
-              cc->previousGroundState = JPH::CharacterBase::EGroundState::InAir;
+              world.GetAudio()->PlaySound({.name = "land", .position = world.GetRegistry().get<const GlobalTransform>(entity2).position});
+
+              auto pushDir = projVelocity.v;
+              pushDir.y    = 0;
+              if (glm::length(pushDir) > 1e-3f)
+              {
+                pushDir = glm::normalize(pushDir);
+              }
+              pushDir *= effectiveKnockback * 3;
+              pushDir.y = effectiveKnockback;
+              // world.SetLinearVelocity(entity1, pushDir);
+              auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
+              pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
+              if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
+              {
+                pushDir *= m->factor;
+              }
+              velocity.v += pushDir;
+              if (auto* cc = world.GetRegistry().try_get<Physics::CharacterControllerShrimple>(entity1))
+              {
+                cc->previousGroundState = JPH::CharacterBase::EGroundState::InAir;
+              }
             }
             world.GetRegistry().emplace_or_replace<DeferredDelete>(entity2);
             world.GetRegistry().remove<Projectile>(entity2);
@@ -155,6 +179,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 
         if (d.item.id != nullItem)
         {
+          world.GetAudio()->PlaySound({.name = "coin", .highlander = true});
           i.TryStackItem(world, d.item);
           if (d.item.count > 0)
           {
@@ -218,6 +243,7 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
           if (world.DamageEntity(entity1, contactDamage.damage) > 0)
           {
             world.GetRegistry().emplace<Invulnerability>(entity1).remainingSeconds = 0.5f;
+            world.GetAudio()->PlaySound({.name = "hurt"});
           }
         }
         return true;
@@ -237,27 +263,30 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
           auto& pos1         = world.GetRegistry().get<const GlobalTransform>(entity1).position;
           auto& pos2         = world.GetRegistry().get<const GlobalTransform>(entity2).position;
           const auto& damage = world.GetRegistry().get<const ContactDamage>(entity2);
-          world.DamageEntity(entity1, damage.damage);
-          auto pushDir = pos1 - pos2;
-          pushDir.y    = 0;
-          if (glm::length(pushDir) > 1e-3f)
+          if (world.DamageEntity(entity1, damage.damage) > 0)
           {
-            pushDir = glm::normalize(pushDir);
+            world.GetAudio()->PlaySound({.name = "land", .position = world.GetRegistry().get<const GlobalTransform>(entity2).position});
+            auto pushDir = pos1 - pos2;
+            pushDir.y    = 0;
+            if (glm::length(pushDir) > 1e-3f)
+            {
+              pushDir = glm::normalize(pushDir);
+            }
+            pushDir *= damage.knockback * 3;
+            pushDir.y      = damage.knockback;
+            auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
+            pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
+            if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
+            {
+              pushDir *= m->factor;
+            }
+            velocity.v += pushDir;
+            if (auto* cc = world.GetRegistry().try_get<Physics::CharacterControllerShrimple>(entity1))
+            {
+              cc->previousGroundState = JPH::CharacterBase::EGroundState::InAir;
+            }
+            world.GetRegistry().get_or_emplace<CannotDamageEntities>(entity2).entities[entity1] = 0.2f;
           }
-          pushDir *= damage.knockback * 3;
-          pushDir.y               = damage.knockback;
-          auto& velocity = world.GetRegistry().get<LinearVelocity>(entity1);
-          pushDir.y /= exp2(glm::max(0.0f, velocity.v.y * 1.0f)); // Reduce velocity gain (prevent stuff from flying super high- subject to change).
-          if (auto* m = world.GetRegistry().try_get<const KnockbackMultiplier>(entity1))
-          {
-            pushDir *= m->factor;
-          }
-          velocity.v += pushDir;
-          if (auto* cc = world.GetRegistry().try_get<Physics::CharacterControllerShrimple>(entity1))
-          {
-            cc->previousGroundState = JPH::CharacterBase::EGroundState::InAir;
-          }
-          world.GetRegistry().get_or_emplace<CannotDamageEntities>(entity2).entities[entity1] = 0.2f;
         }
         return true;
       }

@@ -17,6 +17,8 @@ public:
   std::weak_ptr<SoundHandle> PlaySound(const Sound& sound) override;
   void FreeUnusedResources() override;
 
+  void DrawDebugUI();
+
 private:
   ma_engine* engine_;
   std::unordered_map<std::string, ma_sound*> soundPrototypes_;

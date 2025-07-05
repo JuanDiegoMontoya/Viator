@@ -6,6 +6,7 @@
 #include "Core/Assert2.h"
 #include "Physics/Physics.h"
 #include "Physics/PhysicsUtils.h"
+#include "Audio.h"
 
 #include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -70,6 +71,17 @@ void Gun::UsePrimary(float dt, World& world, entt::entity self, ItemState& state
   const auto shootDt    = GetUseDt();
   if (state.useAccum >= shootDt)
   {
+    world.GetAudio()->PlaySound({
+      .name  = "shot2",
+      .volume = 0.25f,
+      .pitch = world.Rng().RandFloat(0.9f, 1.1f),
+      .reverb =
+        Audio::Sound::ReverbInfo{
+          .roomSize  = 0.5,
+          .damping   = 0.5,
+          .dryWetMix = 0.5,
+        },
+    });
     state.useAccum = glm::clamp(state.useAccum - dt, 0.0f, dt);
 
     for (int i = 0; i < createInfo_.bullets; i++)

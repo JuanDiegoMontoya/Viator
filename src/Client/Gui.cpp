@@ -33,6 +33,7 @@
 #include "imgui_internal.h"
 
 // toml contains two instances of unreachable code in release mode.
+#include "PlayerAudio.h"
 #include "platform/choc_DisableAllWarnings.h"
 #include "toml++/toml.hpp"
 #include "platform/choc_ReenableAllWarnings.h"
@@ -1236,6 +1237,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
   {
+    dynamic_cast<PlayerAudio*>(head_->GetAudio())->DrawDebugUI();
+
     ShowEditor(dt, world);
 
     if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))

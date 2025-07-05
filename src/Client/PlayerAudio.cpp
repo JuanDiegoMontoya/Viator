@@ -119,6 +119,11 @@ namespace
       ma_sound_set_velocity(sound, velocity.x, velocity.y, velocity.z);
     }
 
+    void SetIsLooping(bool isLooping) override
+    {
+      ma_sound_set_looping(sound, isLooping);
+    }
+
     Audio::Sound createInfo;
     ma_sound* sound{};
     std::vector<std::unique_ptr<Node>> nodes;
@@ -144,6 +149,10 @@ PlayerAudio::PlayerAudio()
     {"coin", "coin.wav"},
     {"shot", "good2.wav"},
     {"shot2", "good.wav"},
+    {"walk", "walk.wav"},
+    {"hurt", "hurt.wav"},
+    {"land", "land.wav"},
+    {"jump", "jump.wav"},
   };
 
   for (const auto& [name, path] : soundsToLoad)
@@ -236,13 +245,27 @@ std::weak_ptr<Audio::SoundHandle> PlayerAudio::PlaySound(const Sound& sound)
     handle->nodes.push_back(std::move(reverbNode));
   }
 
+  ma_sound_set_looping(handle->sound, sound.isLooping);
+
   ma_sound_set_volume(handle->sound, sound.volume);
+
+  if (ma_sound_is_spatialization_enabled(handle->sound))
+  {
+    const auto attenuationModel =
+      sound.attenuationModel == Sound::AttenuationModel::Inverse
+        ? ma_attenuation_model_inverse
+        : (sound.attenuationModel == Sound::AttenuationModel::Exponential ? ma_attenuation_model_exponential : ma_attenuation_model_linear);
+
+    ma_sound_set_attenuation_model(handle->sound, attenuationModel);
+    ma_sound_set_min_distance(handle->sound, sound.minDistance);
+    ma_sound_set_max_distance(handle->sound, sound.maxDistance);
+    ma_sound_set_rolloff(handle->sound, sound.rolloff);
+  }
 
   if (ma_sound_start(handle->sound) != MA_SUCCESS)
   {
     throw std::runtime_error("Failed to start sound");
   }
-  
   activeSounds_.push_back(handle);
 
   return handle;
@@ -271,4 +294,52 @@ void PlayerAudio::FreeUnusedResources()
       }
       return false;
     });
+}
+
+#include "imgui.h"
+void PlayerAudio::DrawDebugUI()
+{
+  if (ImGui::Begin("Audio"))
+  {
+    if (ImGui::TreeNode("Prototypes"))
+    {
+      for (const auto& [name, sound] : soundPrototypes_)
+      {
+        if (ImGui::Selectable(name.c_str()))
+        {
+          PlaySound({.name = name});
+        }
+      }
+      ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNodeEx("Active Sounds", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+      if (ImGui::BeginTable("ActiveSounds", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_Hideable | ImGuiTableFlags_RowBg))
+      {
+        ImGui::TableSetupColumn("Name");
+        ImGui::TableSetupColumn("Is playing");
+        ImGui::TableSetupColumn("State");
+        ImGui::TableHeadersRow();
+        for (auto& sh : activeSounds_)
+        {
+          auto* handle = static_cast<PSoundHandle*>(sh.get());
+
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", handle->createInfo.name.c_str());
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", ma_sound_is_playing(handle->sound) ? "true" : "false");
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", ma_node_get_state(handle->sound) == ma_node_state_started ? "started" : "stopped");
+        }
+        ImGui::EndTable();
+      }
+
+      ImGui::TreePop();
+    }
+  }
+  ImGui::End();
 }
