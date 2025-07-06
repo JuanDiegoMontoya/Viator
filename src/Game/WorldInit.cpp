@@ -1254,99 +1254,75 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     const auto y = (int)TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {x, z});
     const auto meadowness = TexelFetch2D(globalMeadowImage, grid.dimensions_.x, {x, z});
 
+    const bool hasSolidFloor = grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
     const auto tree = whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4);
-    if (tree > glm::mix(0.99f, 0.998f, meadowness))
+    if (hasSolidFloor && tree > glm::mix(0.99f, 0.998f, meadowness))
     {
-      if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+      if (registry_.ctx().get<PCG::Rng>().RandFloat() < 0.9f)
       {
-        if (registry_.ctx().get<PCG::Rng>().RandFloat() < 0.9f)
-        {
-          registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
-        }
-        else
-        {
-          registry_.ctx().get<PrefabRegistry>().Get("Tree2").Instantiate(*this, {x, y, z});
-        }
+        registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
+      }
+      else
+      {
+        registry_.ctx().get<PrefabRegistry>().Get("Tree2").Instantiate(*this, {x, y, z});
       }
     }
     else
     {
-      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
+      if (hasSolidFloor &&
+          shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01").GetBlockId());
       }
 
-      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 31) * 0.7f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 30) * 0.3f > 0.88f)
+      if (hasSolidFloor &&
+          shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 31) * 0.7f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 30) * 0.3f > 0.88f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02").GetBlockId());
       }
 
-      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 16) * 0.7f + whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 17) * 0.3f > 0.93f)
+      if (hasSolidFloor && shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 16) * 0.7f +
+            whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 17) * 0.3f >
+          0.93f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom").GetBlockId());
       }
-      else if (meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) * 0.7f +
+      else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) * 0.7f +
                  whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 25) * 0.3f >
                0.95f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose").GetBlockId());
       }
-      else if (meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 22) * 0.7f + whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 23) * 0.3f >
+      else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 22) * 0.7f +
+                                    whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 23) * 0.3f >
                0.93f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion").GetBlockId());
       }
-      else if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) > 0.999f)
+      else if (hasSolidFloor && whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) > 0.999f)
       {
-        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
-        {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small").GetBlockId());
-        }
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small").GetBlockId());
       }
       else // Because it's low priority, grass shouldn't override other foliage.
       {
         const auto grasss = meadowness * 0.1f + shrimplex2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) +
                             whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.3f;
 
-        if (grasss > 0.6f)
+        if (hasSolidFloor)
         {
-          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          if (grasss > 0.6f)
           {
             grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short").GetBlockId());
           }
-        }
-        if (grasss > 0.7f)
-        {
-          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          if (grasss > 0.7f)
           {
             grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium").GetBlockId());
           }
-        }
-        if (grasss > 0.8f)
-        {
-          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          if (grasss > 0.8f)
           {
             grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long").GetBlockId());
           }
-        }
-        if (grasss > 0.9f)
-        {
-          if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+          if (grasss > 0.9f)
           {
             registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(*this, {x, y, z});
           }
