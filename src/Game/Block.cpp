@@ -3,6 +3,7 @@
 #include "Item.h"
 #include "Core/Assert2.h"
 #include "Networking/RPC.h"
+#include "Audio.h"
 
 BlockDefinition::BlockDefinition(const CreateInfo& info) : createInfo_(info) {}
 
@@ -52,6 +53,15 @@ BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
 void ExplodeyBlockDefinition::OnDestroyBlock(World& world, glm::ivec3 voxelPosition) const
 {
   BlockDefinition::OnDestroyBlock(world, voxelPosition);
+
+  world.GetAudio()->PlaySound({
+    .name             = "shot",
+    .volume = 0.5f,
+    .attenuationModel = Audio::Sound::AttenuationModel::Linear,
+    .maxDistance      = 100,
+    .pitch            = 0.5f,
+    .position = glm::vec3(voxelPosition) + 0.5f,
+  });
 
   const auto radius2 = explodeyInfo_.radius * explodeyInfo_.radius;
   const auto cr      = (int)ceil(explodeyInfo_.radius);

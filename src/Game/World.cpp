@@ -719,10 +719,10 @@ void World::FixedUpdate(float dt)
               {
                 registry_.emplace_or_replace<SoundEmitter>(entity,
                   SoundEmitter{GetAudio()->PlaySound({
-                    .name                 = "walk",
-                    .volume               = 1,
-                    .isLooping            = true,
-                    //.position             =,
+                    .name      = "walk",
+                    .volume    = 1,
+                    .isLooping = true,
+                    .delay     = 0.1f,
                   })});
               }
             }
@@ -731,7 +731,7 @@ void World::FixedUpdate(float dt)
               emitter->handle.lock()->SetIsLooping(false);
             }
 
-            if (isOnGround && cc->previousGroundState != JPH::CharacterBase::EGroundState::OnGround)
+            if (isOnGround && cc->previousGroundState != JPH::CharacterBase::EGroundState::OnGround && velocity.y < -1.0f)
             {
               GetAudio()->PlaySound({.name = "walk", .pitch = 0.8f});
             }
@@ -740,7 +740,7 @@ void World::FixedUpdate(float dt)
             {
               if (input.jump)
               {
-                GetAudio()->PlaySound({.name = "jump", .volume = 0.5f, .pitch = 0.8f});
+                GetAudio()->PlaySound({.name = "jump", .volume = 0.4f, .pitch = 0.8f});
                 velocity.y      = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }

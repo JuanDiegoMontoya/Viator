@@ -188,6 +188,7 @@ void ToolDefinition::UsePrimary(float dt, World& world, entt::entity self, ItemS
   if (grid.TraceRaySimple(pos, dir, 10, hit))
   {
     const auto damage = world.DamageBlock(glm::ivec3(hit.voxelPosition), createInfo_.blockDamage, createInfo_.blockDamageTier, createInfo_.blockDamageFlags);
+    world.GetAudio()->PlaySound({.name = "hurt", .minDistance = 3, .pitch = 0.5f, .position = hit.positionWorld});
 
     constexpr float debrisSize = 0.0525f;
     auto cube                  = Physics::Box({debrisSize, debrisSize, debrisSize});

@@ -303,12 +303,20 @@ void PlayerAudio::DrawDebugUI()
   {
     if (ImGui::TreeNode("Prototypes"))
     {
-      for (const auto& [name, sound] : soundPrototypes_)
+      for (int i = 0; const auto& [name, sound] : soundPrototypes_)
       {
+        ImGui::PushID(i++);
+        float pitch = ma_sound_get_pitch(sound);
         if (ImGui::Selectable(name.c_str()))
         {
-          PlaySound({.name = name});
+          PlaySound({.name = name, .pitch = pitch});
         }
+
+        //if (ImGui::SliderFloat("Pitch", &pitch, 0.125f, 2.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+        //{
+        //  ma_sound_set_pitch(sound, pitch);
+        //}
+        ImGui::PopID();
       }
       ImGui::TreePop();
     }
