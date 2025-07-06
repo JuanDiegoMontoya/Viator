@@ -549,9 +549,11 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("roots_end", false);
   RegisterFoliageBlock("roots_main", false);
   RegisterFoliageBlock("bush_01", false);
+  RegisterFoliageBlock("bush_02", false);
   RegisterFoliageBlock("grass_double_base", false);
   RegisterFoliageBlock("grass_double_top", false);
   RegisterFoliageBlock("leaves_01", false);
+  RegisterFoliageBlock("leaves_02", false);
   RegisterFoliageBlock("dandelion", true);
   RegisterFoliageBlock("rose", true);
   RegisterFoliageBlock("pot", true);
@@ -632,23 +634,45 @@ void World::InitializeGameDefinitions()
   tallGrass->voxels.emplace_back(glm::ivec3(0, 1, 0), blocks.Get("grass_double_top").GetBlockId());
   prefabs.Add(tallGrass);
 
-  auto* testTree = new SimplePrefab({.name = "Tree"});
-  auto& binky    = testTree->voxels;
-  for (int z = -3; z <= 3; z++)
-  for (int y = -1; y <= 3; y++)
-  for (int x = -3; x <= 3; x++)
   {
-    if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
-    {
-      binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01").GetBlockId());
-    }
+    auto* testTree = new SimplePrefab({.name = "Tree"});
+    auto& binky    = testTree->voxels;
+    for (int z = -3; z <= 3; z++)
+      for (int y = -1; y <= 3; y++)
+        for (int x = -3; x <= 3; x++)
+        {
+          if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
+          {
+            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01").GetBlockId());
+          }
+        }
+    binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 3, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 4, 0), woodBlockId);
+    prefabs.Add(testTree);
   }
-  binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
-  binky.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
-  binky.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
-  binky.emplace_back(glm::ivec3(0, 3, 0), woodBlockId);
-  binky.emplace_back(glm::ivec3(0, 4, 0), woodBlockId);
-  prefabs.Add(testTree);
+
+  {
+    auto* testTree = new SimplePrefab({.name = "Tree2"});
+    auto& binky    = testTree->voxels;
+    for (int z = -3; z <= 3; z++)
+      for (int y = -1; y <= 3; y++)
+        for (int x = -3; x <= 3; x++)
+        {
+          if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
+          {
+            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_02").GetBlockId());
+          }
+        }
+    binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 3, 0), woodBlockId);
+    binky.emplace_back(glm::ivec3(0, 4, 0), woodBlockId);
+    prefabs.Add(testTree);
+  }
 
   auto* testDungeon = new DungeonPrefab({.name = "Dungeon"});
   prefabs.Add(testDungeon);
@@ -1230,11 +1254,19 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     const auto y = (int)TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {x, z});
     const auto meadowness = TexelFetch2D(globalMeadowImage, grid.dimensions_.x, {x, z});
 
-    if (whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) > glm::mix(0.99f, 0.998f, meadowness))
+    const auto tree = whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4);
+    if (tree > glm::mix(0.99f, 0.998f, meadowness))
     {
       if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
       {
-        registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
+        if (registry_.ctx().get<PCG::Rng>().RandFloat() < 0.9f)
+        {
+          registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(*this, {x, y, z});
+        }
+        else
+        {
+          registry_.ctx().get<PrefabRegistry>().Get("Tree2").Instantiate(*this, {x, y, z});
+        }
       }
     }
     else
@@ -1244,6 +1276,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
         {
           grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01").GetBlockId());
+        }
+      }
+
+      if (shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 31) * 0.7f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 30) * 0.3f > 0.88f)
+      {
+        if (grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air)
+        {
+          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02").GetBlockId());
         }
       }
 
