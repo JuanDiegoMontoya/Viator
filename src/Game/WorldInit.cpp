@@ -1018,7 +1018,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto& blocks          = registry_.ctx().get<BlockRegistry>();
   const auto& grass     = blocks.Get("Grass");
   const auto& dirt     = blocks.Get("Dirt");
-//  const auto& malachite = blocks.Get("Malachite");
+  const auto& malachite = blocks.Get("Malachite");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
@@ -1068,6 +1068,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
     stoneInDirt->SetSource(stoneInDirtA);
     stoneInDirt->SetScaling(1.0f / sampleScale);
+
+    auto ore = FastNoise::NewFromEncodedNodeTree("FgIAAIA/BxUFBg@BhBCDMzsz//Aws@BIQQgzM7M/D@CD///8=");
 
 #ifndef GAME_HEADLESS
     total.store((int32_t)grid.numTopLevelBricks_);
@@ -1132,6 +1134,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Nearest);
 
+          auto copperImage = GenerateAndUpscale3D(ore,
+            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+            mapGenInfo.seed + 55,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Nearest);
+
           const auto tl = glm::ivec3{i, j, k};
 
           ForEachPositionInTLBrick(tl,
@@ -1171,6 +1180,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 else
                 {
                   blockTypeToSet = voxel_t(1);
+                }
+              }
+
+              if (blockTypeToSet != voxel_t::Air && blockTypeToSet != grass.GetBlockId())
+              {
+                if (TexelFetch3D(copperImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
+                {
+                  blockTypeToSet = malachite.GetBlockId();
                 }
               }
 
