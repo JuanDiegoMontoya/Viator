@@ -31,6 +31,7 @@
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
+#include "miniaudio.h"
 
 // toml contains two instances of unreachable code in release mode.
 #include "PlayerAudio.h"
@@ -51,7 +52,8 @@
 namespace
 {
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
-  const auto sRendererSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
+  const auto sGameSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
+  const auto sAudioSettingsPath = GetConfigDirectory() / "audioConfig.toml";
   const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
   const auto sSavesDirectory = GetDataDirectory() / "saves";
   const auto sWorldSavesDirectory  = sSavesDirectory / "worlds";
@@ -61,8 +63,8 @@ namespace
   auto sSelectedWorld = std::optional<std::filesystem::path>();
 
   // Rendering
-  toml::parse_result sRendererConfig;
-  bool sRendererConfigModified = false;
+  toml::parse_result sGameSettings;
+  bool sGameSettingsModified = false;
 
   // Networking
   toml::parse_result sServerList;
@@ -71,11 +73,11 @@ namespace
   std::string sHostAddress = std::string(256, '\0');
   uint16_t sHostPort       = 1234;
 
-  void SaveRendererConfig()
+  void SaveGameSettings()
   {
     ZoneScoped;
-    spdlog::debug("Save renderer config.");
-    auto tempPath = sRendererSettingsPath;
+    spdlog::debug("Save game settings.");
+    auto tempPath = sGameSettingsPath;
     tempPath += ".temp";
     {
       auto file = std::ofstream(tempPath, std::ios::out | std::ios::binary | std::ios::trunc);
@@ -83,9 +85,9 @@ namespace
       {
         throw std::runtime_error("Could not open file for writing");
       }
-      file << sRendererConfig;
+      file << sGameSettings;
     }
-    std::filesystem::rename(tempPath, sRendererSettingsPath);
+    std::filesystem::rename(tempPath, sGameSettingsPath);
   }
 
   void LoadServerList()
@@ -239,10 +241,18 @@ namespace
     ImGui::SetTooltip("%s", text.c_str());
   }
 
+  struct Rect
+  {
+    ImVec2 pos;
+    ImVec2 size;
+  };
+
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
-  void DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
+  Rect DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
   {
+    Rect rect{};
+
     auto title = "Inventory" + std::to_string(std::underlying_type_t<entt::entity>(parent));
     if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
@@ -346,8 +356,12 @@ namespace
         }
       }
       ImGui::PopStyleVar();
+      rect.pos  = ImGui::GetWindowPos();
+      rect.size = ImGui::GetWindowSize();
     }
     ImGui::End();
+
+    return rect;
   }
 
   void DrawArmorAndAccessories(World& world, entt::entity parent, [[maybe_unused]] entt::entity user, ArmorAndAccessories& armorAndAccessories)
@@ -432,25 +446,27 @@ namespace
 } // namespace
 
 // Also used to discard unsaved changes to the config when exiting the options menu.
-void VoxelRenderer::LoadRendererConfig()
+void VoxelRenderer::LoadGameSettings()
 {
   ZoneScoped;
   spdlog::debug("Load renderer config.");
 
-  sRendererConfigModified = false;
-  auto file               = std::fstream(sRendererSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
-  sRendererConfig         = toml::parse(file);
-  giMethod_               = sRendererConfig["gi"]["method"].value_or(giMethod_);
-  pathTracerSamples       = sRendererConfig["pathtracer"]["samples"].value_or(pathTracerSamples);
-  pathTracerBounces       = sRendererConfig["pathtracer"]["bounces"].value_or(pathTracerBounces);
-  enableBloom             = sRendererConfig["bloom"]["enable"].value_or(enableBloom);
+  sGameSettingsModified = false;
+  auto file               = std::fstream(sGameSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
+  sGameSettings           = toml::parse(file);
+  giMethod_               = sGameSettings["graphics"]["gi"]["method"].value_or(giMethod_);
+  pathTracerSamples       = sGameSettings["graphics"]["pathtracer"]["samples"].value_or(pathTracerSamples);
+  pathTracerBounces       = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
+  enableBloom             = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
+
+  ma_engine_set_volume(head_->audio_->engine_, sGameSettings["audio"]["volume"].value_or(0.5f));
 }
 
 void VoxelRenderer::InitGui()
 {
   ZoneScoped;
   spdlog::info("Initializing GUI.");
-  LoadRendererConfig();
+  LoadGameSettings();
   // Attempt to load default layout, if it exists
   if (std::filesystem::exists(g_defaultIniPath) && !std::filesystem::is_directory(g_defaultIniPath))
   {
@@ -507,45 +523,73 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 {
   if (ImGui::Begin("Settings"))
   {
-    ImGui::Text("Global Illumination Method");
-    ImGui::Separator();
-    if (ImGui::RadioButton("None", giMethod_ == GIMethod::None))
+    if (ImGui::BeginTabBar("SettingsTabBar"))
     {
-      sRendererConfigModified = true;
-      giMethod_               = GIMethod::None;
+      if (ImGui::BeginTabItem("Graphics"))
+      {
+        ImGui::Text("Global Illumination Method");
+        ImGui::Separator();
+        if (ImGui::RadioButton("None", giMethod_ == GIMethod::None))
+        {
+          sGameSettingsModified = true;
+          giMethod_             = GIMethod::None;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Path Tracing", giMethod_ == GIMethod::PerPixelPathTracing))
+        {
+          sGameSettingsModified = true;
+          giMethod_             = GIMethod::PerPixelPathTracing;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("DDGI", giMethod_ == GIMethod::DDGI))
+        {
+          sGameSettingsModified = true;
+          giMethod_             = GIMethod::DDGI;
+        }
+        sGameSettingsModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
+        sGameSettingsModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
+        sGameSettingsModified |= ImGui::Checkbox("Bloom", &enableBloom);
+
+        ImGui::EndTabItem();
+      }
+
+      if (ImGui::BeginTabItem("Audio"))
+      {
+        auto volume = ma_engine_get_volume(head_->audio_->engine_);
+        if (ImGui::SliderFloat("Volume", &volume, 0, 1, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+        {
+          sGameSettingsModified = true;
+          ma_engine_set_volume(head_->audio_->engine_, volume);
+        }
+
+        ImGui::EndTabItem();
+      }
+      ImGui::EndTabBar();
     }
-    ImGui::SameLine();
-    if (ImGui::RadioButton("Path Tracing", giMethod_ == GIMethod::PerPixelPathTracing))
-    {
-      sRendererConfigModified = true;
-      giMethod_               = GIMethod::PerPixelPathTracing;
-    }
-    ImGui::SameLine();
-    if (ImGui::RadioButton("DDGI", giMethod_ == GIMethod::DDGI))
-    {
-      sRendererConfigModified = true;
-      giMethod_               = GIMethod::DDGI;
-    }
-    sRendererConfigModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
-    sRendererConfigModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
-    sRendererConfigModified |= ImGui::Checkbox("Bloom", &enableBloom);
 
     ImGui::Separator();
-    ImGui::BeginDisabled(!sRendererConfigModified);
+    ImGui::BeginDisabled(!sGameSettingsModified);
     if (ImGui::Button("Apply###apply"))
     {
+      auto graphics   = toml::table();
       auto pathtracer = toml::table();
       pathtracer.insert_or_assign("samples", pathTracerSamples);
       pathtracer.insert_or_assign("bounces", pathTracerBounces);
-      sRendererConfig.insert_or_assign("pathtracer", pathtracer);
+      graphics.insert_or_assign("pathtracer", pathtracer);
       auto bloom = toml::table();
       bloom.insert_or_assign("enable", enableBloom);
-      sRendererConfig.insert_or_assign("bloom", bloom);
+      graphics.insert_or_assign("bloom", bloom);
       auto gi = toml::table();
       gi.insert_or_assign("method", giMethod_);
-      sRendererConfig.insert_or_assign("gi", gi);
-      SaveRendererConfig();
-      sRendererConfigModified = false;
+      graphics.insert_or_assign("gi", gi);
+      
+      auto audio = toml::table();
+      audio.insert_or_assign("volume", ma_engine_get_volume(head_->audio_->engine_));
+      
+      sGameSettings.insert_or_assign("graphics", graphics);
+      sGameSettings.insert_or_assign("audio", audio);
+      SaveGameSettings();
+      sGameSettingsModified = false;
     }
     ImGui::EndDisabled();
     return true;
@@ -567,7 +611,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     else if (state == GameState::PAUSED_SETTINGS)
     {
-      LoadRendererConfig();
+      LoadGameSettings();
       state = GameState::GAME;
     }
     else if (state == GameState::GAME)
@@ -687,7 +731,30 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    DrawInventory(world, playerEntity, playerEntity, inventory, !p.inventoryIsOpen);
+    const auto rect = DrawInventory(world, playerEntity, playerEntity, inventory, !p.inventoryIsOpen);
+
+    // Draw effects
+    {
+      const auto& effects = world.GetRegistry().get<const TemporaryEffects>(playerEntity).effects;
+      ImGui::SetNextWindowPos({rect.pos.x, rect.pos.y + rect.size.y});
+      if (ImGui::Begin("##effects", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize))
+      {
+        const auto& itemRegistry = world.GetRegistry().ctx().get<ItemRegistry>();
+        for (int i = 0; i < effects.size(); i++)
+        {
+          const auto& effect = effects[i];
+          const auto& item = itemRegistry.Get(effect.id);
+          char buffer[256]{};
+          std::snprintf(buffer, 256, "%s: %.0f seconds", item.GetName().c_str(), effect.useAccum);
+          if (ImGui::Selectable(buffer))
+          {
+            world.GetRegistry().get<TemporaryEffects>(playerEntity).effects.erase(effects.begin() + i);
+            i--;
+          }
+        }
+      }
+      ImGui::End();
+    }
 
     if (p.inventoryIsOpen)
     {
@@ -1097,7 +1164,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SameLine();
       if (ImGui::Button("Back"))
       {
-        LoadRendererConfig();
+        LoadGameSettings();
         gameState = GameState::MENU;
       }
     }
@@ -1111,7 +1178,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SameLine();
       if (ImGui::Button("Back"))
       {
-        LoadRendererConfig();
+        LoadGameSettings();
         gameState = GameState::PAUSED;
       }
     }

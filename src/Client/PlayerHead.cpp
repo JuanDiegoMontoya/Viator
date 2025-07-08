@@ -483,9 +483,9 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   ImGui_ImplFvog_Init(&imguiVulkanInitInfo);
   ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+  audio_         = std::make_unique<PlayerAudio>();
   voxelRenderer_ = std::make_unique<VoxelRenderer>(this, *createInfo.world);
   inputSystem_   = std::make_unique<InputSystem>(window);
-  audio_         = std::make_unique<PlayerAudio>();
 
   // Inform the user that the renderer is done loading
   glfwRequestWindowAttention(window);

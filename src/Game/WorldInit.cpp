@@ -376,9 +376,9 @@ void World::InitializeGameDefinitions()
   [[maybe_unused]] const auto stoneSpearId  = items.Add(new Spear("Stone Spear", {.tint = {0.2f, 0.2f, 0.2f}}));
   [[maybe_unused]] const auto copperSpearId = items.Add(new Spear("Copper Spear", {.damage = 20, .knockback = 5, .tint = {.78f, .51f, .27f}}));
   [[maybe_unused]] const auto speedSpearId  = items.Add(new CSKnife("SPEED Spear", {.tint = {0.2f, 0.2f, 0.3f}}));
-  const auto healthRegenId = items.Add(new Effector("HealthRegeneration", ItemDefinition::EffectType::HealthRegeneration));
+  const auto healthRegenId = items.Add(new Effector("Regeneration", ItemDefinition::EffectType::HealthRegeneration));
   const auto shineId = items.Add(new Effector("Shine", ItemDefinition::EffectType::Shine));
-  const auto swiftnessId = items.Add(new Effector("Shine", ItemDefinition::EffectType::MovementSpeedModifier, 0, 1.25f));
+  const auto swiftnessId = items.Add(new Effector("Swiftness", ItemDefinition::EffectType::MovementSpeedModifier, 0, 1.25f));
   const auto ironskinId = items.Add(new Effector("Ironskin", ItemDefinition::EffectType::ArmorModifier, 8));
   items.Add(new EffectGrantingPotion("Health Regeneration Potion", "potion_healing", healthRegenId, 5));
   items.Add(new EffectGrantingPotion("Shine Potion", "potion_healing", shineId, 5, {0.1f, 2.0f, 1}));

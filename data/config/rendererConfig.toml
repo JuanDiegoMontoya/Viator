@@ -1,9 +1,12 @@
-[bloom]
+[audio]
+volume = 0.5
+
+[graphics.bloom]
 enable = true
 
-[gi]
+[graphics.gi]
 method = 2
 
-[pathtracer]
+[graphics.pathtracer]
 bounces = 2
 samples = 1

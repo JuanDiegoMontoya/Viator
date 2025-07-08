@@ -20,6 +20,8 @@ public:
   void DrawDebugUI();
 
 private:
+  friend class VoxelRenderer; // A bit of a hack
+
   ma_engine* engine_;
   std::unordered_map<std::string, ma_sound*> soundPrototypes_;
   std::vector<std::shared_ptr<SoundHandle>> activeSounds_;
