@@ -258,23 +258,30 @@ namespace
           ImGui::TableNextColumn();
           ImGui::PushID(int(col));
           auto& slot          = inventory.slots[row][col];
-          std::string nameStr = "";
+          std::string nameStr  = "";
+          const auto cursorPos = ImGui::GetCursorPos();
           if (slot.id != nullItem)
           {
             const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id);
             nameStr         = def.GetName();
             if (def.GetMaxStackSize() > 1)
             {
-              nameStr += "\n" + std::to_string(slot.count) + "/" + std::to_string(def.GetMaxStackSize());
+              ImGui::BeginDisabled();
+              ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0, 1});
+              ImGui::Selectable(std::to_string(slot.count).c_str(), false, ImGuiSelectableFlags_AllowOverlap, {50, 50});
+              ImGui::PopStyleVar();
+              ImGui::EndDisabled();
+              //nameStr += "\n" + std::to_string(slot.count);// + "/" + std::to_string(def.GetMaxStackSize());
             }
           }
-          const auto name      = nameStr.c_str();
-          const auto cursorPos = ImGui::GetCursorPos();
+          const auto name = nameStr.c_str();
+          
+          ImGui::SetCursorPos(cursorPos);
           if (ImGui::Selectable(("##" + nameStr).c_str(), inventory.canHaveActiveItem && inventory.activeSlotCoord == currentSlotCoord, 0, {50, 50}))
           {
             Networking::CallRPC("SetActiveSlotRPC"_hs, world, parent, currentSlotCoord);
           }
-          if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
           {
             DrawTooltipForItem(world, parent, slot);
           }

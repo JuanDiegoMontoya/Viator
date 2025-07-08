@@ -81,6 +81,8 @@ public:
     ArmorModifier,
     BaseDamage,
     Knockback,
+    HealthRegeneration,
+    Shine, // User becomes a light source
     EFFECT_COUNT,
   };
 
@@ -381,6 +383,61 @@ class Boots : public SpriteItem
   {
     return 1;
   }
+};
+
+// Generic class used to grant effects when in hidden inventory.
+class Effector : public ItemDefinition
+{
+public:
+  Effector(std::string_view name, EffectType type, float additive = 1, float multiplicative = 1)
+    : ItemDefinition(name), effectType(type), additive(additive), multiplicative(multiplicative)
+  {
+  }
+
+  entt::entity Materialize(World&) const override;
+
+  AllowedSlots GetAllowedSlot() const override
+  {
+    return AllowedSlots::Hidden;
+  }
+
+  float GetWornEffectAdditive(World&, entt::entity, EffectType type) const override
+  {
+    if (type == effectType)
+    {
+      return additive;
+    }
+    return 0;
+  }
+
+  float GetWornEffectMultiplicative(World&, entt::entity, EffectType type) const override
+  {
+    if (type == effectType)
+    {
+      return multiplicative;
+    }
+    return 1;
+  }
+
+private:
+  EffectType effectType;
+  float additive;
+  float multiplicative;
+};
+
+class EffectGrantingPotion : public SpriteItem
+{
+public:
+  EffectGrantingPotion(std::string_view name, std::string_view sprite, ItemId effectorId, float duration, glm::vec3 tint = {1, 1, 1})
+    : SpriteItem(name, sprite, tint), effectorId(effectorId), duration(duration)
+  {
+  }
+
+  void UsePrimary(float dt, World& world, entt::entity self, ItemState& state) const override;
+
+private:
+  ItemId effectorId;
+  float duration;
 };
 
 [[nodiscard]] float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::EffectType effect, float base);

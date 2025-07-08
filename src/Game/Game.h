@@ -250,6 +250,11 @@ struct ArmorAndAccessories
   void OverwriteSlot(World& world, Slot slot, ItemState itemState);
 };
 
+struct TemporaryEffects
+{
+  std::vector<ItemState> effects;
+};
+
 // If necessary, materializes the item. Then, the item is given a RigidBody and is moved into the new entity.
 entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot);
 entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAccessories::Slot slot);

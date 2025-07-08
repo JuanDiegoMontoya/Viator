@@ -13,6 +13,7 @@
 #include "Networking/RPC.h"
 #include "Networking/Server.h"
 #include "Audio.h"
+#include "shaders/Light.h.glsl"
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
@@ -225,6 +226,34 @@ void World::FixedUpdate(float dt)
       input.strafe  = glm::clamp(input.strafe, -1.0f, 1.0f);
       input.forward = glm::clamp(input.forward, -1.0f, 1.0f);
       input.elevate = glm::clamp(input.elevate, -1.0f, 1.0f);
+    }
+
+    // Apply status effects
+    if (IsServer())
+    {
+      for (auto&& [entity, health] : registry_.view<Health>().each())
+      {
+        if (GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::HealthRegeneration, 0) >= 1)
+        {
+          health.hp = glm::min(health.maxHp, health.hp + 10 * dt);
+        }
+      }
+
+      for (auto&& [entity, transform, player] : registry_.view<const GlobalTransform, const Player>().each())
+      {
+        if (GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::Shine, 0) >= 1)
+        {
+          auto& light     = registry_.emplace_or_replace<GpuLight>(entity);
+          light.color     = {1.0f, 0.4f, 0.2f};
+          light.intensity = 500;
+          light.type      = LIGHT_TYPE_POINT;
+          light.range     = 200;
+        }
+        else
+        {
+          registry_.remove<GpuLight>(entity);
+        }
+      }
     }
 
     // Process linear transform paths
@@ -772,7 +801,7 @@ void World::FixedUpdate(float dt)
             if (input.forward == 0 && glm::length(forwardVel) > 1e-3f)
             {
               auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
-              auto offs    = -glm::normalize(forwardVel) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              auto offs    = -glm::normalize(forwardVel) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
               if (glm::dot(offs + forwardVel, forwardVel) < 0)
               { 
                 offs = -forwardVel;
@@ -788,7 +817,7 @@ void World::FixedUpdate(float dt)
             if (input.strafe == 0 && glm::length(rightVel) > 1e-3f)
             {
               auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
-              auto offs    = -glm::normalize(rightVel) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              auto offs    = -glm::normalize(rightVel) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
               if (glm::dot(offs + rightVel, rightVel) < 0)
               {
                 offs = -rightVel;
@@ -805,7 +834,7 @@ void World::FixedUpdate(float dt)
             const auto xzSpeed2 = glm::length(xzVel2);
             if (xzSpeed2 > realMaxSpeed)
             {
-              xzVel2 += -glm::normalize(xzVel2) * (isOnGround ? attribs->deceleration : attribs->airDeceleration) * dt;
+              xzVel2 += -glm::normalize(xzVel2) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
               // Set speed to max if this penalty would put us under it.
               if (glm::length(xzVel2) < realMaxSpeed)
               {
@@ -1073,6 +1102,23 @@ void World::FixedUpdate(float dt)
         {
           Networking::CallRPC("UpdateTransformRPC"_hs, *this, entity, *transform);
         }
+      }
+    }
+
+    // Update status effects
+    if (IsServer())
+    {
+      for (auto&& [entity, effects] : registry_.view<TemporaryEffects>().each())
+      {
+        std::erase_if(effects.effects,
+          [dt](ItemState& effect)
+          {
+            if ((effect.useAccum -= dt) <= 0)
+            {
+              return true;
+            }
+            return false;
+          });
       }
     }
 
@@ -1420,6 +1466,7 @@ entt::entity World::CreatePlayer()
   inventory.OverwriteSlot(*this, {0, 1}, {items.GetId("Stone Pickaxe")}, p);
   inventory.OverwriteSlot(*this, {0, 2}, {items.GetId("Stone Axe")}, p);
   registry_.emplace<ArmorAndAccessories>(p);
+  registry_.emplace<TemporaryEffects>(p);
 
   GivePlayerColliders(p);
 

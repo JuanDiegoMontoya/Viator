@@ -925,4 +925,10 @@ void Core::Reflection::Initialize()
     ENUMERATOR(ItemDefinition::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
     ENUMERATOR(ItemDefinition::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
     ENUMERATOR(ItemDefinition::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
+
+  REFLECT_COMPONENT(TemporaryEffects, REPLICATED)
+    DATA(TemporaryEffects, effects);
+
+  REFLECT_COMPONENT(ArmorAndAccessories, REPLICATED)
+    DATA(ArmorAndAccessories, slots);
 }

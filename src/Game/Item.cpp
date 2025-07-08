@@ -400,10 +400,39 @@ entt::entity SpriteItem::Materialize(World& world) const
   return self;
 }
 
+entt::entity Effector::Materialize(World&) const
+{
+  return entt::null;
+}
+
+void EffectGrantingPotion::UsePrimary(float dt, World& world, entt::entity self, ItemState& state) const
+{
+  if (state.useAccum < GetUseDt())
+  {
+    return;
+  }
+
+  state.useAccum = glm::clamp(state.useAccum - dt, 0.0f, dt);
+  state.count--;
+
+  const auto& h = world.GetRegistry().get<const Hierarchy>(self);
+  auto& effects = world.GetRegistry().get<TemporaryEffects>(h.parent).effects;
+  // Update duration of the effect if it's already in the list of active effects.
+  if (auto it = std::find_if(effects.begin(), effects.end(), [&](const ItemState& is) { return is.id == effectorId;}); it != effects.end())
+  {
+    it->useAccum = glm::max(it->useAccum, duration);
+  }
+  else
+  {
+    effects.emplace_back(effectorId, 1, duration);
+  }
+}
+
 float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::EffectType effect, float base)
 {
-  // Additive
-  float sum = 0;
+  float sum     = 0;
+  float product = 1;
+
   if (auto* inv = world.GetRegistry().try_get<const Inventory>(entity))
   {
     for (size_t rowIdx = 0; rowIdx < inv->slots.size(); rowIdx++)
@@ -414,34 +443,6 @@ float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::
         if (slot.id != nullItem && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
         {
           sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetHeldEffectAdditive(world, entity, effect);
-        }
-      }
-    }
-  }
-
-  if (auto* armor = world.GetRegistry().try_get<const ArmorAndAccessories>(entity))
-  {
-    for (int i = 0; i < ArmorAndAccessories::SLOT_COUNT; i++)
-    {
-      const auto& slot = armor->slots[i];
-      if (slot.id != nullItem)
-      {
-        sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetWornEffectAdditive(world, entity, effect);
-      }
-    }
-  }
-
-  // Multiplicative
-  float product = 1;
-  if (auto* inv = world.GetRegistry().try_get<const Inventory>(entity))
-  {
-    for (size_t rowIdx = 0; rowIdx < inv->slots.size(); rowIdx++)
-    {
-      for (size_t colIdx = 0; colIdx < inv->slots[rowIdx].size(); colIdx++)
-      {
-        const auto& slot = inv->slots[rowIdx][colIdx];
-        if (slot.id != nullItem && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
-        {
           product *= world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetHeldEffectMultiplicative(world, entity, effect);
         }
       }
@@ -455,8 +456,19 @@ float GetTotalEffectOnEntity(World& world, entt::entity entity, ItemDefinition::
       const auto& slot = armor->slots[i];
       if (slot.id != nullItem)
       {
+        sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetWornEffectAdditive(world, entity, effect);
         product *= world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id).GetWornEffectMultiplicative(world, entity, effect);
       }
+    }
+  }
+
+  if (auto* effects = world.GetRegistry().try_get<const TemporaryEffects>(entity))
+  {
+    for (const auto& effect2 : effects->effects)
+    {
+      DEBUG_ASSERT(effect2.id != nullItem);
+      sum += world.GetRegistry().ctx().get<ItemRegistry>().Get(effect2.id).GetWornEffectAdditive(world, entity, effect);
+      product *= world.GetRegistry().ctx().get<ItemRegistry>().Get(effect2.id).GetWornEffectMultiplicative(world, entity, effect);
     }
   }
 
