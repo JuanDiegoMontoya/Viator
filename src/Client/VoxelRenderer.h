@@ -121,6 +121,8 @@ private:
     std::optional<Fvog::Texture> sceneIlluminance;
     std::optional<Fvog::Texture> sceneIlluminancePingPong; // Used in denoising.
     constexpr static Fvog::Format sceneIlluminanceFormat = Fvog::Format::R16G16B16A16_SFLOAT;
+    std::optional<Fvog::Texture> sceneSpecial;
+    constexpr static Fvog::Format sceneSpecialFormat = Fvog::Format::R8_UINT;
 
     // Pre-tonemap
     std::optional<Fvog::Texture> sceneColor;
@@ -146,6 +148,7 @@ private:
   PipelineManager::GraphicsPipelineKey billboardsPipeline;
   PipelineManager::GraphicsPipelineKey billboardSpritesPipeline;
 
+  PipelineManager::ComputePipelineKey spelunkerEffectPipeline;
   PipelineManager::ComputePipelineKey shadeDeferredPipeline;
   PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
   PipelineManager::ComputePipelineKey tonemapPipeline;
@@ -156,6 +159,7 @@ private:
   std::optional<Fvog::NDeviceBuffer<Temp::BillboardInstance>> billboardInstanceBuffer;
   std::optional<Fvog::NDeviceBuffer<Temp::BillboardSpriteInstance>> billboardSpriteInstanceBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBuffer;
+  std::optional<Fvog::Buffer> voxelMaterialBufferSpelunker;
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;

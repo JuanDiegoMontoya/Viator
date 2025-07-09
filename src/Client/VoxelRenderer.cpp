@@ -2,6 +2,7 @@
 
 #include "Game/World.h"
 #include "Game/Assets.h"
+#include "Game/Item.h"
 #include "MathUtilities.h"
 #include "PipelineManager.h"
 #include "Fvog/Device.h"
@@ -419,6 +420,15 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
       },
   });
 
+  spelunkerEffectPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Spelunker Effect",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "voxels/SpelunkerPotionEffect.comp.glsl",
+      },
+  });
+
   shadeDeferredPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
     .name = "Shade Deferred",
     .shaderModuleInfo =
@@ -489,6 +499,7 @@ VoxelRenderer::~VoxelRenderer()
 void VoxelRenderer::CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions)
 {
   auto voxelMaterials = std::vector<GpuVoxelMaterial>();
+  auto voxelMaterialsSpelunker = std::vector<GpuVoxelMaterial>();
 
   // Translate block definitions to GPU materials, then upload.
   for (const auto& def : blockDefinitions)
@@ -523,10 +534,20 @@ void VoxelRenderer::CreateRenderingMaterials(std::span<const std::unique_ptr<Blo
     }
 
     voxelMaterials.emplace_back(gpuMat);
+    if (!desc.isValuable)
+    {
+      gpuMat.materialFlags |= MaterialFlagBit::IS_INVISIBLE;
+    }
+    voxelMaterialsSpelunker.emplace_back(gpuMat);
   }
 
   voxelMaterialBuffer = Fvog::Buffer({.size = voxelMaterials.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer");
-  Fvog::GetDevice().ImmediateSubmit([&](VkCommandBuffer cmd) { voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials)); });
+  voxelMaterialBufferSpelunker = Fvog::Buffer({.size = voxelMaterialsSpelunker.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer Ex");
+  Fvog::GetDevice().ImmediateSubmit([&](VkCommandBuffer cmd)
+  {
+    voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials));
+    voxelMaterialBufferSpelunker->UpdateDataExpensive(cmd, std::span(voxelMaterialsSpelunker));
+  });
 }
 
 void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
@@ -541,6 +562,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneIlluminancePingPong = Fvog::CreateTexture2D(extent, Frame::sceneIlluminanceFormat, Fvog::TextureUsage::GENERAL, "Scene illuminance 2");
   frame.sceneDepth       = Fvog::CreateTexture2D(extent, Frame::sceneDepthFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene depth");
   frame.sceneColor       = Fvog::CreateTexture2D(extent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color");
+  frame.sceneSpecial     = Fvog::CreateTexture2D(extent, Frame::sceneSpecialFormat, Fvog::TextureUsage::GENERAL, "Scene special");
 
   frame.sceneColorBloomScratch = Fvog::CreateTexture2DMip({extent.width / 2, extent.height / 2}, Frame::sceneColorFormat, 8, Fvog::TextureUsage::GENERAL, "Scene color (bloom scratch buffer)");
 
@@ -678,10 +700,12 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   ctx.Barrier();
 
+  auto player   = entt::entity(entt::null);
   auto viewMat  = glm::mat4(1);
   auto position = glm::vec3();
   for (auto&& [entity, inputLook, transform] : world.GetRegistry().view<const InputLookState, const GlobalTransform, const LocalPlayer>().each())
   {
+    player = entity;
     position = transform.position;
     auto rotationQuat = transform.rotation;
     if (const auto* renderTransform = world.GetRegistry().try_get<const RenderTransform>(entity))
@@ -1053,6 +1077,35 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
 
+    // Spelunker effect, if active
+    const bool applySpelunkerEffect = GetTotalEffectOnEntity(world, player, ItemDefinition::EffectType::Spelunker, 0) > 0;
+    if (applySpelunkerEffect)
+    {
+      auto voxels2              = voxels;
+      voxels2.materialBufferIdx = voxelMaterialBufferSpelunker->GetResourceHandle().index;
+
+      ctx.BindComputePipeline(spelunkerEffectPipeline.GetPipeline());
+      ctx.SetPushConstants(ShadingPushConstants{
+        .voxels               = voxels2,
+        .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
+        .gDepth               = frame.sceneDepth->ImageView().GetTexture2D(),
+        .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
+        .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
+        .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
+        .gSpecial             = frame.sceneSpecial->ImageView().GetUImage2D(),
+        .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
+        .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
+        .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .ddgi                 = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+        .samplerr             = linearClampSampler,
+        .giMethod             = uint32_t(giMethod_),
+      });
+      ctx.ImageBarrierDiscard(*frame.sceneSpecial, VK_IMAGE_LAYOUT_GENERAL);
+      ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
+      ctx.Barrier();
+    }
+
+
     // Shade image.
     {
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
@@ -1063,12 +1116,14 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
         .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
         .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
+        .gSpecial             = frame.sceneSpecial->ImageView().GetUImage2D(),
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         .ddgi                 = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
         .samplerr             = linearClampSampler,
         .giMethod             = uint32_t(giMethod_),
+        .applySpelunkerEffect = applySpelunkerEffect,
       });
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }

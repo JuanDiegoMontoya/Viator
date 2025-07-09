@@ -229,4 +229,16 @@ float square(float x)
   return x * x;
 }
 
+// More precise way to generate a ray direction.
+// https://sibaku.github.io/computer-graphics/2017/01/10/Camera-Ray-Generation.html
+vec3 CreateRay(vec2 uv, mat4 view_from_clip, mat4 world_from_view)
+{
+  const vec2 posNDC = uv * 2.0 - 1.0;
+  const vec4 posClip = vec4(posNDC, 0.0, 1.0);
+  vec4 dirView = view_from_clip * posClip;
+  dirView.w = 0.0;
+  const vec3 dirWorld = (world_from_view * dirView).xyz;
+  return normalize(dirWorld);
+}
+
 #endif // MATH_H

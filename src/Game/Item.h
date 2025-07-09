@@ -83,6 +83,7 @@ public:
     Knockback,
     HealthRegeneration,
     Shine, // User becomes a light source
+    Spelunker, // User gains X-ray vision that makes ore and other valuables visible through walls
     EFFECT_COUNT,
   };
 

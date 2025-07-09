@@ -18,6 +18,7 @@ struct VoxelMaterialDesc
   glm::vec3 emissionFactor = {0, 0, 0};
   // This is only a shared ptr because I'm lazy and want this struct to remain copyable.
   std::shared_ptr<TwoLevelGrid::SubGrid> subGrid;
+  bool isValuable = false; // For spelunker potion. If true, voxel will be opaque in spelunker view.
 };
 
 struct DropSelf

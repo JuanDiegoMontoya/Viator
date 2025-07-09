@@ -10,6 +10,10 @@
 
 #define DDGI_NUM_CASCADES 6
 
+// When enabled, probes will be blended in a gamma-2 space to make gradients appear perceptually 
+// smoother than a simple photometrically linear blend.
+#define PERCEPTUAL_BLEND 1
+
 struct ProbeData
 {
   float validity;

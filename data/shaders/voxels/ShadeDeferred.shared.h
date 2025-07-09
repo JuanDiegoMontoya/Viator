@@ -18,6 +18,7 @@ FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
   Texture2D gNormal;
   Texture2D gRadiance;
   Texture2D gIndirectIlluminance;
+  UImage2D gSpecial;
   Image2D sceneColor;
   FVOG_UINT32 internalColorSpace;
   FVOG_UINT32 uniformBufferIndex;
@@ -29,6 +30,7 @@ FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
 #endif
   Sampler samplerr;
   FVOG_UINT32 giMethod; // 1 = per-pixel PT. 2 = DDGI
+  FVOG_BOOL32 applySpelunkerEffect;
 };
 
 #endif

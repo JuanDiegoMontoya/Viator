@@ -240,6 +240,11 @@ struct Image2D
   FVOG_UINT32 imgIdx;
 };
 
+struct UImage2D
+{
+  FVOG_UINT32 imgIdx;
+};
+
 struct Image2DArray
 {
   FVOG_UINT32 imgIdx;
@@ -273,6 +278,7 @@ FVOG_DECLARE_SAMPLED_IMAGES(texture3D);
 FVOG_DECLARE_SAMPLED_IMAGES(texture2DArray);
 FVOG_DECLARE_SAMPLED_IMAGES(utexture2DArray);
 
+FVOG_DECLARE_STORAGE_IMAGES(uimage2D);
 FVOG_DECLARE_STORAGE_IMAGES(image2D);
 FVOG_DECLARE_STORAGE_IMAGES(image3D);
 FVOG_DECLARE_STORAGE_IMAGES(image2DArray);
@@ -344,6 +350,11 @@ ivec2 imageSize(Image2D img)
   return imageSize(Fvog_image2D(img.imgIdx));
 }
 
+ivec2 imageSize(UImage2D img)
+{
+  return imageSize(Fvog_uimage2D(img.imgIdx));
+}
+
 ivec3 imageSize(Image2DArray img)
 {
   return imageSize(Fvog_image2DArray(img.imgIdx));
@@ -359,6 +370,11 @@ void imageStore(Image2D img, ivec2 coord, vec4 data)
   imageStore(Fvog_image2D(img.imgIdx), coord, data);
 }
 
+void imageStore(UImage2D img, ivec2 coord, uvec4 data)
+{
+  imageStore(Fvog_uimage2D(img.imgIdx), coord, data);
+}
+
 void imageStore(Image2DArray img, ivec3 coord, vec4 data)
 {
   imageStore(Fvog_image2DArray(img.imgIdx), coord, data);
@@ -367,6 +383,11 @@ void imageStore(Image2DArray img, ivec3 coord, vec4 data)
 vec4 imageLoad(Image2D img, ivec2 coord)
 {
   return imageLoad(Fvog_image2D(img.imgIdx), coord);
+}
+
+uvec4 imageLoad(UImage2D img, ivec2 coord)
+{
+  return imageLoad(Fvog_uimage2D(img.imgIdx), coord);
 }
 
 vec4 imageLoad(Image2DArray img, ivec3 coord)

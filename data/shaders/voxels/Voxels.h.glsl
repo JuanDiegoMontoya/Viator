@@ -309,13 +309,14 @@ bool vx_IsVisible(voxel_t voxel)
 }
 
 // Ray position in [0, subGrid.dimensions)
-bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, out HitSurfaceParameters hit)
+bool vx_TraceRaySubGrid(vec3 rayPosition, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, inout HitSurfaceParameters hit)
 {
   GpuSubGrid subGrid   = SUBGRIDS[subGridIndex];
   rayPosition          = clamp(rayPosition, vec3(EPSILON), vec3(subGrid.dimensions - EPSILON));
   vec3 mapPos          = (floor(rayPosition));
   vec3 sideDist        = (vec3(init.S) - init.stepDir * fract(rayPosition)) * init.deltaDist;
 
+  [[dont_unroll]]
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, ivec3(subGrid.dimensions))); i++)
   {
     const uint subVoxelIndex = FlattenSubGridCoord(subGridIndex, ivec3(mapPos));
@@ -360,6 +361,7 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
   vec3 mapPos          = vec3(floor(rayPosition));
   vec3 sideDist        = (vec3(init.S) - init.stepDir * fract(rayPosition)) * init.deltaDist;
   
+  [[dont_unroll]]
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(BL_BRICK_SIDE_LENGTH))); i++)
   {
     gVoxelsTraversed++;
@@ -385,22 +387,24 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
       const voxel_t voxel = BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].voxels[localVoxelIndex];
       hit.voxel         = voxel;
       hit.voxelPosition = ivec3(mapPos);
-
-      GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-      if (bool(material.materialFlags & IS_SUBGRID))
+      if (vx_IsVisible(voxel))
       {
-        if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, hit))
+        GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+        if (bool(material.materialFlags & IS_SUBGRID))
         {
-          hit.positionWorld += ivec3(mapPos);
+          if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, hit))
+          {
+            hit.positionWorld += ivec3(mapPos);
+            return true;
+          }
+        }
+        else
+        {
+          hit.positionWorld   = hitWorldPos;
+          hit.texCoords       = vx_GetTexCoords(normal, uvw);
+          hit.flatNormalWorld = normal;
           return true;
         }
-      }
-      else
-      {
-        hit.positionWorld   = hitWorldPos;
-        hit.texCoords       = vx_GetTexCoords(normal, uvw);
-        hit.flatNormalWorld = normal;
-        return true;
       }
     }
 
@@ -428,6 +432,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosition, vec3 rayDirection, TopLevelB
   const vec3 stepDir   = init.stepDir;
   vec3 sideDist        = (vec3(S) - stepDir * fract(rayPosition)) * deltaDist;
 
+  [[dont_unroll]]
   for (int i = 0; all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, ivec3(TL_BRICK_SIDE_LENGTH))); i++)
   {
     const uint bottomLevelIndex             = FlattenBottomLevelBrickCoord(ivec3(mapPos));
@@ -500,6 +505,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
   bvec3 cases = bvec3(sideDist);
 
   bool hasHit = false;
+  [[dont_unroll]]
   for (int i = 0; i < tMax; i++)
   {
     // For the top level, traversal outside the map area is ok, just skip

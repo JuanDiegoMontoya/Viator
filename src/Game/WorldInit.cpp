@@ -380,10 +380,12 @@ void World::InitializeGameDefinitions()
   const auto shineId = items.Add(new Effector("Shine", ItemDefinition::EffectType::Shine));
   const auto swiftnessId = items.Add(new Effector("Swiftness", ItemDefinition::EffectType::MovementSpeedModifier, 0, 1.25f));
   const auto ironskinId = items.Add(new Effector("Ironskin", ItemDefinition::EffectType::ArmorModifier, 8));
+  const auto spelunkerId = items.Add(new Effector("Spelunker", ItemDefinition::EffectType::Spelunker, 1));
   items.Add(new EffectGrantingPotion("Health Regeneration Potion", "potion_healing", healthRegenId, 300, {1, .1f, .1f}));
   items.Add(new EffectGrantingPotion("Shine Potion", "potion_healing", shineId, 600, {1.0f, 1.0f, 0.4f}));
   items.Add(new EffectGrantingPotion("Swiftness Potion", "potion_healing", swiftnessId, 300, {0.1f, 1.0f, 1}));
   items.Add(new EffectGrantingPotion("Ironskin Potion", "potion_healing", ironskinId, 480, {0.4f, 1.0f, 0.1f}));
+  items.Add(new EffectGrantingPotion("Spelunker Potion", "potion_healing", spelunkerId, 300, {1.0f, 0.9f, 0.01f}));
 
   items.Add(new Boots("Super Frog Boots", "potion_healing"));
 
@@ -456,6 +458,7 @@ void World::InitializeGameDefinitions()
                                                        {
                                                          .randomizeTexcoordRotation = true,
                                                          .baseColorTexture          = "malachite_albedo",
+                                                         .isValuable                = true,
                                                        },
                                                    })))
                                                    .GetItemId();
