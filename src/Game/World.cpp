@@ -235,7 +235,7 @@ void World::FixedUpdate(float dt)
       {
         if (GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::HealthRegeneration, 0) >= 1)
         {
-          health.hp = glm::min(health.maxHp, health.hp + 10 * dt);
+          health.hp = glm::min(health.maxHp, health.hp + 4 * dt);
         }
       }
 
@@ -742,16 +742,18 @@ void World::FixedUpdate(float dt)
               input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
 
             auto* emitter = registry_.try_get<SoundEmitter>(entity);
-            if (isOnGround && glm::length(glm::vec2(velocity.x, velocity.z)) > 3)
+            if (isOnGround && glm::length(glm::vec2(velocity.x, velocity.z)) >= attribs->runMaxSpeed * 0.5f)
             {
               if (!emitter || emitter->handle.expired())
               {
                 registry_.emplace_or_replace<SoundEmitter>(entity,
                   SoundEmitter{GetAudio()->PlaySound({
-                    .name      = "walk",
-                    .volume    = 1,
-                    .isLooping = true,
-                    .delay     = 0.1f,
+                    .name        = "walk",
+                    .volume      = 1,
+                    .minDistance = 3,
+                    .isLooping   = true,
+                    .delay       = 0.1f,
+                    .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
                   })});
               }
             }
@@ -762,14 +764,25 @@ void World::FixedUpdate(float dt)
 
             if (isOnGround && cc->previousGroundState != JPH::CharacterBase::EGroundState::OnGround && velocity.y < -1.0f)
             {
-              GetAudio()->PlaySound({.name = "walk", .pitch = 0.8f});
+              GetAudio()->PlaySound({
+                .name        = "walk",
+                .minDistance = 3,
+                .pitch       = 0.8f,
+                .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
+              });
             }
 
             if (isOnGround)
             {
               if (input.jump)
               {
-                GetAudio()->PlaySound({.name = "jump", .volume = 0.4f, .pitch = 0.8f});
+                GetAudio()->PlaySound({
+                  .name        = "jump",
+                  .volume      = 0.4f,
+                  .minDistance = 3,
+                  .pitch       = 0.8f,
+                  .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
+                });
                 velocity.y      = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }

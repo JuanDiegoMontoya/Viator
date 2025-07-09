@@ -28,15 +28,11 @@ entt::entity MeleeFrogDefinition::Spawn(World& world, glm::vec3 position, [[mayb
   registry.emplace<AiHearing>(e);
   registry.emplace<AiTarget>(e);
   registry.emplace<AiWanderBehavior>(e);
-  registry.emplace<WalkingMovementAttributes>(e) = {.runMaxSpeed = 3.5f};
+  registry.emplace<WalkingMovementAttributes>(e) = {.runMaxSpeed = 3.0f};
 
   auto& contactDamage  = registry.emplace<ContactDamage>(e);
   contactDamage.damage = 10;
-  // Physics::AddCharacterController({registry_, e}, {sphere});
-  registry.emplace<Physics::CharacterControllerShrimpleSettings>(e,
-    Physics::CharacterControllerShrimpleSettings{
-      .shape = sphere,
-    });
+  registry.emplace<Physics::CharacterControllerSettings>(e, Physics::CharacterControllerSettings{.shape = sphere});
   // registry_.emplace<FlyingCharacterController>(e) = {.maxSpeed = 6, .acceleration = 25};
   registry.emplace_or_replace<LinearVelocity>(e);
   registry.emplace<Physics::RigidBodySettings>(e,
