@@ -204,6 +204,8 @@ public:
 
   [[nodiscard]] Audio* GetAudio();
 
+  void CreateRenderingMaterials();
+
 private:
   uint64_t ticks_ = 0;
   entt::registry registryOld_;

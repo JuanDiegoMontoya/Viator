@@ -237,6 +237,8 @@ int32_t Networking::Client::HandlePacket(World& world, const ENetPacket& enetPac
     auto grid = Core::Serialization::DeserializeObjectStream<TwoLevelGrid>(stream);
     world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));
     world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
+    
+    world.CreateRenderingMaterials();
   }
   else if ((packetType & PacketType::TypeMask) == PacketType::TickNumber)
   {

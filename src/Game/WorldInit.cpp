@@ -791,8 +791,12 @@ void World::InitializeGameDefinitions()
 
 void World::CreateGrid(glm::ivec3 numChunks)
 {
-  auto& grid = registry_.ctx().insert_or_assign(TwoLevelGrid(numChunks));
+  registry_.ctx().insert_or_assign(TwoLevelGrid(numChunks));
+  CreateRenderingMaterials();
+}
 
+void World::CreateRenderingMaterials()
+{
   auto voxelMats = std::vector<TwoLevelGrid::Material>();
   auto blockDefs = registry_.ctx().get<BlockRegistry>().GetAllDefinitions();
   for (const auto& def : blockDefs)
@@ -803,7 +807,7 @@ void World::CreateGrid(glm::ivec3 numChunks)
       .subGrid   = def->GetSubGrid(),
     });
   }
-  grid.SetMaterialArray(std::move(voxelMats));
+  registry_.ctx().get<TwoLevelGrid>().SetMaterialArray(std::move(voxelMats));
 
   auto* head = registry_.ctx().get<Head*>();
   head->CreateRenderingMaterials(blockDefs);

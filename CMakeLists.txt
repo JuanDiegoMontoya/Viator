@@ -195,6 +195,7 @@ target_compile_options(frogRender
     >
     >
     $<$<CXX_COMPILER_ID:MSVC>:
+    /bigobj # Reflection.cpp generates a lot of symbols.
     /W4
     /WX
     /permissive-
@@ -203,7 +204,6 @@ target_compile_options(frogRender
     /wd4127 # constant expression in conditional
     /wd4459 # declaration of 'foo' hides global declaration (from spdlog)
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
-    /bigobj
     #/JMC # Has a non-negligible perf impact.
     #/UNDEBUG # Undefine NDEBUG for DebugFast builds. Causes linker errors with Jolt.
     /ZI          # Program Database for Edit and Continue

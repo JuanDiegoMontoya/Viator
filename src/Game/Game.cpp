@@ -103,11 +103,11 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
       {
         if (glm::length(world.GetRegistry().get<LinearVelocity>(entity1).v) > 1.0f)
         {
-          world.GetAudio()->PlaySound({.name = "land",
-            .attenuationModel                = Audio::Sound::AttenuationModel::Linear,
-            .maxDistance                     = 5,
-            .rolloff                         = 0.25f,
-            .position                        = world.GetRegistry().get<const GlobalTransform>(entity1).position});
+          world.GetAudio()->PlaySound({
+            .name     = "land",
+            .rolloff  = 0.5f,
+            .position = world.GetRegistry().get<const GlobalTransform>(entity1).position,
+          });
         }
         return true;
       }
@@ -397,7 +397,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<Head*>() = gHead_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<std::unique_ptr<Networking::Interface>*>() = gNetworking_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<NpcSpawnDirector>(world);
-  registry.ctx().emplace<bool>("UpdateNPCSpawnDirector"_hs) = true;
+  registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();

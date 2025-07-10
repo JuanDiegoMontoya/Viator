@@ -429,14 +429,15 @@ namespace Core::Serialization
     ASSERT(file);
 
     {
-      auto inputArchive = cereal::BinaryInputArchive(file);
-
       // Load relevant context variables.
-      auto grid = TwoLevelGrid();
+      auto inputArchive = cereal::BinaryInputArchive(file);
+      auto grid         = TwoLevelGrid();
       SerializeGrid<false>(inputArchive, grid);
       grid.CoalesceBricksSLOW();
       grid.MarkAllBricksDirty();
       registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
+
+      world.CreateRenderingMaterials();
     }
 
     DeserializeComponentStream(world, file, remoteToLocalTemp, localToRemoteTemp, false, false);
