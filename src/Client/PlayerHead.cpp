@@ -115,12 +115,18 @@ public:
   {
     auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
     app->inputSystem_->CursorPosCallback(currentCursorX, currentCursorY);
+    // Prevent unwanted UI movement during gameplay.
+    if (glfwGetInputMode(window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED)
+    {
+      ImGui_ImplGlfw_CursorPosCallback(window, currentCursorX, currentCursorY);
+    }
   }
 
   static void CursorEnterCallback(GLFWwindow* window, int entered)
   {
     auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
     app->inputSystem_->CursorEnterCallback(entered);
+    ImGui_ImplGlfw_CursorEnterCallback(window, entered);
   }
 
   static void FramebufferResizeCallback(GLFWwindow* window, int newWidth, int newHeight)
@@ -147,6 +153,44 @@ public:
   {
     auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
     app->inputSystem_->ScrollCallback(xOffset, yOffset);
+    // Prevent unwanted UI movement during gameplay.
+    if (glfwGetInputMode(window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED)
+    {
+      ImGui_ImplGlfw_ScrollCallback(window, xOffset, yOffset);
+    }
+  }
+
+  static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+  {
+    [[maybe_unused]] auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
+    // Prevent unwanted UI movement during gameplay.
+    if (glfwGetInputMode(window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED)
+    {
+      ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+    }
+  }
+
+  static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+  {
+    [[maybe_unused]] auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
+    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+  }
+
+  static void CharCallback(GLFWwindow* window, unsigned c)
+  {
+    [[maybe_unused]] auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
+    ImGui_ImplGlfw_CharCallback(window, c);
+  }
+
+  static void WindowFocusCallback(GLFWwindow* window, int focused)
+  {
+    [[maybe_unused]] auto* app = static_cast<PlayerHead*>(glfwGetWindowUserPointer(window));
+    ImGui_ImplGlfw_WindowFocusCallback(window, focused);
+  }
+
+  static void MonitorCallback(GLFWmonitor* monitor, int event)
+  {
+    ImGui_ImplGlfw_MonitorCallback(monitor, event);
   }
 };
 
@@ -335,11 +379,16 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
 
   glfwSetWindowUserPointer(window, this);
 
-  glfwSetCursorPosCallback(window, ApplicationAccess2::CursorPosCallback);
+  glfwSetWindowFocusCallback(window, ApplicationAccess2::WindowFocusCallback);
   glfwSetCursorEnterCallback(window, ApplicationAccess2::CursorEnterCallback);
-  glfwSetFramebufferSizeCallback(window, ApplicationAccess2::FramebufferResizeCallback);
-  glfwSetDropCallback(window, ApplicationAccess2::PathDropCallback);
+  glfwSetCursorPosCallback(window, ApplicationAccess2::CursorPosCallback);
+  glfwSetMouseButtonCallback(window, ApplicationAccess2::MouseButtonCallback);
   glfwSetScrollCallback(window, ApplicationAccess2::ScrollCallback);
+  glfwSetKeyCallback(window, ApplicationAccess2::KeyCallback);
+  glfwSetCharCallback(window, ApplicationAccess2::CharCallback);
+  glfwSetMonitorCallback(ApplicationAccess2::MonitorCallback);
+  glfwSetDropCallback(window, ApplicationAccess2::PathDropCallback);
+  glfwSetFramebufferSizeCallback(window, ApplicationAccess2::FramebufferResizeCallback);
 
   // Load app icon
   {
@@ -451,7 +500,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   destroyList_.Push([] { ImGui::DestroyContext(); });
   ImPlot::CreateContext();
   destroyList_.Push([] { ImPlot::DestroyContext(); });
-  ImGui_ImplGlfw_InitForVulkan(window, true);
+  ImGui_ImplGlfw_InitForVulkan(window, false);
   destroyList_.Push([] { ImGui_ImplGlfw_Shutdown(); });
 
   // ImGui may create many sets, but each will only have one combined image sampler
