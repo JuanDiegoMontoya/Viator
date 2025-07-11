@@ -135,7 +135,13 @@ namespace
       return;
     }
     const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
-    auto text       = def.GetName();
+
+    auto text = def.GetName();
+
+    if (def.GetMaxStackSize() > 1)
+    {
+      text += "\n\n" + std::to_string(item.count) + " / " + std::to_string(def.GetMaxStackSize());
+    }
 
     auto GetWornEffectTextMul = [&](ItemDefinition::EffectType type, const char* name)
     {
