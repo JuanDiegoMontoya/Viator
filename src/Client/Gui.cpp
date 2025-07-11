@@ -259,7 +259,7 @@ namespace
   {
     Rect rect{};
 
-    auto title = "Inventory" + std::to_string(std::underlying_type_t<entt::entity>(parent));
+    const auto title = "Inventory" + std::string(parent == user ? "##self" : "##other");
     if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
       ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0.5f, 0.5f});
@@ -372,7 +372,7 @@ namespace
 
   void DrawArmorAndAccessories(World& world, entt::entity parent, [[maybe_unused]] entt::entity user, ArmorAndAccessories& armorAndAccessories)
   {
-    auto title = "ArmorAndAccessories" + std::to_string(std::underlying_type_t<entt::entity>(parent));
+    const auto title = "ArmorAndAccessories" + std::string(parent == user ? "##self" : "##other");
     if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
       ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0.5f, 0.5f});
