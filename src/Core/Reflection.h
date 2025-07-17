@@ -83,5 +83,10 @@ namespace Core::Reflection
   
   const char* EnumToString(entt::meta_any value);
 
+  // Like EnumToString, except returns the "name" property, even if "display_name" exists.
+  const char* EnumToRawName(entt::meta_any value);
+
+  const char* EnumToIcon(entt::meta_any value);
+
   void Initialize();
 }

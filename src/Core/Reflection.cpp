@@ -17,6 +17,7 @@
 #include "entt/meta/template.hpp"
 #include "entt/core/hashed_string.hpp"
 #include "spdlog/spdlog.h"
+#include "IconsFontAwesome6.h"
 
 #include "Jolt/Physics/Body/AllowedDOFs.h"
 #include "Jolt/Physics/Body/MotionQuality.h"
@@ -390,6 +391,59 @@ const char* Core::Reflection::EnumToString(entt::meta_any value)
   return "Unknown enumerator";
 }
 
+const char* Core::Reflection::EnumToRawName(entt::meta_any value)
+{
+  ASSERT(value.type());
+  ASSERT(value.type().is_enum());
+
+  for (auto [id, data] : value.type().data())
+  {
+    PropertiesMap dataProps = {};
+    if (auto* mp = static_cast<const PropertiesMap*>(data.custom()))
+    {
+      dataProps = *mp;
+    }
+
+    if (auto it = dataProps.find("name"_hs); it != dataProps.end())
+    {
+      auto name = it->second.cast<const char*>();
+      if (value == data.get({}))
+      {
+        return name;
+      }
+    }
+  }
+
+  return "Unknown enumerator";
+}
+
+const char* Core::Reflection::EnumToIcon(entt::meta_any value)
+{
+  ASSERT(value.type());
+  ASSERT(value.type().is_enum());
+
+  for (auto [id, data] : value.type().data())
+  {
+    PropertiesMap dataProps = {};
+    if (auto* mp = static_cast<const PropertiesMap*>(data.custom()))
+    {
+      dataProps = *mp;
+    }
+
+    if (auto it = dataProps.find("icon"_hs); it != dataProps.end())
+    {
+      auto name = it->second.cast<const char*>();
+      if (value == data.get({}))
+      {
+        return name;
+      }
+    }
+  }
+
+  return "Unknown enumerator";
+}
+
+
 void Core::Reflection::Initialize()
 {
   ZoneScoped;
@@ -419,6 +473,7 @@ void Core::Reflection::Initialize()
 #define PROP_MIN(Scalar) {"min"_hs, Scalar}
 #define PROP_MAX(Scalar) {"max"_hs, Scalar}
 #define PROP_DISPLAY_NAME(Name) {"display_name"_hs, Name}
+#define PROP_ICON(Icon) {"icon"_hs, Icon}
 #define REFLECT_ENUM(T) entt::meta_factory<T>{}\
   .func<[](T value) { return static_cast<std::underlying_type_t<T>>(value); }>("to_underlying"_hs)
 #define ENUMERATOR(E, Member, ...) \
@@ -897,6 +952,7 @@ void Core::Reflection::Initialize()
   REGISTER_RPC(SwapInventorySlotAndArmorSlotRPC, RpcTraits::Server);
   REGISTER_RPC(ThrowItemFromArmorRPC, RpcTraits::Server);
   REGISTER_RPC(DropItemFromArmorRPC, RpcTraits::Server);
+  REGISTER_RPC(SwapArmorSlotsRPC, RpcTraits::Server);
 
   REFLECT_ENUM(ActionType);
 
@@ -925,6 +981,16 @@ void Core::Reflection::Initialize()
     ENUMERATOR(ItemDefinition::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
     ENUMERATOR(ItemDefinition::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
     ENUMERATOR(ItemDefinition::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
+
+  REFLECT_ENUM(ArmorAndAccessories::Slot)
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_HEAD, PROP_DISPLAY_NAME("Head"), PROP_ICON(ICON_FA_HAT_COWBOY))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_BODY, PROP_DISPLAY_NAME("Body"), PROP_ICON(ICON_FA_SHIRT))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_LEGS, PROP_DISPLAY_NAME("Legs"), PROP_ICON(ICON_FA_SHOE_PRINTS))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY0, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY1, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY2, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY3, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR))
+    ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY4, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR));
 
   REFLECT_COMPONENT(TemporaryEffects, REPLICATED)
     DATA(TemporaryEffects, effects);

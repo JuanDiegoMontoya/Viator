@@ -388,6 +388,10 @@ void World::InitializeGameDefinitions()
   items.Add(new EffectGrantingPotion("Spelunker Potion", "potion_healing", spelunkerId, 300, {1.0f, 0.9f, 0.01f}));
 
   items.Add(new Boots("Super Frog Boots", "potion_healing"));
+  items.Add(new Armor("Copper Cap", 2, ItemDefinition::AllowedSlots::Head, "potion_healing"));
+  items.Add(new Armor("Copper Polo", 2, ItemDefinition::AllowedSlots::Body, "potion_healing"));
+  items.Add(new Armor("Copper Shoes", 2, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
+  items.Add(new TestAccessory("Test Accessory", "potion_healing"));
 
   auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
 

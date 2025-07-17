@@ -1594,6 +1594,8 @@ float World::DamageEntity(entt::entity entity, float damage)
     return 0;
   }
 
+  const auto armor = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::ArmorModifier, 0);
+  damage = glm::max(1.0f, damage - armor / 2);
   auto& h = registry_.get<Health>(entity);
   h.hp -= damage;
   return damage;

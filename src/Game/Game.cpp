@@ -582,6 +582,32 @@ bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::i
   return true;
 }
 
+bool SwapArmorSlotsRPC(World& world, entt::entity parent1, ArmorAndAccessories::Slot parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot)
+{
+  auto* armor1 = world.GetRegistry().try_get<ArmorAndAccessories>(parent1);
+  auto* armor2 = world.GetRegistry().try_get<ArmorAndAccessories>(parent2);
+  if (!armor1 || !armor2)
+  {
+    spdlog::warn("Failed to swap armor slots.");
+    return false;
+  }
+
+  // Only accessory slots can be swapped.
+  if (parent1Slot < ArmorAndAccessories::SLOT_ACCESSORY0 || parent2Slot < ArmorAndAccessories::SLOT_ACCESSORY0)
+  {
+    return false;
+  }
+
+  
+  auto item1 = armor1->slots[parent1Slot];
+  auto item2 = armor2->slots[parent2Slot];
+
+  armor1->OverwriteSlot(world, parent1Slot, item2);
+  armor2->OverwriteSlot(world, parent2Slot, item1);
+
+  return true;
+}
+
 glm::vec3 GetForward(glm::quat rotation)
 {
   return -glm::mat3_cast(rotation)[2];

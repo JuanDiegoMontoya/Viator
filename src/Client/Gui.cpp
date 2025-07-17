@@ -390,9 +390,16 @@ namespace
         }
         const auto cursorPos = ImGui::GetCursorPos();
         ImGui::Selectable(("##" + nameStr).c_str(), false, 0, {50, 50});
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
         {
-          DrawTooltipForItem(world, parent, slot);
+          if (slot.id == nullItem)
+          {
+            ImGui::SetTooltip("%s", Core::Reflection::EnumToString(ArmorAndAccessories::Slot(i)));
+          }
+          else
+          {
+            DrawTooltipForItem(world, parent, slot);
+          }
         }
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
         {
@@ -410,11 +417,25 @@ namespace
           {
             DEBUG_ASSERT(payload->DataSize == sizeof(InventoryDragDropPayload));
             const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
-            Networking::CallRPC("SwapInventorySlotAndArmorSlotRPC"_hs,world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, ArmorAndAccessories::Slot(i));
+            Networking::CallRPC("SwapInventorySlotAndArmorSlotRPC"_hs, world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, ArmorAndAccessories::Slot(i));
+          }
+
+          if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ARMOR_SLOT"))
+          {
+            DEBUG_ASSERT(payload->DataSize == sizeof(ArmorDragDropPayload));
+            const auto armorPayload = *static_cast<const ArmorDragDropPayload*>(payload->Data);
+            Networking::CallRPC("SwapArmorSlotsRPC"_hs, world, armorPayload.sourceEntity, armorPayload.slot, parent, ArmorAndAccessories::Slot(i));
           }
         }
         ImGui::SetCursorPos(cursorPos);
-        ImGui::TextWrapped("%s", nameStr.c_str());
+        if (nameStr.empty())
+        {
+          ImGui::TextColored({1, 1, 1, 0.25f}, Core::Reflection::EnumToIcon(ArmorAndAccessories::Slot(i)));
+        }
+        else
+        {
+          ImGui::TextWrapped("%s", nameStr.c_str());
+        }
         ImGui::PopID();
       }
       ImGui::EndTable();

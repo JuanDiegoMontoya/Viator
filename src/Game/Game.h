@@ -242,6 +242,12 @@ struct ArmorAndAccessories
     SLOT_BODY,
     SLOT_LEGS,
 
+    SLOT_ACCESSORY0,
+    SLOT_ACCESSORY1,
+    SLOT_ACCESSORY2,
+    SLOT_ACCESSORY3,
+    SLOT_ACCESSORY4,
+
     SLOT_COUNT,
   };
 
@@ -269,6 +275,7 @@ bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent
 void TeleportPlayerRPC(World& world, entt::entity player, LocalTransform transform);
 
 bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot);
+bool SwapArmorSlotsRPC(World& world, entt::entity parent1, ArmorAndAccessories::Slot parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot);
 
 // Return to desktop
 struct CloseApplication {};

@@ -346,6 +346,60 @@ class CSKnife : public Spear
   }
 };
 
+class TestAccessory : public SpriteItem
+{
+public:
+  using SpriteItem::SpriteItem;
+
+  float GetWornEffectAdditive(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::ArmorModifier)
+    {
+      return 100;
+    }
+
+    return 0;
+  }
+
+  AllowedSlots GetAllowedSlot() const override
+  {
+    return AllowedSlots::Accessory;
+  }
+};
+
+class Armor : public SpriteItem
+{
+public:
+  explicit Armor(std::string_view name, float armorRating, AllowedSlots slots, std::string_view sprite, glm::vec3 tint = glm::vec3(1))
+    : SpriteItem(name, sprite, tint), armorRating_(armorRating), slots_(slots)
+  {
+  }
+
+  float GetWornEffectAdditive(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::ArmorModifier)
+    {
+      return armorRating_;
+    }
+
+    return 0;
+  }
+
+  AllowedSlots GetAllowedSlot() const override
+  {
+    return slots_;
+  }
+
+  int GetMaxStackSize() const override
+  {
+    return 1;
+  }
+
+private:
+  float armorRating_;
+  AllowedSlots slots_;
+};
+
 class Boots : public SpriteItem
 {
   using SpriteItem::SpriteItem;
@@ -363,6 +417,15 @@ class Boots : public SpriteItem
     }
 
     return 1;
+  }
+
+  float GetWornEffectAdditive(World&, entt::entity, EffectType type) const override
+  {
+    if (type == EffectType::ArmorModifier)
+    {
+      return 10;
+    }
+    return 0;
   }
 
   float GetHeldEffectAdditive(World&, entt::entity, EffectType type) const override
