@@ -11,11 +11,65 @@
 #define CULL_PRIMITIVE_VSM      (1 << 5)
 #define USE_HASHED_TRANSPARENCY (1 << 6)
 
+#define PROFILE_LAYER_COUNT 2
+// An atmosphere layer density which can be calculated as:
+//   density = exp_term * exp(exp_scale * h) + linear_term * h + constant_term,
+struct DensityProfileLayer
+{
+  FVOG_FLOAT const_term;
+  FVOG_FLOAT exp_scale;
+  FVOG_FLOAT exp_term;
+  FVOG_FLOAT layer_width;
+  FVOG_FLOAT lin_term;
+};
+
 struct SkyParameters
 {
   FVOG_VEC3 sunDir;
   FVOG_VEC3 sunColor;
+
+  FVOG_FLOAT atmosphere_bottom;
+  FVOG_FLOAT atmosphere_top;
+  
+  FVOG_VEC3 mie_scattering;
+  FVOG_VEC3 mie_extinction;
+  FVOG_FLOAT mie_scale_height;
+  FVOG_FLOAT mie_phase_function_g;
+  DensityProfileLayer mie_density[PROFILE_LAYER_COUNT];
+  
+  FVOG_VEC3 rayleigh_scattering;
+  FVOG_FLOAT rayleigh_scale_height;
+  DensityProfileLayer rayleigh_density[PROFILE_LAYER_COUNT];
+  
+  FVOG_VEC3 absorption_extinction;
+  DensityProfileLayer absorption_density[PROFILE_LAYER_COUNT];
 };
+
+#ifdef __cplusplus
+inline SkyParameters InitSkyParameters()
+{
+  SkyParameters params;
+  params.absorption_density[0] = { 0.0f, 0.2f, 0.00182376393f, 35.0f, 0.0f };
+  params.absorption_density[1] = { 0.0f, -0.06666666666f, 20.6245170027f, 65.0f, 0.0f };
+  params.absorption_extinction = { 0.00229072f,  0.00154036f,  0.0f};
+  params.atmosphere_bottom = 6360.0f;
+  params.atmosphere_top = 6460.0f;
+
+  params.mie_density[0] = { 0.0f, -0.8333333134651184f, 1.0f, 100.0f, 0.0f};
+  params.mie_density[1] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}; 
+  params.mie_extinction = { 0.00443999981507659f, 0.00443999981507659f, 0.00443999981507659f};
+  params.mie_phase_function_g = 0.800000011920929f;
+  params.mie_scale_height = 1.2000000476837158f;
+  params.mie_scattering = { 0.003996000159531832f, 0.003996000159531832f, 0.003996000159531832f },
+
+  params.rayleigh_density[0] = { 0.0f, -0.125f, 1.0f, 100.0f, 0.0f };
+  params.rayleigh_density[1] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  params.rayleigh_scale_height = 8.696f;
+  params.rayleigh_scattering = { 0.006604931f, 0.012344918f, 0.029412623f };
+  
+  return params;
+}
+#endif //__cplusplus
 
 #ifndef __cplusplus
 

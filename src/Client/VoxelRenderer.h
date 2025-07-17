@@ -136,6 +136,10 @@ private:
   PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
   PipelineManager::ComputePipelineKey tonemapPipeline;
 
+  PipelineManager::ComputePipelineKey skyTransmittancePipeline;
+  PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
+  PipelineManager::ComputePipelineKey skyFinalPipeline;
+
   std::optional<Fvog::NDeviceBuffer<Temp::ObjectUniforms>> meshUniformz;
   std::optional<Fvog::NDeviceBuffer<Debug::Line>> lineVertexBuffer;
   std::optional<Fvog::NDeviceBuffer<GpuLight>> lightBuffer;
@@ -146,6 +150,7 @@ private:
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
+  std::optional<Fvog::Texture> transmittanceLut;
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
   shared::TonemapUniforms tonemapUniforms{};
