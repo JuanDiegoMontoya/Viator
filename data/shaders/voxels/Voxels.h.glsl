@@ -13,6 +13,7 @@ struct Voxels
   FVOG_SHARED Sampler voxelSampler;
   FVOG_UINT32 numLights;
   FVOG_UINT32 lightBufferIdx;
+  FVOG_UINT32 globalUniformsIndex;
 };
 
 #ifndef __cplusplus
@@ -141,6 +142,7 @@ subGridDataBuffers[];
 
 Voxels g_voxels;
 
+#define v_globalUniforms perFrameUniformsBuffers[g_voxels.globalUniformsIndex]
 #define TOP_LEVEL_PTRS      topLevelPtrsBuffers[g_voxels.bufferIdx].topLevelPtrs
 #define TOP_LEVEL_BRICKS    topLevelBricksBuffers[g_voxels.bufferIdx].topLevelBricks
 #define BOTTOM_LEVEL_BRICKS bottomLevelBricksBuffers[g_voxels.bufferIdx].bottomLevelBricks
@@ -1112,7 +1114,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         vec3 neeRayDir;
         if (lightIndex == 0)
         {
-          neeRayDir = normalize(vec3(.7, 1, .3));
+          neeRayDir = v_globalUniforms.sky.sunDir;
         }
         else
         {
@@ -1134,7 +1136,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
           indirectIlluminance += illum_t(throughput *
                                 // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
                                 //(curSurface.albedo / M_PI) *
-                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * 10000 /
+                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor /
                                 // sunShadow /
                                 solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
         }
@@ -1159,7 +1161,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         //     COLOR_SPACE_sRGB_LINEAR,
         //     shadingUniforms.shadingInternalColorSpace);
         // const vec3 skyEmittance = {.1, .3, .5};
-        const vec3 skyEmittance = curRayDir * .5 + .5;
+        const vec3 skyEmittance = SampleSky(v_globalUniforms.sky, curRayDir);
         indirectIlluminance += illum_t(skyEmittance) * throughput;
         break;
       }

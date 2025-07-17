@@ -17,7 +17,7 @@
 
 //	Simplex 3D Noise
 //	by Ian McEwan, Ashima Arts
-//
+// TODO: clean up and move to header
 vec4 permute(vec4 x)
 {
   return mod(((x * 34.0) + 1.0) * x, 289.0);
@@ -149,9 +149,8 @@ void main()
   }
 
   // Shadow
-  const vec3 sunDir = normalize(vec3(.7, 1, .3));
-  const float NoL = max(0, dot(normal, sunDir));
-	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, sunDir);
+  const float NoL = max(0, dot(normal, uniforms.sky.sunDir));
+	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir);
   vec3 finalRadiance = sunlight_internal + radiance_internal + irradiance_internal;
 
   // Spelunker potion effect

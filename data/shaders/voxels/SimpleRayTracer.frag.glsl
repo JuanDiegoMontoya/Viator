@@ -44,7 +44,7 @@ void main()
   }
   else
   {
-    albedo = rayDir * .5 + .5;
+    albedo = SampleSky(uniforms.sky, rayDir);
     radiance = albedo;
     gl_FragDepth = FAR_DEPTH;
   }

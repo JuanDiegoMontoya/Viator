@@ -749,7 +749,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   ctx.ImageBarrierDiscard(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
 
   perFrameUniforms.UpdateData(commandBuffer,
-    Temp::Uniforms{
+    GlobalUniforms{
       .viewProj               = clip_from_world,
       .oldViewProjUnjittered  = glm::mat4{},
       .viewProjUnjittered     = glm::mat4{},
@@ -765,6 +765,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .flags                  = 0,
       .alphaHashScale         = 0,
       .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
+      .sky = SkyParameters{
+        .sunDir   = Math::SphericalToCartesian(sunElevation, sunAzimuth),
+        .sunColor = glm::vec3(10000), // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
+      },
     });
 
   auto drawCalls       = std::vector<GpuMesh*>();
@@ -894,6 +898,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .voxelSampler               = voxelSampler,
       .numLights                  = (uint32_t)lights.size(),
       .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
+      .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
     };
 
     // DDGI- good candidate for async compute or overlapped work.
@@ -1191,6 +1196,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           //.mieScattering                        = ,
           .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
           .voxels = voxels,
+          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         });
       fog_.InjectFog(commandBuffer, fogColorAndDensityVolume.value());
       fog_.MarchVolume(commandBuffer, fogColorAndDensityVolume.value(), inScatteringAndTransmittanceVolume.value());

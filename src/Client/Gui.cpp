@@ -1393,6 +1393,15 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();
       ImGui::Checkbox("Disable Fog", &debugDisableFog);
+      ImGui::SliderFloat("Sun elevation", &sunElevation, 0, glm::two_pi<float>());
+      ImGui::SliderFloat("Sun azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+      if (ImGui::Button("Recompile all shaders"))
+      {
+        for (auto& shaderModule : GetPipelineManager().GetShaderModules())
+        {
+          GetPipelineManager().EnqueueRecompileShader(shaderModule->info);
+        }
+      }
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);

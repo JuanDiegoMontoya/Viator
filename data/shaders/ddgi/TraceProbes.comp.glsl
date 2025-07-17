@@ -1,5 +1,7 @@
 #include "ProbeCommon.shared.h"
 
+#define uniforms perFrameUniformsBuffers[args.globalUniformsIndex]
+
 layout(local_size_x = 128, local_size_y = 1) in;
 
 void main()
@@ -27,7 +29,7 @@ void main()
   vec3 radiance = {0, 0, 0};
   float depth = 1234;
 
-  const uint frameNumber = perFrameUniformsBuffers[args.globalUniformsIndex].frameNumber;
+  const uint frameNumber = uniforms.frameNumber;
   uint randState = PCG_Hash(gid + frameNumber);
   
   const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
@@ -48,9 +50,8 @@ void main()
       radiance += albedo * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, args.linearSampler, args);
 
       // Sun
-      const vec3 sunDir = normalize(vec3(.7, 1, .3));
-      const float NoL = max(0, dot(hit.flatNormalWorld, sunDir));
-      vec3 sunlight_internal = albedo * NoL * TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, sunDir);
+      const float NoL = max(0, dot(hit.flatNormalWorld, uniforms.sky.sunDir));
+      vec3 sunlight_internal = albedo * NoL * TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
 
       radiance += sunlight_internal;
 
@@ -80,7 +81,7 @@ void main()
   }
   else
   {
-    radiance = rayDir * .5 + .5;
+    radiance = SampleSky(uniforms.sky, rayDir);
   }
   
   // Direct lighting

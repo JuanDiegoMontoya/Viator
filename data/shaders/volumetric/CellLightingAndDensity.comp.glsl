@@ -81,10 +81,9 @@ void main()
   light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
   
   // Shadow
-  const vec3 sunDir = normalize(vec3(.7, 1, .3));
   //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), sunDir)));
-  const vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), sunDir));
-	vec3 sunlight_internal = phase * TraceSunRay(wPos, sunDir);
+  const vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
+	vec3 sunlight_internal = phase * TraceSunRay(wPos, globalUniforms.sky.sunDir) * globalUniforms.sky.sunColor / solid_angle_mapping_PDF(radians(0.5));
 
   light += sunlight_internal;
 

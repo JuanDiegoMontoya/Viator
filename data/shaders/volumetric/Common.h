@@ -5,6 +5,7 @@
 #define DDGI_NO_PUSH_CONSTANTS
 #include "../ddgi/ProbeCommon.shared.h"
 #include "../voxels/Voxels.h.glsl"
+#include "../GlobalUniforms.h.glsl"
 
 struct VolumetricUniforms
 {
@@ -14,7 +15,6 @@ struct VolumetricUniforms
   FVOG_MAT4 viewProjVolume;
   FVOG_MAT4 invViewProjVolume;
   FVOG_MAT4 sunViewProj;
-  FVOG_VEC3 sunDir;
   FVOG_FLOAT volumeNearPlane;
   FVOG_FLOAT volumeFarPlane;
   FVOG_UINT32 useScatteringTexture;
@@ -22,7 +22,6 @@ struct VolumetricUniforms
   FVOG_FLOAT noiseOffsetScale;
   FVOG_UINT32 frog;
   FVOG_FLOAT groundFogDensity;
-  FVOG_VEC3 sunColor;
 
   FVOG_SHARED Texture2D inSceneLuminance;
   FVOG_SHARED Texture2D gDepth;
@@ -40,6 +39,7 @@ struct VolumetricUniforms
   VkDeviceAddress ddgi;
 #endif
   Voxels voxels;
+  FVOG_UINT32 globalUniformsIndex;
 };
 
 #ifndef __cplusplus
@@ -55,6 +55,7 @@ FVOG_DECLARE_ARGUMENTS(PushConstants)
 }pc;
 
 #define uniforms buffers[pc.uniformBufferIdx].uniforms
+#define globalUniforms perFrameUniformsBuffers[uniforms.globalUniformsIndex]
 
 // unproject with zero-origin convention [0, 1]
 vec3 UnprojectUVZO(float depth, vec2 uv, mat4 invXProj)

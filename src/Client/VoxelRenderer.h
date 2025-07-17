@@ -13,6 +13,7 @@
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
 #include "shaders/post/TonemapAndDither.shared.h"
+#include "shaders/GlobalUniforms.h.glsl"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -27,25 +28,6 @@
 
 namespace Temp
 {
-  struct Uniforms
-  {
-    glm::mat4 viewProj;
-    glm::mat4 oldViewProjUnjittered;
-    glm::mat4 viewProjUnjittered;
-    glm::mat4 invViewProj;
-    glm::mat4 proj;
-    glm::mat4 invProj;
-    glm::mat4 view;
-    glm::mat4 invView;
-    glm::vec4 cameraPos;
-    glm::uint meshletCount;
-    glm::uint maxIndices;
-    float bindlessSamplerLodBias;
-    glm::uint flags;
-    float alphaHashScale;
-    glm::uint frameNumber;
-  };
-
   FVOG_DECLARE_ARGUMENTS(PushConstants)
   {
     Voxels voxels;
@@ -141,7 +123,7 @@ private:
   Techniques::Bilateral bilateral_;
   Techniques::AutoExposure autoExposure_;
   Techniques::Bloom bloom_;
-  Fvog::NDeviceBuffer<Temp::Uniforms> perFrameUniforms;
+  Fvog::NDeviceBuffer<GlobalUniforms> perFrameUniforms;
   PipelineManager::GraphicsPipelineKey voxelsPipeline;
   PipelineManager::GraphicsPipelineKey meshPipeline;
   PipelineManager::GraphicsPipelineKey debugTexturePipeline;
@@ -229,4 +211,7 @@ private:
   int32_t pathTracerBounces = 2;
   bool enableBloom          = true;
   bool debugDisableFog      = false;
+
+  float sunElevation = 0.5f;
+  float sunAzimuth   = 0.3f;
 };
