@@ -1206,7 +1206,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 }
               }
 
-              grid.SetVoxelAtNoDirty(positionWS, blockTypeToSet);
+              if (blockTypeToSet != voxel_t::Air)
+              {
+                grid.SetVoxelAtNoDirty(positionWS, blockTypeToSet);
+              }
             });
 
           grid.MarkTopLevelBrickAndChildrenDirty(tl);

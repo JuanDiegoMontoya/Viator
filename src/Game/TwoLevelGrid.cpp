@@ -88,7 +88,7 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
 TwoLevelGrid::TwoLevelGrid() : buffer(16) {}
 
 TwoLevelGrid::TwoLevelGrid(glm::ivec3 topLevelBrickDims)
-  : buffer(1'000'000'000, "World"),
+  : buffer(1'500'000'000, "World"),
     topLevelBricksDims_(topLevelBrickDims),
     dimensions_(topLevelBricksDims_.x * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.y * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.z * TL_BRICK_VOXELS_PER_SIDE)
 {
