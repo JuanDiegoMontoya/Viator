@@ -1329,33 +1329,25 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
       ImGui::Text("DDGI");
       ImGui::Separator();
-      if (ImGui::RadioButton("None", ddgiDebugView_ == DDGIDebugView::None))
+      const char* const names[] = {
+        "None",
+        "Luminance",
+        "Illuminance",
+        "Raw Depth",
+        "Depth Moments",
+        "Validity",
+        "Average Luminance",
+      };
+      if (ImGui::BeginCombo("Visualize probes", names[int(ddgiDebugView_)]))
       {
-        ddgiDebugView_ = DDGIDebugView::None;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Luminance", ddgiDebugView_ == DDGIDebugView::Luminance))
-      {
-        ddgiDebugView_ = DDGIDebugView::Luminance;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Illuminance", ddgiDebugView_ == DDGIDebugView::Illuminance))
-      {
-        ddgiDebugView_ = DDGIDebugView::Illuminance;
-      }
-      if (ImGui::RadioButton("Raw Depth", ddgiDebugView_ == DDGIDebugView::RawDepth))
-      {
-        ddgiDebugView_ = DDGIDebugView::RawDepth;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Depth Moments", ddgiDebugView_ == DDGIDebugView::DepthMoments))
-      {
-        ddgiDebugView_ = DDGIDebugView::DepthMoments;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Validity", ddgiDebugView_ == DDGIDebugView::Validity))
-      {
-        ddgiDebugView_ = DDGIDebugView::Validity;
+        for (int i = 0; i < std::size(names); i++)
+        {
+          if (ImGui::Selectable(names[i], int(ddgiDebugView_) == i))
+          {
+            ddgiDebugView_ = DDGIDebugView(i);
+          }
+        }
+        ImGui::EndCombo();
       }
       ImGui::SliderInt("Show Cascade", &ddgiDebugShowOnlyThisCascade_, -1, DDGI_NUM_CASCADES - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
       ImGui::Checkbox("Cascades as Color", &ddgiDebugShowCascadeIndexAsColor_);
@@ -1379,6 +1371,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::SliderFloat("Base Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
       ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
       ImGui::Separator();
+      ImGui::Checkbox("Disable Fog", &debugDisableFog);
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);

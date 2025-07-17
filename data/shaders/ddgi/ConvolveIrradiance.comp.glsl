@@ -39,12 +39,13 @@ void main()
       continue;
     }
     const float pdf = cosine_weighted_hemisphere_PDF(cosTheta);
+    const float brdf = 1.0 / M_PI; // Lambert
 
     const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance).xy;
     const vec2 uv = ProbeDirectionToUv(sampleDir, stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
 
-    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb * cosTheta / pdf / M_PI;
+    tempAccum += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb * cosTheta / pdf * brdf;
   }
   irradiance += tempAccum / SHRIMPLES;
 
@@ -54,4 +55,22 @@ void main()
   const float alpha = max(0.05, 1.0 / validity);
   const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
   WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
+
+  // Compute the average luminance of this probe (used for fog).
+  const int AVG_SAMPLES = 32;
+  vec3 averageLuminance = vec3(0);
+  for (int i = 0; i < AVG_SAMPLES; i++)
+  {
+    const vec2 xi = Hammersley(i, AVG_SAMPLES);
+    const vec3 direction = map_to_unit_sphere(xi);
+
+    const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance).xy;
+    const vec2 uv = ProbeDirectionToUv(direction, stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+
+    averageLuminance += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
+  }
+  const float pdf = uniform_sphere_PDF();
+  averageLuminance = averageLuminance / AVG_SAMPLES;
+  args.gridInfo[cascade].probes.data[stableProbeIndex].averageLuminance = averageLuminance;
 }

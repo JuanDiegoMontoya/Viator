@@ -1,17 +1,14 @@
-#version 460 core
-#extension GL_GOOGLE_include_directive : enable
 #include "Common.h"
-
-layout(binding = 0) uniform sampler3D s_colorDensityVolume;
-layout(binding = 0) uniform writeonly image3D i_inScatteringTransmittanceVolume;
 
 layout(local_size_x = 16, local_size_y = 16) in;
 void main()
 {
   ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
-  ivec3 targetDim = imageSize(i_inScatteringTransmittanceVolume);
+  ivec3 targetDim = imageSize(uniforms.inScatteringAndTransmittanceVolumeRW);
   if (any(greaterThanEqual(gid, targetDim.xy)))
+  {
     return;
+  }
   vec2 uv = (vec2(gid) + 0.5) / targetDim.xy;
 
   vec3 texel = 1.0 / targetDim;
@@ -26,7 +23,7 @@ void main()
     
     // Starting with linear depth, square it to bias precision towards the viewer.
     // Then, invert the depth as though it were multiplied by the volume projection.
-    float zInv = InvertDepthZO(uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
+    float zInv = InvertDepthZO(uvw.z * uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
 
     // Unproject the inverted depth to get the world position of this froxel.
     vec3 pCur = UnprojectUVZO(zInv, uv, uniforms.invViewProjVolume);
@@ -35,7 +32,7 @@ void main()
     float stepSize = distance(pPrev, pCur);
     pPrev = pCur;
 
-    vec4 froxelInfo = textureLod(s_colorDensityVolume, uvw, 0);
+    vec4 froxelInfo = textureLod(uniforms.fogDensityVolume, uniforms.linearSampler, uvw, 0);
     vec3 froxelLight = froxelInfo.rgb;
     float froxelDensity = froxelInfo.a;
 
@@ -45,6 +42,6 @@ void main()
     // 10*stepSize makes the accumulation independent of volume size and depth distribution
     inScatteringAccum += 10 * stepSize * transmittance * froxelLight;
 
-    imageStore(i_inScatteringTransmittanceVolume, ivec3(gid, i), vec4(inScatteringAccum, transmittance));
+    imageStore(uniforms.inScatteringAndTransmittanceVolumeRW, ivec3(gid, i), vec4(inScatteringAccum, transmittance));
   }
 }

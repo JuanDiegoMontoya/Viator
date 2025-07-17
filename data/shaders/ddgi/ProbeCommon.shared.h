@@ -12,10 +12,12 @@
 
 // When enabled, probes will be blended in a gamma-2 space to make gradients appear perceptually 
 // smoother than a simple photometrically linear blend.
-#define PERCEPTUAL_BLEND 1
+// TODO: FIXME: sqrt operation generates NaNs when enabled
+#define PERCEPTUAL_BLEND 0
 
 struct ProbeData
 {
+  FVOG_VEC3 averageLuminance;
   float validity;
 };
 
@@ -332,6 +334,135 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
   return ENERGY_PRESERVATION * irradiance_internal;
 }
 
+vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs ddgi, int cascade, out float outWeight)
+{
+  // TODO: rename variables in this function to reflect that it's sampling luminance, not illuminance
+  if (bool(ddgi.showCascadeIndexAsColor))
+  {
+    outWeight = 1;
+    return TurboColormap(float(cascade) / (DDGI_NUM_CASCADES - 1.0));
+  }
+
+  if (cascade >= DDGI_NUM_CASCADES)
+  {
+    return vec3(0);
+  }
+
+  float sumWeights = 0;
+  float sumWeightsNoShadow = 0;
+  vec3 irradiance_internal = vec3(0);
+  vec3 irradiance_internalNoShadow = vec3(0);
+  //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
+
+  const vec3 posProbeSpacePreMod = ((positionWS - 0.5) / ddgi.gridInfo[cascade].baseGridScale) - ddgi.gridInfo[cascade].gridOffset;
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+  const ivec3 minProbe = ivec3(floor(posProbeSpace));
+  const ivec3 maxProbe = minProbe + 1;
+
+  // Sample nearest 8 probes with weights.
+  for (int z = minProbe.z; z <= maxProbe.z; z++)
+  for (int y = minProbe.y; y <= maxProbe.y; y++)
+  for (int x = minProbe.x; x <= maxProbe.x; x++)
+  {
+    //const ivec3 p = ivec3(round(probeCoord));
+    const vec3 probePos = vec3(x, y, z);
+    const vec3 probePosWS = (probePos + ddgi.gridInfo[cascade].gridOffset) * ddgi.gridInfo[cascade].baseGridScale + 0.5;
+    const float trilinearWeight = TrilinearWeight(probePos, posProbeSpace);
+
+    // Give less weight to probes that lie below the plane of the shaded point.
+    const vec3 dirToProbe = normalize(probePos - posProbeSpace);
+
+    // Sample probe illuminance and depth moments.
+    const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
+    const int probeIndex = ProbeIndexToStableIndex(probeIndexA, ddgi.gridInfo[cascade]);
+
+    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+    const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
+    //const vec2 uv = ProbeDirectionToUv(normalWS, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+    //const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
+    const vec3 illuminance = ddgi.gridInfo[cascade].probes.data[probeIndex].averageLuminance;
+
+    float shadowWeight = 1;
+    const float normalBias = 0.45 * ddgi.gridInfo[cascade].baseGridScale;
+    //const vec3 probeToPointBiasedWS = positionWS - probePosWS + (normal + 3.0 * viewDirWS) * normalBias;
+    const vec3 probeToPointBiasedWS = positionWS - probePosWS;
+    const vec3 dirToProbeBiased = normalize(-probeToPointBiasedWS);
+    const float distToProbeWS = length(probeToPointBiasedWS);
+    //const float distToProbeWS = length(probePos - posProbeSpace) * ddgi.gridInfo.baseGridScale;
+
+#if 1 // Chebyshev test.
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments).xy;
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).xy;
+    const float mean = depthMoments.x;
+    const float mean2 = depthMoments.y;
+
+    if (distToProbeWS > mean)
+    {
+      const float variance = abs(mean * mean - mean2);
+      shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
+    }
+#else // Regular shadow test.
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
+
+    if (distToProbeWS > rawDepth)
+    {
+      shadowWeight = 0;
+    }
+#endif
+
+    const float validityWeight = min(1.0, ddgi.gridInfo[cascade].probes.data[probeIndex].validity / 100);
+    float weightNoTrilinear = shadowWeight * validityWeight;
+    float weightNoTrilinearNoShadow = validityWeight;
+    
+    weightNoTrilinear = max(1e-5, weightNoTrilinear);
+    weightNoTrilinearNoShadow = max(1e-5, weightNoTrilinearNoShadow);
+
+    // Since tiny leaks are very visible, we crush tiny weights here while keeping the curve continuous.
+    const float threshold = 0.2;
+    if (weightNoTrilinear < threshold)
+    {
+      weightNoTrilinear *= square(weightNoTrilinear) / square(threshold);
+    }
+    if (weightNoTrilinearNoShadow < threshold)
+    {
+      weightNoTrilinearNoShadow *= square(weightNoTrilinearNoShadow) / square(threshold);
+    }
+
+    const float weight = trilinearWeight * weightNoTrilinear;
+    const float weightNoShadow = trilinearWeight * weightNoTrilinearNoShadow;
+#if PERCEPTUAL_BLEND
+    irradiance_internal += weight * sqrt(illuminance);
+    irradiance_internalNoShadow += weightNoShadow * sqrt(illuminance);
+#else
+    irradiance_internal += weight * illuminance;
+    irradiance_internalNoShadow += weightNoShadow * illuminance;
+#endif
+    sumWeights += weight;
+    sumWeightsNoShadow += weightNoShadow;
+  }
+
+  irradiance_internal /= sumWeights;
+  irradiance_internalNoShadow /= sumWeightsNoShadow;
+
+#if PERCEPTUAL_BLEND
+  irradiance_internal *= irradiance_internal;
+  irradiance_internalNoShadow *= irradiance_internalNoShadow;
+#endif
+
+  outWeight = sumWeights;
+  irradiance_internal = mix(irradiance_internalNoShadow, irradiance_internal, smoothstep(0, 1e-5, sumWeights));
+
+  // DDGI uses this artificial energy-reducing term to mitigate the perception of light leaks in dark rooms.
+  // The chosen constant is arbitrary and must be in [0, 1].
+  const float ENERGY_PRESERVATION = 0.8;
+  return ENERGY_PRESERVATION * irradiance_internal;
+}
+
 int SelectMinimumCascade(vec3 positionWS, DDGIArgs ddgi, out vec3 posProbeSpacePreMod)
 {
   // Select lowest possible cascade to sample.
@@ -374,6 +505,50 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
 
   float sumWeight2;
   const vec3 upperCascadeIlluminance = SampleIlluminanceFieldRaw(positionWS, normalWS, linearSampler, ddgi, cascade + 1, sumWeight2);
+
+  // These checks mitigate black spots that are caused by one of the two selected cascades being 
+  // totally invalid (all eight probes in the cage are inside opaque blocks). However, they do 
+  // not fix situations in which both cascades are invalid. These checks also add a visible discontinuity.
+  if (sumWeight < 1e-4)
+  {
+    return upperCascadeIlluminance;
+  }
+  if (sumWeight2 < 1e-4)
+  {
+    return lowerCascadeIlluminance;
+  }
+
+  return mix(lowerCascadeIlluminance, upperCascadeIlluminance, 1 - distFromEdge);
+}
+
+
+vec3 SampleAverageLuminance(vec3 positionWS, Sampler linearSampler, DDGIArgs ddgi)
+{
+  // TODO: fix variable names in this function too
+  vec3 posProbeSpacePreMod;
+  const int cascade = SelectMinimumCascade(positionWS, ddgi, posProbeSpacePreMod);
+  if (cascade == -1)
+  {
+    return vec3(0, 0, 0); // No available cascade
+  }
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+
+  const float MAGIC_IDK_WHY = 0.9999; // Chosen after visualizing with TurboColorMap. The exact value 1 does not work!
+  const vec3 halfGridExtent = (ddgi.gridInfo[cascade].gridResolution - MAGIC_IDK_WHY) / 2;
+  const vec3 centeredPos = posProbeSpace - halfGridExtent;
+  const float distFromEdgeA = sd_Box(centeredPos, halfGridExtent);
+  // Decrease the distance if negative. This gives some room for gridOffsetFraction to move the space around.
+  const float distFromEdge = clamp(distFromEdgeA < 0 ? -distFromEdgeA - 1 : distFromEdgeA, 0, 1);
+  float sumWeight;
+  const vec3 lowerCascadeIlluminance = SampleAverageLuminanceRaw(positionWS, linearSampler, ddgi, cascade, sumWeight);
+
+  if (distFromEdge > 1 || cascade + 1 >= DDGI_NUM_CASCADES)
+  {
+    return lowerCascadeIlluminance;
+  }
+
+  float sumWeight2;
+  const vec3 upperCascadeIlluminance = SampleAverageLuminanceRaw(positionWS, linearSampler, ddgi, cascade + 1, sumWeight2);
 
   // These checks mitigate black spots that are caused by one of the two selected cascades being 
   // totally invalid (all eight probes in the cage are inside opaque blocks). However, they do 

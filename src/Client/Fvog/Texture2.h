@@ -164,6 +164,12 @@ namespace Fvog
       return storageDescriptorInfo_.value().GpuResource();
     }
 
+    [[nodiscard]] shared::Texture1D GetTexture1D() noexcept
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_1D);
+      return {sampledDescriptorInfo_.value().GpuResource().index};
+    }
+
     [[nodiscard]] shared::Texture2D GetTexture2D() noexcept
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
@@ -185,6 +191,12 @@ namespace Fvog
     [[nodiscard]] shared::Image2D GetImage2D() noexcept
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      return {storageDescriptorInfo_.value().GpuResource().index};
+    }
+
+    [[nodiscard]] shared::Image3D GetImage3D() noexcept
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 

@@ -475,6 +475,24 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
     .baseGridScale               = 2,
   });
 
+  // Initialize froxel fog resources
+  inScatteringAndTransmittanceVolume = Fvog::Texture(
+    {
+      .viewType = VK_IMAGE_VIEW_TYPE_3D,
+      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
+      .extent   = {160, 90, 256},
+      .usage    = Fvog::TextureUsage::GENERAL,
+    },
+    "In-scattering and transmittance volume");
+  fogColorAndDensityVolume = Fvog::Texture(
+    {
+      .viewType = VK_IMAGE_VIEW_TYPE_3D,
+      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
+      .extent   = {160, 90, 256},
+      .usage    = Fvog::TextureUsage::GENERAL,
+    },
+    "Fog color and density volume");
+
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
@@ -719,7 +737,9 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   const auto view_from_world = viewMat;
   // const auto clip_from_view = Math::InfReverseZPerspectiveRH(cameraFovyRadians, aspectRatio, cameraNearPlane);
-  const auto clip_from_view  = Math::InfReverseZPerspectiveRH(glm::radians(65.0f), (float)head_->windowFramebufferWidth / head_->windowFramebufferHeight, 0.1f);
+  const auto fovy            = glm::radians(65.0f);
+  const auto aspectRatio     = (float)head_->windowFramebufferWidth / head_->windowFramebufferHeight;
+  const auto clip_from_view  = Math::InfReverseZPerspectiveRH(fovy, aspectRatio, 0.1f);
   const auto clip_from_world = clip_from_view * view_from_world;
 
   ctx.ImageBarrierDiscard(frame.sceneAlbedo.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
@@ -1108,6 +1128,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
     // Shade image.
     {
+      auto marker = ctx.MakeScopedDebugMarker("Shade deferred");
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels,
@@ -1127,11 +1148,56 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       });
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }
-  }
 
-  ctx.Barrier();
-  ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrier(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    ctx.Barrier();
+    ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrier(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+
+    if (!debugDisableFog)
+    {
+      auto markerFog = ctx.MakeScopedDebugMarker("Froxel fog");
+
+      ctx.ImageBarrierDiscard(inScatteringAndTransmittanceVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(fogColorAndDensityVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
+      const auto nearVolume            = 1.5f;
+      const auto farVolume             = 1000.0f;
+      const auto clip_from_view_volume = glm::perspectiveZO(fovy, aspectRatio, nearVolume, farVolume);
+      fog_.UpdateUniforms(commandBuffer,
+        {
+          .viewPos           = position,
+          .time              = 0,
+          .invViewProjScene  = glm::inverse(clip_from_world),
+          .viewProjVolume    = clip_from_view_volume * view_from_world,
+          .invViewProjVolume = glm::inverse(clip_from_view_volume * view_from_world),
+          //.sunViewProj                          =,
+          //.sunDir                               =,
+          .volumeNearPlane      = nearVolume,
+          .volumeFarPlane       = farVolume,
+          .useScatteringTexture = false,
+          .anisotropyG          = 0,
+          .noiseOffsetScale     = 1,
+          .frog                 = false,
+          .groundFogDensity     = 0.25f,
+          //.sunColor                             =,
+          .inSceneLuminance                     = frame.sceneColor->ImageView().GetTexture2D(),
+          .gDepth                               = frame.sceneDepth->ImageView().GetTexture2D(),
+          .inScatteringAndTransmittanceVolume   = inScatteringAndTransmittanceVolume->ImageView().GetTexture3D(),
+          .fogDensityVolume                     = fogColorAndDensityVolume->ImageView().GetTexture3D(),
+          .blueNoise                            = noiseTexture->ImageView().GetTexture2D(),
+          .inScatteringAndTransmittanceVolumeRW = inScatteringAndTransmittanceVolume->ImageView().GetImage3D(),
+          .fogDensityVolumeRW                   = fogColorAndDensityVolume->ImageView().GetImage3D(),
+          .outSceneLuminance                    = frame.sceneColor->ImageView().GetImage2D(),
+          .linearSampler                        = linearClampSampler,
+          //.mieScattering                        = ,
+          .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+          .voxels = voxels,
+        });
+      fog_.InjectFog(commandBuffer, fogColorAndDensityVolume.value());
+      fog_.MarchVolume(commandBuffer, fogColorAndDensityVolume.value(), inScatteringAndTransmittanceVolume.value());
+      fog_.ApplyDeferred(commandBuffer, frame.sceneColor.value(), frame.sceneDepth.value(), frame.sceneColor.value(), inScatteringAndTransmittanceVolume.value());
+    }
+    ctx.Barrier();
+  }
 
   // DDGI debug probes.
   if (ddgiDebugView_ != DDGIDebugView::None)

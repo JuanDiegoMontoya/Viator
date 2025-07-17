@@ -1,103 +1,36 @@
-#version 460 core
-#extension GL_GOOGLE_include_directive : enable
 #include "Common.h"
 
 #include "Frog.h"
 
-layout(binding = 0) uniform sampler2D s_exponentialShadowDepth;
-layout(binding = 1) uniform sampler1D s_fogScattering;
-layout(binding = 0) uniform writeonly image3D i_target;
-
-layout(binding = 1, std140) uniform ESM_UNIFORMS
-{
-  float depthExponent;
-}esmUniforms;
-
-struct Light
-{
-  vec4 position;
-  vec3 intensity;
-  float invRadius;
-};
-
-layout(binding = 0, std430) readonly buffer LightBuffer
-{
-  Light lights[];
-}lightBuffer;
-
 float snoise(vec4 v);
-
-float sdBox(vec3 p, vec3 b)
-{
-  vec3 q = abs(p) - b;
-  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
 
 vec3 phaseTex(float cosTheta)
 {
   // [1, -1] -> [0, 1]
   float u = 1.0 - (cosTheta * .5 + .5);
   
-  vec3 intensity = textureLod(s_fogScattering, u, 0).rgb;
+  vec3 intensity = textureLod(uniforms.mieScattering, uniforms.linearSampler, u, 0).rgb;
 
   // limit intensity (hack)
   //return log(1.0 + intensity);
-  return intensity / (1.0 + intensity);
-}
-
-float ShadowESM(vec4 clip)
-{
-  vec4 unorm = clip;
-  if (any(greaterThan(unorm.xyz, vec3(1.0)))) return 1.0;
-  unorm.xy = unorm.xy * .5 + .5;
-  float lightDepth = textureLod(s_exponentialShadowDepth, unorm.xy, 0.0).x;
-  float eyeDepth = unorm.z;
-  return clamp(lightDepth * exp(-esmUniforms.depthExponent * eyeDepth), 0.0, 1.0);
-}
-
-float GetSquareFalloffAttenuation(float distanceSquared, float lightInvRadius)
-{
-  float factor = distanceSquared * lightInvRadius * lightInvRadius;
-  float smoothFactor = max(1.0 - factor * factor, 0.0);
-  return (smoothFactor * smoothFactor) / max(distanceSquared, 1e-4);
+  return intensity;// / (1.0 + intensity);
 }
 
 vec4 FogAtPoint(vec3 wPos)
 {
   // ground fog
   vec3 t = vec3(.2, 0.1, .3) * uniforms.time;
-  float d = max((snoise(vec4(wPos * 0.11 + t, t * 1.2)) + 0.5), 0.0);
-  d *= uniforms.groundFogDensity;
+  //float d = max((snoise(vec4(wPos * 0.11 + t, t * 1.2)) + 0.5), 0.0);
+  //d *= uniforms.groundFogDensity;
+  float d = .1;
 
   // Fade out fog if too low or too high.
-  d *= (1.0 - smoothstep(0, 10, wPos.y)) * (smoothstep(-15, 0, wPos.y));
+  d *= (1.0 - smoothstep(0, 100, wPos.y)) * (smoothstep(-15, 0, wPos.y));
 
   // Fade out fog if too far from center of the world.
-  d *= 1.0 - smoothstep(0, 10, distance(abs(wPos.xz), vec2(0)) - 25);
-
-  // Clouds. Only work if volume far plane is quite large.
-  // float cd = max((snoise(vec4(wPos * 0.001 + t * .1, t * 0.05)) + 0.1) * .05, 0.0);
-  // cd += max((snoise(vec4(wPos * 0.01 + t * .2, t * 0.05)) + 0.1) * .01, 0.0);
-  // cd *= (1.0 - smoothstep(10, 30, abs(wPos.y - 100.)));
-  // d += cd;
+  d *= 1.0 - smoothstep(0, 10, distance(abs(wPos.xz), vec2(0)) - 650);
   
   vec3 c = vec3(1, 1, 1); // base color
-
-  // Fog cube.
-  d += 1.0 - smoothstep(0.0, .25, sdBox(wPos - vec3(3., 2., 0.), vec3(0.75)));
-
-  if (uniforms.frog != 0)
-  {
-    vec3 frogPos = vec3(1, 5, 2);
-    frogPos.x += sin(uniforms.time) * 2;
-    frogPos.y += cos(uniforms.time) * 2;
-    frog_sdfRet ret = frog_map(0.125 * (wPos - frogPos));
-    float froge = 1.0 - smoothstep(0.0, 0.05, ret.sdf);
-    {
-      c = mix(c, frog_idtocol(ret.id), froge);
-      d += froge * 1.0;
-    }
-  }
 
   return vec4(c, d);
 }
@@ -122,94 +55,46 @@ vec4 DensityToLight(vec3 start, vec3 end, int steps)
   return vec4(inScatteringAccum, densityAccum);
 }
 
-vec3 LocalLightIntensity(vec3 wPos, vec3 V, float froxelDensity, float k)
-{
-  vec3 lightAccum = { 0, 0, 0 };
-
-  // Accumulate contribuation from each local light.
-  for (int i = 0; i < lightBuffer.lights.length(); i++)
-  {
-    Light light = lightBuffer.lights[i];
-
-    vec3 posToLight = light.position.xyz - wPos;
-    float distanceSquared = dot(posToLight, posToLight);
-    vec3 localLight = GetSquareFalloffAttenuation(distanceSquared, light.invRadius).xxx;
-
-    // Assume media density is constant from this cell to the light source.
-    // Probably close enough in most situations.
-    float d = sqrt(distanceSquared) * froxelDensity;
-    //float d = ScatteringAndDensityToLight(light.intensity.rgb, wPos, light.position.xyz, 1).w;
-    float localInScatteringCoefficient = beer(d);
-
-    vec3 L = normalize(light.position.xyz - wPos);
-    localLight *= phaseSchlick(k, dot(V, L));
-    //localLight *= phaseTex(dot(V, L));
-
-    localLight *= localInScatteringCoefficient;
-    
-    lightAccum += localLight * light.intensity.rgb;
-  }
-
-  return lightAccum;
-}
-
-vec3 CalculateFroxelLighting(vec3 froxelColor, float froxelDensity, vec3 wPos)
-{
-    float shadow = ShadowESM(uniforms.sunViewProj * vec4(wPos, 1.0));
-
-    vec3 viewDir = normalize(wPos - uniforms.viewPos);
-    float k = gToK(uniforms.anisotropyG);
-
-    float VoL = dot(-viewDir, uniforms.sunDir);
-
-    vec3 sunlight = shadow * uniforms.sunColor;
-    if (uniforms.useScatteringTexture != 0)
-      sunlight *= phaseTex(VoL);
-    else
-      sunlight *= phaseSchlick(k, VoL);
-
-    sunlight *= beer(DensityToLight(wPos - uniforms.sunDir * 50, wPos, 5).w);
-
-    // Local light(s) contribution.
-    vec3 localLight = LocalLightIntensity(wPos, viewDir, froxelDensity, k);
-
-    // Ambient direct scattering hack because this is not PBR.
-    // Yes, the ambient term has up to 50% shadowing. This is because it looks cool.
-    float ambientFactor = max(0.002, 0.01 * smoothstep(0., 1., min(1.0, .5 + dot(uniforms.sunDir, vec3(0, -1, 0)))));
-    //ambientFactor = 0;
-    float ambient = ambientFactor;// * max(shadow, 0.5);
-
-    return froxelColor * froxelDensity * (sunlight + localLight + ambient);
-}
-
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
 void main()
 {
   ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
-  ivec3 targetDim = imageSize(i_target);
+  ivec3 targetDim = imageSize(uniforms.fogDensityVolumeRW);
   if (any(greaterThanEqual(gid, targetDim)))
+  {
     return;
+  }
+  
+  vx_Init(uniforms.voxels);
+
   vec3 uvw = (vec3(gid) + 0.5) / targetDim;
 
   // Apply our own curve by squaring the linear depth, then convert to inverted window-space Z and unproject it to get world position.
-  float zInv = InvertDepthZO(uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
+  float zInv = InvertDepthZO(uvw.z * uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
   vec3 wPos = UnprojectUVZO(zInv, uvw.xy, uniforms.invViewProjVolume);
 
-  vec4 colorAndDensity = FogAtPoint(wPos);
+  vec4 colorAndDensity = FogAtPoint(wPos - vec3(50, 350, 50));
   vec3 fogColor = colorAndDensity.rgb;
-  float fogDensity = colorAndDensity.w;
+  float fogDensity = colorAndDensity.w * 0.0092;
+  uint seed = PCG_Hash(gid.x) ^ PCG_Hash(gid.y) ^ PCG_Hash(gid.z);
+  vec3 light = vec3(0);
+  light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
+  
+  // Shadow
+  const vec3 sunDir = normalize(vec3(.7, 1, .3));
+  //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), sunDir)));
+  const vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), sunDir));
+	vec3 sunlight_internal = phase * TraceSunRay(wPos, sunDir);
 
-  // sphere
-  //d += 1.0 - smoothstep(3, 5, distance(p, vec3(0, 5, 0)));
-  vec3 light = CalculateFroxelLighting(fogColor, fogDensity, wPos);
+  light += sunlight_internal;
 
-  imageStore(i_target, gid, vec4(light, fogDensity));
+  imageStore(uniforms.fogDensityVolumeRW, gid, vec4(light * fogColor * fogDensity, fogDensity));
 }
 
 
 
 
-//	Simplex 4D Noise 
+//	Simplex 4D Noise
 //	by Ian McEwan, Ashima Arts
 vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
 float permute(float x){return floor(mod(((x*34.0)+1.0)*x, 289.0));}

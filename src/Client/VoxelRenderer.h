@@ -8,6 +8,7 @@
 #include "techniques/denoising/spatial/Bilateral.h"
 #include "techniques/Bloom.h"
 #include "techniques/AutoExposure.h"
+#include "techniques/volumetric/FroxelFog.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -200,14 +201,20 @@ private:
     RawDepth,
     DepthMoments,
     Validity,
+    AverageLuminance,
   };
 
   DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
-  float ddgiDebugProbeSize_    = 1;
+  float ddgiDebugProbeSize_    = 0.25f;
   bool ddgiDebugPauseUpdates_  = false;
   bool ddgiDebugFreezeGrid_    = false; // Pauses only grid movement- probes still update.
   int ddgiDebugShowOnlyThisCascade_ = -1; // <0: show all cascades
   bool ddgiDebugShowCascadeIndexAsColor_ = false;
+
+  Techniques::FroxelFog fog_;
+  // Resources needed for froxel fog
+  std::optional<Fvog::Texture> inScatteringAndTransmittanceVolume;
+  std::optional<Fvog::Texture> fogColorAndDensityVolume;
 
   enum class GIMethod
   {
@@ -221,4 +228,5 @@ private:
   int32_t pathTracerSamples = 1;
   int32_t pathTracerBounces = 2;
   bool enableBloom          = true;
+  bool debugDisableFog      = false;
 };

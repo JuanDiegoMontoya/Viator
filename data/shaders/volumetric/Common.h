@@ -1,6 +1,61 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include "../Resources.h.glsl"
+#define DDGI_NO_PUSH_CONSTANTS
+#include "../ddgi/ProbeCommon.shared.h"
+#include "../voxels/Voxels.h.glsl"
+
+struct VolumetricUniforms
+{
+  FVOG_VEC3 viewPos;
+  FVOG_FLOAT time;
+  FVOG_MAT4 invViewProjScene;
+  FVOG_MAT4 viewProjVolume;
+  FVOG_MAT4 invViewProjVolume;
+  FVOG_MAT4 sunViewProj;
+  FVOG_VEC3 sunDir;
+  FVOG_FLOAT volumeNearPlane;
+  FVOG_FLOAT volumeFarPlane;
+  FVOG_UINT32 useScatteringTexture;
+  FVOG_FLOAT anisotropyG;
+  FVOG_FLOAT noiseOffsetScale;
+  FVOG_UINT32 frog;
+  FVOG_FLOAT groundFogDensity;
+  FVOG_VEC3 sunColor;
+
+  FVOG_SHARED Texture2D inSceneLuminance;
+  FVOG_SHARED Texture2D gDepth;
+  FVOG_SHARED Texture3D inScatteringAndTransmittanceVolume;
+  FVOG_SHARED Texture3D fogDensityVolume;
+  FVOG_SHARED Texture2D blueNoise;
+  FVOG_SHARED Image3D inScatteringAndTransmittanceVolumeRW;
+  FVOG_SHARED Image3D fogDensityVolumeRW;
+  FVOG_SHARED Image2D outSceneLuminance;
+  FVOG_SHARED Sampler linearSampler;
+  FVOG_SHARED Texture1D mieScattering;
+#ifndef __cplusplus
+  DDGIArgs ddgi;
+#else
+  VkDeviceAddress ddgi;
+#endif
+  Voxels voxels;
+};
+
+#ifndef __cplusplus
+
+FVOG_DECLARE_STORAGE_BUFFERS_2(VolumetricUniformsBuffers)
+{
+  VolumetricUniforms uniforms;
+}buffers[];
+
+FVOG_DECLARE_ARGUMENTS(PushConstants)
+{
+  FVOG_UINT32 uniformBufferIdx;
+}pc;
+
+#define uniforms buffers[pc.uniformBufferIdx].uniforms
+
 // unproject with zero-origin convention [0, 1]
 vec3 UnprojectUVZO(float depth, vec2 uv, mat4 invXProj)
 {
@@ -29,25 +84,6 @@ float InvertDepthZO(float linearZ, float zn, float zf)
 {
   return (zn - zf * linearZ) / (linearZ * (zn - zf));
 }
-
-layout(binding = 0, std140) uniform UNIFORMS 
-{
-  vec3 viewPos;
-  float time;
-  mat4 invViewProjScene;
-  mat4 viewProjVolume;
-  mat4 invViewProjVolume;
-  mat4 sunViewProj;
-  vec3 sunDir;
-  float volumeNearPlane;
-  float volumeFarPlane;
-  uint useScatteringTexture;
-  float anisotropyG;
-  float noiseOffsetScale;
-  uint frog;
-  float groundFogDensity;
-  vec3 sunColor;
-}uniforms;
 
 #define M_PI 3.1415926
 
@@ -82,4 +118,5 @@ float powder(float d)
   return 1.0 - exp(-d * 2.0);
 }
 
+#endif // !__cplusplus
 #endif

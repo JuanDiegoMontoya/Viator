@@ -20,6 +20,12 @@ void main()
     o_sceneColor.a = 1;
     return;
   }
+
+  if (args.debugMode == 6)
+  {
+    o_sceneColor.rgb = args.ddgi.gridInfo[v_cascade].probes.data[stableProbeIndex].averageLuminance;
+    return;
+  }
   ivec3 swizzle = {0, 1, 2};
   float scale = 1;
   ivec2 probeImageSize = imageSize(args.ddgi.packedProbeRadiance).xy;

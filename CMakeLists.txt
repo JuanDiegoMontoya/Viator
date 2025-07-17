@@ -56,6 +56,8 @@ set(viator_client_files
     src/Client/techniques/ao/RayTracedAO.cpp
     src/Client/techniques/denoising/spatial/Bilateral.h
     src/Client/techniques/denoising/spatial/Bilateral.cpp
+    src/Client/techniques/volumetric/FroxelFog.h
+    src/Client/techniques/volumetric/FroxelFog.cpp
     src/Client/PipelineManager.h
     src/Client/PipelineManager.cpp
     src/Client/VoxelRenderer.h

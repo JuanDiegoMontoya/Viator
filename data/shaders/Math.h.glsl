@@ -175,6 +175,11 @@ float uniform_hemisphere_PDF()
   return 1.0 / (2.0 * M_PI);
 }
 
+float uniform_sphere_PDF()
+{
+  return 1.0 / (4.0 * M_PI);
+}
+
 float cosine_weighted_hemisphere_PDF(float cosTheta)
 {
   return cosTheta / M_PI;
