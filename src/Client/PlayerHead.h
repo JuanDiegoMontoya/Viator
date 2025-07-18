@@ -56,6 +56,11 @@ public:
 
   ~PlayerHead() override;
 
+  struct PerSwapchainImageData
+  {
+    VkSemaphore renderSemaphore;
+  };
+
 private:
   friend class VoxelRenderer; // TODO: HACK
   // Create swapchain size-dependent resources
@@ -88,8 +93,10 @@ private:
   bool shouldResizeNextFrame          = false;
   bool shouldRemakeSwapchainNextFrame = false;
   VkPresentModeKHR presentMode;
-  uint32_t numSwapchainImages = 3;
-  
+  static constexpr uint32_t numSwapchainImages = 3;
+
+  std::vector<PerSwapchainImageData> perSwapchainImageData;
+
   friend class ApplicationAccess2;
 
   void RemakeSwapchain(uint32_t newWidth, uint32_t newHeight);
@@ -97,7 +104,7 @@ private:
   World* worldThisFrame_{};
   double timeOfLastDraw = 0;
   
-  bool swapchainOk             = true;
+  bool swapchainOk = true;
   std::unique_ptr<VoxelRenderer> voxelRenderer_;
   std::unique_ptr<InputSystem> inputSystem_;
   std::unique_ptr<PlayerAudio> audio_;

@@ -327,10 +327,6 @@ namespace Fvog
       CheckVkResult(vkCreateSemaphore(device_, Address(VkSemaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
       }), nullptr, &frame.swapchainSemaphore));
-
-      CheckVkResult(vkCreateSemaphore(device_, Address(VkSemaphoreCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      }), nullptr, &frame.renderSemaphore));
     }
 
     // Immediate submit stuff (subject to change)
@@ -500,7 +496,6 @@ namespace Fvog
     for (const auto& frame : frameData)
     {
       vkDestroyCommandPool(device_, frame.commandPool, nullptr);
-      vkDestroySemaphore(device_, frame.renderSemaphore, nullptr);
       vkDestroySemaphore(device_, frame.swapchainSemaphore, nullptr);
     }
 
@@ -515,6 +510,7 @@ namespace Fvog
   void Device::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& function) const
   {
     ZoneScoped;
+    auto lock = std::scoped_lock(copiumMutex_);
     using namespace detail;
     CheckVkResult(vkResetCommandBuffer(immediateSubmitCommandBuffer_, 0));
     CheckVkResult(vkBeginCommandBuffer(immediateSubmitCommandBuffer_, Address(VkCommandBufferBeginInfo{

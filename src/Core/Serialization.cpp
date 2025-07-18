@@ -437,6 +437,7 @@ namespace Core::Serialization
       grid.MarkAllBricksDirty();
       registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
 
+      // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
       world.CreateRenderingMaterials();
     }
 

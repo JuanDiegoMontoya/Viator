@@ -194,6 +194,41 @@ public:
   }
 };
 
+static auto MakePerSwapchainImageData(uint32_t count)
+{
+  auto datas = std::vector<PlayerHead::PerSwapchainImageData>();
+  for (uint32_t i = 0; i < count; i++)
+  {
+    auto data = PlayerHead::PerSwapchainImageData{};
+    Fvog::detail::CheckVkResult(vkCreateSemaphore(Fvog::GetDevice().device_,
+      Fvog::detail::Address(VkSemaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      }),
+      nullptr,
+      &data.renderSemaphore));
+
+    // TODO: gate behind compile-time switch
+    vkSetDebugUtilsObjectNameEXT(Fvog::GetDevice().device_,
+      Fvog::detail::Address(VkDebugUtilsObjectNameInfoEXT{
+        .sType        = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType   = VK_OBJECT_TYPE_SEMAPHORE,
+        .objectHandle = reinterpret_cast<uint64_t>(data.renderSemaphore),
+        .pObjectName  = ("Render semaphore #" + std::to_string(i)).c_str(),
+      }));
+
+    datas.push_back(data);
+  }
+  return datas;
+}
+
+static void CleanupPerSwapchainImageData(std::span<PlayerHead::PerSwapchainImageData> datas)
+{
+  for (auto& data : datas)
+  {
+    vkDestroySemaphore(Fvog::GetDevice().device_, data.renderSemaphore, nullptr);
+  }
+}
+
 static auto MakeVkbSwapchain(const vkb::Device& device,
   uint32_t width,
   uint32_t height,
@@ -473,6 +508,8 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
     ZoneScopedN("Create Swapchain");
     swapchain_ =
       MakeVkbSwapchain(Fvog::GetDevice().device_, windowFramebufferWidth, windowFramebufferHeight, presentMode, numSwapchainImages, VK_NULL_HANDLE, swapchainFormat_);
+    CleanupPerSwapchainImageData(perSwapchainImageData);
+    perSwapchainImageData = MakePerSwapchainImageData(numSwapchainImages);
 
     swapchainImages_     = swapchain_.get_images().value();
     swapchainImageViews_ = MakeSwapchainImageViews(Fvog::GetDevice().device_, swapchainImages_, swapchainFormat_.format);
@@ -562,6 +599,8 @@ PlayerHead::~PlayerHead()
     vkDestroyImageView(Fvog::GetDevice().device_, view, nullptr);
   }
 
+  CleanupPerSwapchainImageData(perSwapchainImageData);
+
   DestroyGlobalPipelineManager();
 
   Fvog::DestroyDevice();
@@ -570,6 +609,7 @@ PlayerHead::~PlayerHead()
 void PlayerHead::Draw(DeltaTime dt)
 {
   ZoneScoped;
+  auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
 
   auto prevTime  = timeOfLastDraw;
   timeOfLastDraw = glfwGetTime();
@@ -589,7 +629,7 @@ void PlayerHead::Draw(DeltaTime dt)
       }),
       UINT64_MAX);
   }
-
+  
   // Garbage collection
   Fvog::GetDevice().FreeUnusedResources();
 
@@ -703,7 +743,6 @@ void PlayerHead::Draw(DeltaTime dt)
   }
 
   ctx.Barrier();
-  auto marker = ctx.MakeScopedDebugMarker("Everything else");
 
   {
     TracyVkCollect(tracyVkContext_, commandBuffer);
@@ -715,17 +754,19 @@ void PlayerHead::Draw(DeltaTime dt)
 
     {
       ZoneScopedN("Submit");
-      const auto queueSubmitSignalSemaphores = std::array{VkSemaphoreSubmitInfo{
-                                                            .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                                                            .semaphore = Fvog::GetDevice().graphicsQueueTimelineSemaphore_,
-                                                            .value     = Fvog::GetDevice().frameNumber,
-                                                            .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                                                          },
+      const auto queueSubmitSignalSemaphores = std::array{
         VkSemaphoreSubmitInfo{
           .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-          .semaphore = currentFrameData.renderSemaphore,
+          .semaphore = Fvog::GetDevice().graphicsQueueTimelineSemaphore_,
+          .value     = Fvog::GetDevice().frameNumber,
           .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-        }};
+        },
+        VkSemaphoreSubmitInfo{
+          .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+          .semaphore = perSwapchainImageData[swapchainImageIndex].renderSemaphore,
+          .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+        },
+      };
 
       Fvog::detail::CheckVkResult(vkQueueSubmit2(Fvog::GetDevice().graphicsQueue_,
         1,
@@ -756,7 +797,7 @@ void PlayerHead::Draw(DeltaTime dt)
             Fvog::detail::Address(VkPresentInfoKHR{
               .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
               .waitSemaphoreCount = 1,
-              .pWaitSemaphores    = &currentFrameData.renderSemaphore,
+              .pWaitSemaphores    = &perSwapchainImageData[swapchainImageIndex].renderSemaphore,
               .swapchainCount     = 1,
               .pSwapchains        = &swapchain_.swapchain,
               .pImageIndices      = &swapchainImageIndex,
@@ -792,6 +833,8 @@ void PlayerHead::RemakeSwapchain([[maybe_unused]] uint32_t newWidth, [[maybe_unu
     ZoneScopedN("Create New Swapchain");
     swapchain_ =
       MakeVkbSwapchain(Fvog::GetDevice().device_, windowFramebufferWidth, windowFramebufferHeight, presentMode, numSwapchainImages, oldSwapchain, swapchainFormat_);
+    CleanupPerSwapchainImageData(perSwapchainImageData);
+    perSwapchainImageData = MakePerSwapchainImageData(numSwapchainImages);
   }
 
   {

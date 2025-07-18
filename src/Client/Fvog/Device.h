@@ -10,6 +10,7 @@
 #include <stack>
 #include <string>
 #include <memory>
+#include <mutex>
 
 namespace Fvog
 {
@@ -41,7 +42,6 @@ namespace Fvog
       VkCommandBuffer commandBuffer;
       uint64_t renderTimelineSemaphoreWaitValue{};
       VkSemaphore swapchainSemaphore;
-      VkSemaphore renderSemaphore;
     };
 
     PerFrameData frameData[frameOverlap]{};
@@ -62,6 +62,9 @@ namespace Fvog
     VmaAllocator allocator_{};
 
     // Immediate submit stuff
+    // Only lock this mutex when performing queue operations (e.g. ImmediateSubmit) on other threads.
+    // This mutex sucks and needs to be removed. It's just a "temporary" solution to the issue of me calling ImmediateSubmit on other threads.
+    mutable std::mutex copiumMutex_;
     VkCommandPool immediateSubmitCommandPool_{};
     VkCommandBuffer immediateSubmitCommandBuffer_{};
     // TODO: maybe this should return a u64 representing a timeline semaphore value that can be waited on
