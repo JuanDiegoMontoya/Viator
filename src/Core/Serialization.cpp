@@ -3,6 +3,7 @@
 #include "Game/TwoLevelGrid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
+#include "Client/Fvog/Device.h" // TODO: bad bad
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -438,6 +439,7 @@ namespace Core::Serialization
       registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
 
       // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
+      auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
       world.CreateRenderingMaterials();
     }
 

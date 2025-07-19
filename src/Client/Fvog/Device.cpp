@@ -510,7 +510,6 @@ namespace Fvog
   void Device::ImmediateSubmit(const std::function<void(VkCommandBuffer)>& function) const
   {
     ZoneScoped;
-    auto lock = std::scoped_lock(copiumMutex_);
     using namespace detail;
     CheckVkResult(vkResetCommandBuffer(immediateSubmitCommandBuffer_, 0));
     CheckVkResult(vkBeginCommandBuffer(immediateSubmitCommandBuffer_, Address(VkCommandBufferBeginInfo{
