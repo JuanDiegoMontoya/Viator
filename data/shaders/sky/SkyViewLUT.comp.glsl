@@ -151,11 +151,13 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
 layout(local_size_x = 8, local_size_y = 8) in;
 void main()
 {
-    
     const ivec2 sky_view_image_size = imageSize(skyViewImage);
     if (all(lessThan(gl_GlobalInvocationID.xy, sky_view_image_size.xy)))
     {
-        vec3 world_position = uniforms.cameraPos.xyz * M_TO_KM_SCALE;
+        const vec3 z_up_world_pos = uniforms.cameraPos.xzy * vec3(1.0, -1.0, 1.0);;
+        const vec3 z_up_sun_dir = uniforms.sky.sunDir.xzy * vec3(1.0, -1.0, 1.0);;
+
+        vec3 world_position = z_up_world_pos * M_TO_KM_SCALE;
         world_position.z += uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET;
         const float camera_height = length(world_position);
 
@@ -166,6 +168,7 @@ void main()
             uniforms.sky.atmosphere_top,
             sky_view_image_size,
             camera_height);
+
         vec3 ray_direction = vec3( 
             cos(skyview_params.light_view_angle) * sin(skyview_params.view_zenith_angle),
             sin(skyview_params.light_view_angle) * sin(skyview_params.view_zenith_angle),
@@ -174,7 +177,7 @@ void main()
         const mat3 camera_basis = build_orthonormal_basis(world_position / camera_height);
         world_position = vec3(0, 0, camera_height);
 
-        float sun_zenith_cos_angle = dot(vec3(0, 0, 1), uniforms.sky.sunDir * camera_basis);
+        float sun_zenith_cos_angle = dot(vec3(0, 0, 1), z_up_sun_dir * camera_basis);
 
         // sin^2 + cos^2 = 1 -> sqrt(1 - cos^2) = sin
         // rotate the sun direction so that we are aligned with the y = 0 axis

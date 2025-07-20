@@ -83,7 +83,7 @@ void main()
   // Shadow
   //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), sunDir)));
   const vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
-	vec3 sunlight_internal = phase * TraceSunRay(wPos, globalUniforms.sky.sunDir) * globalUniforms.sky.sunColor / solid_angle_mapping_PDF(radians(0.5));
+	vec3 sunlight_internal = phase * TraceSunRay(wPos, globalUniforms.sky.sunDir) * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness / solid_angle_mapping_PDF(radians(0.5));
 
   light += sunlight_internal;
 

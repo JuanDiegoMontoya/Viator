@@ -27,6 +27,7 @@ struct SkyParameters
 {
   FVOG_VEC3 sunDir;
   FVOG_VEC3 sunColor;
+  FVOG_FLOAT sunBrightness;
 
   FVOG_FLOAT atmosphere_bottom;
   FVOG_FLOAT atmosphere_top;
@@ -69,19 +70,6 @@ inline SkyParameters InitSkyParameters()
   
   return params;
 }
-#endif //__cplusplus
-
-#ifndef __cplusplus
-
-// Sample the sky in a particular direction.
-vec3 SampleSky(SkyParameters sky, vec3 direction)
-{
-  return direction * 0.5 + 0.5;
-}
-
-#endif
-
-#ifdef __cplusplus
 struct GlobalUniforms
 #else
 FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
@@ -103,6 +91,8 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
   FVOG_FLOAT alphaHashScale;
   FVOG_UINT32 frameNumber;
   SkyParameters sky;
+  FVOG_SHARED Texture2D skyViewLut;
+  FVOG_SHARED Sampler linearSampler;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

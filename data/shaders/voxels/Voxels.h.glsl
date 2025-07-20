@@ -24,6 +24,7 @@ struct Voxels
 #include "../Pbr.h.glsl"
 #include "../Utility.h.glsl"
 #include "../Color.h.glsl"
+#include "../sky/SkyUtil.h.glsl"
 
 
 const int BL_BRICK_SIDE_LENGTH = 8;
@@ -1136,7 +1137,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
           indirectIlluminance += illum_t(throughput *
                                 // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
                                 //(curSurface.albedo / M_PI) *
-                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor /
+                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor * v_globalUniforms.sky.sunBrightness /
                                 // sunShadow /
                                 solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
         }
@@ -1161,7 +1162,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         //     COLOR_SPACE_sRGB_LINEAR,
         //     shadingUniforms.shadingInternalColorSpace);
         // const vec3 skyEmittance = {.1, .3, .5};
-        const vec3 skyEmittance = SampleSky(v_globalUniforms.sky, curRayDir);
+        const vec3 skyEmittance = getAtmosphereAlongRay(v_globalUniforms.sky, v_globalUniforms.skyViewLut, v_globalUniforms.linearSampler, curRayDir, curRayPos);
         indirectIlluminance += illum_t(skyEmittance) * throughput;
         break;
       }

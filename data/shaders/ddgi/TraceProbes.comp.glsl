@@ -1,4 +1,5 @@
 #include "ProbeCommon.shared.h"
+#include "../sky/SkyUtil.h.glsl"
 
 #define uniforms perFrameUniformsBuffers[args.globalUniformsIndex]
 
@@ -81,7 +82,7 @@ void main()
   }
   else
   {
-    radiance = SampleSky(uniforms.sky, rayDir);
+    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, args.linearSampler, rayDir, rayPos);
   }
   
   // Direct lighting

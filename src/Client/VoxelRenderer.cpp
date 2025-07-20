@@ -805,7 +805,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   SkyParameters skyParameters = InitSkyParameters();
   skyParameters.sunDir = Math::SphericalToCartesian(sunElevation, sunAzimuth);
-  skyParameters.sunColor = glm::vec3(10000); // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
+  skyParameters.sunColor = glm::vec3(1.0f, 0.94f, 0.91f); // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
+  skyParameters.sunBrightness = 10000.0f; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
 
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
@@ -825,6 +826,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .alphaHashScale         = 0,
       .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
       .sky                    = skyParameters,
+      .skyViewLut             = skyViewLut.value().ImageView().GetTexture2D(),
+      .linearSampler          = linearClampSampler,
     });
 
   ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
