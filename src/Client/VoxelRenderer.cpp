@@ -467,6 +467,15 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
       },
   });
 
+  skyMultiscatteringPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Sky Multiscattering LUT",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "sky/MultiscatteringLUT.comp.glsl",
+      },
+  });
+
   noiseTexture = LoadImageFile(GetTextureDirectory() / "bluenoise256.png", false);
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
   backgroundTexture = LoadImageFile(GetTextureDirectory() / "background.png", false);
@@ -511,6 +520,15 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
       .usage    = Fvog::TextureUsage::GENERAL,
     },
     "Transmittance LUT");
+
+  multiscatteringLut = Fvog::Texture(
+    {
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
+      .extent   = {32, 32, 1},
+      .usage    = Fvog::TextureUsage::GENERAL,
+    },
+    "Multiscattering LUT");
 
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
@@ -791,13 +809,25 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .sky                    = skyParameters,
     });
 
+  ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(multiscatteringLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+
   ctx.BindComputePipeline(skyTransmittancePipeline.GetPipeline());
   TransmittancePush transmittancePush;
-  transmittancePush.globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
+  transmittancePush.globalUniformsIndexTransmittance = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
   transmittancePush.transmittanceImage = transmittanceLut.value().ImageView().GetImage2D();
   ctx.SetPushConstants(transmittancePush);
-  ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.DispatchInvocations(transmittanceLut.value().GetCreateInfo().extent);
+  
+  ctx.BindComputePipeline(skyMultiscatteringPipeline.GetPipeline());
+  MultiscatteringPush multiscatteringPush;
+  multiscatteringPush.globalUniformsIndexMultiscattering = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
+  multiscatteringPush.transmittanceTexture = transmittanceLut.value().ImageView().GetTexture2D();
+  multiscatteringPush.transmittanceSampler = linearClampSampler;
+  multiscatteringPush.multiscatteringImage = multiscatteringLut.value().ImageView().GetImage2D();
+  ctx.SetPushConstants(multiscatteringPush);
+  ctx.ImageBarrier(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  ctx.DispatchInvocations(32u, 32u, 1u);
 
   auto drawCalls       = std::vector<GpuMesh*>();
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();

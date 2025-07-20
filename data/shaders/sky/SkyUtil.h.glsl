@@ -2,6 +2,11 @@
 #define SKY_UTIL_H
 
 #include "../GlobalUniforms.h.glsl"
+#include "../Math.h.glsl"
+
+#define PLANET_RADIUS_OFFSET (0.01f)
+#define BASE_HEIGHT_OFFSET (3.0f)
+#define M_TO_KM_SCALE (0.001f)
 
 /* Return sqrt clamped to 0 */
 float safe_sqrt(float x)
@@ -43,11 +48,45 @@ float ray_sphere_intersect_nearest(vec3 r0, vec3 rd, vec3 s0, float sR)
     return max(0.0, min(sol0, sol1));
 }
 
+float from_subuv_to_unit(float u, float resolution)
+{
+    return (u - 0.5 / resolution) * (resolution / (resolution - 1.0));
+}
+
+float from_unit_to_subuv(float u, float resolution)
+{
+    return (u + 0.5 / resolution) * (resolution / (resolution + 1.0));
+}
+
 struct TransmittanceParams
 {
     float height;
     float zenith_cos_angle;
 };
+
+///	Transmittance LUT uses not uniform mapping -> transfer from mapping to texture uv
+///	@param parameters
+/// @param atmosphere_bottom - bottom radius of the atmosphere in km
+/// @param atmosphere_top - top radius of the atmosphere in km
+///	@return - uv of the corresponding texel
+vec2 transmittance_lut_to_uv(TransmittanceParams parameters, float atmosphere_bottom, float atmosphere_top)
+{
+    const float H = safe_sqrt(atmosphere_top * atmosphere_top - atmosphere_bottom * atmosphere_bottom);
+    const float rho = safe_sqrt(parameters.height * parameters.height - atmosphere_bottom * atmosphere_bottom);
+
+    const float discriminant = parameters.height * parameters.height *
+                               (parameters.zenith_cos_angle * parameters.zenith_cos_angle - 1.0) +
+                                atmosphere_top * atmosphere_top;
+    /* Distance to top atmosphere boundary */
+    const float d = max(0.0, (-parameters.height * parameters.zenith_cos_angle + safe_sqrt(discriminant)));
+
+    const float d_min = atmosphere_top - parameters.height;
+    const float d_max = rho + H;
+    const float mu = (d - d_min) / (d_max - d_min);
+    const float r = rho / H;
+
+    return vec2(mu, r);
+}
 
 /// Transmittance LUT uses not uniform mapping -> transfer from uv to this mapping
 /// @param uv - uv in the range [0,1]

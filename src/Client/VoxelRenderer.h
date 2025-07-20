@@ -151,6 +151,8 @@ private:
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
   std::optional<Fvog::Texture> transmittanceLut;
+  std::optional<Fvog::Texture> multiscatteringLut;
+
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
   shared::TonemapUniforms tonemapUniforms{};

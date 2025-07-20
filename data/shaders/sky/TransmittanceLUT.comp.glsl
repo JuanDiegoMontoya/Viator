@@ -1,3 +1,5 @@
+#define TRANSMITTANCE_LUT 1
+
 #include "../GlobalUniforms.h.glsl"
 #include "SkyUtil.h.glsl"
 #include "SkyShared.h.glsl"
