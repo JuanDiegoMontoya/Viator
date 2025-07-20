@@ -458,6 +458,7 @@ void Game::Run()
       }
 
       //if (world_->IsServer())
+      if (world_->GetRegistry().ctx().get<GameState>() == GameState::GAME)
       {
         for (auto&& [entity, player, inputLook, transform, gtransform] : world_->GetRegistry().view<const Player, const InputLookState, LocalTransform, GlobalTransform>().each())
         {
@@ -469,31 +470,34 @@ void Game::Run()
         }
       }
 
-      constexpr int MAX_TICKS = 10;
-      int accumTicks          = 0;
-      fixedUpdateAccum += realDeltaTime * timeScale;
-      while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
+      if (world_->GetRegistry().ctx().get<GameState>() == GameState::GAME)
       {
-        fixedUpdateAccum -= tickDuration;
-        if (networking_)
+        constexpr int MAX_TICKS = 10;
+        int accumTicks          = 0;
+        fixedUpdateAccum += realDeltaTime * timeScale;
+        while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
         {
-          SPDLOG_TRACE("networking_->ProcessMessages()");
-          networking_->ProcessMessages(*world_);
-
-          for (auto entity : world_->GetRegistry().view<const NetworkNeedUpdateLocalTransform>())
+          fixedUpdateAccum -= tickDuration;
+          if (networking_)
           {
-            world_->UpdateLocalTransform(entity);
+            SPDLOG_TRACE("networking_->ProcessMessages()");
+            networking_->ProcessMessages(*world_);
+
+            for (auto entity : world_->GetRegistry().view<const NetworkNeedUpdateLocalTransform>())
+            {
+              world_->UpdateLocalTransform(entity);
+            }
+            world_->GetRegistryRaw().clear<NetworkNeedUpdateLocalTransform>();
+
+            SPDLOG_TRACE("networking_->SendMessages()");
+            networking_->SendMessages(*world_);
           }
-          world_->GetRegistryRaw().clear<NetworkNeedUpdateLocalTransform>();
-
-          SPDLOG_TRACE("networking_->SendMessages()");
-          networking_->SendMessages(*world_);
+          SPDLOG_TRACE("world->FixedUpdate({})", tickDuration);
+          world_->FixedUpdate(static_cast<float>(tickDuration));
         }
-        SPDLOG_TRACE("world->FixedUpdate({})", tickDuration);
-        world_->FixedUpdate(static_cast<float>(tickDuration));
-      }
 
-      dt.fraction = std::clamp(float(fixedUpdateAccum / tickDuration), 0.0f, 1.0f);
+        dt.fraction = std::clamp(float(fixedUpdateAccum / tickDuration), 0.0f, 1.0f);
+      }
 
       if (head_)
       {

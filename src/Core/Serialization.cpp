@@ -424,7 +424,6 @@ namespace Core::Serialization
     auto& registry     = world.GetRegistryRaw();
     auto remoteToLocalTemp = std::unordered_map<entt::entity, entt::entity>();
     auto localToRemoteTemp = std::unordered_map<entt::entity, entt::entity>();
-    world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Loading world";
 
     auto file = std::ifstream(path, std::ios::binary | std::ios::in);
     ASSERT(file);
@@ -439,7 +438,7 @@ namespace Core::Serialization
       registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
 
       // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
-      auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
+      //auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
       world.CreateRenderingMaterials();
     }
 
