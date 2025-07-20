@@ -138,7 +138,7 @@ private:
 
   PipelineManager::ComputePipelineKey skyTransmittancePipeline;
   PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
-  PipelineManager::ComputePipelineKey skyFinalPipeline;
+  PipelineManager::ComputePipelineKey skyViewPipeline;
 
   std::optional<Fvog::NDeviceBuffer<Temp::ObjectUniforms>> meshUniformz;
   std::optional<Fvog::NDeviceBuffer<Debug::Line>> lineVertexBuffer;
@@ -152,6 +152,7 @@ private:
   std::optional<Fvog::Texture> backgroundTexture;
   std::optional<Fvog::Texture> transmittanceLut;
   std::optional<Fvog::Texture> multiscatteringLut;
+  std::optional<Fvog::Texture> skyViewLut;
 
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
