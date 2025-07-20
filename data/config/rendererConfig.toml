@@ -1,12 +1,15 @@
 [audio]
 volume = 0.5
 
-[graphics.bloom]
-enable = true
+[graphics]
+ambient_occlusion = true
 
-[graphics.gi]
-method = 2
+    [graphics.bloom]
+    enable = true
 
-[graphics.pathtracer]
-bounces = 2
-samples = 1
+    [graphics.gi]
+    method = 2
+
+    [graphics.pathtracer]
+    bounces = 2
+    samples = 1

@@ -20,8 +20,8 @@ namespace Techniques
 
   Fvog::Texture& RayTracedAO::ComputeAO(VkCommandBuffer commandBuffer, const ComputeParams& params)
   {
-    assert(params.tlas);
-    assert(params.inputDepth);
+    ASSERT(params.inputDepth);
+    ASSERT(params.inputNormal);
 
     auto ctx = Fvog::Context(commandBuffer);
 
@@ -34,14 +34,13 @@ namespace Techniques
     auto marker = ctx.MakeScopedDebugMarker("Ray Traced AO");
     ctx.BindComputePipeline(rtaoPipeline_.GetPipeline());
     ctx.SetPushConstants(RtaoArguments{
-      .tlasAddress          = params.tlas->GetAddress(),
-      .gDepth               = params.inputDepth->ImageView().GetTexture2D(),
-      .gNormalAndFaceNormal = params.inputNormalAndFaceNormal->ImageView().GetTexture2D(),
-      .outputAo             = aoTexture_.value().ImageView().GetImage2D(),
-      .world_from_clip      = params.world_from_clip,
-      .numRays              = params.numRays,
-      .rayLength            = params.rayLength,
-      .frameNumber          = params.frameNumber,
+      .voxels          = params.voxels,
+      .gDepth          = params.inputDepth->ImageView().GetTexture2D(),
+      .gNormal         = params.inputNormal->ImageView().GetTexture2D(),
+      .outputAo        = aoTexture_.value().ImageView().GetImage2D(),
+      .numRays         = params.numRays,
+      .rayLength       = params.rayLength,
+      .frameNumber     = params.frameNumber,
     });
     ctx.DispatchInvocations(params.outputSize.width, params.outputSize.height, 1);
     ctx.Barrier();

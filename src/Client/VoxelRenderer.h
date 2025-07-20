@@ -9,6 +9,7 @@
 #include "techniques/Bloom.h"
 #include "techniques/AutoExposure.h"
 #include "techniques/volumetric/FroxelFog.h"
+#include "techniques/ao/RayTracedAO.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -197,6 +198,12 @@ private:
   // Resources needed for froxel fog
   std::optional<Fvog::Texture> inScatteringAndTransmittanceVolume;
   std::optional<Fvog::Texture> fogColorAndDensityVolume;
+
+  Techniques::RayTracedAO ao_;
+  bool enableAo_ = true;
+  int numAoRays_ = 1;
+  float aoRayLength_ = 1;
+  std::optional<Fvog::Texture> whiteTexture_;
 
   enum class GIMethod
   {

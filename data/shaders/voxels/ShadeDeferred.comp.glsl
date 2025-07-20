@@ -148,6 +148,8 @@ void main()
     irradiance_internal = albedo_internal * SampleIlluminanceField(positionWorld, normal, samplerr, ddgi);
   }
 
+  irradiance_internal *= textureLod(ambientOcclusion, samplerr, uv, 0).x;
+
   // Shadow
   const float NoL = max(0, dot(normal, uniforms.sky.sunDir));
 	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir);

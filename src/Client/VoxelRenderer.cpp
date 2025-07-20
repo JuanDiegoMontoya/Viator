@@ -475,6 +475,10 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
     .baseGridScale               = 2,
   });
 
+  whiteTexture_ = Fvog::CreateTexture2D({1, 1}, Fvog::Format::R8G8B8A8_UNORM, Fvog::TextureUsage::READ_ONLY, "1x1 White Texture");
+  constexpr auto whiteUnorm8 = glm::u8vec4(255, 255, 255, 255);
+  whiteTexture_->UpdateImageSLOW({.extent = {1, 1, 1}, .data = &whiteUnorm8});
+
   // Initialize froxel fog resources
   inScatteringAndTransmittanceVolume = Fvog::Texture(
     {
@@ -1130,6 +1134,20 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.Barrier();
     }
 
+    Fvog::Texture* aoTexture = &whiteTexture_.value();
+    if (giMethod_ == GIMethod::DDGI && enableAo_)
+    {
+      aoTexture = &ao_.ComputeAO(commandBuffer,
+        {
+          .voxels      = voxels,
+          .inputDepth  = &frame.sceneDepth.value(),
+          .inputNormal = &frame.sceneNormal.value(),
+          .outputSize  = {frame.sceneAlbedo->GetCreateInfo().extent.width, frame.sceneAlbedo->GetCreateInfo().extent.height},
+          .numRays     = uint32_t(numAoRays_),
+          .rayLength   = aoRayLength_,
+          .frameNumber = uint32_t(Fvog::GetDevice().frameNumber),
+        });
+    }
 
     // Shade image.
     {
@@ -1150,6 +1168,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .samplerr             = linearClampSampler,
         .giMethod             = uint32_t(giMethod_),
         .applySpelunkerEffect = applySpelunkerEffect,
+        .ambientOcclusion     = aoTexture->ImageView().GetTexture2D(),
       });
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }

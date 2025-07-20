@@ -485,6 +485,7 @@ void VoxelRenderer::LoadGameSettings()
   pathTracerSamples       = sGameSettings["graphics"]["pathtracer"]["samples"].value_or(pathTracerSamples);
   pathTracerBounces       = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
   enableBloom             = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
+  enableAo_               = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
 
   ma_engine_set_volume(head_->audio_->engine_, sGameSettings["audio"]["volume"].value_or(0.5f));
 }
@@ -573,9 +574,19 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
           sGameSettingsModified = true;
           giMethod_             = GIMethod::DDGI;
         }
+        ImGui::BeginDisabled(giMethod_ != GIMethod::PerPixelPathTracing);
         sGameSettingsModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
         sGameSettingsModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
         sGameSettingsModified |= ImGui::Checkbox("Bloom", &enableBloom);
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(giMethod_ != GIMethod::DDGI);
+        sGameSettingsModified |= ImGui::Checkbox("Ambient Occlusion", &enableAo_);
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("For DDGI only");
+        }
 
         ImGui::EndTabItem();
       }
@@ -606,6 +617,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       auto bloom = toml::table();
       bloom.insert_or_assign("enable", enableBloom);
       graphics.insert_or_assign("bloom", bloom);
+      graphics.insert_or_assign("ambient_occlusion", enableAo_);
       auto gi = toml::table();
       gi.insert_or_assign("method", giMethod_);
       graphics.insert_or_assign("gi", gi);
@@ -1408,6 +1420,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::Checkbox("Disable Fog", &debugDisableFog);
       ImGui::SliderFloat("Sun elevation", &sunElevation, 0, glm::two_pi<float>());
       ImGui::SliderFloat("Sun azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+      ImGui::SliderInt("AO rays", &numAoRays_, 1, 16);
+      ImGui::SliderFloat("AO ray length", &aoRayLength_, 0.125f, 10.0f);
       if (ImGui::Button("Recompile all shaders"))
       {
         for (auto& shaderModule : GetPipelineManager().GetShaderModules())

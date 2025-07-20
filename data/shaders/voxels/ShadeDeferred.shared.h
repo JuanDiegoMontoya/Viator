@@ -31,6 +31,7 @@ FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
   Sampler samplerr;
   FVOG_UINT32 giMethod; // 1 = per-pixel PT. 2 = DDGI
   FVOG_BOOL32 applySpelunkerEffect;
+  Texture2D ambientOcclusion;
 };
 
 #endif

@@ -3,6 +3,7 @@
 #include "Client/Fvog/Texture2.h"
 #include "Client/Fvog/Pipeline2.h"
 #include "Client/PipelineManager.h"
+#include "shaders/voxels/Voxels.h.glsl"
 
 #include <glm/mat4x4.hpp>
 #include <optional>
@@ -22,13 +23,12 @@ namespace Techniques
 
     struct ComputeParams
     {
-      Fvog::Tlas* tlas;
-      Fvog::Texture* inputDepth;
-      Fvog::Texture* inputNormalAndFaceNormal;
+      Voxels voxels;
+      Fvog::Texture* inputDepth{};
+      Fvog::Texture* inputNormal{};
       Fvog::Extent2D outputSize;
-      uint32_t numRays{5};
-      float rayLength{1};
-      glm::mat4 world_from_clip;
+      uint32_t numRays{1};
+      float rayLength{2};
       uint32_t frameNumber{};
 
       // TODO: scale factor and denoising params
