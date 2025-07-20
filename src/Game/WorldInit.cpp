@@ -363,18 +363,21 @@ void World::InitializeGameDefinitions()
   [[maybe_unused]] const auto coinItemId          = items.Add(new SpriteItem("Electrum", "coin"));
   [[maybe_unused]] const auto charcoalItemId      = items.Add(new SpriteItem("Charcoal", "charcoal"));
   [[maybe_unused]] const auto copperIngotItemId   = items.Add(new SpriteItem("Copper Ingot", "copper_ingot"));
+  [[maybe_unused]] const auto leadIngotItemId   = items.Add(new SpriteItem("Lead Ingot", "lead_ingot"));
   [[maybe_unused]] const auto stickItemId         = items.Add(new SpriteItem("Stick", "stick"));
   [[maybe_unused]] const auto coolStickItemId     = items.Add(new SpriteItem("Cool Stick", "stick", {1, 0, 0}));
   [[maybe_unused]] const auto wormSummonItemId    = items.Add(new SpawnBossItemDefinition("Suspicious Coin", "coin", {1, 0.1f, 0.1f}));
   [[maybe_unused]] const auto healingPotionItemId = items.Add(new HealingPotionDefinition("Healing Potion", "potion_healing"));
   [[maybe_unused]] const auto stoneAxeId          = items.Add(new ToolDefinition("Stone Axe", {"axe", {.2f, .2f, .2f}, 20, 2, BlockDamageFlagBit::AXE}));
-  [[maybe_unused]] const auto copperAxeId         = items.Add(new ToolDefinition("Copper Axe", {"axe", {.78f, .51f, .27f}, 30, 2, BlockDamageFlagBit::AXE}));
+  [[maybe_unused]] const auto copperAxeId         = items.Add(new ToolDefinition("Copper Axe", {"axe", {.78f, .51f, .27f}, 30, 3, BlockDamageFlagBit::AXE}));
+  [[maybe_unused]] const auto leadAxeId         = items.Add(new ToolDefinition("Lead Axe", {"axe", {.21f, .34f, .40f}, 35, 4, BlockDamageFlagBit::AXE}));
   [[maybe_unused]] const auto stonePickaxeId = items.Add(new ToolDefinition("Stone Pickaxe", {"pickaxe", {.2f, .2f, .2f}, 20, 2, BlockDamageFlagBit::PICKAXE}));
-  [[maybe_unused]] const auto copperPickaxeId =
-    items.Add(new ToolDefinition("Copper Pickaxe", {"pickaxe", {.78f, .51f, .27f}, 30, 2, BlockDamageFlagBit::PICKAXE}));
+  [[maybe_unused]] const auto copperPickaxeId = items.Add(new ToolDefinition("Copper Pickaxe", {"pickaxe", {.78f, .51f, .27f}, 30, 3, BlockDamageFlagBit::PICKAXE}));
+  [[maybe_unused]] const auto leadPickaxeId = items.Add(new ToolDefinition("Lead Pickaxe", {"pickaxe", {.21f, .34f, .40f}, 35, 4, BlockDamageFlagBit::PICKAXE}));
   [[maybe_unused]] const auto opPickaxeId   = items.Add(new RainbowTool("OP Pickaxe", {"pickaxe", {1, 1, 1}, 1000, 100, BlockDamageFlagBit::ALL_TOOLS, 0.1f}));
   [[maybe_unused]] const auto stoneSpearId  = items.Add(new Spear("Stone Spear", {.tint = {0.2f, 0.2f, 0.2f}}));
   [[maybe_unused]] const auto copperSpearId = items.Add(new Spear("Copper Spear", {.damage = 20, .knockback = 5, .tint = {.78f, .51f, .27f}}));
+  [[maybe_unused]] const auto leadSpearId = items.Add(new Spear("Lead Spear", {.damage = 25, .knockback = 5, .tint = {.21f, .34f, .40f}}));
   [[maybe_unused]] const auto speedSpearId  = items.Add(new CSKnife("SPEED Spear", {.tint = {0.2f, 0.2f, 0.3f}}));
   const auto healthRegenId = items.Add(new Effector("Regeneration", ItemDefinition::EffectType::HealthRegeneration));
   const auto shineId = items.Add(new Effector("Shine", ItemDefinition::EffectType::Shine));
@@ -388,9 +391,12 @@ void World::InitializeGameDefinitions()
   items.Add(new EffectGrantingPotion("Spelunker Potion", "potion_healing", spelunkerId, 300, {1.0f, 0.9f, 0.01f}));
 
   items.Add(new Boots("Super Frog Boots", "potion_healing"));
-  items.Add(new Armor("Copper Cap", 2, ItemDefinition::AllowedSlots::Head, "potion_healing"));
-  items.Add(new Armor("Copper Polo", 2, ItemDefinition::AllowedSlots::Body, "potion_healing"));
-  items.Add(new Armor("Copper Shoes", 2, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
+  const auto copperHelmetId = items.Add(new Armor("Copper Cap", 2, ItemDefinition::AllowedSlots::Head, "potion_healing"));
+  const auto copperShirtId = items.Add(new Armor("Copper Polo", 2, ItemDefinition::AllowedSlots::Body, "potion_healing"));
+  const auto copperPantsId = items.Add(new Armor("Copper Shoes", 2, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
+  const auto leadHelmetId = items.Add(new Armor("Lead Cap", 3, ItemDefinition::AllowedSlots::Head, "potion_healing"));
+  const auto leadShirtId = items.Add(new Armor("Lead Polo", 3, ItemDefinition::AllowedSlots::Body, "potion_healing"));
+  const auto leadPantsId = items.Add(new Armor("Lead Shoes", 3, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
   items.Add(new TestAccessory("Test Accessory", "potion_healing"));
 
   auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
@@ -466,6 +472,21 @@ void World::InitializeGameDefinitions()
                                                        },
                                                    })))
                                                    .GetItemId();
+
+  const auto galenaBlockId = blocks
+                               .Get(blocks.Add(new BlockDefinition({
+                                 .name          = "Galena",
+                                 .initialHealth = 100,
+                                 .damageTier    = 3,
+                                 .damageFlags   = BlockDamageFlagBit::PICKAXE,
+                                 .voxelMaterialDesc =
+                                   {
+                                     .randomizeTexcoordRotation = true,
+                                     .baseColorTexture          = "galena_albedo",
+                                     .isValuable                = true,
+                                   },
+                               })))
+                               .GetItemId();
 
   [[maybe_unused]] const auto forgeBlockItemId = blocks
                                                    .Get(blocks.Add(new BlockDefinition({
@@ -576,6 +597,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("chair", true);
   RegisterFoliageBlock("table", true);
   RegisterFoliageBlock("cloud", true);
+  RegisterFoliageBlock("anvil_lead", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -728,8 +750,18 @@ void World::InitializeGameDefinitions()
     {{healingPotionItemId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{malachiteBlockId, 5}, {charcoalItemId, 1}},
+    {{malachiteBlockId, 4}, {charcoalItemId, 1}},
     {{copperIngotItemId, 1}},
+    blocks.Get("Forge").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{galenaBlockId, 4}, {charcoalItemId, 1}},
+    {{leadIngotItemId, 1}},
+    blocks.Get("Forge").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 10}, {charcoalItemId, 1}},
+    {{blocks.Get("anvil_lead").GetItemId(), 1}},
     blocks.Get("Forge").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
@@ -743,6 +775,48 @@ void World::InitializeGameDefinitions()
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{copperIngotItemId, 5}, {stickItemId, 1}},
     {{copperAxeId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadSpearId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadPickaxeId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadAxeId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperHelmetId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperShirtId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperPantsId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadHelmetId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadShirtId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadPantsId, 1}},
+    blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{coinItemId, 10}, {stickItemId, 20}},
@@ -1038,6 +1112,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   const auto& grass     = blocks.Get("Grass");
   const auto& dirt     = blocks.Get("Dirt");
   const auto& malachite = blocks.Get("Malachite");
+  const auto& galena = blocks.Get("Galena");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
@@ -1088,7 +1163,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     stoneInDirt->SetSource(stoneInDirtA);
     stoneInDirt->SetScaling(1.0f / sampleScale);
 
-    auto ore = FastNoise::NewFromEncodedNodeTree("FgIAAIA/BxUFBg@BhBCDMzsz//Aws@BIQQgzM7M/D@CD///8=");
+    auto copperOre = FastNoise::NewFromEncodedNodeTree("FgLNzIw/BxUFBg@AFRBCK5HoT//Aws@BIQQgzM7M/D@CD///8=");
+    auto leadOre = FastNoise::NewFromEncodedNodeTree("FgIAAIA/BxUFBg@BhBCK5HoT//AxAFCw@AFxBCJqZmT8M@CP8CAACAQf///w==");
 
 #ifndef GAME_HEADLESS
     total.store((int32_t)grid.numTopLevelBricks_);
@@ -1153,9 +1229,16 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Nearest);
 
-          auto copperImage = GenerateAndUpscale3D(ore,
+          auto copperImage = GenerateAndUpscale3D(copperOre,
             glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
             mapGenInfo.seed + 55,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
+            Filter::Nearest);
+
+          auto leadImage = GenerateAndUpscale3D(leadOre,
+            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE)),
+            mapGenInfo.seed + 56,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE,
             Filter::Nearest);
@@ -1207,6 +1290,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 if (TexelFetch3D(copperImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
                 {
                   blockTypeToSet = malachite.GetBlockId();
+                }
+                else if (TexelFetch3D(leadImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
+                {
+                  blockTypeToSet = galena.GetBlockId();
                 }
               }
 

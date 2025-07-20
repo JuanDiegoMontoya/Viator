@@ -376,7 +376,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState =
           {
             .depthTestEnable  = true,
-            .depthWriteEnable = false,
+            .depthWriteEnable = true,
             .depthCompareOp   = FVOG_COMPARE_OP_NEARER,
           },
         .renderTargetFormats =
@@ -409,7 +409,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState =
           {
             .depthTestEnable  = true,
-            .depthWriteEnable = false,
+            .depthWriteEnable = true,
             .depthCompareOp   = FVOG_COMPARE_OP_NEARER,
           },
         .renderTargetFormats =

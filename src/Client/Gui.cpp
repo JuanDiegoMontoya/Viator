@@ -834,14 +834,23 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         const auto& crafting      = world.GetRegistry().ctx().get<Crafting>();
         const auto& itemRegistry  = world.GetRegistry().ctx().get<ItemRegistry>();
         const auto& blockRegistry = world.GetRegistry().ctx().get<BlockRegistry>();
+        static bool showUncraftableRecipes = true;
+        ImGui::Checkbox("Show uncraftable", &showUncraftableRecipes);
+        ImGui::Separator();
         for (int index = 0; const auto& recipe : crafting.recipes)
         {
+          const bool canCraftRecipe = inventory.CanCraftRecipe(recipe) && nearVoxels.contains(recipe.craftingStation);
+          if (!showUncraftableRecipes && !canCraftRecipe)
+          {
+            continue;
+          }
+
           if (index != 0)
           {
             ImGui::Separator();
           }
           ImGui::PushID(index);
-          ImGui::BeginDisabled(!inventory.CanCraftRecipe(recipe) || !nearVoxels.contains(recipe.craftingStation));
+          ImGui::BeginDisabled(!canCraftRecipe);
           if (ImGui::Button("Craft"))
           {
             Networking::CallRPC("TryCraftRecipeRPC"_hs, world, playerEntity, recipe);
