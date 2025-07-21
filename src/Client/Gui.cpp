@@ -28,10 +28,14 @@
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
 #include "entt/meta/container.hpp"
+#include "entt/core/hashed_string.hpp"
+#include "entt/entity/registry.hpp"
 #include "IconsFontAwesome6.h"
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
 #include "miniaudio.h"
+
+using namespace entt::literals;
 
 // toml contains two instances of unreachable code in release mode.
 #include "PlayerAudio.h"
@@ -1361,60 +1365,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       auto& debug = ctx.get<Debugging>();
       ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
-      ImGui::Text("DDGI");
-      ImGui::Separator();
-      const char* const names[] = {
-        "None",
-        "Luminance",
-        "Illuminance",
-        "Raw Depth",
-        "Depth Moments",
-        "Validity",
-        "Average Luminance",
-      };
-      if (ImGui::BeginCombo("Visualize probes", names[int(ddgiDebugView_)]))
-      {
-        for (int i = 0; i < std::size(names); i++)
-        {
-          if (ImGui::Selectable(names[i], int(ddgiDebugView_) == i))
-          {
-            ddgiDebugView_ = DDGIDebugView(i);
-          }
-        }
-        ImGui::EndCombo();
-      }
-      ImGui::SliderInt("Show Cascade", &ddgiDebugShowOnlyThisCascade_, -1, DDGI_NUM_CASCADES - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
-      ImGui::Checkbox("Cascades as Color", &ddgiDebugShowCascadeIndexAsColor_);
-      if (ImGui::RadioButton("None##Updates", !ddgiDebugPauseUpdates_ && !ddgiDebugFreezeGrid_))
-      {
-        ddgiDebugPauseUpdates_ = false;
-        ddgiDebugFreezeGrid_ = false;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Pause Updates", ddgiDebugPauseUpdates_))
-      {
-        ddgiDebugPauseUpdates_ = true;
-        ddgiDebugFreezeGrid_   = false;
-      }
-      ImGui::SameLine();
-      if (ImGui::RadioButton("Freeze Grid", ddgiDebugFreezeGrid_))
-      {
-        ddgiDebugPauseUpdates_ = false;
-        ddgiDebugFreezeGrid_   = true;
-      }
-      ImGui::SliderFloat("Base Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
-      ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
-      ImGui::Separator();
-      ImGui::Checkbox("Disable Fog", &debugDisableFog);
-      ImGui::SliderFloat("Sun elevation", &sunElevation, 0, glm::two_pi<float>());
-      ImGui::SliderFloat("Sun azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
-      if (ImGui::Button("Recompile all shaders"))
-      {
-        for (auto& shaderModule : GetPipelineManager().GetShaderModules())
-        {
-          GetPipelineManager().EnqueueRecompileShader(shaderModule->info);
-        }
-      }
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
@@ -1469,6 +1419,90 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           name = n->name;
         }
         ImGui::Text("%u (%s)", entt::to_entity(entity), name.c_str());
+      }
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Giraffics", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    {
+      if (ImGui::Button("Recompile all shaders"))
+      {
+        for (auto& shaderModule : GetPipelineManager().GetShaderModules())
+        {
+          GetPipelineManager().EnqueueRecompileShader(shaderModule->info);
+        }
+      }
+      ImGui::Separator();
+
+      if (ImGui::BeginTabBar("Options"))
+      {
+        if (ImGui::BeginTabItem("Sky"))
+        {
+          ImGui::Checkbox("Disable Fog", &debugDisableFog);
+          ImGui::SliderFloat("Sun elevation", &sunElevation, 0, glm::two_pi<float>());
+          ImGui::SliderFloat("Sun azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+
+          static float scale0 = 1;
+          ImGui::SliderFloat("Tint##0", &scale0, 0, 1);
+          ImGui::Image(ImTextureSampler(transmittanceLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
+          static float scale1 = 1;
+          ImGui::SliderFloat("Tint##1", &scale1, 0, 1);
+          ImGui::Image(ImTextureSampler(multiscatteringLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
+          static float scale2 = 1;
+          ImGui::SliderFloat("Tint##2", &scale2, 0, 1);
+          ImGui::Image(ImTextureSampler(skyViewLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
+
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("DDGI"))
+        {
+          const char* const names[] = {
+            "None",
+            "Luminance",
+            "Illuminance",
+            "Raw Depth",
+            "Depth Moments",
+            "Validity",
+            "Average Luminance",
+          };
+          if (ImGui::BeginCombo("Visualize probes", names[int(ddgiDebugView_)]))
+          {
+            for (int i = 0; i < std::size(names); i++)
+            {
+              if (ImGui::Selectable(names[i], int(ddgiDebugView_) == i))
+              {
+                ddgiDebugView_ = DDGIDebugView(i);
+              }
+            }
+            ImGui::EndCombo();
+          }
+          ImGui::SliderInt("Show Cascade", &ddgiDebugShowOnlyThisCascade_, -1, DDGI_NUM_CASCADES - 1, "%d", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::Checkbox("Cascades as Color", &ddgiDebugShowCascadeIndexAsColor_);
+          if (ImGui::RadioButton("None##Updates", !ddgiDebugPauseUpdates_ && !ddgiDebugFreezeGrid_))
+          {
+            ddgiDebugPauseUpdates_ = false;
+            ddgiDebugFreezeGrid_   = false;
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("Pause Updates", ddgiDebugPauseUpdates_))
+          {
+            ddgiDebugPauseUpdates_ = true;
+            ddgiDebugFreezeGrid_   = false;
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("Freeze Grid", ddgiDebugFreezeGrid_))
+          {
+            ddgiDebugPauseUpdates_ = false;
+            ddgiDebugFreezeGrid_   = true;
+          }
+          ImGui::SliderFloat("Base Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
+          ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
+
+          ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
       }
     }
     ImGui::End();

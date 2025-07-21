@@ -153,6 +153,9 @@ private:
   std::optional<Fvog::Texture> transmittanceLut;
   std::optional<Fvog::Texture> multiscatteringLut;
   std::optional<Fvog::Texture> skyViewLut;
+  std::optional<Fvog::TextureView> transmittanceLutView;
+  std::optional<Fvog::TextureView> multiscatteringLutView;
+  std::optional<Fvog::TextureView> skyViewLutView;
 
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;

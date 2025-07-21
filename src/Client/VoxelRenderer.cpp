@@ -548,6 +548,10 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
     },
     "Sky View LUT");
 
+  transmittanceLutView   = transmittanceLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
+  multiscatteringLutView = multiscatteringLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
+  skyViewLutView         = skyViewLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
+
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
