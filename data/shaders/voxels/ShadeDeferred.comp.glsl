@@ -4,6 +4,7 @@
 #include "../Utility.h.glsl"
 #include "../Hash.h.glsl"
 #include "../Config.shared.h"
+#include "../sky/SkyUtil.h.glsl"
 
 #define uniforms perFrameUniformsBuffers[uniformBufferIndex]
 
@@ -150,7 +151,15 @@ void main()
 
   // Shadow
   const float NoL = max(0, dot(normal, uniforms.sky.sunDir));
-	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir);
+  const vec3 transmittanceToSun = getTransmittanceAlongRay(
+    v_globalUniforms.sky,
+    v_globalUniforms.transmittanceLut,
+    v_globalUniforms.linearSampler,
+    v_globalUniforms.sky.sunDir,
+    positionWorld);
+
+  vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun;
+	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir) * sun_light / solid_angle_mapping_PDF(radians(0.5));
   vec3 finalRadiance = sunlight_internal + radiance_internal + irradiance_internal;
 
   // Spelunker potion effect

@@ -92,6 +92,7 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
   FVOG_UINT32 frameNumber;
   SkyParameters sky;
   FVOG_SHARED Texture2D skyViewLut;
+  FVOG_SHARED Texture2D transmittanceLut;
   FVOG_SHARED Sampler linearSampler;
 }
 #ifndef __cplusplus

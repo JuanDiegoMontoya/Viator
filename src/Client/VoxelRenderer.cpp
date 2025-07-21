@@ -827,6 +827,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
       .sky                    = skyParameters,
       .skyViewLut             = skyViewLut.value().ImageView().GetTexture2D(),
+      .transmittanceLut       = transmittanceLut.value().ImageView().GetTexture2D(),
       .linearSampler          = linearClampSampler,
     });
 

@@ -1134,10 +1134,17 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         
         if (lightIndex == 0 && hitDist2 > 1e10)
         {
+          const vec3 transmittanceToSun = getTransmittanceAlongRay(
+            v_globalUniforms.sky,
+            v_globalUniforms.transmittanceLut,
+            v_globalUniforms.linearSampler,
+            v_globalUniforms.sky.sunDir,
+            v_globalUniforms.cameraPos.xyz);
+
           indirectIlluminance += illum_t(throughput *
                                 // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
                                 //(curSurface.albedo / M_PI) *
-                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor * v_globalUniforms.sky.sunBrightness /
+                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor * v_globalUniforms.sky.sunBrightness * transmittanceToSun /
                                 // sunShadow /
                                 solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
         }

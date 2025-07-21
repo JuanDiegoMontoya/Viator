@@ -298,6 +298,32 @@ MediumSample sample_medium(SkyParameters params, vec3 position)
     return MediumSample(mie_scattering, ray_scattering, medium_extinction);
 }
 
+vec3 getTransmittanceAlongRay(
+    SkyParameters params,
+    Texture2D transmittance,
+    Sampler lin_clamp_sampler,
+    vec3 ray,
+    vec3 world_position
+)
+{
+    const vec3 z_up_pos = world_position.xzy * vec3(1.0, -1.0, 1.0) * M_TO_KM_SCALE + vec3(0.0, 0.0, params.atmosphere_bottom + BASE_HEIGHT_OFFSET);
+    const float height = length(z_up_pos);
+    
+    const vec3 z_up_ray = ray.xzy * vec3(1.0, -1.0, 1.0);
+
+    const float zenith_cos_angle = dot(z_up_ray, normalize(z_up_pos));
+    const TransmittanceParams transmittance_lut_params = TransmittanceParams(height, zenith_cos_angle);
+
+    const vec2 transmittance_texture_uv = transmittance_lut_to_uv(
+            transmittance_lut_params,
+            params.atmosphere_bottom,
+            params.atmosphere_top
+        );
+        
+    const vec3 transmittance_to_sun = texture(transmittance, lin_clamp_sampler, transmittance_texture_uv).rgb;
+    return transmittance_to_sun;
+}
+
 vec3 getAtmosphereAlongRay(
     SkyParameters params,
     Texture2D sky,
