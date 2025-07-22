@@ -225,4 +225,6 @@ private:
 
   float sunElevation = 0.5f;
   float sunAzimuth   = 0.3f;
+  glm::vec3 sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
+  float sunBrightness = 100'000;
 };

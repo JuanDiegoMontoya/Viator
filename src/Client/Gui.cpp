@@ -1363,6 +1363,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     {
       auto& ctx   = world.GetRegistry().ctx();
       auto& debug = ctx.get<Debugging>();
+      if (ImGui::Button("Enable noclip"))
+      {
+        if (auto player = world.TryGetLocalPlayer(); player != entt::null)
+        {
+          world.GetRegistry().emplace_or_replace<NoclipCharacterController>(player);
+        }
+      }
       ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
@@ -1385,7 +1392,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    if (ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    if (false && ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
       static glm::vec3 probePos  = {0, 60, 0};
       static glm::vec3 probePos2 = {0, 61, 0};
@@ -1439,17 +1446,25 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         if (ImGui::BeginTabItem("Sky"))
         {
           ImGui::Checkbox("Disable Fog", &debugDisableFog);
-          ImGui::SliderFloat("Sun elevation", &sunElevation, 0, glm::two_pi<float>());
-          ImGui::SliderFloat("Sun azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
 
+          ImGui::SeparatorText("Sun position");
+          ImGui::SliderFloat("Elevation", &sunElevation, 0, glm::two_pi<float>());
+          ImGui::DragFloat("Fine elevation", &sunElevation, 0.002f);
+          ImGui::SliderFloat("Azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+
+          ImGui::SeparatorText("Sun appearance");
+          ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);
+          ImGui::SliderFloat("Brightness##sun", &sunBrightness, 0, 110'000, "%.1f", ImGuiSliderFlags_Logarithmic);
+
+          ImGui::SeparatorText("LUTs");
           static float scale0 = 1;
-          ImGui::SliderFloat("Tint##0", &scale0, 0, 1);
+          ImGui::SliderFloat("Transmittance##0", &scale0, 0, 1);
           ImGui::Image(ImTextureSampler(transmittanceLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
           static float scale1 = 1;
-          ImGui::SliderFloat("Tint##1", &scale1, 0, 1);
+          ImGui::SliderFloat("Multiscattering##1", &scale1, 0, 1);
           ImGui::Image(ImTextureSampler(multiscatteringLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
           static float scale2 = 1;
-          ImGui::SliderFloat("Tint##2", &scale2, 0, 1);
+          ImGui::SliderFloat("SkyView##2", &scale2, 0, 1);
           ImGui::Image(ImTextureSampler(skyViewLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
 
           ImGui::EndTabItem();
@@ -1544,32 +1559,45 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
     }
     ImGui::End();
-  }
-
-  if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
-  {
-    if (ImGui::Begin("Networking"))
+    
+    if (ImGui::Begin("Networking", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
-      if (ImGui::BeginTable("Clients", 4))
+      if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
       {
-        ImGui::TableSetupColumn("Client ID");
-        ImGui::TableSetupColumn("Status");
-        ImGui::TableSetupColumn("Ping (variance)");
-        ImGui::TableSetupColumn("Packet loss");
-        ImGui::TableHeadersRow();
-        for (const auto& info : networking->get()->GetClientNetworkInfos())
+        if (world.IsServer())
         {
-          ImGui::TableNextRow();
-          ImGui::TableNextColumn();
-          ImGui::Text("%u", info.entity);
-          ImGui::TableNextColumn();
-          ImGui::Text("%s", Core::Reflection::EnumToString(info.status));
-          ImGui::TableNextColumn();
-          ImGui::Text("%u (%u)", info.roundTripTime, info.roundTripTimeVariance);
-          ImGui::TableNextColumn();
-          ImGui::Text("%.1f%%", 100 * info.packetLoss);
+          ImGui::Text("Status: hosting server");
         }
-        ImGui::EndTable();
+        else
+        {
+          ImGui::Text("Status: client");
+        }
+
+        if (ImGui::BeginTable("Clients", 4))
+        {
+          ImGui::TableSetupColumn("Client ID");
+          ImGui::TableSetupColumn("Status");
+          ImGui::TableSetupColumn("Ping (variance)");
+          ImGui::TableSetupColumn("Packet loss");
+          ImGui::TableHeadersRow();
+          for (const auto& info : networking->get()->GetClientNetworkInfos())
+          {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%u", info.entity);
+            ImGui::TableNextColumn();
+            ImGui::Text("%s", Core::Reflection::EnumToString(info.status));
+            ImGui::TableNextColumn();
+            ImGui::Text("%u (%u)", info.roundTripTime, info.roundTripTimeVariance);
+            ImGui::TableNextColumn();
+            ImGui::Text("%.1f%%", 100 * info.packetLoss);
+          }
+          ImGui::EndTable();
+        }
+      }
+      else
+      {
+        ImGui::TextWrapped("%s", "Host or connect to a server to see networking info.");
       }
     }
     ImGui::End();

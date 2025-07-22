@@ -809,8 +809,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   SkyParameters skyParameters = InitSkyParameters();
   skyParameters.sunDir = Math::SphericalToCartesian(sunElevation, sunAzimuth);
-  skyParameters.sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
-  skyParameters.sunBrightness = 100'000.0f; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
+  skyParameters.sunColor = sunColor;
+  skyParameters.sunBrightness = sunBrightness; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
 
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
