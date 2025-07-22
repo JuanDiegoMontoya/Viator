@@ -126,16 +126,23 @@ void main()
   const vec3 viewDirWS = normalize(positionWorld - uniforms.cameraPos.xyz);
   const uint special = imageLoad(gSpecial, gid).x;
 
-  // Hack for unlit objects to render properly.
-  if (normal == vec3(0))
-  {
-    imageStore(sceneColor, gid, vec4(albedo_internal, 0.0));  
-    return;
-  }
 
   vec3 radiance_internal = color_convert_src_to_dst(texelFetch(gRadiance, gid, 0).rgb,
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
+
+  if (depth == FAR_DEPTH)
+  {
+    imageStore(sceneColor, gid, vec4(radiance_internal, 0.0));
+    return;
+  }
+
+  // Hack for unlit objects to render properly.
+  if (normal == vec3(0))
+  {
+    imageStore(sceneColor, gid, vec4(albedo_internal, 0.0));
+    return;
+  }
 
   vec3 irradiance_internal = vec3(0);
   if (giMethod == 1)
@@ -158,8 +165,10 @@ void main()
     v_globalUniforms.sky.sunDir,
     positionWorld);
 
+  const float MAGIC = 0.01; // Magic number to balance direct and indirect lighting. Maybe someday it won't be needed.
   vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun;
-	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir) * sun_light / solid_angle_mapping_PDF(radians(0.5));
+	//vec3 sunlight_internal = MAGIC * albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir) * sun_light / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
+	vec3 sunlight_internal = MAGIC * albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir) * sun_light / M_PI;
   vec3 finalRadiance = sunlight_internal + radiance_internal + irradiance_internal;
 
   // Spelunker potion effect

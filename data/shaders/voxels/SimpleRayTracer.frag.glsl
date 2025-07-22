@@ -45,8 +45,7 @@ void main()
   }
   else
   {
-    albedo = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
-    radiance = albedo;
+    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
     gl_FragDepth = FAR_DEPTH;
   }
 
