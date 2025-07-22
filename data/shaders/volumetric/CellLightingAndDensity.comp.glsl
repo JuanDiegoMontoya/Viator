@@ -81,12 +81,25 @@ void main()
   light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
   
   // Shadow
-  //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), sunDir)));
-  const vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
+  //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
+  vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
   const vec3 transmittanceToSun = getTransmittanceAlongRay(globalUniforms.sky, globalUniforms.transmittanceLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, uniforms.viewPos);
-	vec3 sunlight_internal = phase * TraceSunRay(wPos, globalUniforms.sky.sunDir) * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+  
+  const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
+      wPos * M_TO_KM_SCALE + vec3(0, globalUniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+      globalUniforms.sky.sunDir,
+      vec3(0.0),
+      globalUniforms.sky.atmosphere_bottom
+  );
 
-  light += fogColor * sunlight_internal;
+  bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
+  const float sunVisibility = TraceSunRay(wPos, globalUniforms.sky.sunDir);
+  vec3 skylight_internal = fogColor * sunVisibility * getAtmosphereAlongRay(globalUniforms.sky, globalUniforms.skyViewLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, wPos);
+	vec3 sunlight_internal = sunVisibility * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+
+  // Vibes-driven lerp between phase functions to smoothen abrupt lighting change when the sun is on the horizon.
+  phase = mix(vec3(1 / (4 * M_PI)), phase, smoothstep(-0.03, 0.06, dot(globalUniforms.sky.sunDir, vec3(0, 1, 0))));
+  light += phase * (float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal);
 
   imageStore(uniforms.fogDensityVolumeRW, gid, vec4(light * fogColor * fogDensity, fogDensity));
 }

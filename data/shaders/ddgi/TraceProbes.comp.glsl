@@ -52,9 +52,26 @@ void main()
 
       // Sun
       const float NoL = max(0, dot(hit.flatNormalWorld, uniforms.sky.sunDir));
-      vec3 sunlight_internal = albedo * NoL * TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
+      const vec3 transmittanceToSun = getTransmittanceAlongRay(
+        v_globalUniforms.sky,
+        v_globalUniforms.transmittanceLut,
+        v_globalUniforms.linearSampler,
+        v_globalUniforms.sky.sunDir,
+        hit.positionWorld);
 
-      radiance += sunlight_internal;
+      const float bottom_atmosphere_intersection_distance =
+        ray_sphere_intersect_nearest(hit.positionWorld * M_TO_KM_SCALE + vec3(0, uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+          uniforms.sky.sunDir,
+          vec3(0.0),
+          uniforms.sky.atmosphere_bottom);
+
+      bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
+      const float sunVisibility = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
+      vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, hit.positionWorld);
+      vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
+      vec3 sunlight_internal = albedo * NoL * sun_light * sunVisibility;
+
+      radiance += float(!view_ray_intersects_ground) * (sunlight_internal + skylight_internal);
 
       // First-bounce lighting
       if (g_voxels.numLights > 0)
