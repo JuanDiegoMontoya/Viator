@@ -648,8 +648,16 @@ void World::InitializeGameDefinitions()
                                {.name = "Torch", .initialHealth = 10, .voxelMaterialDesc = VoxelMaterialDesc{.isInvisible = true}, .isSolid = false},
                                {.id = torchId})))
                              .GetItemId();
-  const auto chestItemId =
-    blocks.Get(blocks.Add(new BlockEntityDefinition({.name = "Cheste", .voxelMaterialDesc = VoxelMaterialDesc{.baseColorTexture = "chest"}}, {.id = chestId})))
+  const auto chestItemId = blocks
+                             .Get(blocks.Add(new BlockEntityDefinition(
+                               {
+                                 .name = "Cheste",
+                                 .voxelMaterialDesc =
+                                   VoxelMaterialDesc{
+                                     .subGrid = VoxToSubGrid(*Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "chest.vox")),
+                                   },
+                               },
+                               {.id = chestId})))
       .GetItemId();
   const auto mushroomBlockItemId = blocks
                                      .Get(blocks.Add(new BlockEntityDefinition(
