@@ -137,6 +137,10 @@ private:
   PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
   PipelineManager::ComputePipelineKey tonemapPipeline;
 
+  PipelineManager::ComputePipelineKey skyTransmittancePipeline;
+  PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
+  PipelineManager::ComputePipelineKey skyViewPipeline;
+
   std::optional<Fvog::NDeviceBuffer<Temp::ObjectUniforms>> meshUniformz;
   std::optional<Fvog::NDeviceBuffer<Debug::Line>> lineVertexBuffer;
   std::optional<Fvog::NDeviceBuffer<GpuLight>> lightBuffer;
@@ -147,6 +151,13 @@ private:
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
+  std::optional<Fvog::Texture> transmittanceLut;
+  std::optional<Fvog::Texture> multiscatteringLut;
+  std::optional<Fvog::Texture> skyViewLut;
+  std::optional<Fvog::TextureView> transmittanceLutView;
+  std::optional<Fvog::TextureView> multiscatteringLutView;
+  std::optional<Fvog::TextureView> skyViewLutView;
+
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
   shared::TonemapUniforms tonemapUniforms{};
@@ -221,4 +232,6 @@ private:
 
   float sunElevation = 0.5f;
   float sunAzimuth   = 0.3f;
+  glm::vec3 sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
+  float sunBrightness = 100'000;
 };

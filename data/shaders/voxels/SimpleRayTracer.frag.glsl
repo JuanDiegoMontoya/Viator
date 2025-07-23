@@ -4,6 +4,7 @@
 #include "../Utility.h.glsl"
 #include "../Hash.h.glsl"
 #include "../Config.shared.h"
+#include "../sky/SkyUtil.h.glsl"
 
 #include "Voxels.h.glsl"
 
@@ -44,8 +45,7 @@ void main()
   }
   else
   {
-    albedo = SampleSky(uniforms.sky, rayDir);
-    radiance = albedo;
+    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
     gl_FragDepth = FAR_DEPTH;
   }
 
