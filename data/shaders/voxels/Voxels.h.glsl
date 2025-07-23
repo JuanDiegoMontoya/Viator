@@ -24,6 +24,7 @@ struct Voxels
 #include "../Pbr.h.glsl"
 #include "../Utility.h.glsl"
 #include "../Color.h.glsl"
+#include "../sky/SkyUtil.h.glsl"
 
 
 const int BL_BRICK_SIDE_LENGTH = 8;
@@ -1133,12 +1134,25 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         
         if (lightIndex == 0 && hitDist2 > 1e10)
         {
+          const vec3 transmittanceToSun = getTransmittanceAlongRay(v_globalUniforms.sky,
+            v_globalUniforms.transmittanceLut,
+            v_globalUniforms.linearSampler,
+            v_globalUniforms.sky.sunDir,
+            v_globalUniforms.cameraPos.xyz);
+
+          const float bottom_atmosphere_intersection_distance =
+            ray_sphere_intersect_nearest(hit.positionWorld * M_TO_KM_SCALE + vec3(0, v_globalUniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+              v_globalUniforms.sky.sunDir,
+              vec3(0.0),
+              v_globalUniforms.sky.atmosphere_bottom);
+
+          bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
           indirectIlluminance += illum_t(throughput *
                                 // BRDF(-curRayDir, -shadingUniforms.sunDir.xyz, curSurface) *
                                 //(curSurface.albedo / M_PI) *
-                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor /
+                                (currentAlbedo / M_PI) * clamp(dot(hit.flatNormalWorld, neeRayDir), 0.0, 1.0) * v_globalUniforms.sky.sunColor * v_globalUniforms.sky.sunBrightness * transmittanceToSun /
                                 // sunShadow /
-                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf);
+                                solid_angle_mapping_PDF(radians(0.5)) / lightPdf * float(!view_ray_intersects_ground));
         }
         else if (lightIndex > 0)
         {
@@ -1161,7 +1175,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
         //     COLOR_SPACE_sRGB_LINEAR,
         //     shadingUniforms.shadingInternalColorSpace);
         // const vec3 skyEmittance = {.1, .3, .5};
-        const vec3 skyEmittance = SampleSky(v_globalUniforms.sky, curRayDir);
+        const vec3 skyEmittance = getAtmosphereAlongRay(v_globalUniforms.sky, v_globalUniforms.skyViewLut, v_globalUniforms.linearSampler, curRayDir, curRayPos);
         indirectIlluminance += illum_t(skyEmittance) * throughput;
         break;
       }

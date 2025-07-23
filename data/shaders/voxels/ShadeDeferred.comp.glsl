@@ -4,6 +4,7 @@
 #include "../Utility.h.glsl"
 #include "../Hash.h.glsl"
 #include "../Config.shared.h"
+#include "../sky/SkyUtil.h.glsl"
 
 #define uniforms perFrameUniformsBuffers[uniformBufferIndex]
 
@@ -125,16 +126,22 @@ void main()
   const vec3 viewDirWS = normalize(positionWorld - uniforms.cameraPos.xyz);
   const uint special = imageLoad(gSpecial, gid).x;
 
-  // Hack for unlit objects to render properly.
-  if (normal == vec3(0))
-  {
-    imageStore(sceneColor, gid, vec4(albedo_internal, 0.0));  
-    return;
-  }
-
   vec3 radiance_internal = color_convert_src_to_dst(texelFetch(gRadiance, gid, 0).rgb,
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
+
+  if (depth == FAR_DEPTH)
+  {
+    imageStore(sceneColor, gid, vec4(radiance_internal, 0.0));
+    return;
+  }
+
+  // Hack for unlit objects to render properly.
+  if (normal == vec3(0))
+  {
+    imageStore(sceneColor, gid, vec4(albedo_internal, 0.0));
+    return;
+  }
 
   vec3 irradiance_internal = vec3(0);
   if (giMethod == 1)
@@ -150,8 +157,27 @@ void main()
 
   // Shadow
   const float NoL = max(0, dot(normal, uniforms.sky.sunDir));
-	vec3 sunlight_internal = albedo_internal * NoL * TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir);
-  vec3 finalRadiance = sunlight_internal + radiance_internal + irradiance_internal;
+  const vec3 transmittanceToSun = getTransmittanceAlongRay(
+    v_globalUniforms.sky,
+    v_globalUniforms.transmittanceLut,
+    v_globalUniforms.linearSampler,
+    v_globalUniforms.sky.sunDir,
+    positionWorld);
+
+  const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
+      positionWorld * M_TO_KM_SCALE + vec3(0, uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+      uniforms.sky.sunDir,
+      vec3(0.0),
+      uniforms.sky.atmosphere_bottom
+  );
+    
+  bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
+
+  const vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+  const float sunVisibility = TraceSunRay(positionWorld + normal * 1e-3, uniforms.sky.sunDir);
+	const vec3 sunlight_internal = float(!view_ray_intersects_ground) * sun_light * albedo_internal * NoL / M_PI * sunVisibility;
+  const vec3 skylight_internal = albedo_internal * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, positionWorld);
+  vec3 finalRadiance = sunlight_internal + skylight_internal + radiance_internal + irradiance_internal;
 
   // Spelunker potion effect
   if (bool(applySpelunkerEffect))
