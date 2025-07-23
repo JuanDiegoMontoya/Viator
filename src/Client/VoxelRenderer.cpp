@@ -15,7 +15,6 @@
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
 #include "shaders/voxels/ShadeDeferred.shared.h"
 #include "shaders/ddgi/DebugProbesCommon.h.glsl"
-#include "shaders/sky/SkyShared.h.glsl"
 
 #ifdef JPH_DEBUG_RENDERER
 #include "Game/Physics/DebugRenderer.h"
@@ -810,8 +809,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   ctx.ImageBarrierDiscard(frame.sceneIlluminance.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
   ctx.ImageBarrierDiscard(frame.sceneRadiance.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
   ctx.ImageBarrierDiscard(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-
-  SkyParameters skyParameters = InitSkyParameters();
+  
   skyParameters.sunDir = Math::SphericalToCartesian(sunElevation, sunAzimuth);
   skyParameters.sunColor = sunColor;
   skyParameters.sunBrightness = sunBrightness; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
@@ -1312,6 +1310,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
           .voxels = voxels,
           .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .sunSelfShadowSteps = sunSelfShadowSteps,
+          .sunSelfShadowDist = sunSelfShadowDist,
         });
       fog_.InjectFog(commandBuffer, fogColorAndDensityVolume.value());
       fog_.MarchVolume(commandBuffer, fogColorAndDensityVolume.value(), inScatteringAndTransmittanceVolume.value());

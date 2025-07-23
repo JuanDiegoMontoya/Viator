@@ -12,12 +12,13 @@ vec3 phaseTex(float cosTheta)
   vec3 intensity = textureLod(uniforms.mieScattering, uniforms.linearSampler, u, 0).rgb;
 
   // limit intensity (hack)
-  //return log(1.0 + intensity);
+  //return log2(1.0 + intensity);
   return intensity;// / (1.0 + intensity);
 }
 
 vec4 FogAtPoint(vec3 wPos)
 {
+  wPos -= vec3(50, 350, 50);
   // ground fog
   vec3 t = vec3(.2, 0.1, .3) * uniforms.time;
   //float d = max((snoise(vec4(wPos * 0.11 + t, t * 1.2)) + 0.5), 0.0);
@@ -73,7 +74,7 @@ void main()
   float zInv = InvertDepthZO(uvw.z * uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
   vec3 wPos = UnprojectUVZO(zInv, uvw.xy, uniforms.invViewProjVolume);
 
-  vec4 colorAndDensity = FogAtPoint(wPos - vec3(50, 350, 50));
+  vec4 colorAndDensity = FogAtPoint(wPos);
   vec3 fogColor = colorAndDensity.rgb;
   float fogDensity = colorAndDensity.w * 0.0092;
   uint seed = PCG_Hash(gid.x) ^ PCG_Hash(gid.y) ^ PCG_Hash(gid.z);
@@ -97,8 +98,16 @@ void main()
   vec3 skylight_internal = fogColor * sunVisibility * getAtmosphereAlongRay(globalUniforms.sky, globalUniforms.skyViewLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, wPos);
 	vec3 sunlight_internal = sunVisibility * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
 
+  if (uniforms.sunSelfShadowSteps > 0)
+  {
+    float selfShadow = beer(DensityToLight(wPos + globalUniforms.sky.sunDir * uniforms.sunSelfShadowDist, wPos, uniforms.sunSelfShadowSteps).w);
+    skylight_internal *= selfShadow;
+    sunlight_internal *= selfShadow;
+  }
+
   // Vibes-driven lerp between phase functions to smoothen abrupt lighting change when the sun is on the horizon.
   phase = mix(vec3(1 / (4 * M_PI)), phase, smoothstep(-0.03, 0.06, dot(globalUniforms.sky.sunDir, vec3(0, 1, 0))));
+  //phase = vec3(1 / (4 * M_PI));
   light += phase * (float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal);
 
   imageStore(uniforms.fogDensityVolumeRW, gid, vec4(light * fogColor * fogDensity, fogDensity));

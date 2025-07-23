@@ -40,6 +40,8 @@ struct VolumetricUniforms
 #endif
   Voxels voxels;
   FVOG_UINT32 globalUniformsIndex;
+  FVOG_INT32 sunSelfShadowSteps;
+  FVOG_FLOAT sunSelfShadowDist;
 };
 
 #ifndef __cplusplus

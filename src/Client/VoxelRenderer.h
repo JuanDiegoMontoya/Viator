@@ -15,6 +15,7 @@
 #include "shaders/ddgi/ProbeCommon.shared.h"
 #include "shaders/post/TonemapAndDither.shared.h"
 #include "shaders/GlobalUniforms.h.glsl"
+#include "shaders/sky/SkyShared.h.glsl"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -151,12 +152,15 @@ private:
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
+
+  // Sky
   std::optional<Fvog::Texture> transmittanceLut;
   std::optional<Fvog::Texture> multiscatteringLut;
   std::optional<Fvog::Texture> skyViewLut;
   std::optional<Fvog::TextureView> transmittanceLutView;
   std::optional<Fvog::TextureView> multiscatteringLutView;
   std::optional<Fvog::TextureView> skyViewLutView;
+  SkyParameters skyParameters = InitSkyParameters(); 
 
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
@@ -209,6 +213,8 @@ private:
   // Resources needed for froxel fog
   std::optional<Fvog::Texture> inScatteringAndTransmittanceVolume;
   std::optional<Fvog::Texture> fogColorAndDensityVolume;
+  int32_t sunSelfShadowSteps = 5;
+  float sunSelfShadowDist    = 100;
 
   Techniques::RayTracedAO ao_;
   bool enableAo_ = true;

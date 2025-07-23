@@ -1452,40 +1452,68 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           GetPipelineManager().EnqueueRecompileShader(shaderModule->info);
         }
       }
-      ImGui::SliderInt("AO rays", &numAoRays_, 1, 16);
-      ImGui::SliderFloat("AO ray length", &aoRayLength_, 0.125f, 10.0f);
-      ImGui::Separator();
 
       if (ImGui::BeginTabBar("Options"))
       {
-        if (ImGui::BeginTabItem("Sky"))
+        if (ImGui::BeginTabItem("Atmosphere"))
         {
-          ImGui::Checkbox("Disable Fog", &debugDisableFog);
+          if (ImGui::CollapsingHeader("Fog"))
+          {
+            bool enabled = !debugDisableFog;
+            ImGui::Checkbox("Enable fog", &enabled);
+            debugDisableFog = !enabled;
+            ImGui::SeparatorText("Fog self-shadowing");
+            ImGui::SliderInt("Steps", &sunSelfShadowSteps, 0, 30, sunSelfShadowSteps > 0 ? "%d" : "%d (disabled)");
+            ImGui::SliderFloat("Ray distance", &sunSelfShadowDist, 5, 300, "%.1f");
+          }
 
-          ImGui::SeparatorText("Sun position");
-          ImGui::SliderFloat("Elevation", &sunElevation, 0, glm::two_pi<float>());
-          ImGui::DragFloat("Fine elevation", &sunElevation, 0.002f);
-          ImGui::SliderFloat("Azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+          if (ImGui::CollapsingHeader("Sun"))
+          {
+            ImGui::SeparatorText("Sun position");
+            ImGui::SliderFloat("Elevation", &sunElevation, 0, glm::two_pi<float>());
+            ImGui::DragFloat("Fine elevation", &sunElevation, 0.002f);
+            ImGui::SliderFloat("Azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
 
-          ImGui::SeparatorText("Sun appearance");
-          ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);
-          ImGui::SliderFloat("Brightness##sun", &sunBrightness, 0, 110'000, "%.1f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SeparatorText("Sun appearance");
+            ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);
+            ImGui::SliderFloat("Brightness##sun", &sunBrightness, 0, 110'000, "%.1f", ImGuiSliderFlags_Logarithmic);
+          }
 
-          ImGui::SeparatorText("LUTs");
-          static float scale0 = 1;
-          ImGui::SliderFloat("Transmittance##0", &scale0, 0, 1);
-          ImGui::Image(ImTextureSampler(transmittanceLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
-          static float scale1 = 1;
-          ImGui::SliderFloat("Multiscattering##1", &scale1, 0, 1);
-          ImGui::Image(ImTextureSampler(multiscatteringLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
-          static float scale2 = 1;
-          ImGui::SliderFloat("SkyView##2", &scale2, 0, 1);
-          ImGui::Image(ImTextureSampler(skyViewLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
+          if (ImGui::CollapsingHeader("Sky parameters"))
+          {
+            static bool paramsChanged = true;
+            if (ImGui::Button("Reset##sky_parameters"))
+            {
+              skyParameters = InitSkyParameters();
+              paramsChanged = true;
+            }
+
+            paramsChanged |= ImGui::DragFloat3("mie scatter", &skyParameters.mie_scattering[0], 0.001f, 0, 0.1f, "%.5f", ImGuiSliderFlags_NoRoundToFormat);
+            paramsChanged |= ImGui::DragFloat3("rayleigh scatter", &skyParameters.rayleigh_scattering[0], 0.001f, 0, 0.1f, "%.5f", ImGuiSliderFlags_NoRoundToFormat);
+          }
+
+          if (ImGui::CollapsingHeader("Sky LUTs"))
+          {
+            static float scale0 = 1;
+            ImGui::SliderFloat("Transmittance##0", &scale0, 0, 1);
+            ImGui::Image(ImTextureSampler(transmittanceLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
+            static float scale1 = 1;
+            ImGui::SliderFloat("Multiscattering##1", &scale1, 0, 1);
+            ImGui::Image(ImTextureSampler(multiscatteringLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
+            static float scale2 = 1;
+            ImGui::SliderFloat("SkyView##2", &scale2, 0, 1);
+            ImGui::Image(ImTextureSampler(skyViewLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
+          }
 
           ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("DDGI"))
+        const bool opened1 = ImGui::BeginTabItem("DDGI");
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("Dynamic diffuse global illumination.");
+        }
+        if (opened1)
         {
           const char* const names[] = {
             "None",
@@ -1530,6 +1558,17 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
 
           ImGui::EndTabItem();
+        }
+
+        const bool opened2 = ImGui::BeginTabItem("RTAO");
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("Ray traced ambient occlusion.\nUsed with DDGI only.");
+        }
+        if (opened2)
+        {
+          ImGui::SliderInt("AO rays", &numAoRays_, 1, 16);
+          ImGui::SliderFloat("AO ray length", &aoRayLength_, 0.125f, 10.0f);   
         }
 
         ImGui::EndTabBar();
