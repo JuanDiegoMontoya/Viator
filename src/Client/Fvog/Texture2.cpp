@@ -284,7 +284,9 @@ namespace Fvog
 
     // Storage is only allowed for GENERAL images with a color format
     auto layout = VK_IMAGE_LAYOUT_GENERAL;
-    if (usage == TextureUsage::GENERAL && detail::FormatIsColor(createInfo.format))
+    const bool isIdentitySwizzle = createInfo.components.r == VK_COMPONENT_SWIZZLE_IDENTITY && createInfo.components.g == VK_COMPONENT_SWIZZLE_IDENTITY &&
+                                   createInfo.components.b == VK_COMPONENT_SWIZZLE_IDENTITY && createInfo.components.a == VK_COMPONENT_SWIZZLE_IDENTITY;
+    if (usage == TextureUsage::GENERAL && detail::FormatIsColor(createInfo.format) && isIdentitySwizzle)
     {
       storageDescriptorInfo_ = Fvog::GetDevice().AllocateStorageImageDescriptor(imageView_, layout);
     }
