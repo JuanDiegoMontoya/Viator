@@ -645,12 +645,31 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
         const vec3 hitWorldPos = rayPosition + rayDirection * t;
         const vec3 uvw         = hitWorldPos - mapPos; // Don't use fract here
 
-        hit.voxel           = voxel;
-        hit.voxelPosition   = ivec3(mapPos);
-        hit.positionWorld   = hitWorldPos;
-        hit.texCoords       = vx_GetTexCoords(normal, uvw);
-        hit.flatNormalWorld = i8vec3(normal);
-        return true;
+        hit.voxel         = voxel;
+        hit.voxelPosition = ivec3(mapPos);
+        if (vx_IsVisible(voxel))
+        {
+          GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+          if (bool(material.materialFlags & IS_SUBGRID))
+          {
+            vx_InitialDDAState init;
+            init.deltaDist = deltaDist;
+            init.S = bvec3(S);
+            init.stepDir = i8vec3(stepDir);
+            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, bvec3(cases), hit))
+            {
+              hit.positionWorld += ivec3(mapPos);
+              return true;
+            }
+          }
+          else
+          {
+            hit.positionWorld   = hitWorldPos;
+            hit.texCoords       = vx_GetTexCoords(normal, uvw);
+            hit.flatNormalWorld = normal;
+            return true;
+          }
+        }
       }
     }
   }

@@ -14,6 +14,7 @@ namespace Techniques
     rtaoPipeline_ = GetPipelineManager().EnqueueCompileComputePipeline({
       .name             = "Ray Traced AO",
       .shaderModuleInfo = {.path = GetShaderDirectory() / "ao/rtao/RayTracedAO.comp.glsl"},
+      .useMinSubgroupSize = true,
     });
 
     upscalePipeline_ = GetPipelineManager().EnqueueCompileComputePipeline({
