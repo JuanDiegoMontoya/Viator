@@ -1567,8 +1567,14 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
         if (opened2)
         {
-          ImGui::SliderInt("AO rays", &numAoRays_, 1, 16);
-          ImGui::SliderFloat("AO ray length", &aoRayLength_, 0.125f, 10.0f);   
+          ImGui::SliderInt("AO rays", &aoParams_.numRays, 1, 32);
+          ImGui::SliderFloat("AO ray length", &aoParams_.rayLength, 0.125f, 10.0f);
+          ImGui::SeparatorText("Upscaling");
+          ImGui::SliderFloat("Phi (normal)", &aoParams_.phiNormal, 0, 2);
+          ImGui::SliderFloat("Phi (depth)", &aoParams_.phiDepth, 0, 2);
+          int factor = aoParams_.upscaleFactor;
+          ImGui::SliderInt("Upscale factor", &factor, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp);
+          aoParams_.upscaleFactor = uint32_t(factor);
         }
 
         ImGui::EndTabBar();

@@ -33,6 +33,10 @@
 #define FVOG_DECLARE_ARGUMENTS(name) \
   struct name
 
+#define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) \
+  using typename = VkDeviceAddress; \
+  struct typename ## _t
+
 #else // GLSL
 
 #define FVOG_FLOAT float
@@ -125,6 +129,8 @@
 
 #define FVOG_DECLARE_BUFFER_REFERENCE(typename) \
   layout(buffer_reference, scalar) buffer typename
+
+#define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) FVOG_DECLARE_BUFFER_REFERENCE(typename)
 
 // Qualifiers can be put in the block name
 #define FVOG_DECLARE_STORAGE_BUFFERS(blockname) \

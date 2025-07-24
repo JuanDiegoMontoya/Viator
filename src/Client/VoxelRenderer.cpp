@@ -1231,16 +1231,16 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     Fvog::Texture* aoTexture = &whiteTexture_.value();
     if (giMethod_ == GIMethod::DDGI && enableAo_)
     {
-      aoTexture = &ao_.ComputeAO(commandBuffer,
-        {
-          .voxels      = voxels,
-          .inputDepth  = &frame.sceneDepth.value(),
-          .inputNormal = &frame.sceneNormal.value(),
-          .outputSize  = {frame.sceneAlbedo->GetCreateInfo().extent.width, frame.sceneAlbedo->GetCreateInfo().extent.height},
-          .numRays     = uint32_t(numAoRays_),
-          .rayLength   = aoRayLength_,
-          .frameNumber = uint32_t(Fvog::GetDevice().frameNumber),
-        });
+      aoParams_.voxels          = voxels;
+      aoParams_.inputDepth      = &frame.sceneDepth.value();
+      aoParams_.inputNormal     = &frame.sceneNormal.value();
+      aoParams_.outputSize      = {frame.sceneAlbedo->GetCreateInfo().extent.width, frame.sceneAlbedo->GetCreateInfo().extent.height};
+      aoParams_.frameNumber     = uint32_t(Fvog::GetDevice().frameNumber);
+      aoParams_.clip_from_view  = clip_from_view;
+      aoParams_.world_from_clip = glm::inverse(clip_from_world);
+      aoParams_.cameraPosWS     = position;
+
+      aoTexture = &ao_.ComputeAO(commandBuffer, aoParams_);
     }
 
     // Shade image.

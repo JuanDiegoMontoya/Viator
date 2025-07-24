@@ -218,9 +218,8 @@ private:
 
   Techniques::RayTracedAO ao_;
   bool enableAo_ = true;
-  int numAoRays_ = 1;
-  float aoRayLength_ = 1;
   std::optional<Fvog::Texture> whiteTexture_;
+  Techniques::RayTracedAO::ComputeParams aoParams_{};
 
   enum class GIMethod
   {

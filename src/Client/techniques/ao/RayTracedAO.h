@@ -4,8 +4,11 @@
 #include "Client/Fvog/Pipeline2.h"
 #include "Client/PipelineManager.h"
 #include "shaders/voxels/Voxels.h.glsl"
+#include "shaders/ao/rtao/Upscale.comp.glsl"
 
-#include <glm/mat4x4.hpp>
+#include "glm/mat4x4.hpp"
+#include "glm/vec3.hpp"
+
 #include <optional>
 
 namespace Fvog
@@ -27,17 +30,27 @@ namespace Techniques
       Fvog::Texture* inputDepth{};
       Fvog::Texture* inputNormal{};
       Fvog::Extent2D outputSize;
-      uint32_t numRays{1};
+      int32_t numRays{4};
       float rayLength{2};
       uint32_t frameNumber{};
 
-      // TODO: scale factor and denoising params
+      glm::mat4 clip_from_view;
+      glm::mat4 world_from_clip;
+      glm::vec3 cameraPosWS;
+      float stepWidth = 1;
+      float phiNormal = 0.3f;
+      float phiDepth = 0.2f;
+
+      uint32_t upscaleFactor = 2;
     };
 
     [[nodiscard]] Fvog::Texture& ComputeAO(VkCommandBuffer commandBuffer, const ComputeParams& params);
 
   private:
     PipelineManager::ComputePipelineKey rtaoPipeline_;
-    std::optional<Fvog::Texture> aoTexture_;
+    PipelineManager::ComputePipelineKey upscalePipeline_;
+    std::optional<Fvog::Texture> aoLowResTexture_;
+    std::optional<Fvog::Texture> aoOutputTexture_;
+    Fvog::NDeviceBuffer<FilterParams_t> upscaleUniforms_;
   };
 }

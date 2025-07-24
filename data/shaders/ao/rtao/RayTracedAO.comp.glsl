@@ -6,16 +6,14 @@
 #include "../../Utility.h.glsl"
 #include "../../Config.shared.h"
 #include "../../Hash.h.glsl"
-#else
-using namespace shared;
 #endif
 
 FVOG_DECLARE_ARGUMENTS(RtaoArguments)
 {
   Voxels voxels;
-  Texture2D gDepth;
-  Texture2D gNormal;
-  Image2D outputAo;
+  FVOG_SHARED Texture2D gDepth;
+  FVOG_SHARED Texture2D gNormal;
+  FVOG_SHARED Image2D outputAo;
   FVOG_UINT32 numRays;
   FVOG_FLOAT rayLength;
   FVOG_UINT32 frameNumber;
@@ -36,20 +34,24 @@ void main()
 
   vx_Init(voxels);
 
-  const vec2 uv = (vec2(gid) + 0.5) / imageSize(outputAo);
+  const int upscaleFactor = textureSize(gDepth, 0).x / imageSize(outputAo).x;
+  const vec2 uv = (vec2(gid * upscaleFactor) + 0.5) / textureSize(gDepth, 0);
 
-  const float depth = texelFetch(gDepth, gid, 0).x;
+  const ivec2 scaledGid = gid * upscaleFactor;
+  const float depth = texelFetch(gDepth, scaledGid, 0).x;
 
   if (depth == FAR_DEPTH)
   {
+    imageStore(outputAo, gid, vec4(1));
     return;
   }
 
-  const vec3 normal = texelFetch(gNormal, gid, 0).xyz;
+  const vec3 normal = texelFetch(gNormal, scaledGid, 0).xyz;
 
   const vec3 rayOrigin = UnprojectUV_ZO(depth, uv, v_globalUniforms.invViewProj);
 
-  uint randState = PCG_Hash(frameNumber + PCG_Hash(gid.y + PCG_Hash(gid.x)));
+  //uint randState = PCG_Hash(frameNumber + PCG_Hash(gid.y + PCG_Hash(gid.x)));
+  uint randState = PCG_Hash(PCG_Hash(gid.y + PCG_Hash(gid.x)));
   vec2 noise = vec2(PCG_RandFloat(randState, 0, 1), PCG_RandFloat(randState, 0, 1));
 
   float visibility = 0;
