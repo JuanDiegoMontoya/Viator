@@ -130,16 +130,18 @@ void main()
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
 
+  // Sky.
   if (depth == FAR_DEPTH)
   {
     imageStore(sceneColor, gid, vec4(radiance_internal, 0.0));
     return;
   }
 
-  // Hack for unlit objects to render properly.
   if (normal == vec3(0))
   {
-    imageStore(sceneColor, gid, vec4(albedo_internal, 0.0));
+    const vec3 avgLuminance = SampleAverageLuminance(positionWorld, uniforms.linearSampler, ddgi);
+    const float artisticLightScale = 2; // Makes sprites "pop" a little more from their surroundings.
+    imageStore(sceneColor, gid, vec4(artisticLightScale * albedo_internal * avgLuminance, 0.0));
     return;
   }
 

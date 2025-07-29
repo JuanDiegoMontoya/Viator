@@ -30,7 +30,7 @@ namespace Techniques
       Fvog::Texture* inputDepth{};
       Fvog::Texture* inputNormal{};
       Fvog::Extent2D outputSize;
-      int32_t numRays{4};
+      int32_t numRays{8};
       float rayLength{2};
       uint32_t frameNumber{};
 
