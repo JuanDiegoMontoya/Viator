@@ -264,7 +264,9 @@ namespace
     Rect rect{};
 
     const auto title = "Inventory" + std::string(parent == user ? "##self" : "##other");
-    if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
+    if (ImGui::Begin(title.c_str(),
+          nullptr,
+          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
       if (parent != user)
       {
@@ -381,7 +383,9 @@ namespace
   void DrawArmorAndAccessories(World& world, entt::entity parent, [[maybe_unused]] entt::entity user, ArmorAndAccessories& armorAndAccessories)
   {
     const auto title = "ArmorAndAccessories" + std::string(parent == user ? "##self" : "##other");
-    if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
+    if (ImGui::Begin(title.c_str(),
+          nullptr,
+          ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
       ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0.5f, 0.5f});
       ImGui::BeginTable(title.c_str(), 1, ImGuiTableFlags_Borders);
@@ -711,7 +715,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (auto* gp = world.GetRegistry().try_get<const GhostPlayer>(localPlayer))
       {
         ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-        constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+        constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
         if (ImGui::Begin("###death_window", nullptr, flags))
         {
           ImGui::Text("You died");
@@ -763,11 +767,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     const auto displaySize = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos({displaySize.x, 0}, 0, {1, 0});
     
-    if (ImGui::Begin("Target", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::Begin("Target",
+          nullptr,
+          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
     {
       if (auto* h = world.GetRegistry().try_get<const Health>(playerEntity))
       {
-        ImGui::Text("Health: %.0f", h->hp);
+        ImGui::Text("Health: %.0f/%.0f", h->hp, h->maxHp);
         constexpr auto bgColor = ImColor(207.f / 255, 69.f / 255, 27.f / 255, 1.0f);
         constexpr auto fgColor = ImColor(27.f / 255, 207.f / 255, 75.f / 255, 1.0f);
         LoadingBar("##health", h->hp / h->maxHp, ImVec2(400, 50), bgColor, fgColor);
@@ -794,7 +800,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     {
       const auto& effects = world.GetRegistry().get<const TemporaryEffects>(playerEntity).effects;
       ImGui::SetNextWindowPos({rect.pos.x, rect.pos.y + rect.size.y});
-      if (ImGui::Begin("##effects", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize))
+      if (ImGui::Begin("##effects",
+            nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
       {
         const auto& itemRegistry = world.GetRegistry().ctx().get<ItemRegistry>();
         for (int i = 0; i < effects.size(); i++)
@@ -834,7 +842,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     if (p.showInteractPrompt)
     {
       ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.55f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-      constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground;
+      constexpr auto flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground |
+                             ImGuiWindowFlags_NoSavedSettings;
       if (ImGui::Begin("Interact", nullptr, flags))
       {
         ImGui::Text("Press F to pay respects");
@@ -1057,7 +1066,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
       ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-      if (ImGui::BeginPopupModal("Delete World", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+      if (ImGui::BeginPopupModal("Delete World", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
       {
         ImGui::Text("Are you sure?");
         ImGui::Separator();
@@ -1119,7 +1128,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::LOADING_SP;
         ImGui::CloseCurrentPopup();
       };
-      if (ImGui::BeginPopupModal("New World##1", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+      if (ImGui::BeginPopupModal("New World##1", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
       {
         ImGui::PushItemWidth(200);
         ImGui::InputText("Name", sNewWorldName.data(), sNewWorldName.size());
@@ -1151,7 +1160,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
 
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal("Overwrite World", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Overwrite World", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
         {
           ImGui::Text("A world with this name already exists.\nDo you want to overwrite it?");
 
@@ -1295,7 +1304,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Delete Server", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Delete Server", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
         {
           ImGui::Text("Are you sure?");
           ImGui::Separator();
