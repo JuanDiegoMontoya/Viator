@@ -9,6 +9,7 @@
 #include "Game/Networking/Client.h"
 #include "Game/Item.h"
 #include "shaders/Light.h.glsl" // "TEMP"
+#include "Game/Pathfinding.h"
 
 #include "imgui.h"
 #include "entt/meta/container.hpp"
@@ -997,4 +998,11 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(ArmorAndAccessories, REPLICATED)
     DATA(ArmorAndAccessories, slots);
+
+  REFLECT_COMPONENT(Pathfinding::CachedPath)
+    DATA(Pathfinding::CachedPath, path)
+    TRAITS(TRANSIENT)
+    DATA(Pathfinding::CachedPath, progress)
+    DATA(Pathfinding::CachedPath, updateAccum)
+    DATA(Pathfinding::CachedPath, timeBetweenUpdates);
 }
