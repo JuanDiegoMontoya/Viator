@@ -266,6 +266,10 @@ namespace
     const auto title = "Inventory" + std::string(parent == user ? "##self" : "##other");
     if (ImGui::Begin(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDecoration))
     {
+      if (parent != user)
+      {
+        ImGui::Text("%s", world.GetRegistry().get<Name>(parent).name.c_str());
+      }
       ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0.5f, 0.5f});
       ImGui::BeginTable(title.c_str(), (int)inventory.width, ImGuiTableFlags_Borders);
 
@@ -717,22 +721,25 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
     }
 
-    if (ImGui::Begin("Test"))
+    if (world.GetRegistry().ctx().get<Debugging>().showFps)
     {
-      ImGui::Text("Framerate: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
-      auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
-      VmaStatistics stats{};
-      vmaGetVirtualBlockStatistics(grid.buffer.GetAllocator(), &stats);
-      auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
-      auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
-      ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
-
-      if (ImGui::Button("Collapse da grid"))
+      if (ImGui::Begin("Test"))
       {
-        grid.CoalesceDirtyBricks();
+        ImGui::Text("Framerate: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
+        auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+        VmaStatistics stats{};
+        vmaGetVirtualBlockStatistics(grid.buffer.GetAllocator(), &stats);
+        auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
+        auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
+        ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
+
+        if (ImGui::Button("Collapse da grid"))
+        {
+          grid.CoalesceDirtyBricks();
+        }
       }
+      ImGui::End();
     }
-    ImGui::End();
 
     // Get information about the local player
     auto range = world.GetRegistry().view<Player, const LocalPlayer, Inventory, const GlobalTransform>(entt::exclude<GhostPlayer>).each();
@@ -745,33 +752,39 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     auto&& [playerEntity, p, inventory, gt] = *range.begin();
 
     // TODO: replace with bitmap font rendered above each creature
-    auto collector = Physics::NearestRayCollector();
-    auto dir       = GetForward(gt.rotation);
-    auto start     = gt.position;
-    Physics::GetNarrowPhaseQuery().CastRay(JPH::RRayCast(Physics::ToJolt(start), Physics::ToJolt(dir * 20.0f)),
-      JPH::RayCastSettings(),
-      collector,
-      Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_CHARACTER),
-      Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_CHARACTER));
-    if (ImGui::Begin("Target"))
+    //auto collector = Physics::NearestRayCollector();
+    //auto dir       = GetForward(gt.rotation);
+    //auto start     = gt.position;
+    //Physics::GetNarrowPhaseQuery().CastRay(JPH::RRayCast(Physics::ToJolt(start), Physics::ToJolt(dir * 20.0f)),
+    //  JPH::RayCastSettings(),
+    //  collector,
+    //  Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_CHARACTER),
+    //  Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_CHARACTER));
+    const auto displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos({displaySize.x, 0}, 0, {1, 0});
+    
+    if (ImGui::Begin("Target", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize))
     {
       if (auto* h = world.GetRegistry().try_get<const Health>(playerEntity))
       {
-        ImGui::Text("Player HP: %.2f", h->hp);
+        ImGui::Text("Health: %.0f", h->hp);
+        constexpr auto bgColor = ImColor(207.f / 255, 69.f / 255, 27.f / 255, 1.0f);
+        constexpr auto fgColor = ImColor(27.f / 255, 207.f / 255, 75.f / 255, 1.0f);
+        LoadingBar("##health", h->hp / h->maxHp, ImVec2(400, 50), bgColor, fgColor);
       }
-      if (collector.nearest)
-      {
-        auto entity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(collector.nearest->mBodyID));
-        if (auto* n = world.GetRegistry().try_get<const Name>(entity))
-        {
-          ImGui::Text("%s", n->name.c_str());
-        }
+      //if (collector.nearest)
+      //{
+      //  auto entity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(collector.nearest->mBodyID));
+      //  if (auto* n = world.GetRegistry().try_get<const Name>(entity))
+      //  {
+      //    ImGui::Text("%s", n->name.c_str());
+      //  }
 
-        if (auto* h = world.GetRegistry().try_get<const Health>(entity))
-        {
-          ImGui::Text("Health: %.2f", h->hp);
-        }
-      }
+      //  if (auto* h = world.GetRegistry().try_get<const Health>(entity))
+      //  {
+      //    ImGui::Text("Health: %.0f", h->hp);
+      //  }
+      //}
     }
     ImGui::End();
 
@@ -1385,6 +1398,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
       ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
+      ImGui::Checkbox("Show FPS", &debug.showFps);
+      ImGui::Checkbox("Draw Path Lines", &debug.drawPathLines);
       ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);

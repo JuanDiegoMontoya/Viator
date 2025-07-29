@@ -173,14 +173,17 @@ namespace Pathfinding
       frontier.pop();
 
 #ifndef GAME_HEADLESS
-      auto& lines           = const_cast<World&>(world).GetRegistry().ctx().get<std::vector<Debug::Line>>();
-      constexpr auto offset = glm::vec3(0.5f, 0, 0.5f);
-      lines.emplace_back(Debug::Line{
-        .aPosition = glm::vec3(current) + offset,
-        .aColor    = glm::vec4(.8f, .4f, 0, 1),
-        .bPosition = glm::vec3(current) + offset + glm::vec3(0, currentPriority * 0.01f, 0),
-        .bColor    = glm::vec4(.8f, .8f, 0, 1),
-      });
+      if (world.GetRegistry().ctx().get<Debugging>().drawPathLines)
+      {
+        auto& lines           = const_cast<World&>(world).GetRegistry().ctx().get<std::vector<Debug::Line>>();
+        constexpr auto offset = glm::vec3(0.5f, 0, 0.5f);
+        lines.emplace_back(Debug::Line{
+          .aPosition = glm::vec3(current) + offset,
+          .aColor    = glm::vec4(.8f, .4f, 0, 1),
+          .bPosition = glm::vec3(current) + offset + glm::vec3(0, currentPriority * 0.01f, 0),
+          .bColor    = glm::vec4(.8f, .8f, 0, 1),
+        });
+      }
 #endif
 
       const auto currentCost = costSoFar.at(current);

@@ -60,6 +60,8 @@ struct Debugging
   bool drawDebugProbe      = false;
   bool drawPhysicsShapes   = false;
   bool drawPhysicsVelocity = false;
+  bool drawPathLines       = false;
+  bool showFps             = true;
 };
 
 struct LocalTransform

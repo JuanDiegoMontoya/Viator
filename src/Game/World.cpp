@@ -625,15 +625,18 @@ void World::FixedUpdate(float dt)
         {
 #ifndef GAME_HEADLESS
           // Render path
-          auto& lines = registry_.ctx().get<std::vector<Debug::Line>>();
-          for (size_t i = 1; i < path.size(); i++)
+          if (registry_.ctx().get<Debugging>().drawPathLines)
           {
-            lines.emplace_back(Debug::Line{
-              .aPosition = path[i - 1],
-              .aColor    = glm::vec4(0, 0, 1, 1),
-              .bPosition = path[i + 0],
-              .bColor    = glm::vec4(0, 0, 1, 1),
-            });
+            auto& lines = registry_.ctx().get<std::vector<Debug::Line>>();
+            for (size_t i = 1; i < path.size(); i++)
+            {
+              lines.emplace_back(Debug::Line{
+                .aPosition = path[i - 1],
+                .aColor    = glm::vec4(0, 0, 1, 1),
+                .bPosition = path[i + 0],
+                .bColor    = glm::vec4(0, 0, 1, 1),
+              });
+            }
           }
 #endif
 
