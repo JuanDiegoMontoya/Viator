@@ -1265,7 +1265,17 @@ void World::FixedUpdate(float dt)
           }
           else
           {
-            registry_.emplace<DeferredDelete>(entity);
+            registry_.emplace<DeferredDelete>(entity); 
+            SpawnHitParticles({
+              .numParticles = 30,
+              .position = transform.position,
+              .normal = glm::vec3(0, 1, 0),
+              .spreadConeAngle = glm::half_pi<float>(),
+              .size = 0.065f,
+              .tint = {.5f, .01f, .02f},
+              .speed = 6,
+              .lifetime = 3,
+            });
           }
         }
       }
@@ -1986,4 +1996,25 @@ void World::SetParent(entt::entity child, entt::entity parent)
   }
 
   UpdateLocalTransform(child);
+}
+
+void World::SpawnHitParticles(const SpawnHitParticlesParams& p)
+{
+  auto& reg = registry_;
+
+  auto cube = Physics::Box({p.size, p.size, p.size});
+
+  for (int i = 0; i < (int)p.numParticles; i++)
+  {
+    auto offset = glm::vec3(Rng().RandFloat(-0.125f, 0.125f), Rng().RandFloat(-0.125f, 0.125f), Rng().RandFloat(-0.125f, 0.125f));
+    offset *= glm::equal(p.normal, glm::vec3(0)); // Zero out the component of the normal.
+    auto e                    = CreateRenderableEntityNoHashGrid(p.position + offset + p.normal * p.size / 2.0f, glm::identity<glm::quat>(), p.size);
+    reg.emplace<Mesh>(e).name = "cube";
+    reg.emplace<Name>(e).name = "Debris";
+    reg.emplace<Lifetime>(e).remainingSeconds = p.lifetime;
+    reg.emplace<Physics::RigidBodySettings>(e, Physics::RigidBodySettings{.shape = cube, .layer = Physics::Layers::DEBRIS});
+    reg.emplace<Tint>(e, p.tint);
+    const auto velocity                         = Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, p.normal, p.spreadConeAngle) * p.speed;
+    reg.emplace_or_replace<LinearVelocity>(e).v = velocity;
+  }
 }

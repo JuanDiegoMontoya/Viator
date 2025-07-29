@@ -190,7 +190,12 @@ namespace Physics
         [[maybe_unused]] JPH::ContactSettings& ioSettings) override
       {
         auto lock = std::unique_lock(s->contactListenerMutex);
-        s->contactAddedPairs.emplace_back(static_cast<entt::entity>(inBody1.GetUserData()), static_cast<entt::entity>(inBody2.GetUserData()));
+        s->contactAddedPairs.push_back({
+          .entity1  = static_cast<entt::entity>(inBody1.GetUserData()),
+          .entity2  = static_cast<entt::entity>(inBody2.GetUserData()),
+          .position = ToGlm(inManifold.GetWorldSpaceContactPointOn1(0)),
+          .normal   = ToGlm(inManifold.mWorldSpaceNormal),
+        });
       }
 
       void OnContactPersisted(const JPH::Body& inBody1,
@@ -199,7 +204,12 @@ namespace Physics
         [[maybe_unused]] JPH::ContactSettings& ioSettings) override
       {
         auto lock = std::unique_lock(s->contactListenerMutex);
-        s->contactPersistedPairs.emplace_back(static_cast<entt::entity>(inBody1.GetUserData()), static_cast<entt::entity>(inBody2.GetUserData()));
+        s->contactPersistedPairs.push_back({
+          .entity1  = static_cast<entt::entity>(inBody1.GetUserData()),
+          .entity2  = static_cast<entt::entity>(inBody2.GetUserData()),
+          .position = ToGlm(inManifold.GetWorldSpaceContactPointOn1(0)),
+          .normal   = ToGlm(inManifold.mWorldSpaceNormal),
+        });
       }
     };
 
@@ -692,10 +702,17 @@ namespace Physics
 
       if (collector.HadHit())
       {
-        // Generate collision events.
+        // Generate collision event.
         const auto entity2 = static_cast<entt::entity>(s->bodyInterface->GetUserData(collector.mHit.mBodyID));
-        auto pair          = ContactAddedPair(entity, entity2);
-        auto ppair         = &pair;
+        const auto position = gt.position + collector.mHit.mFraction * castVelocity;
+
+        auto pair = ContactAddedPair{
+          .entity1  = entity,
+          .entity2  = entity2,
+          .position = position,
+          .normal   = ToGlm(GetBodyInterface().GetTransformedShape(collector.mHit.mBodyID).GetWorldSpaceSurfaceNormal(JPH::SubShapeID(), ToJolt(position))),
+        };
+        auto ppair = &pair;
         s->dispatcher.trigger(ppair);
 
         // Object may have been destroyed in event.

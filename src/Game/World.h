@@ -206,6 +206,19 @@ public:
 
   void CreateRenderingMaterials();
 
+  struct SpawnHitParticlesParams
+  {
+    uint32_t numParticles;
+    glm::vec3 position;
+    glm::vec3 normal;
+    float spreadConeAngle;
+    float size     = 0.0525f;
+    glm::vec3 tint = {1, 1, 1};
+    float speed    = 3;
+    float lifetime = 2;
+  };
+  void SpawnHitParticles(const SpawnHitParticlesParams& params);
+
 private:
   uint64_t ticks_ = 0;
   entt::registry registryOld_;

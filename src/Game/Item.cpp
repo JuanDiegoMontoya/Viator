@@ -190,24 +190,14 @@ void ToolDefinition::UsePrimary(float dt, World& world, entt::entity self, ItemS
     const auto damage = world.DamageBlock(glm::ivec3(hit.voxelPosition), createInfo_.blockDamage, createInfo_.blockDamageTier, createInfo_.blockDamageFlags);
     world.GetAudio()->PlaySound({.name = "hurt", .minDistance = 3, .pitch = 0.5f, .position = hit.positionWorld});
 
-    constexpr float debrisSize = 0.0525f;
-    auto cube                  = Physics::Box({debrisSize, debrisSize, debrisSize});
-
     // Make debris "particles"
     const auto numParticles = glm::clamp(glm::ceil(glm::mix(1.0f, 6.0f, damage / 20.0f)), 0.0f, 10.0f);
-    for (int i = 0; i < (int)numParticles; i++)
-    {
-      auto offset = glm::vec3(world.Rng().RandFloat(-0.125f, 0.125f), world.Rng().RandFloat(-0.125f, 0.125f), world.Rng().RandFloat(-0.125f, 0.125f));
-      offset *= glm::equal(hit.flatNormalWorld, glm::vec3(0)); // Zero out the component of the normal.
-      auto e =
-        world.CreateRenderableEntityNoHashGrid(hit.positionWorld + offset + hit.flatNormalWorld * debrisSize / 2.0f, glm::identity<glm::quat>(), debrisSize);
-      reg.emplace<Mesh>(e).name                 = "cube";
-      reg.emplace<Name>(e).name                 = "Debris";
-      reg.emplace<Lifetime>(e).remainingSeconds = 2;
-      reg.emplace<Physics::RigidBodySettings>(e, Physics::RigidBodySettings{.shape = cube, .layer = Physics::Layers::DEBRIS});
-      const auto velocity = Math::RandVecInCone({world.Rng().RandFloat(), world.Rng().RandFloat()}, hit.flatNormalWorld, glm::quarter_pi<float>()) * 3.0f;
-      reg.emplace_or_replace<LinearVelocity>(e).v = velocity;
-    }
+    world.SpawnHitParticles({
+      .numParticles    = (uint32_t)numParticles,
+      .position        = hit.positionWorld,
+      .normal          = hit.flatNormalWorld,
+      .spreadConeAngle = glm::quarter_pi<float>(),
+    });
   }
 }
 

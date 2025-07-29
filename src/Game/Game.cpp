@@ -97,17 +97,29 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
 
   // Projectile hit sound
   TryTwice(pair,
-    [&](entt::entity entity1, entt::entity)
+    [&](entt::entity entity1, entt::entity entity2)
     {
       if (world.GetRegistry().all_of<Projectile>(entity1))
       {
-        if (glm::length(world.GetRegistry().get<LinearVelocity>(entity1).v) > 1.0f)
+        if (auto len = glm::length(world.GetRegistry().get<LinearVelocity>(entity1).v); len > 2.0f)
         {
           world.GetAudio()->PlaySound({
             .name     = "land",
             .rolloff  = 0.5f,
-            .position = world.GetRegistry().get<const GlobalTransform>(entity1).position,
+            .position = ppair->position,
           });
+
+          // Particles are already spawned when projectiles hit creatures.
+          if (!world.GetRegistry().all_of<Health>(entity2))
+          {
+            const auto numParticles = uint32_t(glm::clamp(glm::ceil(glm::mix(1.0f, 4.0f, len / 80.0f)), 0.0f, 4.0f));
+            world.SpawnHitParticles({
+              .numParticles    = numParticles,
+              .position        = ppair->position,
+              .normal          = ppair->normal,
+              .spreadConeAngle = glm::half_pi<float>(),
+            });
+          }
         }
         return true;
       }
@@ -135,6 +147,14 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
             const auto effectiveKnockback = damage.knockback * energyFraction;
             if (world.DamageEntity(entity1, damage.damage * energyFraction) > 0)
             {
+              world.SpawnHitParticles({
+                .numParticles    = 5,
+                .position        = ppair->position,
+                .normal          = ppair->normal,
+                .spreadConeAngle = glm::pi<float>(),
+                .tint            = {.5f, .01f, .02f},
+                .speed           = 5,
+              });
               world.GetAudio()->PlaySound({.name = "land", .position = world.GetRegistry().get<const GlobalTransform>(entity2).position});
 
               auto pushDir = projVelocity.v;
@@ -265,6 +285,13 @@ static void OnContactPersisted(World& world, Physics::ContactPersistedPair* ppai
           const auto& damage = world.GetRegistry().get<const ContactDamage>(entity2);
           if (world.DamageEntity(entity1, damage.damage) > 0)
           {
+            world.SpawnHitParticles({
+              .numParticles = 5,
+              .position = ppair->position,
+              .normal = ppair->normal,
+              .spreadConeAngle = glm::half_pi<float>(),
+              .tint = {0.5f, 0.01f, 0.02f},
+            });
             world.GetAudio()->PlaySound({.name = "land", .position = world.GetRegistry().get<const GlobalTransform>(entity2).position});
             auto pushDir = pos1 - pos2;
             pushDir.y    = 0;

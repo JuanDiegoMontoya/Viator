@@ -142,12 +142,16 @@ namespace Physics
   {
     entt::entity entity1;
     entt::entity entity2;
+    glm::vec3 position;
+    glm::vec3 normal;
   };
 
   struct ContactPersistedPair
   {
     entt::entity entity1;
     entt::entity entity2;
+    glm::vec3 position;
+    glm::vec3 normal;
   };
 
   entt::dispatcher& GetDispatcher();
