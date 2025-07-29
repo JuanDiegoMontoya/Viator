@@ -185,8 +185,18 @@ void main()
 
   const vec2 uv = (vec2(gid) + 0.5) / targetDim;
   
+  const float rawExposure = d_exposureBuffer.exposure;
+  float effectiveExposure = rawExposure;
+  if (bool(uniforms.curveExposure))
+  {
+    effectiveExposure = mix(uniforms.minExposure, uniforms.maxExposure, smoothstep(uniforms.minExposure, uniforms.maxExposure, rawExposure));
+  }
+  else
+  {
+    effectiveExposure = clamp(effectiveExposure, uniforms.minExposure, uniforms.maxExposure);
+  }
   vec3 hdrColor = textureLod(sceneColor, nearestSampler, uv, 0).rgb;
-  hdrColor *= pow(2.0, d_exposureBuffer.exposure); // Apply exposure
+  hdrColor *= exp2(effectiveExposure); // Apply exposure
   vec3 tonemappedColor = hdrColor;
   
   // sRGB/SDR display mappers (AgX actually works okay as an HDR tonemapper despite assuming BT.709 input)

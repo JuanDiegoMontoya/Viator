@@ -1590,6 +1590,17 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           int factor = aoParams_.upscaleFactor;
           ImGui::SliderInt("Upscale factor", &factor, 1, 4, "%d", ImGuiSliderFlags_AlwaysClamp);
           aoParams_.upscaleFactor = uint32_t(factor);
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Exposure"))
+        {
+          bool b = tonemapUniforms.curveExposure != 0;
+          ImGui::Checkbox("Curve exposure (WIP)", &b);
+          tonemapUniforms.curveExposure = b;
+          ImGui::SliderFloat("Min exposure", &tonemapUniforms.minExposure, -20, tonemapUniforms.maxExposure, "%.1f");
+          ImGui::SliderFloat("Max exposure", &tonemapUniforms.maxExposure, tonemapUniforms.minExposure, 20, "%.1f");
+          ImGui::EndTabItem();
         }
 
         ImGui::EndTabBar();

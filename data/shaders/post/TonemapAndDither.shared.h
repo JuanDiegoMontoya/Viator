@@ -58,7 +58,10 @@ struct TonemapUniforms
         .lengthOfLinearSection = 0.40f,
         .toeCurviness          = 1.33f,
         .toeFloor              = 0.00f,
-      })
+      }),
+      minExposure(-10),
+      maxExposure(5),
+      curveExposure(0)
   {
   }
 #endif
@@ -71,6 +74,9 @@ struct TonemapUniforms
   FVOG_UINT32 tonemapOutputColorSpace;
   AgXMapperSettings agx;
   GTMapperSettings gt;
+  FVOG_FLOAT minExposure;
+  FVOG_FLOAT maxExposure;
+  FVOG_BOOL32 curveExposure; // Apply exposure compensation curve
 };
 
 #ifdef __cplusplus
