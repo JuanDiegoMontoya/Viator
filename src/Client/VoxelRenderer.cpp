@@ -809,7 +809,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   ctx.ImageBarrierDiscard(frame.sceneIlluminance.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
   ctx.ImageBarrierDiscard(frame.sceneRadiance.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
   ctx.ImageBarrierDiscard(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-  
+
+  const auto& sunInfo = world.GetRegistry().ctx().get<SunInfo>();
+  sunElevation        = sunInfo.timeOfDay * glm::pi<float>() - glm::pi<float>();
+  sunAzimuth          = sunInfo.azimuth;
+
   skyParameters.sunDir = Math::SphericalToCartesian(sunElevation, sunAzimuth);
   skyParameters.sunColor = sunColor;
   skyParameters.sunBrightness = sunBrightness; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))

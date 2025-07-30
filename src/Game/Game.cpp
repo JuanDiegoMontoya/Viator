@@ -425,6 +425,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<std::unique_ptr<Networking::Interface>*>() = gNetworking_HORRIBLE_HACK; // Hack
   registry.ctx().emplace<NpcSpawnDirector>(world);
   registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
+  registry.ctx().emplace<SunInfo>();
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();

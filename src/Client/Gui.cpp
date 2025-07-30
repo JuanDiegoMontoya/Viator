@@ -1494,9 +1494,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           if (ImGui::CollapsingHeader("Sun"))
           {
             ImGui::SeparatorText("Sun position");
-            ImGui::SliderFloat("Elevation", &sunElevation, 0, glm::two_pi<float>());
-            ImGui::DragFloat("Fine elevation", &sunElevation, 0.002f);
-            ImGui::SliderFloat("Azimuth", &sunAzimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+            auto& sunInfo = world.GetRegistry().ctx().get<SunInfo>();
+            ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
+            ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+            ImGui::SliderFloat("Day length", &sunInfo.dayLength, 5, 3600, "%.0f s");
+            ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
 
             ImGui::SeparatorText("Sun appearance");
             ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);

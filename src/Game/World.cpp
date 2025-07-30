@@ -218,6 +218,16 @@ void World::FixedUpdate(float dt)
       registry_.ctx().get<NpcSpawnDirector>().Update(dt);
     }
 
+    if (IsServer())
+    {
+      auto& sunInfo = registry_.ctx().get<SunInfo>();
+      if (!sunInfo.pauseDayNightCycle)
+      {
+        sunInfo.timeOfDay += dt / sunInfo.dayLength * 2;
+        sunInfo.timeOfDay = glm::mod(sunInfo.timeOfDay, 2.0f);
+      }
+    }
+
     Physics::FixedUpdate(dt, *this);
 
     // Clamp movement input

@@ -595,6 +595,14 @@ struct LocalAuthoritative {};
 
 struct NetworkNeedUpdateLocalTransform {};
 
+struct SunInfo
+{
+  float timeOfDay = 0.667f; // 0 = midnight, 1 = midday, 2 = midnight
+  float azimuth   = 0.3f;
+  float dayLength = 1200; // Time, in seconds, it takes for a full day cycle to complete.
+  bool pauseDayNightCycle = false;
+};
+
 // Game class used for client and server
 class Game
 {
