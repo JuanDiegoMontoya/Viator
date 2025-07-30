@@ -526,6 +526,10 @@ void Game::Run()
 
         dt.fraction = std::clamp(float(fixedUpdateAccum / tickDuration), 0.0f, 1.0f);
       }
+      else if (networking_) // Process network messages if we aren't yet in the game (i.e. still connecting).
+      {
+        networking_->ProcessMessages(*world_);
+      }
 
       if (head_)
       {
