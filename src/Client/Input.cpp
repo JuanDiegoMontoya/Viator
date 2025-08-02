@@ -151,6 +151,11 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     debug.forceShowCursor = !debug.forceShowCursor;
   }
 
+  if (ImGui::GetKeyPressedAmount(ImGuiKey_F3, 10000, 1))
+  {
+    debug.disableAllUi = !debug.disableAllUi;
+  }
+
   // Sleep for a bit if the window is not focused
   if (!glfwGetWindowAttrib(window_, GLFW_FOCUSED) && !world.IsHosting())
   {

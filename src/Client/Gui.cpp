@@ -653,6 +653,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 {
   ZoneScoped;
 
+  if (world.GetRegistry().ctx().get<Debugging>().disableAllUi)
+  {
+    return;
+  }
+
   // Toggle pause state if the user presses Escape.
   if (ImGui::GetKeyPressedAmount(ImGuiKey_Escape, 10000, 1))
   {

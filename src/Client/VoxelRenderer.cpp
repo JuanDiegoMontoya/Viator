@@ -243,6 +243,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   g_meshes.emplace("axe", LoadObjFile(GetAssetDirectory() / "models/axe.obj"));
   g_meshes.emplace("torch", LoadObjFile(GetAssetDirectory() / "models/torch.obj"));
   g_meshes.emplace("mushroom", LoadObjFile(GetAssetDirectory() / "models/mushroom.obj"));
+  g_meshes.emplace("player", LoadObjFile(GetAssetDirectory() / "models/player.obj"));
 
   head_->renderCallback_ = [this](float dt, World& world, VkCommandBuffer cmd, uint32_t swapchainImageIndex) { OnRender(dt, world, cmd, swapchainImageIndex); };
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };
@@ -877,6 +878,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();
   for (auto&& [entity, transform, mesh] : world.GetRegistry().view<const GlobalTransform, const Mesh>().each())
   {
+    if (world.GetRegistry().all_of<DoNotRenderIfAncestorIsLocalPlayer>(entity) && world.AncestorHasComponent<LocalPlayer>(entity))
+    {
+      continue;
+    }
     GlobalTransform actualTransform = transform;
     if (auto* renderTransform = world.GetRegistry().try_get<const RenderTransform>(entity))
     {

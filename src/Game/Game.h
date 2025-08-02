@@ -62,6 +62,7 @@ struct Debugging
   bool drawPhysicsVelocity = false;
   bool drawPathLines       = false;
   bool showFps             = true;
+  bool disableAllUi        = false;
 };
 
 struct LocalTransform
@@ -432,6 +433,8 @@ struct Mesh
 {
   std::string name;
 };
+
+struct DoNotRenderIfAncestorIsLocalPlayer {};
 
 struct Tint
 {

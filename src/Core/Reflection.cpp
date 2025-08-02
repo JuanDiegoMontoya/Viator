@@ -1005,4 +1005,6 @@ void Core::Reflection::Initialize()
     DATA(Pathfinding::CachedPath, progress)
     DATA(Pathfinding::CachedPath, updateAccum)
     DATA(Pathfinding::CachedPath, timeBetweenUpdates);
+
+  REFLECT_COMPONENT(DoNotRenderIfAncestorIsLocalPlayer, REPLICATED);
 }
