@@ -132,6 +132,12 @@ vec3 ProbeTexelCoordToDirection(ivec2 texelCoord, ivec2 probeResolution)
   return OctToVec3(uv * 2 - 1);
 }
 
+vec3 ProbeTexelCoordToDirectionOffset(ivec2 texelCoord, ivec2 probeResolution, vec2 texelOffset)
+{
+  const vec2 uv = (texelCoord + texelOffset + 0.5) / probeResolution;
+  return OctToVec3(uv * 2 - 1);
+}
+
 int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
 {
   return (probeCoord.z * gridResolution.x * gridResolution.y) + 

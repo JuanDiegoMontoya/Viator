@@ -24,7 +24,9 @@ void main()
 
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo[cascade].probeRadianceResolution);
 
-  vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeRadianceResolution);
+  const vec2 offset = Hammersley(uniforms.frameNumber % 16, 16) - 0.5;
+  vec3 rayDir = ProbeTexelCoordToDirectionOffset(texelCoord, args.gridInfo[cascade].probeRadianceResolution, offset);
+  //vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeRadianceResolution);
   rayDir = normalize(rayDir + vec3(1e-4, 0, 0)); // HACK: perfectly 45-degree ray directions are not liked by DDA.
   
   vec3 radiance = {0, 0, 0};
@@ -124,6 +126,13 @@ void main()
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
   const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(radiance, 0));
-  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(depth, 0, 0, 0));
+  const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+  const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
+  const float validity = args.gridInfo[cascade].probes.data[stableProbeIndex].validity;
+  const float alpha = max(0.01, 1.0 / validity);
+  const vec3 newRadiance = mix(oldRadiance, radiance, alpha);
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
+  const float oldDepth = imageLoad(args.packedProbeRawDepth, ivec3(texelOffset + texelCoord, cascade)).x;
+  const float newDepth = mix(oldDepth, depth, alpha);
+  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newDepth, 0, 0, 0));
 }

@@ -72,5 +72,7 @@ void main()
   }
   const float pdf = uniform_sphere_PDF();
   averageLuminance = averageLuminance / AVG_SAMPLES;
-  args.gridInfo[cascade].probes.data[stableProbeIndex].averageLuminance = averageLuminance;
+  const vec3 oldAverageLuminance = args.gridInfo[cascade].probes.data[stableProbeIndex].averageLuminance;
+  const vec3 newAverageLuminance = mix(oldAverageLuminance, averageLuminance, alpha);
+  args.gridInfo[cascade].probes.data[stableProbeIndex].averageLuminance = newAverageLuminance;
 }
