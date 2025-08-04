@@ -134,22 +134,25 @@ namespace
 
   void DrawTooltipForItem(World& world, entt::entity parent, const ItemState& item)
   {
-    if (item.id == nullItem)
+    if (item.id == entt::null)
     {
       return;
     }
-    const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
 
-    auto text = def.GetName();
+    auto text = Item::GetName(world, item.id);
 
-    if (def.GetMaxStackSize() > 1)
+    if (Item::GetMaxStackSize(world, item.id) > 1)
     {
-      text += "\n\n" + std::to_string(item.count) + " / " + std::to_string(def.GetMaxStackSize());
+      text += "\n\n" + std::to_string(item.count) + " / " + std::to_string(Item::GetMaxStackSize(world, item.id));
     }
 
-    auto GetWornEffectTextMul = [&](ItemDefinition::EffectType type, const char* name)
+    using Item::EffectCondition;
+    using Item::EffectQuantityType;
+    using Item::EffectType;
+
+    auto GetWornEffectTextMul = [&](Item::EffectType type, const char* name)
     {
-      const auto effectAmount = def.GetWornEffectMultiplicative(world, parent, type);
+      const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnWorn, EffectQuantityType::Multiplicative, type);
       if (effectAmount != 1)
       {
         return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
@@ -157,9 +160,9 @@ namespace
 
       return std::string();
     };
-    auto GetWornEffectTextAdd = [&](ItemDefinition::EffectType type, const char* name)
+    auto GetWornEffectTextAdd = [&](Item::EffectType type, const char* name)
     {
-      const auto effectAmount = def.GetWornEffectAdditive(world, parent, type);
+      const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnWorn, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
         return std::format("+{:.0f} {}\n", effectAmount, name);
@@ -168,9 +171,9 @@ namespace
       return std::string();
     };
 
-    auto GetHeldEffectTextMul = [&](ItemDefinition::EffectType type, const char* name)
+    auto GetHeldEffectTextMul = [&](Item::EffectType type, const char* name)
     {
-      const auto effectAmount = def.GetHeldEffectMultiplicative(world, parent, type);
+      const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnHeld, EffectQuantityType::Multiplicative, type);
       if (effectAmount != 1)
       {
         return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
@@ -178,9 +181,9 @@ namespace
 
       return std::string();
     };
-    auto GetHeldEffectTextAdd = [&](ItemDefinition::EffectType type, const char* name)
+    auto GetHeldEffectTextAdd = [&](Item::EffectType type, const char* name)
     {
-      const auto effectAmount = def.GetHeldEffectAdditive(world, parent, type);
+      const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnHeld, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
         return std::format("+{:.0f} {}\n", effectAmount, name);
@@ -189,9 +192,9 @@ namespace
       return std::string();
     };
 
-    auto GetUseEffectText = [&](ItemDefinition::EffectType type, const char* name)
+    auto GetUseEffectText = [&](Item::EffectType type, const char* name)
     {
-      const auto effectAmount = def.GetUseEffect(world, parent, type);
+      const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnUse, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
         return std::format("{:.0f} {}\n", effectAmount, name);
@@ -204,9 +207,9 @@ namespace
 
     // Use effects
     auto usedText = std::string();
-    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    for (int i = 0; i < int(Item::EffectType::EFFECT_COUNT); i++)
     {
-      const auto type = ItemDefinition::EffectType(i);
+      const auto type = Item::EffectType(i);
       const auto name = Core::Reflection::EnumToString(type);
       usedText += GetUseEffectText(type, name);
     }
@@ -219,9 +222,9 @@ namespace
 
     // Worn effects
     auto equippedText = std::string();
-    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    for (int i = 0; i < int(Item::EffectType::EFFECT_COUNT); i++)
     {
-      const auto type = ItemDefinition::EffectType(i);
+      const auto type = Item::EffectType(i);
       const auto name = Core::Reflection::EnumToString(type);
       equippedText += GetWornEffectTextAdd(type, name);
       equippedText += GetWornEffectTextMul(type, name);
@@ -235,9 +238,9 @@ namespace
 
     // Held effects
     auto heldText = std::string();
-    for (int i = 0; i < int(ItemDefinition::EffectType::EFFECT_COUNT); i++)
+    for (int i = 0; i < int(Item::EffectType::EFFECT_COUNT); i++)
     {
-      const auto type = ItemDefinition::EffectType(i);
+      const auto type = Item::EffectType(i);
       const auto name = Core::Reflection::EnumToString(type);
       heldText += GetHeldEffectTextAdd(type, name);
       heldText += GetHeldEffectTextMul(type, name);
@@ -286,11 +289,10 @@ namespace
           auto& slot          = inventory.slots[row][col];
           std::string nameStr  = "";
           const auto cursorPos = ImGui::GetCursorPos();
-          if (slot.id != nullItem)
+          if (slot.id != entt::null)
           {
-            const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id);
-            nameStr         = def.GetName();
-            if (def.GetMaxStackSize() > 1)
+            nameStr = Item::GetName(world, slot.id);
+            if (Item::GetMaxStackSize(world, slot.id) > 1)
             {
               ImGui::BeginDisabled();
               ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0, 1});
@@ -395,16 +397,15 @@ namespace
         ImGui::TableNextColumn();
         auto& slot          = armorAndAccessories.slots[i];
         std::string nameStr = "";
-        if (slot.id != nullItem)
+        if (slot.id != entt::null)
         {
-          const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(slot.id);
-          nameStr         = def.GetName();
+          nameStr = Item::GetName(world, slot.id);
         }
         const auto cursorPos = ImGui::GetCursorPos();
         ImGui::Selectable(("##" + nameStr).c_str(), false, 0, {50, 50});
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
         {
-          if (slot.id == nullItem)
+          if (slot.id == entt::null)
           {
             ImGui::SetTooltip("%s", Core::Reflection::EnumToString(ArmorAndAccessories::Slot(i)));
           }
@@ -809,13 +810,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             nullptr,
             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
       {
-        const auto& itemRegistry = world.GetRegistry().ctx().get<ItemRegistry>();
         for (int i = 0; i < effects.size(); i++)
         {
           const auto& effect = effects[i];
-          const auto& item = itemRegistry.Get(effect.id);
           char buffer[256]{};
-          std::snprintf(buffer, 256, "%s: %.0f s", item.GetName().c_str(), effect.useAccum);
+          std::snprintf(buffer, 256, "%s: %.0f s", Item::GetName(world, effect.id).c_str(), effect.useAccum);
           if (ImGui::Selectable(buffer))
           {
             world.GetRegistry().get<TemporaryEffects>(playerEntity).effects.erase(effects.begin() + i);
@@ -876,7 +875,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             }
 
         const auto& crafting      = world.GetRegistry().ctx().get<Crafting>();
-        const auto& itemRegistry  = world.GetRegistry().ctx().get<ItemRegistry>();
         const auto& blockRegistry = world.GetRegistry().ctx().get<BlockRegistry>();
         static bool showUncraftableRecipes = true;
         ImGui::Checkbox("Show uncraftable", &showUncraftableRecipes);
@@ -903,8 +901,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::Indent();
           for (const auto& output : recipe.output)
           {
-            const auto& def = itemRegistry.Get(output.item);
-            ImGui::TextWrapped("%s: %d", def.GetName().c_str(), output.count);
+            ImGui::TextWrapped("%s: %d", Item::GetName(world, output.item).c_str(), output.count);
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
             {
               DrawTooltipForItem(world, playerEntity, {.id = output.item, .count = output.count});
@@ -916,8 +913,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::Indent();
           for (const auto& ingredient : recipe.ingredients)
           {
-            const auto& def = itemRegistry.Get(ingredient.item);
-            ImGui::TextWrapped("%s: %d", def.GetName().c_str(), ingredient.count);
+            ImGui::TextWrapped("%s: %d", Item::GetName(world, ingredient.item).c_str(), ingredient.count);
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
             {
               DrawTooltipForItem(world, playerEntity, {.id = ingredient.item, .count = ingredient.count});
@@ -1201,6 +1197,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     using namespace std::chrono_literals;
     if (future.wait_for(0s) == std::future_status::ready)
     {
+      future.get();
       gameState = GameState::GAME;
     }
     else
@@ -1636,13 +1633,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     
     if (ImGui::Begin("It's free real estate", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
-      const auto& itemRegistry = world.GetRegistry().ctx().get<ItemRegistry>();
-      for (int i = 0; const auto& itemDefinition : itemRegistry.GetAllItemDefinitions())
+      const auto& itemRegistry = world.GetRegistry().ctx().get<Item::Registry>();
+      for (int i = 0; const auto& [tag, id] : itemRegistry.GetNameToIdMap())
       {
         ImGui::PushID(i);
-        if (ImGui::Button(itemDefinition->GetName().c_str(), {-1, 0}))
+        if (ImGui::Button(tag.c_str(), {-1, 0}))
         {
-          auto item = ItemState{static_cast<ItemId>(i), 1};
+          auto item = ItemState{static_cast<ItemId>(id), 1};
           inventory.TryStackItem(world, item);
           if (item.count > 0)
           {

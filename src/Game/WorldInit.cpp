@@ -19,7 +19,7 @@ public:
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
     const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
-    const auto& items  = world.GetRegistry().ctx().get<ItemRegistry>();
+    const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
     const auto& air    = blocks.Get("Air");
     const auto& wood   = blocks.Get("Wood Plank");
     const auto& chest  = blocks.Get("Cheste");
@@ -45,8 +45,8 @@ public:
               ASSERT(chestEntity != entt::null);
               if (auto [e, i] = world.GetComponentFromDescendant<Inventory>(chestEntity); i)
               {
-                i->slots[0][0] = {.id = items.GetId("Electrum"), .count = 10};
-                i->slots[0][1] = {.id = items.GetId("Suspicious Coin"), .count = 1};
+                i->slots[0][0] = {.id = items.Get("Electrum"), .count = 10};
+                i->slots[0][1] = {.id = items.Get("Suspicious Coin"), .count = 1};
               }
             }
           }
@@ -150,7 +150,7 @@ public:
     ZoneScoped;
     auto& grid         = world.GetRegistry().ctx().get<TwoLevelGrid>();
     const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
-    const auto& items  = world.GetRegistry().ctx().get<ItemRegistry>();
+    const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
     const auto& air    = blocks.Get("Air");
     const auto& wood   = blocks.Get("Wood Plank");
     
@@ -228,8 +228,8 @@ public:
         ASSERT(chestEntity != entt::null);
         if (auto [e, i] = world.GetComponentFromDescendant<Inventory>(chestEntity); i)
         {
-          i->slots[0][0] = {.id = items.GetId("Electrum"), .count = int(rng.RandU32(1, 20))};
-          i->slots[0][1] = {.id = items.GetId("Suspicious Coin"), .count = 1};
+          i->slots[0][0] = {.id = items.Get("item_electrum"), .count = int(rng.RandU32(1, 20))};
+          i->slots[0][1] = {.id = items.Get("item_suspicious_coin"), .count = 1};
         }
       }
     }
@@ -315,16 +315,18 @@ void World::InitializeGameDefinitions()
   [[maybe_unused]] auto wormBossId = entityPrefabs.Add("Worm Boss", new WormBossDefinition());
 
   // Reset item registry
-  auto& items                       = registry_.ctx().insert_or_assign<ItemRegistry>({});
-  [[maybe_unused]] const auto gunId = items.Add(new Gun("M4", {}));
+  auto& items = registry_.ctx().insert_or_assign<Item::Registry>({});
 
-  [[maybe_unused]] const auto gun2Id = items.Add(new Gun("Frogun",
+  const auto gunId = Item::CreateGun(items, "weapon_m4", "M4", 800, {});
+  Item::CreateGun(items,
+    "weapon_frogun",
+    "Frogun",
+    80,
     {
       .model       = "frog",
       .scale       = 0.125f,
       .damage      = 10,
       .knockback   = 2,
-      .fireRateRpm = 80,
       .bullets     = 9,
       .velocity    = 50,
       .accuracyMoa = 300,
@@ -332,22 +334,23 @@ void World::InitializeGameDefinitions()
       .vrecoilDev  = 3,
       .hrecoil     = 1,
       .hrecoilDev  = 1,
-    }));
+    });
 
   auto light      = GpuLight();
   light.color     = {1.0f, 0.4f, 0.2f};
   light.intensity = 500;
   light.type      = LIGHT_TYPE_POINT;
   light.range     = 200;
-
-  [[maybe_unused]] const auto flareGunId = items.Add(new Gun("Flare Gun",
+  const auto flareGunId = Item::CreateGun(items,
+    "weapon_flaregun",
+    "Flare Gun",
+    90,
     {
       .model       = "ar15",
       .tint        = {1, 0.4f, 0.22f},
       .scale       = 1,
       .damage      = 10,
       .knockback   = 1,
-      .fireRateRpm = 90,
       .bullets     = 1,
       .velocity    = 60,
       .accuracyMoa = 40,
@@ -358,46 +361,66 @@ void World::InitializeGameDefinitions()
       .light      = light,
       .sticky     = true,
       .stickyDist = 0.125f,
-    }));
+    });
 
-  [[maybe_unused]] const auto coinItemId          = items.Add(new SpriteItem("Electrum", "coin"));
-  [[maybe_unused]] const auto charcoalItemId      = items.Add(new SpriteItem("Charcoal", "charcoal"));
-  [[maybe_unused]] const auto copperIngotItemId   = items.Add(new SpriteItem("Copper Ingot", "copper_ingot"));
-  [[maybe_unused]] const auto leadIngotItemId   = items.Add(new SpriteItem("Lead Ingot", "lead_ingot"));
-  [[maybe_unused]] const auto stickItemId         = items.Add(new SpriteItem("Stick", "stick"));
-  [[maybe_unused]] const auto coolStickItemId     = items.Add(new SpriteItem("Cool Stick", "stick", {1, 0, 0}));
-  [[maybe_unused]] const auto wormSummonItemId    = items.Add(new SpawnBossItemDefinition("Suspicious Coin", "coin", {1, 0.1f, 0.1f}));
-  [[maybe_unused]] const auto healingPotionItemId = items.Add(new HealingPotionDefinition("Healing Potion", "potion_healing"));
-  [[maybe_unused]] const auto stoneAxeId          = items.Add(new ToolDefinition("Stone Axe", {"axe", {.2f, .2f, .2f}, 20, 2, BlockDamageFlagBit::AXE}));
-  [[maybe_unused]] const auto copperAxeId         = items.Add(new ToolDefinition("Copper Axe", {"axe", {.78f, .51f, .27f}, 30, 3, BlockDamageFlagBit::AXE}));
-  [[maybe_unused]] const auto leadAxeId         = items.Add(new ToolDefinition("Lead Axe", {"axe", {.21f, .34f, .40f}, 35, 4, BlockDamageFlagBit::AXE}));
-  [[maybe_unused]] const auto stonePickaxeId = items.Add(new ToolDefinition("Stone Pickaxe", {"pickaxe", {.2f, .2f, .2f}, 20, 2, BlockDamageFlagBit::PICKAXE}));
-  [[maybe_unused]] const auto copperPickaxeId = items.Add(new ToolDefinition("Copper Pickaxe", {"pickaxe", {.78f, .51f, .27f}, 30, 3, BlockDamageFlagBit::PICKAXE}));
-  [[maybe_unused]] const auto leadPickaxeId = items.Add(new ToolDefinition("Lead Pickaxe", {"pickaxe", {.21f, .34f, .40f}, 35, 4, BlockDamageFlagBit::PICKAXE}));
-  [[maybe_unused]] const auto opPickaxeId   = items.Add(new RainbowTool("OP Pickaxe", {"pickaxe", {1, 1, 1}, 1000, 100, BlockDamageFlagBit::ALL_TOOLS, 0.1f}));
-  [[maybe_unused]] const auto stoneSpearId  = items.Add(new Spear("Stone Spear", {.tint = {0.2f, 0.2f, 0.2f}}));
-  [[maybe_unused]] const auto copperSpearId = items.Add(new Spear("Copper Spear", {.damage = 20, .knockback = 5, .tint = {.78f, .51f, .27f}}));
-  [[maybe_unused]] const auto leadSpearId = items.Add(new Spear("Lead Spear", {.damage = 25, .knockback = 5, .tint = {.21f, .34f, .40f}}));
-  [[maybe_unused]] const auto speedSpearId  = items.Add(new CSKnife("SPEED Spear", {.tint = {0.2f, 0.2f, 0.3f}}));
-  const auto healthRegenId = items.Add(new Effector("Regeneration", ItemDefinition::EffectType::HealthRegeneration));
-  const auto shineId = items.Add(new Effector("Shine", ItemDefinition::EffectType::Shine));
-  const auto swiftnessId = items.Add(new Effector("Swiftness", ItemDefinition::EffectType::MovementSpeedModifier, 0, 1.25f));
-  const auto ironskinId = items.Add(new Effector("Ironskin", ItemDefinition::EffectType::ArmorModifier, 8));
-  const auto spelunkerId = items.Add(new Effector("Spelunker", ItemDefinition::EffectType::Spelunker, 1));
-  items.Add(new EffectGrantingPotion("Health Regeneration Potion", "potion_healing", healthRegenId, 300, {1, .1f, .1f}));
-  items.Add(new EffectGrantingPotion("Shine Potion", "potion_healing", shineId, 600, {1.0f, 1.0f, 0.4f}));
-  items.Add(new EffectGrantingPotion("Swiftness Potion", "potion_healing", swiftnessId, 300, {0.1f, 1.0f, 1}));
-  items.Add(new EffectGrantingPotion("Ironskin Potion", "potion_healing", ironskinId, 480, {0.4f, 1.0f, 0.1f}));
-  items.Add(new EffectGrantingPotion("Spelunker Potion", "potion_healing", spelunkerId, 300, {1.0f, 0.9f, 0.01f}));
+  const auto stonePickaxeId = Item::CreateTool(items, "tool_stone_pickaxe", "Stone Pickaxe", "pickaxe", {.2f, .2f, .2f}, 0.3f, {20, 2, BlockDamageFlagBit::PICKAXE});
+  const auto stoneAxeId = Item::CreateTool(items, "tool_stone_axe", "Stone Axe", "axe", {.2f, .2f, .2f}, 0.3f, {20, 2, BlockDamageFlagBit::AXE});
+  const auto stoneSpearId = Item::CreateSpear(items, "weapon_stone_spear", "Stone Spear", "spear", {.2f, .2f, .2f}, 0.55f, 15, 5);
 
-  items.Add(new Boots("Super Frog Boots", "potion_healing"));
-  const auto copperHelmetId = items.Add(new Armor("Copper Cap", 2, ItemDefinition::AllowedSlots::Head, "potion_healing"));
-  const auto copperShirtId = items.Add(new Armor("Copper Polo", 2, ItemDefinition::AllowedSlots::Body, "potion_healing"));
-  const auto copperPantsId = items.Add(new Armor("Copper Shoes", 2, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
-  const auto leadHelmetId = items.Add(new Armor("Lead Cap", 3, ItemDefinition::AllowedSlots::Head, "potion_healing"));
-  const auto leadShirtId = items.Add(new Armor("Lead Polo", 3, ItemDefinition::AllowedSlots::Body, "potion_healing"));
-  const auto leadPantsId = items.Add(new Armor("Lead Shoes", 3, ItemDefinition::AllowedSlots::Legs, "potion_healing"));
-  items.Add(new TestAccessory("Test Accessory", "potion_healing"));
+  const auto copperPickaxeId = Item::CreateTool(items, "tool_copper_pickaxe", "Copper Pickaxe", "pickaxe", {.78f, .51f, .27f}, 0.3f, {30, 3, BlockDamageFlagBit::PICKAXE});
+  const auto copperAxeId = Item::CreateTool(items, "tool_copper_axe", "Copper Axe", "axe", {.78f, .51f, .27f}, 0.3f, {30, 3, BlockDamageFlagBit::AXE});
+  const auto copperSpearId = Item::CreateSpear(items, "weapon_copper_spear", "Copper Spear", "spear", {.78f, .51f, .27f}, 0.55f, 20, 5);
+
+  const auto leadPickaxeId = Item::CreateTool(items, "tool_lead_pickaxe", "Lead Pickaxe", "pickaxe", {.21f, .34f, .40f}, 0.3f, {35, 4, BlockDamageFlagBit::PICKAXE});
+  const auto leadAxeId = Item::CreateTool(items, "tool_lead_axe", "Lead Axe", "axe", {.21f, .34f, .40f}, 0.3f, {35, 4, BlockDamageFlagBit::AXE});
+  const auto leadSpearId = Item::CreateSpear(items, "weapon_lead_spear", "Lead Spear", "spear", {.21f, .34f, .40f}, 0.55f, 25, 5);
+
+  const auto coinId = Item::CreateSimpleSpriteItem(items, "item_electrum", "Electrum", "coin", 999);
+  const auto charcoalId = Item::CreateSimpleSpriteItem(items, "item_charcoal", "Charcoal", "charcoal", 999);
+  const auto copperIngotId = Item::CreateSimpleSpriteItem(items, "item_copper_ingot", "Copper Ingot", "copper_ingot", 999);
+  const auto leadIngotId = Item::CreateSimpleSpriteItem(items, "item_lead_ingot", "Lead Ingot", "lead_ingot", 999);
+  const auto stickId = Item::CreateSimpleSpriteItem(items, "item_stick", "Stick", "stick", 999);
+  const auto coolStickId = Item::CreateSimpleSpriteItem(items, "item_cool_stick", "Cool Stick", "stick", 999, {1, .1f, .1f});
+  const auto susCoin = Item::CreateSimpleSpriteItem(items, "item_suspicious_coin", "Suspicious Coin", "coin", 999, {1, .1f, .1f});
+  items.GetRegistry().emplace<Item::Component::SpawnEntityPrefabOnUse>(susCoin, "Worm Boss");
+  items.GetRegistry().emplace<Item::Component::Usable>(susCoin, 1.0f);
+
+  const auto healingPotion = Item::CreateSimpleSpriteItem(items, "item_healing_potion", "Healing Potion", "potion_healing", 999);
+  items.GetRegistry().emplace<Item::Component::Usable>(healingPotion, 1.0f);
+  items.GetRegistry().emplace<Item::Component::HealUserOnUse>(healingPotion, 30.0f);
+
+  const auto opPickaxe = Item::CreateTool(items,
+    "tool_op_pickaxe",
+    "OP Pickaxe",
+    "pickaxe",
+    {1, 1, 1},
+    0.1f,
+    {
+      .blockDamage      = 1000,
+      .blockDamageTier  = 100,
+      .blockDamageFlags = BlockDamageFlagBit::ALL_TOOLS,
+    });
+  items.GetRegistry().emplace<Item::Component::Rainbow>(opPickaxe);
+
+  const auto healthRegenId = Item::CreateEffector(items, "effect_regeneration", "Health Regeneration", Item::EffectType::HealthRegeneration);
+  const auto shineId       = Item::CreateEffector(items, "effect_shine", "Shine", Item::EffectType::Shine);
+  const auto swiftnessId   = Item::CreateEffector(items, "effect_swiftness", "Swiftness", Item::EffectType::MovementSpeedModifier, 0, 1.25f);
+  const auto ironSkinId    = Item::CreateEffector(items, "effect_ironskin", "Ironskin", Item::EffectType::ArmorModifier, 8);
+  const auto spelunkerId   = Item::CreateEffector(items, "effect_spelunker", "Spelunker", Item::EffectType::Spelunker);
+
+  Item::CreateEffectGranter(items, "potion_health_regeneration", "Potion of Health Regeneration", healthRegenId, 300, "potion_healing", {1, 1, 1});
+  Item::CreateEffectGranter(items, "potion_shine", "Potion of Shine", shineId, 600, "potion_healing", {1, 1, 0.4f});
+  Item::CreateEffectGranter(items, "potion_swiftness", "Potion of Swiftness", swiftnessId, 300, "potion_healing", {.1f, 1, 1.0f});
+  Item::CreateEffectGranter(items, "potion_ironskin", "Potion of Ironskin", ironSkinId, 480, "potion_healing", {.4f, 1, .1f});
+  Item::CreateEffectGranter(items, "potion_spelunker", "Spelunker Potion", spelunkerId, 300, "potion_healing", {1, .9f, .01f});
+
+  const auto copperHelmetId = Item::CreateArmor(items, "armor_copper_helmet", "Copper Cap", Item::Component::AllowedSlots::Head, 2, "potion_healing");
+  const auto copperShirtId  = Item::CreateArmor(items, "armor_copper_chest", "Copper Polo", Item::Component::AllowedSlots::Body, 2, "potion_healing");
+  const auto copperPantsId  = Item::CreateArmor(items, "armor_copper_leg", "Copper Shoes", Item::Component::AllowedSlots::Legs, 2, "potion_healing");
+
+  const auto leadHelmetId = Item::CreateArmor(items, "armor_lead_helmet", "Lead Cap", Item::Component::AllowedSlots::Head, 3, "potion_healing");
+  const auto leadShirtId  = Item::CreateArmor(items, "armor_lead_chest", "Lead Polo", Item::Component::AllowedSlots::Body, 3, "potion_healing");
+  const auto leadPantsId  = Item::CreateArmor(items, "armor_lead_leg", "Lead Shoes", Item::Component::AllowedSlots::Legs, 3, "potion_healing");
 
   auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
 
@@ -473,7 +496,7 @@ void World::InitializeGameDefinitions()
                                                    })))
                                                    .GetItemId();
 
-  const auto galenaBlockId = blocks
+  [[maybe_unused]] const auto galenaBlockId = blocks
                                .Get(blocks.Add(new BlockDefinition({
                                  .name          = "Galena",
                                  .initialHealth = 100,
@@ -643,12 +666,13 @@ void World::InitializeGameDefinitions()
                                                    })))
                                                    .GetItemId();
 
-  const auto torchItemId = blocks
+  [[maybe_unused]] const auto torchItemId =
+    blocks
                              .Get(blocks.Add(new BlockEntityDefinition(
                                {.name = "Torch", .initialHealth = 10, .voxelMaterialDesc = VoxelMaterialDesc{.isInvisible = true}, .isSolid = false},
                                {.id = torchId})))
                              .GetItemId();
-  const auto chestItemId = blocks
+  [[maybe_unused]] const auto chestItemId = blocks
                              .Get(blocks.Add(new BlockEntityDefinition(
                                {
                                  .name = "Cheste",
@@ -659,7 +683,7 @@ void World::InitializeGameDefinitions()
                                },
                                {.id = chestId})))
       .GetItemId();
-  const auto mushroomBlockItemId = blocks
+  [[maybe_unused]] const auto mushroomBlockItemId = blocks
                                      .Get(blocks.Add(new BlockEntityDefinition(
                                        {
                                          .name              = "Shroom",
@@ -727,122 +751,119 @@ void World::InitializeGameDefinitions()
   prefabs.Add(new AbandonedHousePrefab({.name = "AbandonedHouse"}));
   prefabs.Add(new FloatingIslandPrefab({.name = "FloatingIsland"}));
 
-  auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
+  [[maybe_unused]] auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
+  
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{stoneBlockId, 15}},
     {{forgeBlockItemId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stoneBlockId, 5}, {stickItemId, 1}},
+    {{stoneBlockId, 5}, {stickId, 1}},
     {{stoneSpearId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stoneBlockId, 5}, {stickItemId, 1}},
+    {{stoneBlockId, 5}, {stickId, 1}},
     {{stonePickaxeId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stoneBlockId, 5}, {stickItemId, 1}},
+    {{stoneBlockId, 5}, {stickId, 1}},
     {{stoneAxeId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stickItemId, 3}},
-    {{charcoalItemId, 1}},
+    {{stickId, 3}},
+    {{charcoalId, 1}},
     blocks.Get("Forge").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stickItemId, 1}, {charcoalItemId, 1}},
+    {{stickId, 1}, {charcoalId, 1}},
     {{torchItemId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stoneBlockId, 1}, {charcoalItemId, 1}, {mushroomBlockItemId, 1}},
-    {{healingPotionItemId, 1}},
+    {{stoneBlockId, 1}, {charcoalId, 1}, {mushroomBlockItemId, 1}},
+    {{healingPotion, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{malachiteBlockId, 4}, {charcoalItemId, 1}},
-    {{copperIngotItemId, 1}},
+    {{malachiteBlockId, 4}, {charcoalId, 1}},
+    {{copperIngotId, 1}},
     blocks.Get("Forge").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{galenaBlockId, 4}, {charcoalItemId, 1}},
-    {{leadIngotItemId, 1}},
+    {{galenaBlockId, 4}, {charcoalId, 1}},
+    {{leadIngotId, 1}},
     blocks.Get("Forge").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 10}, {charcoalItemId, 1}},
+    {{leadIngotId, 10}, {charcoalId, 1}},
     {{blocks.Get("anvil_lead").GetItemId(), 1}},
     blocks.Get("Forge").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperSpearId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperPickaxeId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperAxeId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadSpearId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadPickaxeId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadAxeId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperHelmetId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperShirtId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{copperIngotItemId, 5}, {stickItemId, 1}},
+    {{copperIngotId, 5}, {stickId, 1}},
     {{copperPantsId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadHelmetId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadShirtId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{leadIngotItemId, 5}, {stickItemId, 1}},
+    {{leadIngotId, 5}, {stickId, 1}},
     {{leadPantsId, 1}},
     blocks.Get("anvil_lead").GetBlockId(),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{coinItemId, 10}, {stickItemId, 20}},
+    {{coinId, 10}, {stickId, 20}},
     {{chestItemId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{gunId, 1}, {wormSummonItemId, 1}},
+    {{gunId, 1}, {susCoin, 1}},
     {{flareGunId, 1}},
-  });
-  crafting.recipes.emplace_back(Crafting::Recipe{
-    {},
-    {{speedSpearId, 1}},
   });
 
   auto& loot        = registry_.ctx().insert_or_assign<LootRegistry>({});
   auto standardLoot = std::make_unique<LootDrops>();
   standardLoot->drops.emplace_back(RandomLootDrop{
-    .item         = coinItemId,
+    .item         = coinId,
     .count        = 6,
     .chanceForOne = 0.5f,
   });
@@ -850,12 +871,12 @@ void World::InitializeGameDefinitions()
 
   auto treeLoot = std::make_unique<LootDrops>();
   treeLoot->drops.emplace_back(RandomLootDrop{
-    .item         = stickItemId,
+    .item         = stickId,
     .count        = 6,
     .chanceForOne = 0.65f,
   });
   treeLoot->drops.emplace_back(RandomLootDrop{
-    .item         = coolStickItemId,
+    .item         = coolStickId,
     .count        = 1,
     .chanceForOne = 0.01f,
   });
@@ -868,7 +889,7 @@ void World::InitializeGameDefinitions()
     .chanceForOne = 1,
   });
   wormLoot->drops.emplace_back(RandomLootDrop{
-    .item         = coinItemId,
+    .item         = coinId,
     .count        = 150,
     .chanceForOne = 0.5f,
   });

@@ -116,7 +116,7 @@ void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel);
 
 struct ItemIdAndCount
 {
-  ItemId item = nullItem;
+  ItemId item = entt::null;
   int count   = 1;
 };
 
@@ -126,7 +126,7 @@ struct RandomLootDrop
   // Use individual probabilities for spawning each of count items.
   [[nodiscard]] std::vector<ItemIdAndCount> Sample(PCG::Rng& rng) const;
 
-  ItemId item = nullItem;
+  ItemId item = entt::null;
   int count = 1;
   float chanceForOne = 1;
   // TODO: distribution type (normal, uniform)

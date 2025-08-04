@@ -243,7 +243,7 @@ void World::FixedUpdate(float dt)
     {
       for (auto&& [entity, health] : registry_.view<Health>().each())
       {
-        if (GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::HealthRegeneration, 0) >= 1)
+        if (Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::HealthRegeneration, 0) >= 1)
         {
           health.hp = glm::min(health.maxHp, health.hp + 4 * dt);
         }
@@ -251,7 +251,7 @@ void World::FixedUpdate(float dt)
 
       for (auto&& [entity, transform, player] : registry_.view<const GlobalTransform, const Player>().each())
       {
-        if (GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::Shine, 0) >= 1)
+        if (Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::Shine, 0) >= 1)
         {
           auto& light     = registry_.emplace_or_replace<GpuLight>(entity);
           light.color     = {1.0f, 0.4f, 0.2f};
@@ -796,7 +796,7 @@ void World::FixedUpdate(float dt)
                   .pitch       = 0.8f,
                   .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
                 });
-                velocity.y      = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
+                velocity.y      = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }
               attribs->timeSinceJumped = 0;
@@ -811,7 +811,7 @@ void World::FixedUpdate(float dt)
             auto xzVel              = glm::vec2(velocity.x, velocity.z);
             const auto xzSpeed      = glm::length(xzVel);
             const auto baseMaxSpeed = attribs->runMaxSpeed * (input.walk ? attribs->walkModifier : 1.0f);
-            const auto realMaxSpeed = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::MovementSpeedModifier, baseMaxSpeed);
+            const auto realMaxSpeed = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::MovementSpeedModifier, baseMaxSpeed);
             if (glm::length(deltaXZ1 + xzVel) > realMaxSpeed)
             {
               const auto nextXZVel = glm::normalize(deltaXZ1 + xzVel) * glm::max(realMaxSpeed, xzSpeed);
@@ -1023,10 +1023,9 @@ void World::FixedUpdate(float dt)
 
         if (IsServer() && input.usePrimary)
         {
-          if (inventory.ActiveSlot().id != nullItem)
+          if (inventory.ActiveSlot().id != entt::null)
           {
-            const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
-            def.UsePrimary(dt, *this, inventory.activeSlotEntity, inventory.ActiveSlot());
+            Item::UsePrimary(*this, dt, inventory.activeSlotEntity, inventory.ActiveSlot());
             if (inventory.ActiveSlot().count <= 0)
             {
               inventory.OverwriteSlot(*this, inventory.activeSlotCoord, {}, entt::null);
@@ -1046,14 +1045,14 @@ void World::FixedUpdate(float dt)
           for (size_t col = 0; col < inventory.width; col++)
           {
             auto& slot = inventory.slots[row][col];
-            if (slot.id != nullItem)
+            if (slot.id != entt::null)
             {
               entt::entity self = entt::null;
               if (inventory.activeSlotCoord == glm::ivec2{row, col})
               {
                 self = inventory.activeSlotEntity;
               }
-              registry_.ctx().get<ItemRegistry>().Get(slot.id).Update(dt, *this, self, slot);
+              Item::Update(*this, dt, self, slot);
             }
           }
         }
@@ -1252,12 +1251,11 @@ void World::FixedUpdate(float dt)
           {
             auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
             ASSERT(table);
-            const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
+
             for (auto drop : table->Collect(Rng()))
             {
-              const auto& def    = itemRegistry.Get(drop.item);
-              auto droppedEntity = def.Materialize(*this);
-              def.GiveCollider(*this, droppedEntity);
+              auto droppedEntity = Item::Materialize(*this, drop.item);
+              Item::GiveCollider(*this, drop.item, droppedEntity);
               registry_.get<LocalTransform>(droppedEntity).position = transform.position;
               UpdateLocalTransform(droppedEntity);
               registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
@@ -1387,15 +1385,14 @@ entt::entity World::CreateRenderableEntity(glm::vec3 position, glm::quat rotatio
 
 entt::entity World::CreateDroppedItem(ItemState item, glm::vec3 position, glm::quat rotation, float scale)
 {
-  const auto& itemDef = registry_.ctx().get<ItemRegistry>().Get(item.id);
-  auto entity         = itemDef.Materialize(*this);
+  auto entity = Item::Materialize(*this, item.id);
 
   auto& t    = registry_.get<LocalTransform>(entity);
   t.position = position;
   t.rotation = rotation;
   t.scale    = scale;
   UpdateLocalTransform(entity);
-  itemDef.GiveCollider(*this, entity);
+  Item::GiveCollider(*this, item.id, entity);
   registry_.emplace<DroppedItem>(entity).item = ItemState{item.id};
   return entity;
 }
@@ -1502,11 +1499,11 @@ entt::entity World::CreatePlayer()
   registry_.emplace_or_replace<LinearVelocity>(p);
   // cc.character->SetMaxStrength(10000000);
 
-  auto& items     = registry_.ctx().get<ItemRegistry>();
+  auto& items     = registry_.ctx().get<Item::Registry>();
   auto& inventory = registry_.emplace<Inventory>(p);
-  inventory.OverwriteSlot(*this, {0, 0}, {items.GetId("Stone Spear")}, p);
-  inventory.OverwriteSlot(*this, {0, 1}, {items.GetId("Stone Pickaxe")}, p);
-  inventory.OverwriteSlot(*this, {0, 2}, {items.GetId("Stone Axe")}, p);
+  inventory.OverwriteSlot(*this, {0, 0}, {items.Get("weapon_stone_spear")}, p);
+  inventory.OverwriteSlot(*this, {0, 1}, {items.Get("tool_stone_pickaxe")}, p);
+  inventory.OverwriteSlot(*this, {0, 2}, {items.Get("tool_stone_axe")}, p);
   registry_.emplace<ArmorAndAccessories>(p);
   registry_.emplace<TemporaryEffects>(p);
 
@@ -1588,10 +1585,9 @@ void World::KillPlayer(entt::entity playerEntity)
   }
 
   auto& inventory = registry_.get<const Inventory>(playerEntity);
-  if (inventory.ActiveSlot().id != nullItem)
+  if (inventory.ActiveSlot().id != entt::null)
   {
-    const auto& def = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
-    def.Dematerialize(*this, inventory.activeSlotEntity);
+    Item::Dematerialize(*this, inventory.ActiveSlot().id, inventory.activeSlotEntity);
   }
 }
 
@@ -1608,10 +1604,9 @@ void World::RespawnPlayer(entt::entity playerEntity)
   GivePlayerColliders(playerEntity);
 
   auto& inventory = registry_.get<Inventory>(playerEntity);
-  if (inventory.ActiveSlot().id != nullItem)
+  if (inventory.ActiveSlot().id != entt::null)
   {
-    const auto& def            = registry_.ctx().get<ItemRegistry>().Get(inventory.ActiveSlot().id);
-    inventory.activeSlotEntity = def.Materialize(*this);
+    inventory.activeSlotEntity = Item::Materialize(*this, inventory.ActiveSlot().id);
     SetParent(inventory.activeSlotEntity, playerEntity);
   }
 }
@@ -1623,9 +1618,9 @@ float World::DamageEntity(entt::entity entity, float damage)
     return 0;
   }
 
-  const auto armor = GetTotalEffectOnEntity(*this, entity, ItemDefinition::EffectType::ArmorModifier, 0);
-  damage = glm::max(1.0f, damage - armor / 2);
-  auto& h = registry_.get<Health>(entity);
+  const auto armor = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::ArmorModifier, 0);
+  damage           = glm::max(1.0f, damage - armor / 2);
+  auto& h          = registry_.get<Health>(entity);
   h.hp -= damage;
   return damage;
 }
@@ -1795,12 +1790,11 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
       const auto dropType = blockDef.GetLootDropType();
       if (auto* ip = std::get_if<ItemState>(&dropType))
       {
-        const auto& itemDef = registry_.ctx().get<ItemRegistry>().Get(ip->id);
-        auto itemSelf       = itemDef.Materialize(*this);
+        auto itemSelf = Item::Materialize(*this, ip->id);
 
         registry_.get<LocalTransform>(itemSelf).position = worldPos;
         UpdateLocalTransform(itemSelf);
-        itemDef.GiveCollider(*this, itemSelf);
+        Item::GiveCollider(*this, ip->id, itemSelf);
         registry_.emplace<DroppedItem>(itemSelf).item = *ip;
 
         const auto throwdir                                  = glm::vec3(Rng().RandFloat(-0.25f, 0.25f), 1, Rng().RandFloat(-0.25f, 0.25f));
@@ -1810,12 +1804,10 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
       {
         auto* table = registry_.ctx().get<LootRegistry>().Get(*lp);
         ASSERT(table);
-        const auto& itemRegistry = registry_.ctx().get<ItemRegistry>();
         for (auto drop : table->Collect(Rng()))
         {
-          const auto& def    = itemRegistry.Get(drop.item);
-          auto droppedEntity = def.Materialize(*this);
-          def.GiveCollider(*this, droppedEntity);
+          auto droppedEntity = Item::Materialize(*this, drop.item);
+          Item::GiveCollider(*this, drop.item, droppedEntity);
           registry_.get<LocalTransform>(droppedEntity).position = worldPos;
           UpdateLocalTransform(droppedEntity);
           registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});

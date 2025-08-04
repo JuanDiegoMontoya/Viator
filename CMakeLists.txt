@@ -149,6 +149,7 @@ add_executable(frogRender
     src/Game/Head.cpp
     src/Game/Audio.h
     src/Game/Audio.cpp
+    src/Game/Physics/Shape.h
 )
 
 # Precompiled headers for standard library

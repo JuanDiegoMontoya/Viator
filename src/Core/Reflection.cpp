@@ -976,12 +976,12 @@ void Core::Reflection::Initialize()
     ENUMERATOR(GameState, SERVER_SELECT)
     ENUMERATOR(GameState, SERVER_SELECT_ADD_SERVER);
 
-  REFLECT_ENUM(ItemDefinition::EffectType)
-    ENUMERATOR(ItemDefinition::EffectType, MovementSpeedModifier, PROP_DISPLAY_NAME("Speed"))
-    ENUMERATOR(ItemDefinition::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
-    ENUMERATOR(ItemDefinition::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
-    ENUMERATOR(ItemDefinition::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
-    ENUMERATOR(ItemDefinition::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
+  REFLECT_ENUM(Item::EffectType)
+    ENUMERATOR(Item::EffectType, MovementSpeedModifier, PROP_DISPLAY_NAME("Speed"))
+    ENUMERATOR(Item::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
+    ENUMERATOR(Item::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
+    ENUMERATOR(Item::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
+    ENUMERATOR(Item::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
 
   REFLECT_ENUM(ArmorAndAccessories::Slot)
     ENUMERATOR(ArmorAndAccessories::Slot, SLOT_HEAD, PROP_DISPLAY_NAME("Head"), PROP_ICON(ICON_FA_HAT_COWBOY))

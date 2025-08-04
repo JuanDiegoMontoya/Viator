@@ -197,7 +197,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         auto& i = world.GetRegistry().get<Inventory>(entity1);
         auto& d = world.GetRegistry().get<DroppedItem>(entity2);
 
-        if (d.item.id != nullItem)
+        if (d.item.id != entt::null)
         {
           world.GetAudio()->PlaySound({.name = "coin", .highlander = true});
           i.TryStackItem(world, d.item);
@@ -589,25 +589,25 @@ bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::i
   auto item1 = inventory1->slots[parent1Slot.x][parent1Slot.y];
   auto item2 = armor2->slots[parent2Slot];
 
-  auto item1Target = ItemDefinition::AllowedSlots::Accessory;
+  auto item1Target = Item::Component::AllowedSlots::Accessory;
 
   if (parent2Slot == ArmorAndAccessories::SLOT_HEAD)
   {
-    item1Target = ItemDefinition::AllowedSlots::Head;
+    item1Target = Item::Component::AllowedSlots::Head;
   }
 
   if (parent2Slot == ArmorAndAccessories::SLOT_BODY)
   {
-    item1Target = ItemDefinition::AllowedSlots::Body;
+    item1Target = Item::Component::AllowedSlots::Body;
   }
 
   if (parent2Slot == ArmorAndAccessories::SLOT_LEGS)
   {
-    item1Target = ItemDefinition::AllowedSlots::Legs;
+    item1Target = Item::Component::AllowedSlots::Legs;
   }
 
   // Check that target for the item being moved into restricted slots is compatible.
-  if (item1.id != nullItem && world.GetRegistry().ctx().get<ItemRegistry>().Get(item1.id).GetAllowedSlot() != item1Target)
+  if (item1.id != entt::null && !Item::ItemIsCompatibleWithSlot(world, item1.id, item1Target))
   {
     return false;
   }
@@ -729,16 +729,19 @@ void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol)
 
   if (rowCol != inv->activeSlotCoord)
   {
-    if (inv->ActiveSlot().id != nullItem)
+    if (inv->ActiveSlot().id != entt::null)
     {
-      world.GetRegistry().ctx().get<ItemRegistry>().Get(inv->ActiveSlot().id).Dematerialize(world, inv->activeSlotEntity);
+      Item::Dematerialize(world, inv->ActiveSlot().id, inv->activeSlotEntity);
       inv->activeSlotEntity = entt::null;
     }
     inv->activeSlotCoord = rowCol;
-    if (inv->ActiveSlot().id != nullItem)
+    if (inv->ActiveSlot().id != entt::null)
     {
-      inv->activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(inv->ActiveSlot().id).Materialize(world);
-      world.SetParent(inv->activeSlotEntity, parent);
+      inv->activeSlotEntity = Item::Materialize(world, inv->ActiveSlot().id);
+      if (inv->activeSlotEntity != entt::null)
+      {
+        world.SetParent(inv->activeSlotEntity, parent);
+      }
     }
   }
 }
@@ -773,21 +776,19 @@ entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
   }
 
   auto& item = inv->slots[slot[0]][slot[1]];
-  if (item.id == nullItem)
+  if (item.id == entt::null)
   {
     return entt::null;
   }
 
-  const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
-
   if (inv->canHaveActiveItem && inv->activeSlotCoord == slot)
   {
-    def.Dematerialize(world, inv->activeSlotEntity);
+    Item::Dematerialize(world, item.id, inv->activeSlotEntity);
     inv->activeSlotEntity = entt::null;
   }
 
-  auto entity = def.Materialize(world);
-  def.GiveCollider(world, entity);
+  auto entity = Item::Materialize(world, item.id);
+  Item::GiveCollider(world, item.id, entity);
   world.GetRegistry().emplace<DroppedItem>(entity).item = std::exchange(item, {});
   world.GetRegistry().emplace<CannotBePickedUp>(entity).remainingSeconds = 1.0f;
   return entity;
@@ -809,15 +810,13 @@ entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAcc
   }
 
   auto& item = armor->slots[slot];
-  if (item.id == nullItem)
+  if (item.id == entt::null)
   {
     return entt::null;
   }
-
-  const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
-
-  auto entity = def.Materialize(world);
-  def.GiveCollider(world, entity);
+  
+  auto entity = Item::Materialize(world, item.id);
+  Item::GiveCollider(world, item.id, entity);
   world.GetRegistry().emplace<DroppedItem>(entity).item = std::exchange(item, {});
   world.GetRegistry().emplace<CannotBePickedUp>(entity).remainingSeconds = 1.0f;
   return entity;
@@ -870,22 +869,21 @@ entt::entity ThrowItemFromArmorRPC(World& world, entt::entity parent, entt::enti
 void Inventory::OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemState, entt::entity parent)
 {
   const bool dstIsActive = rowCol == activeSlotCoord;
-  if (canHaveActiveItem && dstIsActive && ActiveSlot().id != nullItem)
+  if (canHaveActiveItem && dstIsActive && ActiveSlot().id != entt::null)
   {
-    world.GetRegistry().ctx().get<ItemRegistry>().Get(ActiveSlot().id).Dematerialize(world, activeSlotEntity);
+    Item::Dematerialize(world, ActiveSlot().id, activeSlotEntity);
     activeSlotEntity = entt::null;
   }
   slots[rowCol[0]][rowCol[1]] = itemState;
-  if (canHaveActiveItem && dstIsActive && itemState.id != nullItem)
+  if (canHaveActiveItem && dstIsActive && itemState.id != entt::null)
   {
-    activeSlotEntity = world.GetRegistry().ctx().get<ItemRegistry>().Get(ActiveSlot().id).Materialize(world);
+    activeSlotEntity = Item::Materialize(world, ActiveSlot().id);
     world.SetParent(activeSlotEntity, parent);
   }
 }
 
 void Inventory::TryStackItem(World& world, ItemState& item)
 {
-  const auto& def = world.GetRegistry().ctx().get<ItemRegistry>().Get(item.id);
   for (auto& row : slots)
   {
     for (auto& slot : row)
@@ -898,7 +896,7 @@ void Inventory::TryStackItem(World& world, ItemState& item)
       if (slot.id == item.id)
       {
         // Moves stack from item to slot, up to max stack size.
-        const auto avail = glm::min(item.count, def.GetMaxStackSize() - slot.count);
+        const auto avail = glm::min(item.count, Item::GetMaxStackSize(world, item.id) - slot.count);
         slot.count += avail;
         item.count -= avail;
       }
@@ -912,7 +910,7 @@ std::optional<glm::ivec2> Inventory::GetFirstEmptySlot() const
   {
     for (size_t col = 0; col < width; col++)
     {
-      if (slots[row][col].id == nullItem)
+      if (slots[row][col].id == entt::null)
       {
         return glm::ivec2{row, col};
       }

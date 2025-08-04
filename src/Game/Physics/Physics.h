@@ -1,4 +1,6 @@
 #pragma once
+#include "Shape.h"
+
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Body/Body.h"
 #include "Jolt/Physics/Body/MotionType.h"
@@ -43,39 +45,6 @@ namespace Physics
     constexpr JPH::ObjectLayer CAST_PROJECTILE  = 11;
     constexpr JPH::ObjectLayer CAST_CHARACTER   = 12;
   }
-
-  struct Sphere
-  {
-    bool operator==(const Sphere&) const = default;
-    float radius{};
-  };
-
-  struct Capsule
-  {
-    bool operator==(const Capsule&) const = default;
-    float radius{};
-    float cylinderHalfHeight{};
-  };
-
-  struct Box
-  {
-    bool operator==(const Box&) const = default;
-    glm::vec3 halfExtent{};
-  };
-
-  struct Plane
-  {
-    bool operator==(const Plane&) const = default;
-    glm::vec3 normal{};
-    float constant{};
-  };
-
-  struct UseTwoLevelGrid
-  {
-    bool operator==(const UseTwoLevelGrid&) const = default;
-  };
-
-  using PolyShape = std::variant<std::monostate, Sphere, Capsule, Box, Plane, UseTwoLevelGrid>;
 
   struct ShapeSettings
   {

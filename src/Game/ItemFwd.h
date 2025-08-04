@@ -1,12 +1,20 @@
 #pragma once
+#include "entt/core/fwd.hpp"
+#include "entt/entity/entity.hpp"
+
 #include <cstdint>
 
-using ItemId              = uint32_t;
-constexpr ItemId nullItem = ~0u;
+namespace entt
+{
+  enum class entity : id_type;
+}
+
+using ItemId = entt::entity;
 
 struct ItemState
 {
-  ItemId id      = nullItem;
+  //ItemId id      = ItemId(0xDEADBEEF);
+  ItemId id      = entt::null;
   int count      = 1;
   float useAccum = 1000;
 };

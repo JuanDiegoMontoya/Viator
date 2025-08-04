@@ -36,7 +36,7 @@ const BlockDefinition& BlockRegistry::Get(BlockId id) const
 BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
 {
   ASSERT(!nameToId_.contains(blockDefinition->GetName()));
-  ASSERT(world_->GetRegistry().ctx().contains<ItemRegistry>());
+  ASSERT(world_->GetRegistry().ctx().contains<Item::Registry>());
 
   const auto myBlockId      = (BlockId)idToDefinition_.size();
   blockDefinition->blockId_ = myBlockId;
@@ -44,8 +44,18 @@ BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
   nameToId_.emplace(blockDefinition->GetName(), myBlockId);
   idToDefinition_.emplace_back(blockDefinition);
 
-  auto& itemRegistry       = world_->GetRegistry().ctx().get<ItemRegistry>();
-  blockDefinition->itemId_ = itemRegistry.Add(new Block(myBlockId, blockDefinition->GetName()));
+  auto& itemRegistry = world_->GetRegistry().ctx().get<Item::Registry>();
+  auto& reg          = itemRegistry.GetRegistry();
+  const auto e = itemRegistry.Create(blockDefinition->GetName());
+  reg.emplace<Name>(e).name = blockDefinition->GetName();
+  reg.emplace<Item::Component::MaterializeAsMeshEntity>(e) = {.mesh = "cube", .position = {0.2f, -0.2f, -0.5f}};
+  reg.emplace<Item::Component::Usable>(e).timeBetweenUses  = 0.5f;
+  reg.emplace<Item::Component::Stackable>(e);
+  reg.emplace<Item::Component::ColliderWhenDropped>(e);
+  reg.emplace<Item::Component::AllowedSlots>(e, Item::Component::AllowedSlots::Normal);
+  reg.emplace<Item::Component::Block>(e).voxel = myBlockId;
+
+  blockDefinition->itemId_ = e;
 
   return myBlockId;
 }

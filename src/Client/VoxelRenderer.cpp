@@ -1210,7 +1210,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
 
     // Spelunker effect, if active
-    const bool applySpelunkerEffect = GetTotalEffectOnEntity(world, player, ItemDefinition::EffectType::Spelunker, 0) > 0;
+    const bool applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0;
     if (applySpelunkerEffect)
     {
       auto voxels2              = voxels;
