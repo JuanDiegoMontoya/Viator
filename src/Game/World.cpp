@@ -1479,6 +1479,7 @@ entt::entity World::CreatePlayer()
   registry_.emplace<TeamFlags>(p, TeamFlagBits::FRIENDLY);
 
   auto meshE = CreateRenderableEntity({0, 0, 0});
+  registry_.emplace<Name>(meshE, "Mesh");
   registry_.emplace<Mesh>(meshE).name = "player";
   SetParent(meshE, p);
   registry_.get<Hierarchy>(meshE).useLocalRotationAsGlobal = true;

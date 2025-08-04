@@ -86,6 +86,7 @@ private:
 
   void InitGui();
   void LoadGameSettings();
+  void DrawEntityHelper(World& world, entt::entity entity, const struct Hierarchy* h);
   void ShowEditor(DeltaTime dt, World& world);
   bool ShowSettingsWindow(World& world);
   void OnFramebufferResize(uint32_t newWidth, uint32_t newHeight);

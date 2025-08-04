@@ -34,6 +34,7 @@
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
 #include "miniaudio.h"
+#include "rapidfuzz/fuzz.hpp"
 
 using namespace entt::literals;
 
@@ -52,6 +53,7 @@ using namespace entt::literals;
 #include <fstream>
 #include <filesystem>
 #include <format>
+#include <map>
  
 namespace
 {
@@ -1431,43 +1433,46 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
 
-    if (false && ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    if (false)
     {
-      static glm::vec3 probePos  = {0, 60, 0};
-      static glm::vec3 probePos2 = {0, 61, 0};
-      static float probeRadius   = 2;
+      if (ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+      {
+        static glm::vec3 probePos  = {0, 60, 0};
+        static glm::vec3 probePos2 = {0, 61, 0};
+        static float probeRadius   = 2;
 
 #ifdef JPH_DEBUG_RENDERER
-      // JPH::DebugRenderer::sInstance->DrawWireSphere(Physics::ToJolt(probePos), probeRadius, JPH::Color::sGreen);
-      const auto jup    = Physics::ToJolt(glm::normalize(probePos2 - probePos));
-      const auto jfor   = jup.GetNormalizedPerpendicular();
-      const auto jright = jfor.Cross(jup);
+        // JPH::DebugRenderer::sInstance->DrawWireSphere(Physics::ToJolt(probePos), probeRadius, JPH::Color::sGreen);
+        const auto jup    = Physics::ToJolt(glm::normalize(probePos2 - probePos));
+        const auto jfor   = jup.GetNormalizedPerpendicular();
+        const auto jright = jfor.Cross(jup);
 
-      auto mat = JPH::Mat44::sIdentity();
-      mat.SetAxisX(jright);
-      mat.SetAxisY(jup);
-      mat.SetAxisZ(jfor);
-      mat.SetTranslation(Physics::ToJolt((probePos + probePos2) / 2.0f));
-      JPH::DebugRenderer::sInstance->DrawCapsule(mat, glm::distance(probePos, probePos2) / 2.0f, probeRadius, JPH::Color::sGreen);
+        auto mat = JPH::Mat44::sIdentity();
+        mat.SetAxisX(jright);
+        mat.SetAxisY(jup);
+        mat.SetAxisZ(jfor);
+        mat.SetTranslation(Physics::ToJolt((probePos + probePos2) / 2.0f));
+        JPH::DebugRenderer::sInstance->DrawCapsule(mat, glm::distance(probePos, probePos2) / 2.0f, probeRadius, JPH::Color::sGreen);
 #endif
 
-      ImGui::DragFloat3("Probe pos1", &probePos[0], 0.25f);
-      ImGui::DragFloat3("Probe pos2", &probePos2[0], 0.25f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
-      ImGui::DragFloat("Probe radius", &probeRadius, 0.125f, 0, 1000);
-      ImGui::Separator();
-      auto entities = world.GetEntitiesInCapsule(probePos, probePos2, probeRadius);
-      ImGui::Text("Covered: %llu", entities.size());
-      for (auto entity : entities)
-      {
-        auto name = std::string();
-        if (const auto* n = world.GetRegistry().try_get<const Name>(entity))
+        ImGui::DragFloat3("Probe pos1", &probePos[0], 0.25f);
+        ImGui::DragFloat3("Probe pos2", &probePos2[0], 0.25f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+        ImGui::DragFloat("Probe radius", &probeRadius, 0.125f, 0, 1000);
+        ImGui::Separator();
+        auto entities = world.GetEntitiesInCapsule(probePos, probePos2, probeRadius);
+        ImGui::Text("Covered: %llu", entities.size());
+        for (auto entity : entities)
         {
-          name = n->name;
+          auto name = std::string();
+          if (const auto* n = world.GetRegistry().try_get<const Name>(entity))
+          {
+            name = n->name;
+          }
+          ImGui::Text("%u (%s)", entt::to_entity(entity), name.c_str());
         }
-        ImGui::Text("%u (%s)", entt::to_entity(entity), name.c_str());
       }
+      ImGui::End();
     }
-    ImGui::End();
 
     if (ImGui::Begin("Giraffics", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
@@ -1630,12 +1635,29 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     auto&& [playerEntity, p, inventory, gt] = *range.begin();
 
-    
     if (ImGui::Begin("It's free real estate", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
+      ZoneScopedN("Item list");
+      static char buffer[256]{};
+      ImGui::Text("Filter");
+      ImGui::SameLine();
+      ImGui::InputText("##Filter", buffer, 256);
+      const auto len = std::strlen(buffer);
+
       const auto& itemRegistry = world.GetRegistry().ctx().get<Item::Registry>();
-      for (int i = 0; const auto& [tag, id] : itemRegistry.GetNameToIdMap())
+      auto scores              = std::multimap<double, decltype(*itemRegistry.GetNameToIdMap().begin()), std::greater<double>>();
+      for (const auto& pair : itemRegistry.GetNameToIdMap())
       {
+        scores.emplace(rapidfuzz::fuzz::partial_ratio(buffer, pair.first), pair);
+      }
+
+      for (int i = 0; const auto& [score, pair] : scores)
+      {
+        if (len != 0 && score == 0)
+        {
+          continue;
+        }
+        const auto& [tag, id] = pair;
         ImGui::PushID(i);
         if (ImGui::Button(tag.c_str(), {-1, 0}))
         {

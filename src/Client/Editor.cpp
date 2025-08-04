@@ -5,6 +5,9 @@
 #include "entt/meta/resolve.hpp"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
+#include "rapidfuzz/fuzz.hpp"
+
+#include <map>
 
 namespace
 {
@@ -145,53 +148,100 @@ namespace
 
     return changed;
   }
-}
+} // namespace
 
+// Recursive
+void VoxelRenderer::DrawEntityHelper(World& world, entt::entity e, [[maybe_unused]] const Hierarchy* h)
+{
+  auto& registry = world.GetRegistryRaw();
+  ImGui::PushID((int)e);
+  bool opened = false;
+
+  int flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
+  if (selectedEntity == e)
+  {
+    flags |= ImGuiTreeNodeFlags_Selected;
+  }
+
+  if (!h || h->children.empty())
+  {
+    flags |= ImGuiTreeNodeFlags_Leaf;
+  }
+
+  if (auto* s = registry.try_get<const Name>(e))
+  {
+    opened = ImGui::TreeNodeEx("entity", flags, "%u (%s) (v%u)", entt::to_entity(e), s->name.c_str(), entt::to_version(e));
+  }
+  else
+  {
+    opened = ImGui::TreeNodeEx("entity", flags, "%u (v%u)", entt::to_entity(e), entt::to_version(e));
+  }
+
+  // Single-clicking anywhere should select the node
+  if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+  {
+    selectedEntity = e;
+  }
+
+  if (opened)
+  {
+    if (h)
+    {
+      for (auto child : h->children)
+      {
+        DrawEntityHelper(world, child, registry.try_get<const Hierarchy>(child));
+      }
+    }
+    ImGui::TreePop();
+  }
+  ImGui::Separator();
+  ImGui::PopID();
+}
 void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
 {
   auto& registry = world.GetRegistryRaw();
   if (ImGui::Begin("Entities"))
   {
+    ImGui::Text("Count: %d", registry.view<entt::entity>().size());
     ZoneScopedN("Entities");
     if (!ImGui::IsAnyItemHovered() && ImGui::IsWindowHovered() && ImGui::GetIO().MouseClicked[ImGuiMouseButton_Left])
     {
       selectedEntity = entt::null;
     }
 
-    // Show entity hierarchy.
-    for (auto e : registry.view<entt::entity>())
+    static char buffer[256]{};
+    ImGui::Text("Filter");
+    ImGui::SameLine();
+    ImGui::InputText("##Filter", buffer, 256);
+    const auto len = std::strlen(buffer);
+
+    auto scores = std::multimap<double, entt::entity, std::greater<double>>();
     {
-      ImGui::PushID((int)e);
-      bool opened = false;
+      ZoneScopedN("Fuzzy string match");
+      auto scorer = rapidfuzz::fuzz::CachedPartialRatio(buffer);
+      for (auto e : registry.view<entt::entity>())
+      {
+        const auto* h = registry.try_get<const Hierarchy>(e);
+        if (!h || h->parent == entt::null)
+        {
+          const auto* name = registry.try_get<const Name>(e);
+          scores.emplace(name ? scorer.similarity(name->name) : 0, e);
+        }
+      }
+    }
 
-      int flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
-      if (selectedEntity == e)
+    // Show entity hierarchy.
+    for (const auto& [score, e] : scores)
+    {
+      if (len != 0 && score == 0)
       {
-        flags |= ImGuiTreeNodeFlags_Selected;
+        continue;
       }
-
-      if (auto* s = registry.try_get<const Name>(e))
+      // Draw only root nodes.
+      if (const auto* h = registry.try_get<const Hierarchy>(e); !h || h->parent == entt::null)
       {
-        opened = ImGui::TreeNodeEx("entity", flags, "%u (%s) (v%u)", entt::to_entity(e), s->name.c_str(), entt::to_version(e));
+        DrawEntityHelper(world, e, h);
       }
-      else
-      {
-        opened = ImGui::TreeNodeEx("entity", flags, "%u (v%u)", entt::to_entity(e), entt::to_version(e));
-      }
-
-      // Single-clicking anywhere should select the node
-      if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-      {
-        selectedEntity = e;
-      }
-
-      if (opened)
-      {
-        ImGui::TextUnformatted("TODO lol");
-        ImGui::TreePop();
-      }
-      ImGui::Separator();
-      ImGui::PopID();
     }
   }
   ImGui::End();

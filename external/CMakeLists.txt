@@ -184,6 +184,12 @@ option(TRACY_ON_DEMAND "" ON)
 option(TRACY_ENABLE "Enable profiling" ON)
 option(TRACY_ONLY_IPV4 "IPv4 only" ON)
 
+FetchContent_Declare(
+    rapidfuzz
+    GIT_REPOSITORY https://github.com/rapidfuzz/rapidfuzz-cpp.git
+    GIT_TAG v3.3.2
+)
+
 FetchContent_MakeAvailable(
     glm
     tracy
@@ -198,6 +204,7 @@ FetchContent_MakeAvailable(
     spdlog
     enet
     tomlplusplus
+    rapidfuzz
 )
 
 set(FSR2_SOURCE ${fsr2_SOURCE_DIR} PARENT_SCOPE)
