@@ -7,7 +7,9 @@
 #include "tracy/Tracy.hpp"
 #include "rapidfuzz/fuzz.hpp"
 
-#include <map>
+#include <vector>
+#include <algorithm>
+#include <execution>
 
 namespace
 {
@@ -194,7 +196,6 @@ void VoxelRenderer::DrawEntityHelper(World& world, entt::entity e, [[maybe_unuse
     }
     ImGui::TreePop();
   }
-  ImGui::Separator();
   ImGui::PopID();
 }
 void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
@@ -215,32 +216,57 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
     ImGui::InputText("##Filter", buffer, 256);
     const auto len = std::strlen(buffer);
 
-    auto scores = std::multimap<double, entt::entity, std::greater<double>>();
+    auto scores = std::vector<std::pair<double, entt::entity>>(registry.view<entt::entity>().size());
+
     {
       ZoneScopedN("Fuzzy string match");
       auto scorer = rapidfuzz::fuzz::CachedPartialRatio(buffer);
-      for (auto e : registry.view<entt::entity>())
+      
+      auto view = registry.view<entt::entity>();
       {
-        const auto* h = registry.try_get<const Hierarchy>(e);
-        if (!h || h->parent == entt::null)
-        {
-          const auto* name = registry.try_get<const Name>(e);
-          scores.emplace(name ? scorer.similarity(name->name) : 0, e);
-        }
+        ZoneScopedN("transform");
+        std::transform(std::execution::par,
+          view.begin(),
+          view.end(),
+          scores.begin(),
+          [&](entt::entity e) -> decltype(scores)::value_type
+          {
+            const auto* h = registry.try_get<const Hierarchy>(e);
+            if (!h || h->parent == entt::null)
+            {
+              const auto* name = registry.try_get<const Name>(e);
+              return {name ? scorer.similarity(name->name) : 0, e};
+            }
+
+            return {0, entt::null};
+          });
+      }
+
+      {
+        ZoneScopedN("erase_if");
+        std::erase_if(scores, [](const auto& pair) { return pair.second == entt::null; });
+      }
+      {
+        ZoneScopedN("sort");
+        std::sort(std::execution::par, scores.begin(), scores.end(), [](const auto& p1, const auto& p2) { return p1.first > p2.first; });
       }
     }
 
-    // Show entity hierarchy.
-    for (const auto& [score, e] : scores)
     {
-      if (len != 0 && score == 0)
+      ZoneScopedN("Draw entities");
+
+      // Show entity hierarchy. If this is slow, ImGuiListClipper can improve perf, but it requires list elements to have a fixed height.
+      for (const auto& [score, e] : scores)
       {
-        continue;
-      }
-      // Draw only root nodes.
-      if (const auto* h = registry.try_get<const Hierarchy>(e); !h || h->parent == entt::null)
-      {
-        DrawEntityHelper(world, e, h);
+        if (len != 0 && score == 0)
+        {
+          continue;
+        }
+        // Draw only root nodes.
+        if (const auto* h = registry.try_get<const Hierarchy>(e); !h || h->parent == entt::null)
+        {
+          DrawEntityHelper(world, e, h);
+        }
       }
     }
   }
