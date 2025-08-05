@@ -48,8 +48,7 @@ BlockId BlockRegistry::Add(BlockDefinition* blockDefinition)
   auto& reg          = itemRegistry.GetRegistry();
   const auto e = itemRegistry.Create(blockDefinition->GetName());
   reg.emplace<Name>(e).name = blockDefinition->GetName();
-  reg.emplace<Item::Component::MaterializeAsMeshEntity>(e) = {.mesh = "cube", .position = {0.2f, -0.2f, -0.5f}};
-  reg.emplace<Item::Component::Usable>(e).timeBetweenUses  = 0.5f;
+  reg.emplace<Item::Component::Usable>(e).timeBetweenUses = 0.25f;
   reg.emplace<Item::Component::Stackable>(e);
   reg.emplace<Item::Component::ColliderWhenDropped>(e);
   reg.emplace<Item::Component::AllowedSlots>(e, Item::Component::AllowedSlots::Normal);

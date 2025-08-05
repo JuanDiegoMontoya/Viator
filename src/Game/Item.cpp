@@ -47,6 +47,7 @@ entt::entity Item::Materialize(World& world, ItemId item)
 
   if (const auto* p = iReg.try_get<const Component::MaterializeAsSprite>(item))
   {
+    ASSERT(self == entt::null);
     self = world.CreateRenderableEntity({0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>(), 0.25f);
     world.GetRegistry().emplace<Billboard>(self, p->tag);
     world.GetRegistry().emplace<Tint>(self, p->tint);
@@ -64,6 +65,7 @@ entt::entity Item::Materialize(World& world, ItemId item)
         return entityPrefab.Spawn(world, {0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>());
       }
     }
+    ASSERT(self == entt::null);
     self = world.CreateRenderableEntity({0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>(), 0.25f);
 
     auto& mesh           = world.GetRegistry().emplace<Mesh>(self);

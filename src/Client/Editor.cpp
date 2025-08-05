@@ -284,12 +284,12 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
       openAction += -(int)ImGui::Button("Collapse all");
 
       auto e = selectedEntity;
-
+      ImGui::SameLine();
       if (ImGui::Button("Delete Entity"))
       {
         registry.emplace_or_replace<DeferredDelete>(e);
       }
-      ImGui::SameLine();
+
       if (ImGui::BeginCombo("##add", "Add Component"))
       {
         using MetaPair = decltype(*entt::resolve().begin());
@@ -427,7 +427,7 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
           ImGui::PopItemFlag();
           if (isEmptyType && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
           {
-            ImGui::SetTooltip("Type is empty.");
+            ImGui::SetTooltip("Type contains no data.");
           }
           ImGui::PopID();
         }
