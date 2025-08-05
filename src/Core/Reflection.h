@@ -40,6 +40,9 @@ namespace Core::Reflection
     // The type is a base class and owning pointers to it (via std::unique_ptr) will be serialized using the concrete type.
     // An ID will be serialized along with the concrete type.
     POLYMORPHIC = 1 << 7,
+
+    // Automatically set on components for which std::is_empty_v<T> is true.
+    EMPTY = 1 << 8,
   };
 
   constexpr Traits operator|(Traits a, Traits b)

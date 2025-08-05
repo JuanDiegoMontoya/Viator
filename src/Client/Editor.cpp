@@ -1,6 +1,7 @@
 #include "VoxelRenderer.h"
 #include "Game/World.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "Core/Assert2.h"
 #include "entt/meta/resolve.hpp"
 #include "spdlog/spdlog.h"
@@ -277,6 +278,11 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
     ZoneScopedN("Components");
     if (registry.valid(selectedEntity))
     {
+      int openAction = 0;
+      openAction += ImGui::Button("Expand all");
+      ImGui::SameLine();
+      openAction += -(int)ImGui::Button("Collapse all");
+
       auto e = selectedEntity;
 
       if (ImGui::Button("Delete Entity"))
@@ -365,44 +371,69 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
           });
       }
 
-      for (int i = 0; auto&& [meta, storage, _] : storages)
+      ImGui::Separator();
+      if (ImGui::BeginChild("Component Controls", {0, ImGui::GetContentRegionAvail().y}, 0, ImGuiWindowFlags_NoSavedSettings))
       {
-        if (!storage)
+        for (int i = 0; auto&& [meta, storage, _] : storages)
         {
-          spdlog::debug("[Editor] Null component storage found. Re-sorting storages.");
-          world.GetRegistry().ctx().erase<bool>("isEditorStorageInitialized"_hs);
-          continue;
-        }
+          if (!storage)
+          {
+            spdlog::debug("[Editor] Null component storage found. Re-sorting storages.");
+            world.GetRegistry().ctx().erase<bool>("isEditorStorageInitialized"_hs);
+            continue;
+          }
 
-        if (!storage->contains(e))
-        {
-          continue;
-        }
+          if (!storage->contains(e))
+          {
+            continue;
+          }
 
-        ImGui::PushID(i++);
-        if (ImGui::Button("X"))
-        {
-          storage->remove(e);
-        }
-        ImGui::SameLine();
-        ImGui::SeparatorText(FixupTypeString(storage->type().name()).c_str());
+          ImGui::PushID(i++);
+          if (ImGui::Button("X"))
+          {
+            storage->remove(e);
+          }
+          ImGui::SameLine();
 
-        if (storage->contains(e) && meta)
-        {
-          DrawComponentHelper(world,
-            e,
-            meta.from_void(storage->value(e)),
-            meta.custom(),
-            meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ_ONLY,
-            i);
+          bool isEmptyType = false;
+          auto flags       = 0;
+          if (meta.traits<Core::Reflection::Traits>() & Core::Reflection::EMPTY)
+          {
+            isEmptyType = true;
+            flags |= ImGuiTreeNodeFlags_Leaf;
+          }
+          if (openAction)
+          {
+            ImGui::SetNextItemOpen(openAction == 1);
+          }
+          ImGui::PushItemFlag(ImGuiItemFlags_Disabled, isEmptyType);
+          if (ImGui::CollapsingHeader(FixupTypeString(storage->type().name()).c_str(), isEmptyType ? flags : 0))
+          {
+            if (storage->contains(e) && meta)
+            {
+              int i2 = 0;
+              DrawComponentHelper(world,
+                e,
+                meta.from_void(storage->value(e)),
+                meta.custom(),
+                meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EDITOR_READ_ONLY,
+                i2);
+            }
+            else
+            {
+              ImGui::Text("Reflection is unavailable for this type.");
+            }
+          }
+          ImGui::PopItemFlag();
+          if (isEmptyType && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+          {
+            ImGui::SetTooltip("Type is empty.");
+          }
+          ImGui::PopID();
         }
-        else
-        {
-          ImGui::Text("Reflection is unavailable for this type.");
-        }
-        ImGui::PopID();
       }
     }
+    ImGui::EndChild();
   }
   ImGui::End();
 }
