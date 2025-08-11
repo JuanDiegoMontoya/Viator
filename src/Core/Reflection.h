@@ -43,6 +43,11 @@ namespace Core::Reflection
 
     // Automatically set on components for which std::is_empty_v<T> is true.
     EMPTY = 1 << 8,
+
+    // Indicates top-level component types for items only. They are still considered for serialization
+    // and will appear in the component menu for the item editor, but will not appear in the component
+    // menu for game entities.
+    ITEM_COMPONENT = 1 << 9,
   };
 
   constexpr Traits operator|(Traits a, Traits b)

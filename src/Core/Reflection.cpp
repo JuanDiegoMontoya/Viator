@@ -346,10 +346,10 @@ namespace Core::Reflection
     world.UpdateLocalTransform(entity);
   }
 
-  static void EditorUpdateLinearPath(entt::handle handle)
+  static void EditorUpdateLinearPath(World& world, entt::entity entity)
   {
     // Path component treats 0 as the "reset transform value", and we don't want to trigger that.
-    auto& path = handle.get<LinearPath>();
+    auto& path = world.GetRegistry().get<LinearPath>(entity);
     if (path.secondsElapsed == 0)
     {
       path.secondsElapsed = 1e-5f;
@@ -1007,4 +1007,111 @@ void Core::Reflection::Initialize()
     DATA(Pathfinding::CachedPath, timeBetweenUpdates);
 
   REFLECT_COMPONENT(DoNotRenderIfAncestorIsLocalPlayer, REPLICATED);
+
+  REFLECT_ENUM(Item::EffectType)
+    ENUMERATOR(Item::EffectType, MovementSpeedModifier)
+    ENUMERATOR(Item::EffectType, JumpImpulseModifier)
+    ENUMERATOR(Item::EffectType, ArmorModifier)
+    ENUMERATOR(Item::EffectType, BaseDamage)
+    ENUMERATOR(Item::EffectType, Knockback)
+    ENUMERATOR(Item::EffectType, HealthRegeneration)
+    ENUMERATOR(Item::EffectType, Shine)
+    ENUMERATOR(Item::EffectType, Spelunker);
+
+  REFLECT_ENUM(Item::EffectCondition)
+    ENUMERATOR(Item::EffectCondition, OnUse)
+    ENUMERATOR(Item::EffectCondition, OnHeld)
+    ENUMERATOR(Item::EffectCondition, OnWorn);
+
+  REFLECT_ENUM(Item::EffectQuantityType)
+    ENUMERATOR(Item::EffectQuantityType, Additive)
+    ENUMERATOR(Item::EffectQuantityType, Multiplicative);
+
+  REFLECT_COMPONENT(Item::Component::MaterializeAsMeshEntity, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::MaterializeAsMeshEntity, mesh)
+    DATA(Item::Component::MaterializeAsMeshEntity, tint)
+    DATA(Item::Component::MaterializeAsMeshEntity, position)
+    DATA(Item::Component::MaterializeAsMeshEntity, scale)
+    DATA(Item::Component::MaterializeAsMeshEntity, rotation);
+
+  REFLECT_COMPONENT(Item::Component::Usable, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Usable, timeBetweenUses);
+
+  REFLECT_COMPONENT(Item::Component::Stackable, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Stackable, maxStackSize);
+  
+  REFLECT_COMPONENT(Item::Component::ColliderWhenDropped, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::ColliderWhenDropped, shape)
+    DATA(Item::Component::ColliderWhenDropped, translation)
+    DATA(Item::Component::ColliderWhenDropped, rotation)
+    DATA(Item::Component::ColliderWhenDropped, friction);
+  
+  REFLECT_COMPONENT(Item::Component::AllowedSlots, ITEM_COMPONENT | REPLICATED);
+
+  REFLECT_ENUM(Item::Component::AllowedSlots)
+    ENUMERATOR(Item::Component::AllowedSlots, Normal)
+    ENUMERATOR(Item::Component::AllowedSlots, Head)
+    ENUMERATOR(Item::Component::AllowedSlots, Body)
+    ENUMERATOR(Item::Component::AllowedSlots, Legs)
+    ENUMERATOR(Item::Component::AllowedSlots, Accessory)
+    ENUMERATOR(Item::Component::AllowedSlots, Hidden);
+
+  REFLECT_COMPONENT(Item::Component::StaticEffect, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::StaticEffect, condition)
+    DATA(Item::Component::StaticEffect, quantityType)
+    DATA(Item::Component::StaticEffect, type)
+    DATA(Item::Component::StaticEffect, amount);
+
+  REFLECT_COMPONENT(Item::Component::StaticEffects, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::StaticEffects, effects);
+  
+  REFLECT_COMPONENT(Item::Component::Gun, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Gun, model)
+    DATA(Item::Component::Gun, tint)
+    DATA(Item::Component::Gun, scale)
+    DATA(Item::Component::Gun, damage)
+    DATA(Item::Component::Gun, knockback)
+    DATA(Item::Component::Gun, bullets)
+    DATA(Item::Component::Gun, velocity)
+    DATA(Item::Component::Gun, accuracyMoa)
+    DATA(Item::Component::Gun, vrecoil)
+    DATA(Item::Component::Gun, vrecoilDev)
+    DATA(Item::Component::Gun, hrecoil)
+    DATA(Item::Component::Gun, hrecoilDev)
+    DATA(Item::Component::Gun, light)
+    DATA(Item::Component::Gun, sticky)
+    DATA(Item::Component::Gun, stickyDist);
+
+  REFLECT_COMPONENT(Item::Component::MaterializeAsSprite, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::MaterializeAsSprite, tag)
+    DATA(Item::Component::MaterializeAsSprite, tint);
+
+  REFLECT_COMPONENT(Item::Component::Rainbow, ITEM_COMPONENT | REPLICATED);
+
+  REFLECT_COMPONENT(Item::Component::Tool, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Tool, blockDamage)
+    DATA(Item::Component::Tool, blockDamageTier)
+    DATA(Item::Component::Tool, blockDamageFlags);
+
+  REFLECT_COMPONENT(Item::Component::SpawnEntityPrefabOnUse, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::SpawnEntityPrefabOnUse, tag);
+  
+  REFLECT_COMPONENT(Item::Component::HealUserOnUse, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::HealUserOnUse, amount);
+  
+  REFLECT_COMPONENT(Item::Component::Block, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Block, voxel);
+  
+  REFLECT_COMPONENT(Item::Component::SpawnTempHurtboxOnUse, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::SpawnTempHurtboxOnUse, shape)
+    DATA(Item::Component::SpawnTempHurtboxOnUse, position)
+    DATA(Item::Component::SpawnTempHurtboxOnUse, damage)
+    DATA(Item::Component::SpawnTempHurtboxOnUse, knockback)
+    DATA(Item::Component::SpawnTempHurtboxOnUse, duration);
+
+  // TODO: reflect AnimatePathOnUse
+
+  REFLECT_COMPONENT(Item::Component::GiveEffectOnUse, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::GiveEffectOnUse, effectId)
+    DATA(Item::Component::GiveEffectOnUse, duration);
 }

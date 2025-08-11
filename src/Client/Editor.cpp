@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "Core/Assert2.h"
+#include "Game/Item.h"
 #include "entt/meta/resolve.hpp"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
@@ -154,14 +155,13 @@ namespace
 } // namespace
 
 // Recursive
-void VoxelRenderer::DrawEntityHelper(World& world, entt::entity e, [[maybe_unused]] const Hierarchy* h)
+void VoxelRenderer::DrawEntityHelper(entt::registry& registry, entt::entity e, const Hierarchy* h)
 {
-  auto& registry = world.GetRegistryRaw();
   ImGui::PushID((int)e);
   bool opened = false;
 
   int flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
-  if (selectedEntity == e)
+  if (selectedHandle == entt::handle{registry, e})
   {
     flags |= ImGuiTreeNodeFlags_Selected;
   }
@@ -183,7 +183,7 @@ void VoxelRenderer::DrawEntityHelper(World& world, entt::entity e, [[maybe_unuse
   // Single-clicking anywhere should select the node
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
   {
-    selectedEntity = e;
+    selectedHandle = {registry, e};
   }
 
   if (opened)
@@ -192,23 +192,44 @@ void VoxelRenderer::DrawEntityHelper(World& world, entt::entity e, [[maybe_unuse
     {
       for (auto child : h->children)
       {
-        DrawEntityHelper(world, child, registry.try_get<const Hierarchy>(child));
+        DrawEntityHelper(registry, child, registry.try_get<const Hierarchy>(child));
       }
     }
     ImGui::TreePop();
   }
   ImGui::PopID();
 }
-void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
+
+void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, EditorMode mode)
 {
-  auto& registry = world.GetRegistryRaw();
-  if (ImGui::Begin("Entities"))
+  const char* title = nullptr;
+  entt::registry* pRegistry{};
+  switch (mode)
+  {
+  case EditorMode::Entities:
+  {
+    pRegistry = &world.GetRegistryRaw();
+    title     = "Entities";
+    break;
+  }
+  case EditorMode::Items:
+  {
+    pRegistry = &world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+    title     = "Items";
+    break;
+  }
+  }
+
+  auto& registry = *pRegistry;
+
+  if (ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
   {
     ImGui::Text("Count: %d", registry.view<entt::entity>().size());
-    ZoneScopedN("Entities");
+    ZoneScopedN("Editor");
+    ZoneText(title, std::strlen(title));
     if (!ImGui::IsAnyItemHovered() && ImGui::IsWindowHovered() && ImGui::GetIO().MouseClicked[ImGuiMouseButton_Left])
     {
-      selectedEntity = entt::null;
+      selectedHandle = {};
     }
 
     static char buffer[256]{};
@@ -266,24 +287,31 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
         // Draw only root nodes.
         if (const auto* h = registry.try_get<const Hierarchy>(e); !h || h->parent == entt::null)
         {
-          DrawEntityHelper(world, e, h);
+          DrawEntityHelper(registry, e, h);
         }
       }
     }
   }
   ImGui::End();
 
+  if (selectedHandle.registry() != pRegistry)
+  {
+    ImGui::Begin("Components");
+    ImGui::End();
+    return;
+  }
+
   if (ImGui::Begin("Components"))
   {
     ZoneScopedN("Components");
-    if (registry.valid(selectedEntity))
+    if (selectedHandle.valid())
     {
       int openAction = 0;
       openAction += ImGui::Button("Expand all");
       ImGui::SameLine();
       openAction += -(int)ImGui::Button("Collapse all");
 
-      auto e = selectedEntity;
+      auto e = selectedHandle.entity();
       ImGui::SameLine();
       if (ImGui::Button("Delete Entity"))
       {
@@ -307,7 +335,22 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
 
         for (auto [id, meta] : metas)
         {
-          if (meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::COMPONENT)
+          const auto traits = meta.traits<Core::Reflection::Traits>();
+          bool displayInfo  = false;
+          switch (mode)
+          {
+          case EditorMode::Entities:
+          {
+            displayInfo = traits & Core::Reflection::Traits::COMPONENT && !(traits & Core::Reflection::Traits::ITEM_COMPONENT);
+            break;
+          }
+          case EditorMode::Items:
+          {
+            displayInfo = meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::ITEM_COMPONENT;
+            break;
+          }
+          }
+          if (displayInfo)
           {
             const auto label        = FixupTypeString(meta.info().name());
             auto addFunc            = meta.func("add"_hs);
@@ -319,7 +362,7 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
             }
             if (ImGui::Selectable(label.c_str(), false, flags))
             {
-              if (addFunc)
+              if (addFunc && mode == EditorMode::Entities)
               {
                 addFunc.invoke({}, &world, e); // Can't figure out how to invoke with a reference (std::ref doesn't work), so pointers it is.
               }
@@ -346,21 +389,20 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
         std::string fixupString;
       };
       using namespace entt::literals;
-      static auto storages = std::vector<TypeInfo>();
-      if (!world.GetRegistry().ctx().contains<bool>("isEditorStorageInitialized"_hs)) // Naughty hack to make this sorting only happen once.
+      auto* storages = registry.ctx().find<std::vector<TypeInfo>>();
+      if (!storages)
       {
         ZoneScopedN("Sort editor storages");
         spdlog::debug("[Editor] Sort storages.");
-        storages.clear();
-        world.GetRegistry().ctx().emplace_as<bool>("isEditorStorageInitialized"_hs, true);
+        storages = &registry.ctx().insert_or_assign<std::vector<TypeInfo>>({});
 
-        for (auto pair : world.GetRegistryRaw().storage())
+        for (auto pair : registry.storage())
         {
           auto meta = entt::resolve(pair.first);
-          storages.emplace_back(meta, &pair.second, meta ? FixupTypeString(meta.info().name()) : std::string());
+          storages->emplace_back(meta, &pair.second, meta ? FixupTypeString(meta.info().name()) : std::string());
         }
-        std::sort(storages.begin(),
-          storages.end(),
+        std::sort(storages->begin(),
+          storages->end(),
           [](const TypeInfo& p1, const TypeInfo& p2)
           {
             if (p1.meta && p2.meta)
@@ -374,12 +416,12 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world)
       ImGui::Separator();
       if (ImGui::BeginChild("Component Controls", {0, ImGui::GetContentRegionAvail().y}, 0, ImGuiWindowFlags_NoSavedSettings))
       {
-        for (int i = 0; auto&& [meta, storage, _] : storages)
+        for (int i = 0; auto&& [meta, storage, _] : *storages)
         {
           if (!storage)
           {
             spdlog::debug("[Editor] Null component storage found. Re-sorting storages.");
-            world.GetRegistry().ctx().erase<bool>("isEditorStorageInitialized"_hs);
+            registry.ctx().erase<std::vector<TypeInfo>>();
             continue;
           }
 

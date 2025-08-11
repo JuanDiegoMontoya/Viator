@@ -1396,7 +1396,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   {
     dynamic_cast<PlayerAudio*>(head_->GetAudio())->DrawDebugUI();
 
-    ShowEditor(dt, world);
+    ShowEditor(dt, world, EditorMode::Entities);
+    ShowEditor(dt, world, EditorMode::Items);
 
     if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {

@@ -22,6 +22,8 @@
 #include "glm/mat4x4.hpp"
 #include "glm/vec4.hpp"
 #include "entt/entity/entity.hpp"
+#include "entt/entity/handle.hpp"
+#include "entt/entity/registry.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -86,8 +88,14 @@ private:
 
   void InitGui();
   void LoadGameSettings();
-  void DrawEntityHelper(World& world, entt::entity entity, const struct Hierarchy* h);
-  void ShowEditor(DeltaTime dt, World& world);
+  void DrawEntityHelper(entt::registry& world, entt::entity entity, const struct Hierarchy* h);
+
+  enum class EditorMode
+  {
+    Entities,
+    Items,
+  };
+  void ShowEditor(DeltaTime dt, World& world, EditorMode mode);
   bool ShowSettingsWindow(World& world);
   void OnFramebufferResize(uint32_t newWidth, uint32_t newHeight);
   void OnRender(double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex);
@@ -168,7 +176,7 @@ private:
   shared::TonemapUniforms tonemapUniforms{};
   std::unordered_map<std::string, Fvog::Texture> stringToTexture;
   PlayerHead* head_;
-  entt::entity selectedEntity = entt::null;
+  entt::handle selectedHandle;
 
   // DDGI
   struct DDGI
