@@ -879,57 +879,169 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         const auto& crafting      = world.GetRegistry().ctx().get<Crafting>();
         const auto& blockRegistry = world.GetRegistry().ctx().get<BlockRegistry>();
         static bool showUncraftableRecipes = true;
-        ImGui::Checkbox("Show uncraftable", &showUncraftableRecipes);
-        ImGui::Separator();
+        static auto selectedRecipeIndex    = std::optional<int>();
+
+        static char buffer[256]{};
+        ImGui::Text("Filter");
+        ImGui::SameLine();
+        ImGui::InputText("##Filter", buffer, 256);
+        const auto len = std::strlen(buffer);
+
+        auto scores = std::multimap<double, int, std::greater<double>>();
         for (int index = 0; const auto& recipe : crafting.recipes)
         {
+          auto name = std::string();
+          if (recipe.name.empty())
+          {
+            for (auto output : recipe.output)
+            {
+              name += Item::GetName(world, output.item) + '\n';
+            }
+          }
+          else
+          {
+            name = recipe.name;
+          }
+          scores.emplace(rapidfuzz::fuzz::partial_ratio(buffer, name), index);
+          index++;
+        }
+
+        ImGui::SameLine();
+        ImGui::Checkbox("Show all recipes", &showUncraftableRecipes);
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("Includes recipes that cannot be crafted due to insufficient materials.");
+        }
+
+        ImGui::BeginChild("Left (recipe list)", {ImGui::GetContentRegionAvail().x / 3, ImGui::GetContentRegionAvail().y});
+        for (auto [score, index] : scores)
+        {
+          if (len != 0 && score == 0)
+          {
+            continue;
+          }
+          const auto& recipe        = crafting.recipes[index];
           const bool canCraftRecipe = inventory.CanCraftRecipe(recipe) && nearVoxels.contains(recipe.craftingStation);
           if (!showUncraftableRecipes && !canCraftRecipe)
           {
             continue;
           }
-
-          if (index != 0)
-          {
-            ImGui::Separator();
-          }
+          
+          ImGui::Separator();
           ImGui::PushID(index);
           ImGui::BeginDisabled(!canCraftRecipe);
-          if (ImGui::Button("Craft"))
+
+          const auto cursorPosStart = ImGui::GetCursorPos();
+          if (recipe.name.empty())
+          {
+            for (const auto& output : recipe.output)
+            {
+              ImGui::TextWrapped("%s", Item::GetName(world, output.item).c_str());
+              if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
+              {
+                DrawTooltipForItem(world, playerEntity, {.id = output.item, .count = output.count});
+              }
+            }
+          }
+          else
+          {
+            ImGui::TextWrapped("%s", recipe.name.c_str());
+          }
+
+          const auto cursorPosEnd = ImGui::GetCursorPos();
+          ImGui::SetCursorPos(cursorPosStart);
+          ImGui::EndDisabled();
+          if (ImGui::Selectable("", selectedRecipeIndex ? *selectedRecipeIndex == index : false, 0, {ImGui::GetContentRegionAvail().x, cursorPosEnd.y - cursorPosStart.y}))
+          {
+            selectedRecipeIndex = index;
+          }
+          ImGui::PopID();
+        }
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("Right (recipe details)", {ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y});
+        if (selectedRecipeIndex.has_value())
+        {
+          const auto& recipe        = crafting.recipes[*selectedRecipeIndex];
+          const bool canCraftRecipe = inventory.CanCraftRecipe(recipe) && nearVoxels.contains(recipe.craftingStation);
+          ImGui::BeginDisabled(!canCraftRecipe);
+          if (ImGui::Button("Craft", {60, 40}))
           {
             Networking::CallRPC("TryCraftRecipeRPC"_hs, world, playerEntity, recipe);
           }
-          ImGui::Text("Output");
+          ImGui::EndDisabled();
+          ImGui::Separator();
+
+          ImGui::Text("Produces");
           ImGui::Indent();
           for (const auto& output : recipe.output)
           {
-            ImGui::TextWrapped("%s: %d", Item::GetName(world, output.item).c_str(), output.count);
+            auto color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            color.x *= .85f;
+            color.y *= .85f;
+            ImGui::TextColored(color, "%s x%d", Item::GetName(world, output.item).c_str(), output.count);
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
             {
               DrawTooltipForItem(world, playerEntity, {.id = output.item, .count = output.count});
             }
           }
           ImGui::Unindent();
-
+          ImGui::Separator();
+          
           ImGui::Text("Ingredients");
           ImGui::Indent();
           for (const auto& ingredient : recipe.ingredients)
           {
-            ImGui::TextWrapped("%s: %d", Item::GetName(world, ingredient.item).c_str(), ingredient.count);
+            auto color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            color.z *= .5f;
+            if (inventory.CountItem(ingredient.item) < ingredient.count)
+            {
+              color.y *= .5f; // Red
+            }
+            else
+            {
+              color.x *= .5f; // Green
+            }
+            ImGui::TextColored(color, "%s x%d", Item::GetName(world, ingredient.item).c_str(), ingredient.count);
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled))
             {
               DrawTooltipForItem(world, playerEntity, {.id = ingredient.item, .count = ingredient.count});
             }
           }
           ImGui::Unindent();
+
           if (recipe.craftingStation != voxel_t::Air)
           {
-            ImGui::Text("Required: %s", blockRegistry.Get(recipe.craftingStation).GetName().c_str());
+            ImGui::Separator();
+            ImGui::Text("Crafting station");
+            auto color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            color.z *= .5f;
+            if (!nearVoxels.contains(recipe.craftingStation))
+            {
+              color.y *= .5f; // Red
+            }
+            else
+            {
+              color.x *= .5f; // Green
+            }
+            ImGui::Indent();
+            ImGui::TextColored(color, "%s", blockRegistry.Get(recipe.craftingStation).GetName().c_str());
+            ImGui::Unindent();
           }
-          ImGui::EndDisabled();
-          ImGui::PopID();
-          index++;
+
+          if (!recipe.description.empty())
+          {
+            ImGui::Separator();
+            auto color = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            color.w *= .5f;
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::TextWrapped("%s", recipe.description.c_str());
+            ImGui::PopStyleColor();
+          }
         }
+        ImGui::EndChild();
       }
       ImGui::End();
     }

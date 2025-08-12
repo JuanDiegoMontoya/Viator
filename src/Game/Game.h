@@ -193,6 +193,8 @@ struct Crafting
     std::vector<ItemIdAndCount> ingredients;
     std::vector<ItemIdAndCount> output;
     BlockId craftingStation = voxel_t(0);
+    std::string name;
+    std::string description;
   };
 
   std::vector<Recipe> recipes;
@@ -230,7 +232,8 @@ struct Inventory
   void TryStackItem(World& world, ItemState& item);
   std::optional<glm::ivec2> GetFirstEmptySlot() const;
 
-  bool CanCraftRecipe(Crafting::Recipe recipe) const;
+  int CountItem(ItemId item) const;
+  bool CanCraftRecipe(const Crafting::Recipe& recipe) const;
 };
 
 void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol);

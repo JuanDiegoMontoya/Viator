@@ -920,25 +920,27 @@ std::optional<glm::ivec2> Inventory::GetFirstEmptySlot() const
   return std::nullopt;
 }
 
-bool Inventory::CanCraftRecipe(Crafting::Recipe recipe) const
+int Inventory::CountItem(ItemId item) const
 {
-  for (auto& ingredient : recipe.ingredients)
+  int count = 0;
+  for (const auto& row : slots)
   {
-    for (const auto& row : slots)
+    for (const auto& slot : row)
     {
-      for (const auto& slot : row)
+      if (slot.id == item)
       {
-        if (slot.id == ingredient.item)
-        {
-          ingredient.count -= (int)slot.count;
-        }
+        count += (int)slot.count;
       }
     }
   }
-  
+  return count;
+}
+
+bool Inventory::CanCraftRecipe(const Crafting::Recipe& recipe) const
+{
   for (const auto& ingredient : recipe.ingredients)
   {
-    if (ingredient.count > 0)
+    if (CountItem(ingredient.item) < ingredient.count)
     {
       return false;
     }
