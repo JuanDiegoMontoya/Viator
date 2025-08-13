@@ -23,7 +23,7 @@ public:
   // After FixedUpdate
   virtual void VariableUpdatePost(DeltaTime dt, World& world) = 0;
 
-  virtual void CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>>) {}
+  virtual void CreateRenderingMaterials([[maybe_unused]] const World& world) {}
 
   virtual Audio* GetAudio() = 0;
 };

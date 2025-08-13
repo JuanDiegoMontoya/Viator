@@ -82,7 +82,7 @@ public:
   explicit VoxelRenderer(PlayerHead* head, World& world);
   ~VoxelRenderer();
 
-  void CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions);
+  void CreateRenderingMaterials(const World& world);
 
 private:
 
@@ -94,6 +94,7 @@ private:
   {
     Entities,
     Items,
+    Blocks,
   };
   void ShowEditor(DeltaTime dt, World& world, EditorMode mode);
   bool ShowSettingsWindow(World& world);

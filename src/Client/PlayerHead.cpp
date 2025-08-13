@@ -353,9 +353,9 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
   }
 }
 
-void PlayerHead::CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions)
+void PlayerHead::CreateRenderingMaterials(const World& world)
 {
-  voxelRenderer_->CreateRenderingMaterials(blockDefinitions);
+  voxelRenderer_->CreateRenderingMaterials(world);
 }
 
 Audio* PlayerHead::GetAudio()

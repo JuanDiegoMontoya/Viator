@@ -18,7 +18,7 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
     const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
     const auto& air    = blocks.Get("Air");
     const auto& wood   = blocks.Get("Wood Plank");
@@ -35,11 +35,11 @@ public:
           const auto blockPos = worldPos + glm::ivec3(x, y, z);
           if (x == -ds || x == ds || y == -ds || y == ds || z == -ds || z == ds)
           {
-            wood.OnTryPlaceBlock(world, blockPos);
+            Block::OnTryPlaceBlock(world, blockPos, wood);
           }
           else if (x == 0 && y == -ds + 1 && z == 0)
           {
-            if (chest.OnTryPlaceBlock(world, blockPos))
+            if (Block::OnTryPlaceBlock(world, blockPos, chest))
             {
               auto chestEntity = world.GetBlockEntity(blockPos);
               ASSERT(chestEntity != entt::null);
@@ -52,11 +52,11 @@ public:
           }
           else if (x == 0 && y == ds - 1 && z == 0)
           {
-            light.OnTryPlaceBlock(world, blockPos);
+            Block::OnTryPlaceBlock(world, blockPos, light);
           }
           else
           {
-            air.OnTryPlaceBlock(world, blockPos);
+            Block::OnTryPlaceBlock(world, blockPos, air);
           }
         }
       }
@@ -71,7 +71,7 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks    = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& blocks    = world.GetRegistry().ctx().get<Block::Registry>();
     const auto& vinesMain = blocks.Get("vines_main");
     const auto& vinesEnd  = blocks.Get("vines_end");
 
@@ -93,11 +93,11 @@ public:
       return;
     }
 
-    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, vinesEnd.GetBlockId());
+    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, vinesEnd);
 
     for (int y = 0; y > -(freeRealEstate - 1); y--)
     {
-      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, vinesMain.GetBlockId());
+      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, vinesMain);
     }
   }
 };
@@ -109,7 +109,7 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks    = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& blocks    = world.GetRegistry().ctx().get<Block::Registry>();
     const auto& rootsMain = blocks.Get("roots_main");
     const auto& rootsEnd  = blocks.Get("roots_end");
 
@@ -131,11 +131,11 @@ public:
       return;
     }
 
-    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, rootsEnd.GetBlockId());
+    grid.SetVoxelAt(worldPos + glm::ivec3{0, -(freeRealEstate - 1), 0}, rootsEnd);
 
     for (int y = 0; y > -(freeRealEstate - 1); y--)
     {
-      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, rootsMain.GetBlockId());
+      grid.SetVoxelAt(worldPos + glm::ivec3{0, y, 0}, rootsMain);
     }
   }
 };
@@ -149,10 +149,10 @@ public:
   {
     ZoneScoped;
     auto& grid         = world.GetRegistry().ctx().get<TwoLevelGrid>();
-    const auto& blocks = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
     const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
-    const auto& air    = blocks.Get("Air");
-    const auto& wood   = blocks.Get("Wood Plank");
+    const auto& air    = blocks.Get("air");
+    const auto& wood   = blocks.Get("plank_wood");
     
     constexpr int MIN_ROOM_DIM = 5;
     constexpr int MAX_ROOM_DIM = 8;
@@ -165,12 +165,12 @@ public:
     for (uint32_t zl = 0; zl < roomLength; zl++)
     for (uint32_t xl = 0; xl < roomWidth; xl++)
     {
-      wood.OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 0, zl));
+      Block::OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 0, zl), wood);
       const auto& block = xl == 0 || xl == roomWidth - 1 || zl == 0 || zl == roomLength - 1 ? wood : air;
-      for (uint32_t yl = 1; yl < rng.RandU32(block.GetBlockId() == air.GetBlockId() ? 2 : 1, ROOM_HEIGHT); yl++)
+      for (uint32_t yl = 1; yl < rng.RandU32(block == air ? 2 : 1, ROOM_HEIGHT); yl++)
       {
         // Fill edges with wood, interior with air.
-        block.OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, yl, zl));
+        Block::OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, yl, zl), block);
       }
 
       // Supporting column
@@ -182,7 +182,7 @@ public:
           const auto voxel = grid.GetVoxelAt(pos);
           if (voxel == voxel_t::Air)
           {
-            wood.OnTryPlaceBlock(world, pos);
+            Block::OnTryPlaceBlock(world, pos, wood);
           }
           else
           {
@@ -197,14 +197,14 @@ public:
     {
       const auto xl = rng.RandU32(1, roomWidth - 1);
       const auto zl = rng.RandU32(1, roomLength - 1);
-      blocks.Get("table").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+      Block::OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl), blocks.Get("table"));
     }
     
     if (rng.RandFloat() < 0.75f)
     {
       const auto xl = rng.RandU32(1, roomWidth - 1);
       const auto zl = rng.RandU32(1, roomLength - 1);
-      blocks.Get("chair").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+      Block::OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl), blocks.Get("chair"));
     }
 
     for (int i = 0; i < 2; i++)
@@ -213,7 +213,7 @@ public:
       {
         const auto xl = rng.RandU32(1, roomWidth - 1);
         const auto zl = rng.RandU32(1, roomLength - 1);
-        blocks.Get("pot").OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl));
+        Block::OnTryPlaceBlock(world, worldPos + glm::ivec3(xl, 1, zl), blocks.Get("pot"));
       }
     }
 
@@ -222,7 +222,7 @@ public:
       const auto xl = rng.RandU32(1, roomWidth - 1);
       const auto zl = rng.RandU32(1, roomLength - 1);
       const auto blockPos = worldPos + glm::ivec3(xl, 1, zl);
-      if (blocks.Get("Cheste").OnTryPlaceBlock(world, blockPos))
+      if (Block::OnTryPlaceBlock(world, blockPos, blocks.Get("chest")))
       {
         auto chestEntity = world.GetBlockEntity(blockPos);
         ASSERT(chestEntity != entt::null);
@@ -247,10 +247,10 @@ public:
     auto cloudNoise = FastNoise::NewFromEncodedNodeTree(
       "JQAK@BBRUFFwUOBQsAAIDSQgRI4erACI/C9b7//wMNBQY@ADiQQT2KFw/CNejEED///8DFgMXBQUDFwUE@BgD//AwAAw/UoP///CxcF/wYAAwQIAACAP////wIK1yM8/waPwvU9////");
     constexpr auto regionSize = glm::ivec3(75, 32, 75);
-    const auto& blocks        = world.GetRegistry().ctx().get<BlockRegistry>();
+    const auto& blocks        = world.GetRegistry().ctx().get<Block::Registry>();
     const auto& grid          = world.GetRegistry().ctx().get<TwoLevelGrid>();
     const auto& cloudA        = blocks.Get("cloud");
-    const auto& cloudB        = blocks.Get("Cloud B");
+    const auto& cloudB        = blocks.Get("cloud_b");
     const auto seed           = int(world.GetRegistry().ctx().get<PCG::Rng>().RandU32(0, 1 << 20));
 
     // Island shape
@@ -263,11 +263,11 @@ public:
       const auto density  = cloudNoise->GenSingle3D((float)localPos.x, (float)localPos.y, (float)localPos.z, seed);
       if (density <= -0.3f)
       {
-        cloudB.OnTryPlaceBlock(world, pos);
+        Block::OnTryPlaceBlock(world, pos, cloudB);
       }
       else if (density <= 0)
       {
-        cloudA.OnTryPlaceBlock(world, pos);
+        Block::OnTryPlaceBlock(world, pos, cloudA);
       }
     }
 
@@ -422,205 +422,250 @@ void World::InitializeGameDefinitions()
   const auto leadShirtId  = Item::CreateArmor(items, "armor_lead_chest", "Lead Polo", Item::Component::AllowedSlots::Body, 3, "potion_healing");
   const auto leadPantsId  = Item::CreateArmor(items, "armor_lead_leg", "Lead Shoes", Item::Component::AllowedSlots::Legs, 3, "potion_healing");
 
-  auto& blocks = registry_.ctx().insert_or_assign<BlockRegistry>(*this);
+  auto& blocks = registry_.ctx().insert_or_assign<Block::Registry>({});
 
-  const auto& stoneBlock = blocks.Get(blocks.Add(new BlockDefinition({
-    .name        = "Stone",
-    .damageTier  = 2,
-    .damageFlags = BlockDamageFlagBit::PICKAXE,
-    .voxelMaterialDesc =
-      {
+  const auto stoneBlock = Block::CreateStandardBlock(*this,
+    {
+      "stone",
+      "Stone",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 2,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "stone_albedo",
       },
-  })));
+    });
 
-  [[maybe_unused]] const auto& dirtBlock = blocks.Get(blocks.Add(new BlockDefinition({
-    .name        = "Dirt",
-    .initialHealth = 75,
-    .damageTier  = 2,
-    .damageFlags = BlockDamageFlagBit::PICKAXE,
-    .voxelMaterialDesc =
-      {
+  [[maybe_unused]] const auto dirtBlock = Block::CreateStandardBlock(*this,
+    {
+      "dirt",
+      "Dirt",
+      Block::Component::Breakable{
+        .initialHealth = 75,
+        .damageTier    = 2,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "dirt_albedo",
       },
-  })));
+    });
 
-  blocks.Add(new BlockDefinition({
-    .name          = "Cloud B",
-    .initialHealth = 50,
-    .damageTier    = 1,
-    .voxelMaterialDesc =
-      {
-        .baseColorFactor = {0.85f, 0.85f, 0.85f}
+  Block::CreateStandardBlock(*this,
+    {
+      "cloud_b",
+      "Cloud B",
+      Block::Component::Breakable{
+        .initialHealth = 50,
+        .damageTier    = 1,
       },
-  }));
+      Block::Component::RenderAsTexturedCube{
+        .baseColorFactor = {0.85f, 0.85f, 0.85f},
+      },
+    });
 
-  [[maybe_unused]] const auto stoneBlockId = stoneBlock.GetItemId();
+  [[maybe_unused]] const auto stoneBlockId = Block::GetItemId(*this, stoneBlock);
 
-  [[maybe_unused]] const auto frogLightId = blocks
-                                              .Get(blocks.Add(new BlockDefinition({
-                                                .name              = "Frog light",
-                                                .initialHealth     = 50,
-                                                .voxelMaterialDesc = {.baseColorFactor = {0, 0, 0}, .emissionFactor = {1, 5, 1}},
-                                              })))
-                                              .GetItemId();
-
-  [[maybe_unused]] const auto grassBlockId = blocks
-                                               .Get(blocks.Add(new BlockDefinition({
-                                                 .name          = "Grass",
-                                                 .initialHealth = 50,
-                                                 .damageTier    = 1,
-                                                 .damageFlags   = BlockDamageFlagBit::PICKAXE,
-                                                 .voxelMaterialDesc =
-                                                   {
-                                                     .randomizeTexcoordRotation = true,
-                                                     .baseColorTexture          = "grass_albedo",
-                                                   },
-                                               })))
-                                               .GetItemId();
-
-  [[maybe_unused]] const auto malachiteBlockId = blocks
-                                                   .Get(blocks.Add(new BlockDefinition({
-                                                     .name          = "Malachite",
-                                                     .initialHealth = 100,
-                                                     .damageTier    = 2,
-                                                     .damageFlags   = BlockDamageFlagBit::PICKAXE,
-                                                     .voxelMaterialDesc =
-                                                       {
-                                                         .randomizeTexcoordRotation = true,
-                                                         .baseColorTexture          = "malachite_albedo",
-                                                         .isValuable                = true,
-                                                       },
-                                                   })))
-                                                   .GetItemId();
-
-  [[maybe_unused]] const auto galenaBlockId = blocks
-                               .Get(blocks.Add(new BlockDefinition({
-                                 .name          = "Galena",
-                                 .initialHealth = 100,
-                                 .damageTier    = 3,
-                                 .damageFlags   = BlockDamageFlagBit::PICKAXE,
-                                 .voxelMaterialDesc =
-                                   {
-                                     .randomizeTexcoordRotation = true,
-                                     .baseColorTexture          = "galena_albedo",
-                                     .isValuable                = true,
-                                   },
-                               })))
-                               .GetItemId();
-
-  [[maybe_unused]] const auto forgeBlockItemId = blocks
-                                                   .Get(blocks.Add(new BlockDefinition({
-                                                     .name          = "Forge",
-                                                     .initialHealth = 100,
-                                                     .damageTier    = 1,
-                                                     .damageFlags   = BlockDamageFlagBit::PICKAXE,
-                                                     .voxelMaterialDesc =
-                                                       {
-                                                         .baseColorTexture = "forge_side_albedo",
-                                                         .emissionTexture  = "forge_side_emission",
-                                                         .emissionFactor   = {3, 3, 3},
-                                                       },
-                                                   })))
-                                                   .GetItemId();
-
-  [[maybe_unused]] const auto bombId = blocks
-                                         .Get(blocks.Add(new ExplodeyBlockDefinition(
-                                           {
-                                             .name              = "Bomb",
-                                             .initialHealth     = 40,
-                                             .voxelMaterialDesc = {.baseColorFactor = {0.8f, 0.2f, 0.2f}, .emissionFactor = {0.1f, 0.01f, 0.01f}},
-                                           },
-                                           {
-                                             .radius      = 3,
-                                             .damage      = 100,
-                                             .damageTier  = 0,
-                                             .pushForce   = 8,
-                                             .damageFlags = BlockDamageFlagBit::PICKAXE | BlockDamageFlagBit::AXE,
-                                           })))
-                                         .GetItemId();
-
-  [[maybe_unused]] const auto stupidBombId = blocks
-                                               .Get(blocks.Add(new ExplodeyBlockDefinition(
-                                                 {
-                                                   .name              = "Stupid Bomb",
-                                                   .initialHealth     = 40,
-                                                   .voxelMaterialDesc = {.baseColorFactor = {0.8f, 0.2f, 0.2f}, .emissionFactor = {0.5f, 0.1f, 0.1f}},
-                                                 },
-                                                 {
-                                                   .radius      = 8,
-                                                   .damage      = 100,
-                                                   .damageTier  = 2,
-                                                   .pushForce   = 10,
-                                                   .damageFlags = BlockDamageFlagBit::PICKAXE | BlockDamageFlagBit::AXE | BlockDamageFlagBit::NO_LOOT,
-                                                 })))
-                                               .GetItemId();
-
-  [[maybe_unused]] const auto woodBlockId = blocks.Add(new BlockDefinition({
-    .name          = "Wood",
-    .initialHealth = 100,
-    .damageTier    = 1,
-    .damageFlags   = BlockDamageFlagBit::AXE,
-    .lootDrop      = "tree",
-    .voxelMaterialDesc =
+  [[maybe_unused]] const auto frogLightId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
       {
+        "frog_light",
+        "Frog Light",
+        Block::Component::Breakable{
+          .initialHealth = 50,
+        },
+        Block::Component::RenderAsTexturedCube{
+          .baseColorFactor = {0, 0, 0},
+          .emissionFactor  = {1, 5, 1},
+        },
+      }));
+
+  [[maybe_unused]] const auto grassBlockId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "grass",
+        "Grass",
+        Block::Component::Breakable{
+          .initialHealth = 50,
+          .damageTier    = 1,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube{
+          .randomizeTexcoordRotation = true,
+          .baseColorTexture          = "grass_albedo",
+        },
+      }));
+
+  const auto malachiteBlockId = Block::CreateStandardBlock(*this,
+    {"malachite",
+      "Malachite",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 2,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{
+        .randomizeTexcoordRotation = true,
+        .baseColorTexture          = "malachite_albedo",
+      }});
+  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(malachiteBlockId));
+
+  const auto galenaBlockId = Block::CreateStandardBlock(*this,
+    {
+      "galena",
+      "Galena",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 3,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{
+        .randomizeTexcoordRotation = true,
+        .baseColorTexture          = "galena_albedo",
+      },
+    });
+  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(galenaBlockId));
+
+  [[maybe_unused]] const auto forgeBlockItemId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "forge",
+        "Forge",
+        Block::Component::Breakable{
+          .initialHealth = 100,
+          .damageTier    = 1,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube{
+          .baseColorTexture = "forge_side_albedo",
+          .emissionTexture  = "forge_side_emission",
+          .emissionFactor   = {3, 3, 3},
+        },
+      }));
+
+  const auto bombBlockId = Block::CreateStandardBlock(*this,
+    {
+      .tag = "bomb",
+      .name = "Bomb",
+      .breakable = Block::Component::Breakable{
+        .initialHealth = 40,
+      },
+      .render = Block::Component::RenderAsTexturedCube{
+        .baseColorFactor = {0.8f, 0.2f, 0.2f},
+        .emissionFactor  = {0.1f, 0.01f, 0.01f},
+      },
+      .explode = Block::Component::ExplodeWhenBroken{
+        .radius      = 3,
+        .damage      = 100,
+        .damageTier  = 0,
+        .pushForce   = 8,
+        .damageFlags = BlockDamageFlagBit::PICKAXE | BlockDamageFlagBit::AXE,
+      }
+    });
+  
+  [[maybe_unused]] const auto bombId = Block::GetItemId(*this, bombBlockId);
+
+  const auto bigBombBlockId = Block::CreateStandardBlock(*this,
+    {
+      .tag = "bomb_big",
+      .name = "Big Bomb",
+      .breakable = Block::Component::Breakable{
+        .initialHealth = 40,
+      },
+      .render = Block::Component::RenderAsTexturedCube{
+        .baseColorFactor = {0.8f, 0.2f, 0.2f},
+        .emissionFactor  = {0.5f, 0.1f, 0.1f},
+      },
+      .explode = Block::Component::ExplodeWhenBroken{
+        .radius      = 8,
+        .damage      = 100,
+        .damageTier  = 2,
+        .pushForce   = 10,
+        .damageFlags = BlockDamageFlagBit::PICKAXE | BlockDamageFlagBit::AXE | BlockDamageFlagBit::NO_LOOT,
+      }
+    });
+  
+  [[maybe_unused]] const auto bigBombId = Block::GetItemId(*this, bigBombBlockId);
+
+  [[maybe_unused]] const auto woodBlockId = Block::CreateStandardBlock(*this,
+    {
+      "wood",
+      "Wood",
+      Block::Component::Breakable{
+        .initialHealth  = 100,
+        .damageTier     = 1,
+        .damageFlags    = BlockDamageFlagBit::AXE,
+        .dropWhenBroken = "tree",
+      },
+      Block::Component::RenderAsTexturedCube{
         .baseColorFactor = {0.39f, 0.24f, 0.08f},
       },
-  }));
+    });
 
-  blocks.Add(new BlockDefinition({
-    .name          = "Wood Plank",
-    .initialHealth = 75,
-    .damageTier    = 1,
-    .damageFlags   = BlockDamageFlagBit::AXE,
-    .voxelMaterialDesc =
-      {
+  Block::CreateStandardBlock(*this,
+    {
+      "plank_wood",
+      "Wood Plank",
+      Block::Component::Breakable{
+        .initialHealth  = 75,
+        .damageTier     = 1,
+        .damageFlags    = BlockDamageFlagBit::AXE,
+        .dropWhenBroken = "tree",
+      },
+      Block::Component::RenderAsTexturedCube{
         .baseColorTexture = "wood_plank_albedo",
       },
-  }));
+    });
 
-  auto RegisterFoliageBlock = [&](const char* name, bool dropsSelf) -> BlockId
+  auto RegisterFoliageBlock = [&](const char* tag, const char* name, bool dropsSelf) -> BlockId
   {
-    auto vox = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(name) + ".vox"));
-    return blocks.Add(new BlockDefinition({
-      .name          = name,
-      .initialHealth = 10,
-      .lootDrop = dropsSelf ? decltype(BlockDefinition::CreateInfo::lootDrop)(DropSelf{}) : decltype(BlockDefinition::CreateInfo::lootDrop)(std::monostate{}),
-      .voxelMaterialDesc =
-        VoxelMaterialDesc{
+    auto vox       = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(tag) + ".vox"));
+    using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
+    return Block::CreateStandardBlock(*this,
+      {
+        tag,
+        name,
+        Block::Component::Breakable{
+          .initialHealth  = 10,
+          .dropWhenBroken = dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
+        },
+        Block::Component::RenderAsSubGrid{
           .subGrid = VoxToSubGrid(*vox),
         },
-      .isSolid = false,
-    }));
+        {
+          .isSolid = false,
+        },
+      });
   };
 
-  RegisterFoliageBlock("test", true);
-  RegisterFoliageBlock("grass_long", false);
-  RegisterFoliageBlock("grass_medium", false);
-  RegisterFoliageBlock("grass_short", false);
-  RegisterFoliageBlock("mushroom", true);
-  RegisterFoliageBlock("mushroom_glowing", true);
-  RegisterFoliageBlock("rock_small", false);
-  RegisterFoliageBlock("vines_end", false);
-  RegisterFoliageBlock("vines_main", false);
-  RegisterFoliageBlock("roots_end", false);
-  RegisterFoliageBlock("roots_main", false);
-  RegisterFoliageBlock("bush_01", false);
-  RegisterFoliageBlock("bush_02", false);
-  RegisterFoliageBlock("grass_double_base", false);
-  RegisterFoliageBlock("grass_double_top", false);
-  RegisterFoliageBlock("leaves_01", false);
-  RegisterFoliageBlock("leaves_02", false);
-  RegisterFoliageBlock("dandelion", true);
-  RegisterFoliageBlock("rose", true);
-  RegisterFoliageBlock("pot", true);
-  RegisterFoliageBlock("SM_Deccer_Cubes_Small", true);
-  RegisterFoliageBlock("chair", true);
-  RegisterFoliageBlock("table", true);
-  RegisterFoliageBlock("cloud", true);
-  RegisterFoliageBlock("anvil_lead", true);
+  RegisterFoliageBlock("test", "Test", true);
+  RegisterFoliageBlock("grass_long", "Long Grass", false);
+  RegisterFoliageBlock("grass_medium", "Medium Grass", false);
+  RegisterFoliageBlock("grass_short", "Short Grass", false);
+  RegisterFoliageBlock("mushroom", "Mushroom", true);
+  RegisterFoliageBlock("mushroom_glowing", "Glowing Mushroom", true);
+  RegisterFoliageBlock("rock_small", "Small Rock", false);
+  RegisterFoliageBlock("vines_end", "Vines End", false);
+  RegisterFoliageBlock("vines_main", "Vines Main", false);
+  RegisterFoliageBlock("roots_end", "Roots End", false);
+  RegisterFoliageBlock("roots_main", "Roots Main", false);
+  RegisterFoliageBlock("bush_01", "Bush 1", false);
+  RegisterFoliageBlock("bush_02", "Bush 2", false);
+  RegisterFoliageBlock("grass_double_base", "Double Grass Base", false);
+  RegisterFoliageBlock("grass_double_top", "Double Grass Top", false);
+  RegisterFoliageBlock("leaves_01", "Leaves 1", false);
+  RegisterFoliageBlock("leaves_02", "Leaves 2", false);
+  RegisterFoliageBlock("dandelion", "Dandelion", true);
+  RegisterFoliageBlock("rose", "Rose", true);
+  RegisterFoliageBlock("pot", "Pot", true);
+  RegisterFoliageBlock("SM_Deccer_Cubes_Small", "Deccer's Cubes", true);
+  RegisterFoliageBlock("chair", "Chair", true);
+  RegisterFoliageBlock("table", "Table", true);
+  RegisterFoliageBlock("cloud", "Cloud", true);
+  RegisterFoliageBlock("anvil_lead", "Lead Anvil", true);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
@@ -640,67 +685,62 @@ void World::InitializeGameDefinitions()
         }
       }
 
-  [[maybe_unused]] const auto subBlockId = blocks.Add(new BlockDefinition({
-    .name          = "Sub",
-    .initialHealth = 100,
-    .voxelMaterialDesc =
-      VoxelMaterialDesc{
+  [[maybe_unused]] const auto subBlockId = Block::CreateStandardBlock(*this,
+    {
+      "sub",
+      "Sub",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+      },
+      Block::Component::RenderAsSubGrid{
         .subGrid = std::make_shared<TwoLevelGrid::SubGrid>(TwoLevelGrid::SubGrid{
           .dimensions = szz,
           .grid       = std::move(subGrid),
           .materials  = {{glm::vec4(1, 1, 1, 1)}},
         }),
       },
-  }));
+    });
 
-  [[maybe_unused]] const auto lightBlockItemId = blocks
-                                                   .Get(blocks.Add(new BlockDefinition({
-                                                     .name = "Light",
-                                                     .voxelMaterialDesc =
-                                                       VoxelMaterialDesc{
-                                                         //.baseColorTexture          =,
-                                                         //.baseColorFactor           =,
-                                                         //.emissionTexture           =,
-                                                         .emissionFactor = {5, 3, 2},
-                                                       },
-                                                   })))
-                                                   .GetItemId();
+  [[maybe_unused]] const auto lightBlockItemId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "light",
+        "Light",
+        {},
+        Block::Component::RenderAsTexturedCube{.emissionFactor = {5, 3, 2}},
+      }));
 
-  [[maybe_unused]] const auto torchItemId =
-    blocks
-                             .Get(blocks.Add(new BlockEntityDefinition(
-                               {.name = "Torch", .initialHealth = 10, .voxelMaterialDesc = VoxelMaterialDesc{.isInvisible = true}, .isSolid = false},
-                               {.id = torchId})))
-                             .GetItemId();
-  [[maybe_unused]] const auto chestItemId = blocks
-                             .Get(blocks.Add(new BlockEntityDefinition(
-                               {
-                                 .name = "Cheste",
-                                 .voxelMaterialDesc =
-                                   VoxelMaterialDesc{
-                                     .subGrid = VoxToSubGrid(*Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "chest.vox")),
-                                   },
-                               },
-                               {.id = chestId})))
-      .GetItemId();
-  [[maybe_unused]] const auto mushroomBlockItemId = blocks
-                                     .Get(blocks.Add(new BlockEntityDefinition(
-                                       {
-                                         .name              = "Shroom",
-                                         .initialHealth     = 10,
-                                         .voxelMaterialDesc = VoxelMaterialDesc{.isInvisible = true},
-                                         .isSolid           = false,
-                                       },
-                                       {.id = mushroomId})))
-                                     .GetItemId();
+  [[maybe_unused]] const auto torchItemId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        .tag                = "torch",
+        .name               = "Torch",
+        .breakable          = Block::Component::Breakable{.initialHealth = 10},
+        .render             = std::nullopt,
+        .physicalProperties = {.isSolid = false},
+        .entityPrefab       = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = torchId},
+      }));
+
+  [[maybe_unused]] const auto chestItemId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        .tag                = "chest",
+        .name               = "Chest",
+        .breakable = Block::Component::Breakable{},
+        .render =
+          Block::Component::RenderAsSubGrid{
+            .subGrid = VoxToSubGrid(*Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "chest.vox")),
+          },
+        .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = chestId},
+      }));
 
   auto& prefabs = registry_.ctx().insert_or_assign<PrefabRegistry>({});
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();
 
   auto* tallGrass = new SimplePrefab({.name = "Double Grass"});
-  tallGrass->voxels.emplace_back(glm::ivec3(0, 0, 0), blocks.Get("grass_double_base").GetBlockId());
-  tallGrass->voxels.emplace_back(glm::ivec3(0, 1, 0), blocks.Get("grass_double_top").GetBlockId());
+  tallGrass->voxels.emplace_back(glm::ivec3(0, 0, 0), blocks.Get("grass_double_base"));
+  tallGrass->voxels.emplace_back(glm::ivec3(0, 1, 0), blocks.Get("grass_double_top"));
   prefabs.Add(tallGrass);
 
   {
@@ -712,7 +752,7 @@ void World::InitializeGameDefinitions()
         {
           if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
           {
-            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01").GetBlockId());
+            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01"));
           }
         }
     binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
@@ -732,7 +772,7 @@ void World::InitializeGameDefinitions()
         {
           if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
           {
-            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_02").GetBlockId());
+            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_02"));
           }
         }
     binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
@@ -772,30 +812,30 @@ void World::InitializeGameDefinitions()
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{stickId, 3}},
     {{charcoalId, 1}},
-    blocks.Get("Forge").GetBlockId(),
+    blocks.Get("forge"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{stickId, 1}, {charcoalId, 1}},
     {{torchItemId, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{stoneBlockId, 1}, {charcoalId, 1}, {mushroomBlockItemId, 1}},
+    {{stoneBlockId, 1}, {charcoalId, 1}, {Block::GetItemId(*this, blocks.Get("mushroom")), 1}},
     {{healingPotion, 1}},
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{malachiteBlockId, 4}, {charcoalId, 1}},
+    {{Block::GetItemId(*this, malachiteBlockId), 4}, {charcoalId, 1}},
     {{copperIngotId, 1}},
-    blocks.Get("Forge").GetBlockId(),
+    blocks.Get("forge"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
-    {{galenaBlockId, 4}, {charcoalId, 1}},
+    {{Block::GetItemId(*this, galenaBlockId), 4}, {charcoalId, 1}},
     {{leadIngotId, 1}},
-    blocks.Get("Forge").GetBlockId(),
+    blocks.Get("forge"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 10}, {charcoalId, 1}},
-    {{blocks.Get("anvil_lead").GetItemId(), 1}},
-    blocks.Get("Forge").GetBlockId(),
+    {{Block::GetItemId(*this, blocks.Get("anvil_lead")), 1}},
+    blocks.Get("forge"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{copperIngotId, 5}, {stickId, 1}},
@@ -812,17 +852,17 @@ void World::InitializeGameDefinitions()
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadSpearId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadPickaxeId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadAxeId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{copperIngotId, 5}, {stickId, 1}},
@@ -839,17 +879,17 @@ void World::InitializeGameDefinitions()
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadHelmetId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadShirtId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadPantsId, 1}},
-    blocks.Get("anvil_lead").GetBlockId(),
+    blocks.Get("anvil_lead"),
   });
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{coinId, 10}, {stickId, 20}},
@@ -858,6 +898,16 @@ void World::InitializeGameDefinitions()
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{gunId, 1}, {susCoin, 1}},
     {{flareGunId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    {},
+    {{flareGunId, 1}},
+  });
+  crafting.recipes.emplace_back(Crafting::Recipe{
+    .ingredients = {{stickId, 1}},
+    .output      = {{chestItemId, 1}},
+    .name        = "Chest Test",
+    .description = "Makes a really useful item for storing stuff. This block can be placed and interacted with by pressing F.",
   });
 
   auto& loot        = registry_.ctx().insert_or_assign<LootRegistry>({});
@@ -905,19 +955,20 @@ void World::CreateGrid(glm::ivec3 numChunks)
 void World::CreateRenderingMaterials()
 {
   auto voxelMats = std::vector<TwoLevelGrid::Material>();
-  auto blockDefs = registry_.ctx().get<BlockRegistry>().GetAllDefinitions();
-  for (const auto& def : blockDefs)
+  const auto& blocks = registry_.ctx().get<Block::Registry>();
+  const auto& blockMap = blocks.GetIdToTagMap();
+  for (const auto& [id, tag] : blockMap)
   {
     voxelMats.emplace_back(TwoLevelGrid::Material{
-      .isVisible = !def->GetMaterialDesc().isInvisible,
-      .isSolid   = def->GetIsSolid(),
-      .subGrid   = def->GetSubGrid(),
+      .isVisible = Block::IsVisible(*this, id),
+      .isSolid   = Block::IsSolid(*this, id),
+      .subGrid   = Block::GetSubGrid(*this, id),
     });
   }
   registry_.ctx().get<TwoLevelGrid>().SetMaterialArray(std::move(voxelMats));
 
   auto* head = registry_.ctx().get<Head*>();
-  head->CreateRenderingMaterials(blockDefs);
+  head->CreateRenderingMaterials(*this);
 }
 
 void World::CreateInitialEntities()
@@ -1137,11 +1188,11 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto& progress     = registry_.ctx().get<std::atomic_int32_t>("progress"_hs);
   auto& total        = registry_.ctx().get<std::atomic_int32_t>("total"_hs);
 #endif
-  auto& blocks          = registry_.ctx().get<BlockRegistry>();
-  const auto& grass     = blocks.Get("Grass");
-  const auto& dirt     = blocks.Get("Dirt");
-  const auto& malachite = blocks.Get("Malachite");
-  const auto& galena = blocks.Get("Galena");
+  auto& blocks          = registry_.ctx().get<Block::Registry>();
+  const auto& grass     = blocks.Get("grass");
+  const auto& dirt     = blocks.Get("dirt");
+  const auto& malachite = blocks.Get("malachite");
+  const auto& galena = blocks.Get("galena");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE;
@@ -1289,12 +1340,12 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
                 if (positionWS.y == height - 1)
                 {
-                  blockTypeToSet = grass.GetBlockId();
+                  blockTypeToSet = grass;
                 }
                 // Surface and underground biomes' substrate is dirt
                 else if (positionWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
                 {
-                  blockTypeToSet = dirt.GetBlockId();
+                  blockTypeToSet = dirt;
 
                   // Add stone blobs with increasing size as they get closer to caverns.
                   if (TexelFetch3D(stoneInDirtImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, alphaCaverns))
@@ -1314,15 +1365,15 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 }
               }
 
-              if (blockTypeToSet != voxel_t::Air && blockTypeToSet != grass.GetBlockId())
+              if (blockTypeToSet != voxel_t::Air && blockTypeToSet != grass)
               {
                 if (TexelFetch3D(copperImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
                 {
-                  blockTypeToSet = malachite.GetBlockId();
+                  blockTypeToSet = malachite;
                 }
                 else if (TexelFetch3D(leadImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
                 {
-                  blockTypeToSet = galena.GetBlockId();
+                  blockTypeToSet = galena;
                 }
               }
 
@@ -1427,36 +1478,36 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
       if (hasSolidFloor &&
           shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01"));
       }
 
       if (hasSolidFloor &&
           shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 31) * 0.7f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 30) * 0.3f > 0.88f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02"));
       }
 
       if (hasSolidFloor && shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 16) * 0.7f +
             whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 17) * 0.3f >
           0.93f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom"));
       }
       else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) * 0.7f +
                  whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 25) * 0.3f >
                0.95f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose"));
       }
       else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 22) * 0.7f +
                                     whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 23) * 0.3f >
                0.93f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion"));
       }
       else if (hasSolidFloor && whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) > 0.999f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small").GetBlockId());
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small"));
       }
       else // Because it's low priority, grass shouldn't override other foliage.
       {
@@ -1467,15 +1518,15 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         {
           if (grasss > 0.6f)
           {
-            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short").GetBlockId());
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short"));
           }
           if (grasss > 0.7f)
           {
-            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium").GetBlockId());
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium"));
           }
           if (grasss > 0.8f)
           {
-            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long").GetBlockId());
+            grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long"));
           }
           if (grasss > 0.9f)
           {
@@ -1553,7 +1604,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                         0.05f)
                     {
                       auto lk = std::unique_lock(mutex);
-                      if (aboveBlock == dirt.GetBlockId())
+                      if (aboveBlock == dirt)
                       {
                         prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Root"), positionWS);
                       }
@@ -1568,9 +1619,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 if (belowWS.y > 0)
                 {
                   const auto belowBlock = grid.GetVoxelAtUnchecked(belowWS);
-                  if (belowBlock == dirt.GetBlockId() && TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) > 0.98f)
+                  if (belowBlock == dirt && TexelFetch3D(whiteImage, TwoLevelGrid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) > 0.98f)
                   {
-                    grid.SetVoxelAtNoDirty(positionWS, blocks.Get("pot").GetBlockId());
+                    grid.SetVoxelAtNoDirty(positionWS, blocks.Get("pot"));
                   }
                 }
               }
@@ -1641,18 +1692,18 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           {
             if (density <= 0)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("Wood").GetBlockId());
+              grid.SetVoxelAt(positionWS, blocks.Get("wood"));
             }
           }
           else
           {
             if (density <= -0.032f)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("Wood").GetBlockId());
+              grid.SetVoxelAt(positionWS, blocks.Get("wood"));
             }
             else if (density <= 0.0f)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("leaves_01").GetBlockId());
+              grid.SetVoxelAt(positionWS, blocks.Get("leaves_01"));
             }
           }
         });

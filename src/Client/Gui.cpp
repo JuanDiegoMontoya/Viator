@@ -877,7 +877,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             }
 
         const auto& crafting      = world.GetRegistry().ctx().get<Crafting>();
-        const auto& blockRegistry = world.GetRegistry().ctx().get<BlockRegistry>();
         static bool showUncraftableRecipes = true;
         static auto selectedRecipeIndex    = std::optional<int>();
 
@@ -1027,7 +1026,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
               color.x *= .5f; // Green
             }
             ImGui::Indent();
-            ImGui::TextColored(color, "%s", blockRegistry.Get(recipe.craftingStation).GetName().c_str());
+            ImGui::TextColored(color, "%s", Block::GetName(world, recipe.craftingStation).c_str());
             ImGui::Unindent();
           }
 

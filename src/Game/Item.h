@@ -233,4 +233,6 @@ namespace Item
     float armorModifier,
     std::string sprite,
     glm::vec3 tint = {1, 1, 1});
+
+  ItemId RegisterItemForBlock(World& world, BlockId block);
 } // namespace Item

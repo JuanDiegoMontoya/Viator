@@ -55,11 +55,11 @@ entt::entity Item::Materialize(World& world, ItemId item)
 
   if (const auto* p = iReg.try_get<const Component::Block>(item))
   {
-    auto& blockDef = world.GetRegistry().ctx().get<BlockRegistry>().Get(p->voxel);
-    if (auto* blockEntityDef = dynamic_cast<const BlockEntityDefinition*>(&blockDef))
+    auto& bReg = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+    if (const auto* p2 = bReg.try_get<const Block::Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(p->voxel)))
     {
       auto& entityPrefabs      = world.GetRegistry().ctx().get<EntityPrefabRegistry>();
-      const auto& entityPrefab = entityPrefabs.Get(blockEntityDef->GetEntityPrefab());
+      const auto& entityPrefab = entityPrefabs.Get(p2->id);
       if (entityPrefab.GetCreateInfo().isVisible)
       {
         return entityPrefab.Spawn(world, {0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>());
@@ -68,19 +68,22 @@ entt::entity Item::Materialize(World& world, ItemId item)
     ASSERT(self == entt::null);
     self = world.CreateRenderableEntity({0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>(), 0.25f);
 
-    auto& mesh           = world.GetRegistry().emplace<Mesh>(self);
-    mesh.name            = "cube";
-    const auto& material = blockDef.GetMaterialDesc();
-    world.GetRegistry().emplace<Tint>(self, material.baseColorFactor);
-    if (!material.emissionTexture && glm::length(material.emissionFactor) > 0.01f)
+    auto& mesh = world.GetRegistry().emplace<Mesh>(self);
+    mesh.name  = "cube";
+
+    if (const auto* material = bReg.try_get<const Block::Component::RenderAsTexturedCube>(entt::entity(p->voxel)))
     {
-      // TODO: Convert from luminance (cd/m^2) to luminous intensity (cd)
-      auto light      = GpuLight();
-      light.color     = material.emissionFactor;
-      light.intensity = 1;
-      light.type      = LIGHT_TYPE_POINT;
-      light.range     = 100;
-      world.GetRegistry().emplace<GpuLight>(self, light);
+      world.GetRegistry().emplace<Tint>(self, material->baseColorFactor);
+      if (!material->emissionTexture && glm::length(material->emissionFactor) > 0.01f)
+      {
+        // TODO: Convert from luminance (cd/m^2) to luminous intensity (cd)
+        auto light      = GpuLight();
+        light.color     = material->emissionFactor;
+        light.intensity = 1;
+        light.type      = LIGHT_TYPE_POINT;
+        light.range     = 100;
+        world.GetRegistry().emplace<GpuLight>(self, light);
+      }
     }
   }
 
@@ -353,7 +356,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
               Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
               Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE));
 
-            if (!collector.HadHit() && world.GetRegistry().ctx().get<BlockRegistry>().Get(p->voxel).OnTryPlaceBlock(world, newPos))
+            if (!collector.HadHit() && Block::OnTryPlaceBlock(world, newPos, p->voxel))
             {
               subtractCountFromState = true;
             }
@@ -610,4 +613,28 @@ ItemId Item::CreateArmor(Registry& registry,
     .amount       = armorModifier,
   });
   return id;
+}
+
+ItemId Item::RegisterItemForBlock(World& world, BlockId block)
+{
+  auto& itemRegistry = world.GetRegistry().ctx().get<Item::Registry>();
+  auto& reg          = itemRegistry.GetRegistry();
+
+  auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>();
+  auto name           = blockRegistry.GetIdToTagMap().at(block);
+
+  const auto e = itemRegistry.Create(name);
+  if (auto* n = blockRegistry.GetRegistry().try_get<Name>(entt::entity(block)))
+  {
+    name = n->name;
+  }
+  reg.emplace<Name>(e, name);
+  reg.emplace<Item::Component::Usable>(e).timeBetweenUses = 0.25f;
+  reg.emplace<Item::Component::Stackable>(e);
+  reg.emplace<Item::Component::ColliderWhenDropped>(e);
+  reg.emplace<Item::Component::AllowedSlots>(e, Item::Component::AllowedSlots::Normal);
+  reg.emplace<Item::Component::Block>(e).voxel = block;
+
+  blockRegistry.GetRegistry().emplace_or_replace<Block::Component::CorrespondingItem>(entt::entity(block), e);
+  return e;
 }

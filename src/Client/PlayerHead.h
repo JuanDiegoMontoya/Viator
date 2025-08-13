@@ -40,7 +40,7 @@ public:
   NO_COPY_NO_MOVE(PlayerHead);
   void VariableUpdatePre(DeltaTime dt, World& world) override;
   void VariableUpdatePost(DeltaTime dt, World& world) override;
-  void CreateRenderingMaterials(std::span<const std::unique_ptr<BlockDefinition>> blockDefinitions) override;
+  void CreateRenderingMaterials(const World& world) override;
   Audio* GetAudio() override;
 
   struct CreateInfo

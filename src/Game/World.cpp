@@ -1744,7 +1744,7 @@ entt::entity World::GetNearestPlayer(glm::vec3 position)
 float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, BlockDamageFlags damageType)
 {
   auto& grid     = registry_.ctx().get<TwoLevelGrid>();
-  auto prevVoxel = grid.GetVoxelAt(voxelPos);
+  const auto prevVoxel = grid.GetVoxelAt(voxelPos);
   if (prevVoxel == voxel_t::Air)
   {
     return 0;
@@ -1764,17 +1764,15 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
     }
   }
 
-  const auto& blockDef = registry_.ctx().get<BlockRegistry>().Get(prevVoxel);
-
   if (foundEntity == entt::null)
   {
     foundEntity = this->CreateRenderableEntity(worldPos);
-    hp          = &registry_.emplace<BlockHealth>(foundEntity, blockDef.GetInitialHealth());
+    hp          = &registry_.emplace<BlockHealth>(foundEntity, Block::GetInitialHealth(*this, prevVoxel));
   }
 
   registry_.emplace_or_replace<Lifetime>(foundEntity).remainingSeconds = 5;
 
-  if ((damageType & blockDef.GetDamageFlags()).flags == 0 || damageTier < blockDef.GetDamageTier())
+  if ((damageType & Block::GetDamageFlags(*this, prevVoxel)).flags == 0 || damageTier < Block::GetDamageTier(*this, prevVoxel))
   {
     return 0;
   }
@@ -1783,12 +1781,12 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
   hp->health -= damage;
   if (hp->health <= 0)
   {
-    blockDef.OnDestroyBlock(*this, voxelPos);
+    Block::OnDestroyBlock(*this, voxelPos, prevVoxel);
 
     const auto hasNoLoot95 = damageType & BlockDamageFlagBit::NO_LOOT_95_PERCENT;
     if ((!hasNoLoot95 || Rng().RandFloat() >= 0.95) && !(damageType & BlockDamageFlagBit::NO_LOOT))
     {
-      const auto dropType = blockDef.GetLootDropType();
+      const auto dropType = Block::GetLootDropType(*this, prevVoxel);
       if (auto* ip = std::get_if<ItemState>(&dropType))
       {
         auto itemSelf = Item::Materialize(*this, ip->id);
