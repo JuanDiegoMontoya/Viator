@@ -17,6 +17,7 @@ namespace Block
 {
   struct DropSelf
   {
+    bool operator==(const DropSelf&) const = default;
   };
 
   namespace Component

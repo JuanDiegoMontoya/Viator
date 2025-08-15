@@ -8,6 +8,7 @@
 #include "Game/Physics/Physics.h"
 #include "Game/Networking/Client.h"
 #include "Game/Item.h"
+#include "Game/Block.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "Game/Pathfinding.h"
 
@@ -16,6 +17,7 @@
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
 #include "entt/meta/template.hpp"
+#include "entt/meta/pointer.hpp"
 #include "entt/core/hashed_string.hpp"
 #include "spdlog/spdlog.h"
 #include "IconsFontAwesome6.h"
@@ -32,6 +34,194 @@
 #include <fstream>
 #include <iterator>
 #include <unordered_map>
+
+// ADL and specializations
+namespace entt
+{
+  template<>
+  struct entt::type_name<std::string> final
+  {
+    [[nodiscard]] static constexpr std::string_view value() noexcept
+    {
+      return std::string_view{"std::string"};
+    }
+  };
+#if 0
+#if 1
+  template<typename T>
+  struct adl_meta_pointer_like<std::optional<T>>
+  {
+    static decltype(auto) dereference(const std::optional<T>& option)
+    {
+      return option.value();
+    }
+
+    static decltype(auto) dereference(std::optional<T>& option)
+    {
+      return option.value();
+    }
+  };
+
+  template<typename T>
+  struct is_meta_pointer_like<std::optional<T>> : std::true_type
+  {
+  };
+#else
+  template<typename T>
+  struct meta_sequence_container_traits<std::optional<T>>
+  {
+    using size_type = typename meta_sequence_container::size_type;
+    //using iterator = T*;
+    using value_type = T;
+    using iterator = typename meta_sequence_container::iterator;
+    using reference = T&;
+    using const_reference = const T&;
+
+    static constexpr bool fixed_size = false;
+    
+    [[nodiscard]] static size_type size(const void* container)
+    {
+      const auto* cont = static_cast<const std::optional<T>*>(container);
+      return cont->has_value() ? 1 : 0;
+    }
+
+    [[nodiscard]] static bool clear(void* container)
+    {
+      auto* cont = static_cast<std::optional<T>*>(container);
+      cont->reset();
+      return true;
+    }
+
+    [[nodiscard]] static bool reserve([[maybe_unused]] void* container, [[maybe_unused]] size_type size)
+    {
+      return false;
+    }
+
+    [[nodiscard]] static bool resize(void* container, size_type size)
+    {
+      if constexpr (!std::is_default_constructible_v<T>)
+      {
+        return false;
+      }
+
+      if (size == 0)
+      {
+        return clear(container);
+      }
+
+      if (size == 1)
+      {
+        auto* cont = static_cast<std::optional<T>*>(container);
+        cont->emplace();
+        return true;
+      }
+
+      return false;
+    }
+    static iterator begin(const meta_ctx& area, void* container, const void* as_const)
+    {
+      if (container)
+      {
+        auto* cont = static_cast<std::optional<T>*>(container);
+        return cont->has_value() ? iterator{area, &*cont} : iterator{area, (T*)nullptr};
+      }
+
+      const auto* cont = static_cast<const std::optional<T>*>(as_const);
+      return cont->has_value() ? iterator{area, &*cont} : iterator{area, (const T*)nullptr};
+    }
+    
+    static iterator end(const meta_ctx& area, void* container, const void* as_const)
+    {
+      if (container)
+      {
+        auto* cont = static_cast<std::optional<T>*>(container);
+        return cont->has_value() ? iterator{area, &*cont + 1} : iterator{area, (T*)nullptr};
+      }
+
+      const auto* cont = static_cast<const std::optional<T>*>(as_const);
+      return cont->has_value() ? iterator{area, &*cont + 1} : iterator{area, (const T*)nullptr};
+    }
+    
+    [[nodiscard]] static iterator insert([[maybe_unused]] const meta_ctx& area,
+      [[maybe_unused]] void* container,
+      [[maybe_unused]] const void* value,
+      [[maybe_unused]] const void* cref,
+      [[maybe_unused]] const iterator& it)
+    {
+      //auto* cont = static_cast<std::optional<T>*>(container);
+      return iterator{area, (T*)nullptr};
+    }
+    
+    [[nodiscard]] static iterator erase([[maybe_unused]] const meta_ctx& area, [[maybe_unused]] void* container, [[maybe_unused]] const iterator& it)
+    {
+      auto* cont = static_cast<std::optional<T>*>(container);
+      if (cont->has_value() && it == &*cont)
+      {
+        cont->reset();
+      }
+      return iterator{area, (T*)nullptr};
+    }
+  };
+#endif
+#endif
+} // namespace entt
+
+namespace // type traits 2
+{
+  template<typename T>
+  struct is_optional : std::false_type
+  {
+  };
+
+  template<typename T>
+  struct is_optional<std::optional<T>> : std::true_type
+  {
+  };
+
+  template<typename T>
+  constexpr bool is_optional_v = is_optional<T>::value;
+
+  template<typename T>
+  struct is_variant : std::false_type
+  {
+  };
+
+  template<typename... Ts>
+  struct is_variant<std::variant<Ts...>> : std::true_type
+  {
+  };
+
+  template<typename T>
+  constexpr bool is_variant_v = is_variant<T>::value;
+}
+
+namespace
+{
+  template<typename Variant, std::size_t I = 0>
+  void ForEachVariantAlternative(auto&& func)
+  {
+    if constexpr (I < std::variant_size_v<Variant>)
+    {
+      using T = std::variant_alternative_t<I, Variant>;
+      func.template operator()<T>();
+      ForEachVariantAlternative<Variant, I + 1>(std::forward<decltype(func)>(func));
+    }
+  }
+
+  template<typename T, typename U>
+  decltype(auto) AppendToPropertiesMap(entt::id_type id, U any)
+  {
+    auto meta = entt::resolve<T>();
+    auto* map = static_cast<Core::Reflection::PropertiesMap*>(meta.custom());
+    if (!map)
+    {
+      entt::meta_factory<T>{}.template custom<Core::Reflection::PropertiesMap>();
+      map = static_cast<Core::Reflection::PropertiesMap*>(entt::resolve<T>().custom());
+      DEBUG_ASSERT(map);
+    }
+    return map->emplace(id, std::move(any)).first->second.template cast<U&>();
+  }
+}
 
 namespace
 {
@@ -451,25 +641,50 @@ void Core::Reflection::Initialize()
   spdlog::info("Initializing type reflection.");
   entt::meta_reset();
 
-//#define MAKE_IDENTIFIER(T) [[maybe_unused]] bool reflection_for_ ## T
-#define MAKE_IDENTIFIER(T)
-#define REFLECT_TYPE(T) MAKE_IDENTIFIER(T); entt::meta_factory<T>{}
+#define MAKE_IDENTIFIER() CONCAT(factory_, __LINE__)
+#define MAKE_IDENTIFIER2(name) CONCAT(name, __LINE__)
+#define CONCAT(x, y) CONCAT_INDIRECT(x, y)
+#define CONCAT_INDIRECT(x, y) x ## y
+//#define MAKE_IDENTIFIER()
+#define REFLECT_TYPE(T) auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}
 #define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
-  MAKE_IDENTIFIER(T);                                                                               \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
-  entt::meta_factory<T>{}                                                                           \
+  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}                                                \
   .traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
-#define REFLECT_COMPONENT(T, ...)                                                                                   \
-  MAKE_IDENTIFIER(T);                                                                                               \
-  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                 \
-  entt::meta_factory<T>{}                                                                                           \
-    .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) __VA_OPT__(| __VA_ARGS__))                                                                    \
-    .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \
-    .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs)
+#define REFLECT_COMPONENT(T, ...)                                                                                                                          \
+  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                        \
+  [[maybe_unused]] auto MAKE_IDENTIFIER() =                                                                                                                \
+    entt::meta_factory<T>{}                                                                                                                                \
+      .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) | (is_optional_v<T> ? OPTIONAL : Traits(0)) |                                           \
+              (is_variant_v<T> ? VARIANT : Traits(0))__VA_OPT__(| __VA_ARGS__))                                                                            \
+      .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs)                                      \
+      .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs); \
+  MAKE_IDENTIFIER()
 #define TRAITS(TraitsV) .traits(TraitsV)
-#define DATA(Type, Member, ...) \
-  .data<&Type :: Member, entt::as_ref_t>(#Member##_hs) \
-  .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)})
+
+#define DATA(Type, Member, ...)                                                                                                \
+  ; auto MAKE_IDENTIFIER() = entt::meta_factory<Type>{};                                                                       \
+  MAKE_IDENTIFIER()                                                                                                            \
+    .data<&Type ::Member, entt::as_ref_t>(#Member##_hs)                                                                        \
+    .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)});                                     \
+  entt::meta_factory<decltype(Type::Member)>{}                                                 \
+    .traits((is_optional_v<decltype(Type::Member)> ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0))); \
+  []<typename U>()                                                                                           \
+  {                                                                                                                            \
+    if constexpr (is_variant_v<U>)                                                                                             \
+    {                                                                                                                          \
+      /*entt::meta_factory<U>{} VARIANT_FUNCS(U);*/                                                                                \
+    }                                                                                                                          \
+  }.operator()<decltype(Type::Member)>();                                                                                      \
+  []<typename U>()                                                                                                             \
+  {                                                                                                                            \
+    if constexpr (is_optional_v<U>)                                                                                            \
+    {                                                                                                                          \
+      entt::meta_factory<U>{}.template ctor<typename U::value_type>() OPTIONAL_FUNCS(U);               \
+    }                                                                                                                          \
+  }.operator()<decltype(Type::Member)>();                                                                                      \
+  MAKE_IDENTIFIER()
+
 #define PROP_SPEED(Scalar) {"speed"_hs, Scalar}
 #define PROP_MIN(Scalar) {"min"_hs, Scalar}
 #define PROP_MAX(Scalar) {"max"_hs, Scalar}
@@ -480,32 +695,50 @@ void Core::Reflection::Initialize()
 #define ENUMERATOR(E, Member, ...) \
   .data<E :: Member>(#Member##_hs) \
   .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)})
-#define VARIANT_FUNCS(T)                                                      \
-  func<[](const T& ps)                                                        \
-    {                                                                         \
-      auto info = entt::id_type();                                            \
-      std::visit([&](auto&& x) { info = entt::type_id<decltype(x)>().hash(); }, ps); \
-      return info;                                                            \
-    }>("type_hash"_hs)                                                        \
-  .func<[](const T& ps)                                                       \
-    {                                                                         \
-      auto value = entt::meta_any();                                          \
-      std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);    \
-      return value;                                                           \
-    }>("const_value"_hs)                                                      \
-  .func<[](T& ps)                                                             \
-    {                                                                         \
-      auto value = entt::meta_any();                                          \
-      std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);    \
-      return value;                                                           \
-    }>("value"_hs)
-#define PTR_FUNCS(T)                                                           \
-  func<[]() { return new T(); }>("make_raw_ptr"_hs)                            \
-  func<[]() { return std::make_unique<T>(); }>("make_unique_ptr"_hs)           \
-  func<[]() { return std::make_shared<T>(); }>("make_shared_ptr"_hs)           \
-  func<[](T*& p, T* v) { p = v; }>("reset_raw_ptr"_hs)                         \
-  func<[](std::unique_ptr<T>& p, T* v) { p.reset(v); }>("reset_unique_ptr"_hs) \
-  func<[](std::shared_ptr<T>& p, T* v) { p.reset(v); }>("reset_shared_ptr"_hs) \
+
+#define VARIANT_FUNCS(T)                                                               \
+  ;                                                                                    \
+  ForEachVariantAlternative<T>(                                                        \
+    []<typename V>                                                                     \
+    {                                                                                  \
+      entt::meta_factory<T>{}.ctor<V>();                                               \
+      auto& vec = AppendToPropertiesMap<T>("alternatives"_hs, std::vector<entt::id_type>());  \
+      vec.push_back(entt::type_hash<V>::value());                                      \
+    });                                                                                \
+  entt::meta_factory<T>{}                                                              \
+    .traits<Traits>(VARIANT)                                                           \
+    .template func<[](const T& ps)                                                     \
+      {                                                                                \
+        auto info = entt::id_type();                                                   \
+        std::visit([&](auto&& x) { info = entt::type_id<decltype(x)>().hash(); }, ps); \
+        return info;                                                                   \
+      }>("type_hash"_hs)                                                               \
+    .template func<[](const T& ps)                                                     \
+      {                                                                                \
+        auto value = entt::meta_any();                                                 \
+        std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);           \
+        return value;                                                                  \
+      }>("const_value"_hs)                                                             \
+    .template func<[](T& ps)                                                           \
+      {                                                                                \
+        auto value = entt::meta_any();                                                 \
+        std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);           \
+        return value;                                                                  \
+      }>("value"_hs)
+
+#define PTR_FUNCS(T)                                                            \
+  .template func<[]() { return new T(); }>("make_raw_ptr"_hs)                            \
+  .template func<[]() { return std::make_unique<T>(); }>("make_unique_ptr"_hs)           \
+  .template func<[]() { return std::make_shared<T>(); }>("make_shared_ptr"_hs)           \
+  .template func<[](T*& p, T* v) { p = v; }>("reset_raw_ptr"_hs)                         \
+  .template func<[](std::unique_ptr<T>& p, T* v) { p.reset(v); }>("reset_unique_ptr"_hs) \
+  .template func<[](std::shared_ptr<T>& p, T* v) { p.reset(v); }>("reset_shared_ptr"_hs) \
+
+#define OPTIONAL_FUNCS(T)                                                   \
+  .template func<[](const T& option) { return option.has_value(); }>("has_value"_hs) \
+  .template func<[](T& option) { return option.emplace(); }>("emplace"_hs)           \
+  .template func<[](T& option) { option.reset(); }>("reset"_hs)                      \
+  .template func<[](T& option) -> decltype(auto) { return option.value(); }>("value"_hs)
 
   #define REGISTER_RPC(Function, Traits) \
     entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
@@ -681,14 +914,7 @@ void Core::Reflection::Initialize()
     DATA(Plane, constant);
 
   REFLECT_TYPE(PolyShape)
-    .ctor<std::monostate>()
-    .ctor<Sphere>()
-    .ctor<Capsule>()
-    .ctor<Box>()
-    .ctor<Plane>()
-    .ctor<UseTwoLevelGrid>()
-    .traits<Traits>(VARIANT)
-    .VARIANT_FUNCS(PolyShape);
+    VARIANT_FUNCS(PolyShape);
 
   REFLECT_TYPE(ShapeSettings)
     TRAITS(EDITOR_READ_ONLY)
@@ -721,7 +947,7 @@ void Core::Reflection::Initialize()
     ENUMERATOR(JPH::EAllowedDOFs, RotationX)
     ENUMERATOR(JPH::EAllowedDOFs, RotationY)
     ENUMERATOR(JPH::EAllowedDOFs, RotationZ)
-    ENUMERATOR(JPH::EAllowedDOFs, Plane2D)
+    ENUMERATOR(JPH::EAllowedDOFs, Plane2D);
 
   REFLECT_COMPONENT(DroppedItem)
     DATA(DroppedItem, item);
@@ -1114,4 +1340,54 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Item::Component::GiveEffectOnUse, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::GiveEffectOnUse, effectId)
     DATA(Item::Component::GiveEffectOnUse, duration);
+
+  REFLECT_TYPE(Block::DropSelf);
+
+  REFLECT_ENUM(BlockDamageFlagBit)
+    ENUMERATOR(BlockDamageFlagBit, NONE)
+    ENUMERATOR(BlockDamageFlagBit, PICKAXE)
+    ENUMERATOR(BlockDamageFlagBit, AXE)
+    ENUMERATOR(BlockDamageFlagBit, ALL_TOOLS)
+    ENUMERATOR(BlockDamageFlagBit, NO_LOOT)
+    ENUMERATOR(BlockDamageFlagBit, NO_LOOT_95_PERCENT);
+
+  REFLECT_TYPE(BlockDamageFlags)
+    DATA(BlockDamageFlags, flags);
+
+  using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
+  REFLECT_TYPE(LootType)
+    VARIANT_FUNCS(LootType);
+
+  REFLECT_COMPONENT(Block::Component::Breakable, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::Breakable, initialHealth)
+    DATA(Block::Component::Breakable, damageTier)
+    DATA(Block::Component::Breakable, damageFlags)
+    DATA(Block::Component::Breakable, dropWhenBroken);
+
+  REFLECT_COMPONENT(Block::Component::Valuable, BLOCK_COMPONENT | REPLICATED);
+
+  REFLECT_COMPONENT(Block::Component::RenderAsSubGrid, BLOCK_COMPONENT | REPLICATED);
+
+  REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::RenderAsTexturedCube, randomizeTexcoordRotation)
+    DATA(Block::Component::RenderAsTexturedCube, baseColorTexture)
+    DATA(Block::Component::RenderAsTexturedCube, baseColorFactor)
+    DATA(Block::Component::RenderAsTexturedCube, emissionTexture)
+    DATA(Block::Component::RenderAsTexturedCube, emissionFactor);
+
+  REFLECT_COMPONENT(Block::Component::PhysicalProperties, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::PhysicalProperties, isSolid);
+  
+  REFLECT_COMPONENT(Block::Component::ExplodeWhenBroken, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::ExplodeWhenBroken, radius)
+    DATA(Block::Component::ExplodeWhenBroken, damage)
+    DATA(Block::Component::ExplodeWhenBroken, damageTier)
+    DATA(Block::Component::ExplodeWhenBroken, pushForce)
+    DATA(Block::Component::ExplodeWhenBroken, damageFlags);
+
+  REFLECT_COMPONENT(Block::Component::SpawnDependentEntityPrefabWhenPlaced, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::SpawnDependentEntityPrefabWhenPlaced, id);
+
+  REFLECT_COMPONENT(Block::Component::CorrespondingItem, BLOCK_COMPONENT | REPLICATED)
+    DATA(Block::Component::CorrespondingItem, item);
 }

@@ -73,15 +73,6 @@ namespace Core::Serialization
   {
     ZoneScoped;
 
-    if (value.type().traits<Traits>() & Traits::TRIVIAL)
-    {
-      // Spooky const_cast! Technically only needed when loading, and should be well-defined as the underlying data is mutable...
-      auto* vp = const_cast<void*>(value.base().data());
-      auto binary = cereal::binary_data(vp, value.type().size_of());
-      ar(binary);
-      return;
-    }
-
     // First, check if the type already has a bespoke serialization function.
     const auto archiveHash = entt::type_id<Archive>();
     for (auto [id, func] : value.type().func())
@@ -92,6 +83,15 @@ namespace Core::Serialization
         ASSERT(ret);
         return;
       }
+    }
+
+    if (value.type().traits<Traits>() & Traits::TRIVIAL)
+    {
+      // Spooky const_cast! Technically only needed when loading, and should be well-defined as the underlying data is mutable...
+      auto* vp = const_cast<void*>(value.base().data());
+      auto binary = cereal::binary_data(vp, value.type().size_of());
+      ar(binary);
+      return;
     }
 
     if (value.type().is_sequence_container())
@@ -394,7 +394,7 @@ namespace Core::Serialization
     {
       if (auto meta = entt::resolve(id))
       {
-        const auto traits = meta.traits<Traits>();
+        const auto traits = meta.template traits<Traits>();
         if (traits & Traits::COMPONENT)
         {
           ZoneScopedN("Component");
@@ -460,7 +460,7 @@ namespace Core::Serialization
     const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(),
       [](const auto& p)
       {
-        const auto traits = entt::resolve(p.first).traits<Traits>();
+        const auto traits = entt::resolve(p.first).template traits<Traits>();
         return traits & Traits::COMPONENT && traits & Traits::REPLICATED;
       });
     Serialize<true>(outputArchive, numSets);
@@ -468,7 +468,7 @@ namespace Core::Serialization
     {
       if (auto meta = entt::resolve(id))
       {
-        const auto traits = meta.traits<Traits>();
+        const auto traits = meta.template traits<Traits>();
         if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
         {
           ZoneScopedN("Component");
@@ -518,7 +518,7 @@ namespace Core::Serialization
       auto& set = *registry.storage(id);
       if (auto meta = entt::resolve(id))
       {
-        const auto traits = meta.traits<Traits>();
+        const auto traits = meta.template traits<Traits>();
         if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
         {
           ZoneScopedN("Component");
@@ -698,7 +698,7 @@ namespace Core::Serialization
 
       if (auto meta = entt::resolve(id))
       {
-        const auto traits = meta.traits<Traits>();
+        const auto traits = meta.template traits<Traits>();
         if (traits & Traits::COMPONENT && traits & Traits::REPLICATED)
         {
           ZoneScopedN("Component");

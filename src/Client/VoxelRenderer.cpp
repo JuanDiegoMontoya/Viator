@@ -597,7 +597,6 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
   // Translate block definitions to GPU materials, then upload.
   for (auto block : orderedBlocks)
   {
-    printf("%d: %s\n", int(block), Block::GetName(world, BlockId(block)).c_str());
     auto gpuMat = GpuVoxelMaterial{};
 
     if (const auto* p = bReg.try_get<const Block::Component::RenderAsTexturedCube>(block))

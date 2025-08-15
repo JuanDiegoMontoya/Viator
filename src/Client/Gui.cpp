@@ -1509,6 +1509,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     ShowEditor(dt, world, EditorMode::Entities);
     ShowEditor(dt, world, EditorMode::Items);
+    ShowEditor(dt, world, EditorMode::Blocks);
 
     if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {

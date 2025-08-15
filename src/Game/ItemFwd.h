@@ -13,6 +13,7 @@ using ItemId = entt::entity;
 
 struct ItemState
 {
+  bool operator==(const ItemState&) const = default;
   //ItemId id      = ItemId(0xDEADBEEF);
   ItemId id      = entt::null;
   int count      = 1;

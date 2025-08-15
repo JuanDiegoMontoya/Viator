@@ -48,6 +48,12 @@ namespace Core::Reflection
     // and will appear in the component menu for the item editor, but will not appear in the component
     // menu for game entities.
     ITEM_COMPONENT = 1 << 9,
+
+    // Top-level component types for blocks only.
+    BLOCK_COMPONENT = 1 << 10,
+
+    // For std::optional and similar. Provides functions for has_value, emplace, and reset.
+    OPTIONAL = 1 << 11,
   };
 
   constexpr Traits operator|(Traits a, Traits b)

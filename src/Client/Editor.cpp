@@ -107,6 +107,13 @@ namespace
       }
       if (isOpen)
       {
+        if (auto fn = meta.func("to_underlying"_hs))
+        {
+          if (const auto* val = fn.invoke({}, instance).try_cast<uint32_t>())
+          {
+            ImGui::Text("Value: %u", *val);
+          }
+        }
         for (auto [id, data] : meta.data())
         {
           PropertiesMap dataProps = {};
@@ -128,6 +135,128 @@ namespace
           }
         }
         ImGui::TreePop();
+      }
+    }
+    else if (meta.is_pointer_like())
+    {
+      ImGui::Text("TODO: pointer-likes");
+    }
+    else if (meta.traits<Traits>() & Traits::VARIANT)
+    {
+      auto valueFn = meta.func("value"_hs);
+      auto typeHashFn = meta.func("type_hash"_hs);
+      ASSERT(valueFn);
+      ASSERT(typeHashFn);
+
+      auto name = std::string();
+      if (auto it = properties.find("name"_hs); it != properties.end())
+      {
+        name = it->second.cast<const char*>();
+      }
+      else
+      {
+        name = FixupTypeString(meta.info().name());
+      }
+
+      auto typeHash = typeHashFn.invoke({}, instance).cast<entt::id_type>();
+
+      PropertiesMap properties3 = {};
+      if (auto* mp = static_cast<const PropertiesMap*>(meta.custom()))
+      {
+        properties3 = *mp;
+      }
+      if (auto it = properties3.find("alternatives"_hs); it != properties3.end())
+      {
+        if (ImGui::BeginCombo(name.c_str(), FixupTypeString(entt::resolve(typeHash).info().name()).c_str()))
+        {
+          ImGui::BeginDisabled(readonly);
+          for (auto alternativeId : it->second.cast<std::vector<entt::id_type>>())
+          {
+            auto alternativeType = entt::resolve(alternativeId);
+            if (ImGui::Selectable(FixupTypeString(alternativeType.info().name()).c_str(), alternativeId == typeHash))
+            {
+              instance.assign(meta.construct(alternativeType.construct()));
+              changed = true;
+            }
+          }
+          ImGui::EndCombo();
+          ImGui::EndDisabled();
+        }
+      }
+      
+      auto value = valueFn.invoke({}, instance.as_ref()).as_ref();
+
+      ImGui::PushID(guiId++);
+      ImGui::Indent();
+      changed |= DrawComponentHelper(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
+      ImGui::Unindent();
+      ImGui::PopID();
+
+      if (changed)
+      {
+        // Hack because I can't seem to make value hold a real reference without invoking UB.
+        instance.assign(meta.construct(value));
+      }
+    }
+    else if (meta.traits<Traits>() & Traits::OPTIONAL)
+    {
+      auto hasValueFn = meta.func("has_value"_hs);
+      auto emplaceFn = meta.func("emplace"_hs);
+      auto resetFn = meta.func("reset"_hs);
+      auto valueFn = meta.func("value"_hs);
+
+      ASSERT(hasValueFn);
+
+      bool hasValue = hasValueFn.invoke({}, instance.as_ref()).cast<bool>();
+
+      ImGui::BeginDisabled(!emplaceFn || hasValue);
+      if (ImGui::Button("Emplace"))
+      {
+        emplaceFn.invoke({}, instance.as_ref());
+        hasValue = true;
+        changed  = true;
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SameLine();
+
+      ImGui::BeginDisabled(!resetFn || !hasValue || !hasValueFn);
+      if (ImGui::Button("Erase"))
+      {
+        resetFn.invoke({}, instance.as_ref());
+        hasValue = false;
+        changed  = true;
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SameLine();
+
+      if (auto it = properties.find("name"_hs); it != properties.end())
+      {
+        ImGui::Text("%s", it->second.cast<const char*>());
+      }
+      else
+      {
+        ImGui::Text("%s", FixupTypeString(meta.info().name()).c_str());
+      }
+
+      if (hasValue)
+      {
+        ASSERT(valueFn);
+        auto value = valueFn.invoke({}, instance);
+        ASSERT(value);
+        ImGui::PushID(guiId++);
+        changed |= DrawComponentHelper(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
+        ImGui::PopID();
+        if (changed)
+        {
+          // Hack because I can't seem to make value hold a real reference without invoking UB.
+          instance.assign(meta.construct(value));
+        }
+      }
+      else
+      {
+        ImGui::Text("nullopt (Emplace to add a value)");
       }
     }
     else
@@ -216,6 +345,12 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, Edit
   {
     pRegistry = &world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
     title     = "Items";
+    break;
+  }
+  case EditorMode::Blocks:
+  {
+    pRegistry = &world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+    title     = "Blocks";
     break;
   }
   }
@@ -341,12 +476,17 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, Edit
           {
           case EditorMode::Entities:
           {
-            displayInfo = traits & Core::Reflection::Traits::COMPONENT && !(traits & Core::Reflection::Traits::ITEM_COMPONENT);
+            displayInfo = traits & Core::Reflection::Traits::COMPONENT && !(traits & (Core::Reflection::Traits::ITEM_COMPONENT | Core::Reflection::Traits::BLOCK_COMPONENT));
             break;
           }
           case EditorMode::Items:
           {
-            displayInfo = meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::ITEM_COMPONENT;
+            displayInfo = traits & Core::Reflection::Traits::ITEM_COMPONENT;
+            break;
+          }
+          case EditorMode::Blocks:
+          {
+            displayInfo = traits & Core::Reflection::Traits::BLOCK_COMPONENT;
             break;
           }
           }
