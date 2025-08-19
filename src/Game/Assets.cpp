@@ -52,3 +52,8 @@ std::filesystem::path GetConfigDirectory()
 {
   return GetDataDirectory() / "config";
 }
+
+std::filesystem::path GetScriptDirectory()
+{
+  return GetDataDirectory() / "scripts";
+}

@@ -10,6 +10,7 @@
 #include "Core/Assert2.h"
 #include "GuiHelpers.h"
 #include "Game/Item.h"
+#include "Game/Scripting.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -1506,6 +1507,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
   {
     dynamic_cast<PlayerAudio*>(head_->GetAudio())->DrawDebugUI();
+    world.GetRegistry().ctx().get<Scripting*>()->DrawDebugUI(world);
 
     ShowEditor(dt, world, EditorMode::Entities);
     ShowEditor(dt, world, EditorMode::Items);

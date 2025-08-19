@@ -1,3 +1,6 @@
 [submodule "data/assets"]
 	path = data/assets
 	url = https://github.com/JuanDiegoMontoya/Viator-Assets.git
+[submodule "external/angelscript"]
+	path = external/angelscript
+	url = https://github.com/anjo76/angelscript.git

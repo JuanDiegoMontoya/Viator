@@ -7,3 +7,4 @@ std::filesystem::path GetShaderDirectory();
 std::filesystem::path GetTextureDirectory();
 std::filesystem::path GetAudioDirectory();
 std::filesystem::path GetConfigDirectory();
+std::filesystem::path GetScriptDirectory();

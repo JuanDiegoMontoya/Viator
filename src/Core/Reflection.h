@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <unordered_map>
 
+class World;
+class Scripting;
+
 namespace Core::Reflection
 {
   enum Traits : uint16_t
@@ -102,5 +105,5 @@ namespace Core::Reflection
 
   const char* EnumToIcon(entt::meta_any value);
 
-  void Initialize();
+  void Initialize(Scripting& scripting);
 }

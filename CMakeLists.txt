@@ -81,9 +81,9 @@ set(viator_client_files
 
 add_executable(frogRender
     ${viator_client_files}
-    src/Client/Fvog/detail/Flags.h
-    src/main.cpp
     vendor/zstd.cpp
+    src/main.cpp
+    src/Client/Fvog/detail/Flags.h
     src/PCG.h
     src/Game/Game.cpp
     src/Game/Game.h
@@ -150,6 +150,8 @@ add_executable(frogRender
     src/Game/Audio.h
     src/Game/Audio.cpp
     src/Game/Physics/Shape.h
+    src/Game/Scripting.h
+    src/Game/Scripting.cpp
 )
 
 # Precompiled headers for standard library
@@ -233,6 +235,21 @@ endif()
 
 add_subdirectory(external)
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/angelscript/sdk/angelscript/projects/cmake)
+
+add_library(as_addons
+    external/angelscript/sdk/add_on/scriptstdstring/scriptstdstring.cpp
+    external/angelscript/sdk/add_on/scriptstdstring/scriptstdstring_utils.cpp
+    external/angelscript/sdk/add_on/scriptbuilder/scriptbuilder.cpp
+)
+target_include_directories(as_addons PRIVATE 
+    external/angelscript/sdk/angelscript/include
+)
+target_link_libraries(as_addons PRIVATE angelscript)
+target_compile_options(as_addons PRIVATE "$<$<C_COMPILER_ID:MSVC>:/utf-8>")
+target_compile_options(as_addons PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
 if (FROGRENDER_FSR2_ENABLE)
     set(FSR2_LIBS ffx_fsr2_api_x64 ffx_fsr2_api_vk_x64)
     target_compile_definitions(frogRender PUBLIC FROGRENDER_FSR2_ENABLE)
@@ -252,6 +269,8 @@ target_include_directories(frogRender
     vendor
     data
     src
+    external/angelscript/sdk/angelscript/include
+    external
     ${enet_SOURCE_DIR}/include # hack
 )
 
@@ -277,6 +296,8 @@ target_link_libraries(frogRender
     spdlog
     tomlplusplus::tomlplusplus
     rapidfuzz::rapidfuzz
+    angelscript
+    as_addons
 )
 
 target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE VK_NO_PROTOTYPES GLFW_INCLUDE_NONE ImTextureID=ImU64)

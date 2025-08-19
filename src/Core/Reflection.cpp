@@ -11,7 +11,9 @@
 #include "Game/Block.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "Game/Pathfinding.h"
+#include "Game/Scripting.h"
 
+#include "angelscript.h"
 #include "imgui.h"
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -34,6 +36,7 @@
 #include <fstream>
 #include <iterator>
 #include <unordered_map>
+#include <string>
 
 // ADL and specializations
 namespace entt
@@ -220,6 +223,55 @@ namespace
       DEBUG_ASSERT(map);
     }
     return map->emplace(id, std::move(any)).first->second.template cast<U&>();
+  }
+
+  std::string RemoveNamespaces(std::string name)
+  {
+    if (auto pos = name.find_last_of(':'); pos != std::string::npos)
+    {
+      name.erase(name.begin(), name.begin() + pos + 1);
+    }
+
+    if (auto pos = name.find_last_of(' '); pos != std::string_view::npos)
+    {
+      name.erase(name.begin(), name.begin() + pos + 1);
+    }
+
+    return name;
+  }
+
+  template<typename T>
+  T WorldGet(World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    if (auto* ptr = world.GetRegistry().try_get<T>(entity))
+    {
+      return *ptr;
+    }
+    throw std::runtime_error("Component did not exist on entity");
+  }
+
+  template<typename T>
+  void WorldSet(World& world, entt::entity entity, T val)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    world.GetRegistry().emplace_or_replace<T>(entity, val);
+  }
+
+  template<typename T>
+  bool WorldHas(World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    return world.GetRegistry().all_of<T>(entity);
   }
 }
 
@@ -634,24 +686,59 @@ const char* Core::Reflection::EnumToIcon(entt::meta_any value)
   return "Unknown enumerator";
 }
 
+template<typename T>
+static std::string GetName()
+{
+  if (auto meta = entt::resolve<T>())
+  {
+    if (const auto* props = static_cast<const Core::Reflection::PropertiesMap*>(meta.custom()))
+    {
+      if (auto it = props->find("name"_hs); it != props->end())
+      {
+        return it->second.cast<const char*>();
+      }
+    }
+  }
 
-void Core::Reflection::Initialize()
+  return std::string(entt::type_name<T>::value());
+}
+
+void Core::Reflection::Initialize(Scripting& scripting)
 {
   ZoneScoped;
   spdlog::info("Initializing type reflection.");
   entt::meta_reset();
+  
+  auto& asEngine  = scripting.GetEngine();
+
+  ASSERT(asEngine.RegisterObjectType("World", 0, asOBJ_REF | asOBJ_NOCOUNT) >= 0);
+  ASSERT(asEngine.RegisterObjectType("entity", sizeof(entt::entity), asOBJ_VALUE | asOBJ_POD | asOBJ_APP_PRIMITIVE) >= 0);
+  ASSERT(asEngine.RegisterObjectType("vec3", sizeof(glm::vec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine.RegisterObjectType("ivec3", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine.RegisterObjectType("ivec2", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine.RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine.RegisterTypedef("short", "uint16") >= 0);
 
 #define MAKE_IDENTIFIER() CONCAT(factory_, __LINE__)
 #define MAKE_IDENTIFIER2(name) CONCAT(name, __LINE__)
 #define CONCAT(x, y) CONCAT_INDIRECT(x, y)
 #define CONCAT_INDIRECT(x, y) x ## y
-//#define MAKE_IDENTIFIER()
-#define REFLECT_TYPE(T) auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}
+
+#define REFLECT_TYPE(T)    \
+  REGISTER_OBJECT_TYPE(T); \
+  auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
+
 #define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
+  REGISTER_OBJECT_TYPE(T);                                                                          \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
-  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}                                                \
-  .traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
-#define REFLECT_COMPONENT(T, ...)                                                                                                                          \
+  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
+
+#define REFLECT_COMPONENT(T, ...)       \
+  REGISTER_OBJECT_TYPE(T);              \
+  REGISTER_COMPONENT_REGISTRY_FUNCS(T); \
+  REFLECT_COMPONENT_BASE(T __VA_OPT__(, __VA_ARGS__))
+
+#define REFLECT_COMPONENT_BASE(T, ...)                                                                                                                     \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                        \
   [[maybe_unused]] auto MAKE_IDENTIFIER() =                                                                                                                \
     entt::meta_factory<T>{}                                                                                                                                \
@@ -660,29 +747,87 @@ void Core::Reflection::Initialize()
       .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs)                                      \
       .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs); \
   MAKE_IDENTIFIER()
+
 #define TRAITS(TraitsV) .traits(TraitsV)
 
-#define DATA(Type, Member, ...)                                                                                                \
-  ; auto MAKE_IDENTIFIER() = entt::meta_factory<Type>{};                                                                       \
-  MAKE_IDENTIFIER()                                                                                                            \
-    .data<&Type ::Member, entt::as_ref_t>(#Member##_hs)                                                                        \
-    .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)});                                     \
-  entt::meta_factory<decltype(Type::Member)>{}                                                 \
-    .traits((is_optional_v<decltype(Type::Member)> ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0))); \
-  []<typename U>()                                                                                           \
-  {                                                                                                                            \
-    if constexpr (is_variant_v<U>)                                                                                             \
-    {                                                                                                                          \
-      /*entt::meta_factory<U>{} VARIANT_FUNCS(U);*/                                                                                \
-    }                                                                                                                          \
-  }.operator()<decltype(Type::Member)>();                                                                                      \
-  []<typename U>()                                                                                                             \
-  {                                                                                                                            \
-    if constexpr (is_optional_v<U>)                                                                                            \
-    {                                                                                                                          \
-      entt::meta_factory<U>{}.template ctor<typename U::value_type>() OPTIONAL_FUNCS(U);               \
-    }                                                                                                                          \
-  }.operator()<decltype(Type::Member)>();                                                                                      \
+#define REGISTER_ENUM(Enum) ASSERT(asEngine.RegisterEnum(RemoveNamespaces(#Enum).c_str()) >= 0)
+#define REGISTER_ENUM_VALUE(Enum, Value) ASSERT(asEngine.RegisterEnumValue(RemoveNamespaces(#Enum).c_str(), RemoveNamespaces(#Value).c_str(), static_cast<int>(Enum::Value)) >= 0)
+
+#define REGISTER_OBJECT_TYPE(Type)                                                                                                                                   \
+  /*if constexpr (!is_variant_v<Type>)*/                                                                                                                                           \
+  {                                                                                                                                                                  \
+    const auto MAKE_IDENTIFIER2(name) = RemoveNamespaces(#Type);                                                                                                     \
+    ASSERT(asEngine.RegisterObjectType(MAKE_IDENTIFIER2(name).c_str(), sizeof(Type), asOBJ_VALUE | asGetTypeTraits<Type>()) >= 0);                                   \
+    ASSERT(                                                                                                                                                          \
+      asEngine.RegisterObjectBehaviour(MAKE_IDENTIFIER2(name).c_str(), asBEHAVE_CONSTRUCT, "void f()", asFUNCTION(std::construct_at<Type>), asCALL_CDECL_OBJLAST) >= \
+      0);                                                                                                                                                            \
+    ASSERT(                                                                                                                                                          \
+      asEngine.RegisterObjectBehaviour(MAKE_IDENTIFIER2(name).c_str(), asBEHAVE_DESTRUCT, "void f()", asFUNCTION(std::destroy_at<Type>), asCALL_CDECL_OBJLAST) >=    \
+      0);                                                                                                                                                            \
+    ASSERT(asEngine.RegisterObjectMethod(MAKE_IDENTIFIER2(name).c_str(),                                                                                             \
+             (MAKE_IDENTIFIER2(name) + "& opAssign(" + MAKE_IDENTIFIER2(name) + "& in)").c_str(),                                                                    \
+             asMETHODPR(Type, operator=, (const Type&), Type&),                                                                                                      \
+             asCALL_THISCALL) >= 0);                                                                                                                                 \
+  }
+
+#define REGISTER_OBJECT_PROPERTIES(Type, Member)                                        \
+  ASSERT(asEngine.RegisterObjectProperty(RemoveNamespaces(#Type).c_str(),               \
+           (RemoveNamespaces(GetName<decltype(Type::Member)>()) + " " #Member).c_str(), \
+           asOFFSET(Type, Member)) >= 0)
+
+  // Registers the following functions:
+  // registry::has (alias for single-component registry::all)
+  // registry::get (wrapper for get() that throws if not exists)
+  // registry::set (wrapper for emplace_or_replace())
+#define REGISTER_COMPONENT_REGISTRY_FUNCS(Type)                                                                                                                   \
+  {                                                                                                                                                               \
+    [&asEngine]<typename T>                                                                                                                                       \
+    {                                                                                                                                                             \
+      const auto MAKE_IDENTIFIER2(name2) = RemoveNamespaces(#Type);                                                                                               \
+      /* e.g. Velocity GetVelocity(World& in, entity)*/                                                                                                           \
+      if constexpr (!std::is_empty_v<Type>)                                                                                                                       \
+      {                                                                                                                                                           \
+        ASSERT(asEngine.RegisterObjectMethod("World",                                                                                                             \
+                 (MAKE_IDENTIFIER2(name2) + " Get" + MAKE_IDENTIFIER2(name2) + "(entity)").c_str(),                                                               \
+                 asFUNCTION(WorldGet<Type>),                                                                                                                      \
+                 asCALL_CDECL_OBJFIRST) >= 0);                                                                                                                    \
+        ASSERT(asEngine.RegisterObjectMethod("World",                                                                                                             \
+                 ("void Set" + MAKE_IDENTIFIER2(name2) + "(entity, " + MAKE_IDENTIFIER2(name2) + ")").c_str(),                                                    \
+                 asFUNCTION(WorldSet<Type>),                                                                                                                      \
+                 asCALL_CDECL_OBJFIRST) >= 0);                                                                                                                    \
+      }                                                                                                                                                           \
+      ASSERT(                                                                                                                                                     \
+        asEngine.RegisterObjectMethod("World", ("bool Has" + MAKE_IDENTIFIER2(name2) + "(entity)").c_str(), asFUNCTION(WorldHas<Type>), asCALL_CDECL_OBJFIRST) >= \
+        0);                                                                                                                                                       \
+    }.operator()<Type>();                                                                                                                                         \
+  }
+
+#define DATA(Type, Member, ...)                                                                                                                              \
+  ;                                                                                                                                                          \
+  REGISTER_OBJECT_PROPERTIES(Type, Member); \
+  DATA_BASE(Type, Member __VA_OPT__(, __VA_ARGS__))
+
+#define DATA_BASE(Type, Member, ...);                                                                                                                          \
+  auto MAKE_IDENTIFIER() = entt::meta_factory<Type> {};                                                                                                      \
+  MAKE_IDENTIFIER() \
+  .data<&Type ::Member, entt::as_ref_t>(#Member##_hs) \
+  .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)}); \
+  entt::meta_factory<decltype(Type::Member)>{}.traits(                                                                                                       \
+    (is_optional_v<decltype(Type::Member)> ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0)));                          \
+  []<typename U>()                                                                                                                                           \
+  {                                                                                                                                                          \
+    if constexpr (is_variant_v<U>)                                                                                                                           \
+    {                                                                                                                                                        \
+      /*entt::meta_factory<U>{} VARIANT_FUNCS(U);*/                                                                                                          \
+    }                                                                                                                                                        \
+  }.operator()<decltype(Type::Member)>();                                                                                                                    \
+  []<typename U>()                                                                                                                                           \
+  {                                                                                                                                                          \
+    if constexpr (is_optional_v<U>)                                                                                                                          \
+    {                                                                                                                                                        \
+      entt::meta_factory<U>{}.template ctor<typename U::value_type>() OPTIONAL_FUNCS(U);                                                                     \
+    }                                                                                                                                                        \
+  }.operator()<decltype(Type::Member)>();                                                                                                                    \
   MAKE_IDENTIFIER()
 
 #define PROP_SPEED(Scalar) {"speed"_hs, Scalar}
@@ -690,10 +835,14 @@ void Core::Reflection::Initialize()
 #define PROP_MAX(Scalar) {"max"_hs, Scalar}
 #define PROP_DISPLAY_NAME(Name) {"display_name"_hs, Name}
 #define PROP_ICON(Icon) {"icon"_hs, Icon}
-#define REFLECT_ENUM(T) entt::meta_factory<T>{}\
+#define REFLECT_ENUM(T) REGISTER_ENUM(T);\
+  entt::meta_factory<T>{}\
   .func<[](T value) { return static_cast<std::underlying_type_t<T>>(value); }>("to_underlying"_hs)
+
 #define ENUMERATOR(E, Member, ...) \
-  .data<E :: Member>(#Member##_hs) \
+  ;                                \
+  REGISTER_ENUM_VALUE(E, Member); \
+  entt::meta_factory<E>{}.data<E :: Member>(#Member##_hs) \
   .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)})
 
 #define VARIANT_FUNCS(T)                                                               \
@@ -750,7 +899,9 @@ void Core::Reflection::Initialize()
   entt::meta_factory<uint16_t>().func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint16_t>>("EditorRead"_hs).traits(TRIVIAL);
   entt::meta_factory<uint8_t>().func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint8_t>>("EditorRead"_hs).traits(TRIVIAL);
   entt::meta_factory<float>().func<&EditorWriteScalar<float>>("EditorWrite"_hs).func<&EditorReadScalar<float>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<glm::vec3>().func<&EditorWriteVec3>("EditorWrite"_hs).func<&EditorReadVec3>("EditorRead"_hs)
+  entt::meta_factory<glm::vec3>()
+    .func<&EditorWriteVec3>("EditorWrite"_hs)
+    .func<&EditorReadVec3>("EditorRead"_hs)
     TRAITS(TRIVIAL)
     DATA(glm::vec3, x)
     DATA(glm::vec3, y)
@@ -764,16 +915,23 @@ void Core::Reflection::Initialize()
     TRAITS(TRIVIAL)
     DATA(glm::ivec2, x)
     DATA(glm::ivec2, y);
-  entt::meta_factory<glm::quat>().func<&EditorWriteQuat>("EditorWrite"_hs).func<&EditorReadQuat>("EditorRead"_hs)
+  entt::meta_factory<glm::quat>()
+    .func<&EditorWriteQuat>("EditorWrite"_hs)
+    .func<&EditorReadQuat>("EditorRead"_hs)
     TRAITS(TRIVIAL)
     DATA(glm::quat, w)
     DATA(glm::quat, x)
     DATA(glm::quat, y)
     DATA(glm::quat, z);
+  AppendToPropertiesMap<glm::vec3>("name"_hs, "glm::vec3");
+  AppendToPropertiesMap<glm::ivec3>("name"_hs, "glm::ivec3");
+  AppendToPropertiesMap<glm::ivec2>("name"_hs, "glm::ivec2");
+  AppendToPropertiesMap<glm::quat>("name"_hs, "glm::quat");
+  AppendToPropertiesMap<std::string>("name"_hs, "std::string");
   entt::meta_factory<std::string>().func<&EditorWriteString>("EditorWrite"_hs).func<&EditorReadString>("EditorRead"_hs);
   entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs).traits(TRIVIAL);
   entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs); // NOT trivial, because they need to be remapped for networking.
-  
+
   REFLECT_COMPONENT_NO_DEFAULT(LocalTransform, REPLICATED | TRIVIAL)
     .func<&EditorUpdateTransform>("OnUpdate"_hs)
     .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<LocalTransform>(entity); }>("EmplaceDefault"_hs)
@@ -862,6 +1020,72 @@ void Core::Reflection::Initialize()
     DATA(FlyingCharacterController, acceleration, PROP_MAX(50.0f));
 
   using namespace Physics;
+
+  REFLECT_TYPE(std::monostate);
+  REFLECT_TYPE(UseTwoLevelGrid);
+
+  REFLECT_TYPE(Sphere)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Sphere, radius);
+
+  REFLECT_TYPE(Capsule)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Capsule, radius)
+    DATA(Capsule, cylinderHalfHeight);
+  
+  REFLECT_TYPE(Box)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Box, halfExtent);
+
+  REFLECT_TYPE(Plane)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(Plane, normal)
+    DATA(Plane, constant);
+
+  REFLECT_TYPE(PolyShape)
+    VARIANT_FUNCS(PolyShape);
+
+  REFLECT_TYPE(ItemState)
+    DATA(ItemState, id)
+    DATA(ItemState, count)
+    DATA(ItemState, useAccum);
+
+  REFLECT_COMPONENT(DroppedItem)
+    DATA(DroppedItem, item);
+
+  REFLECT_ENUM(JPH::CharacterBase::EGroundState)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, OnGround)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, OnSteepGround)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, NotSupported)
+    ENUMERATOR(JPH::CharacterBase::EGroundState, InAir);
+
+  REFLECT_TYPE(ShapeSettings)
+    TRAITS(EDITOR_READ_ONLY)
+    DATA(ShapeSettings, shape)
+    DATA(ShapeSettings, density)
+    DATA(ShapeSettings, translation)
+    DATA(ShapeSettings, rotation);
+
+  REFLECT_ENUM(JPH::EMotionType)
+    ENUMERATOR(JPH::EMotionType, Static)
+    ENUMERATOR(JPH::EMotionType, Kinematic)
+    ENUMERATOR(JPH::EMotionType, Dynamic);
+
+  REFLECT_ENUM(JPH::EMotionQuality)
+    ENUMERATOR(JPH::EMotionQuality, Discrete)
+    ENUMERATOR(JPH::EMotionQuality, LinearCast);
+
+  REFLECT_ENUM(JPH::EAllowedDOFs)
+    ENUMERATOR(JPH::EAllowedDOFs, None)
+    ENUMERATOR(JPH::EAllowedDOFs, All)
+    ENUMERATOR(JPH::EAllowedDOFs, TranslationX)
+    ENUMERATOR(JPH::EAllowedDOFs, TranslationY)
+    ENUMERATOR(JPH::EAllowedDOFs, TranslationZ)
+    ENUMERATOR(JPH::EAllowedDOFs, RotationX)
+    ENUMERATOR(JPH::EAllowedDOFs, RotationY)
+    ENUMERATOR(JPH::EAllowedDOFs, RotationZ)
+    ENUMERATOR(JPH::EAllowedDOFs, Plane2D);
+
   REFLECT_COMPONENT(CharacterController)
     .func<[](World* w, entt::entity e) { w->GivePlayerCharacterController(e); }>("add"_hs)
     DATA(CharacterController, previousGroundState)
@@ -892,71 +1116,6 @@ void Core::Reflection::Initialize()
     DATA(RigidBodySettings, layer)
     DATA(RigidBodySettings, degreesOfFreedom);
 
-  REFLECT_TYPE(std::monostate);
-  REFLECT_TYPE(UseTwoLevelGrid);
-
-  REFLECT_TYPE(Sphere)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Sphere, radius);
-
-  REFLECT_TYPE(Capsule)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Capsule, radius)
-    DATA(Capsule, cylinderHalfHeight);
-  
-  REFLECT_TYPE(Box)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Box, halfExtent);
-
-  REFLECT_TYPE(Plane)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Plane, normal)
-    DATA(Plane, constant);
-
-  REFLECT_TYPE(PolyShape)
-    VARIANT_FUNCS(PolyShape);
-
-  REFLECT_TYPE(ShapeSettings)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(ShapeSettings, shape)
-    DATA(ShapeSettings, density)
-    DATA(ShapeSettings, translation)
-    DATA(ShapeSettings, rotation);
-
-  REFLECT_ENUM(JPH::EMotionType)
-    ENUMERATOR(JPH::EMotionType, Static)
-    ENUMERATOR(JPH::EMotionType, Kinematic)
-    ENUMERATOR(JPH::EMotionType, Dynamic);
-
-  REFLECT_ENUM(JPH::EMotionQuality)
-    ENUMERATOR(JPH::EMotionQuality, Discrete)
-    ENUMERATOR(JPH::EMotionQuality, LinearCast);
-
-  REFLECT_ENUM(JPH::CharacterBase::EGroundState)
-    ENUMERATOR(JPH::CharacterBase::EGroundState, OnGround)
-    ENUMERATOR(JPH::CharacterBase::EGroundState, OnSteepGround)
-    ENUMERATOR(JPH::CharacterBase::EGroundState, NotSupported)
-    ENUMERATOR(JPH::CharacterBase::EGroundState, InAir);
-
-  REFLECT_ENUM(JPH::EAllowedDOFs)
-    ENUMERATOR(JPH::EAllowedDOFs, None)
-    ENUMERATOR(JPH::EAllowedDOFs, All)
-    ENUMERATOR(JPH::EAllowedDOFs, TranslationX)
-    ENUMERATOR(JPH::EAllowedDOFs, TranslationY)
-    ENUMERATOR(JPH::EAllowedDOFs, TranslationZ)
-    ENUMERATOR(JPH::EAllowedDOFs, RotationX)
-    ENUMERATOR(JPH::EAllowedDOFs, RotationY)
-    ENUMERATOR(JPH::EAllowedDOFs, RotationZ)
-    ENUMERATOR(JPH::EAllowedDOFs, Plane2D);
-
-  REFLECT_COMPONENT(DroppedItem)
-    DATA(DroppedItem, item);
-
-  REFLECT_TYPE(ItemState)
-    DATA(ItemState, id)
-    DATA(ItemState, count)
-    DATA(ItemState, useAccum);
-
   REFLECT_TYPE(TwoLevelGrid::Material)
     DATA(TwoLevelGrid::Material, isVisible)
     DATA(TwoLevelGrid::Material, isSolid);
@@ -967,6 +1126,11 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(SimpleEnemyBehavior);
 
+  REFLECT_ENUM(PredatoryBirdBehavior::State)
+    ENUMERATOR(PredatoryBirdBehavior::State, IDLE)
+    ENUMERATOR(PredatoryBirdBehavior::State, CIRCLING)
+    ENUMERATOR(PredatoryBirdBehavior::State, SWOOPING);
+
   REFLECT_COMPONENT(PredatoryBirdBehavior)
     DATA(PredatoryBirdBehavior, state)
     DATA(PredatoryBirdBehavior, accum)
@@ -974,11 +1138,6 @@ void Core::Reflection::Initialize()
     TRAITS(EDITOR_READ_ONLY)
     DATA(PredatoryBirdBehavior, idlePosition)
     DATA(PredatoryBirdBehavior, lineOfSightDuration);
-
-  REFLECT_ENUM(PredatoryBirdBehavior::State)
-    ENUMERATOR(PredatoryBirdBehavior::State, IDLE)
-    ENUMERATOR(PredatoryBirdBehavior::State, CIRCLING)
-    ENUMERATOR(PredatoryBirdBehavior::State, SWOOPING);
 
   REFLECT_COMPONENT(SimplePathfindingEnemyBehavior);
 
@@ -989,10 +1148,18 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(LinearPath, REPLICATED)
     .func<&EditorUpdateLinearPath>("OnUpdate"_hs)
-    DATA(LinearPath, frames)
+    DATA_BASE(LinearPath, frames)
     DATA(LinearPath, secondsElapsed)
     DATA(LinearPath, originalLocalTransform)
     TRAITS(NO_EDITOR);
+
+  REFLECT_ENUM(Math::Easing)
+    ENUMERATOR(Math::Easing, LINEAR)
+    ENUMERATOR(Math::Easing, EASE_IN_SINE)
+    ENUMERATOR(Math::Easing, EASE_OUT_SINE)
+    ENUMERATOR(Math::Easing, EASE_IN_OUT_BACK)
+    ENUMERATOR(Math::Easing, EASE_IN_CUBIC)
+    ENUMERATOR(Math::Easing, EASE_OUT_CUBIC);
 
   //using LinearPath::KeyFrame;
   REFLECT_TYPE(LinearPath::KeyFrame)
@@ -1007,7 +1174,7 @@ void Core::Reflection::Initialize()
     
   REFLECT_COMPONENT(Hierarchy, EDITOR_READ_ONLY | REPLICATED)
     DATA(Hierarchy, parent)
-    DATA(Hierarchy, children)
+    DATA_BASE(Hierarchy, children)
     DATA(Hierarchy, useLocalPositionAsGlobal)
     DATA(Hierarchy, useLocalRotationAsGlobal);
 
@@ -1021,7 +1188,7 @@ void Core::Reflection::Initialize()
     DATA(Invulnerability, remainingSeconds, PROP_MAX(1000.0f));
 
   REFLECT_COMPONENT(CannotDamageEntities)
-    DATA(CannotDamageEntities, entities);
+    DATA_BASE(CannotDamageEntities, entities);
 
   REFLECT_COMPONENT(Projectile)
     DATA(Projectile, initialSpeed, PROP_MAX(500.0f))
@@ -1032,7 +1199,7 @@ void Core::Reflection::Initialize()
     DATA(Inventory, activeSlotCoord)
     DATA(Inventory, canHaveActiveItem)
     DATA(Inventory, activeSlotEntity)
-    DATA(Inventory, slots)
+    DATA_BASE(Inventory, slots)
     TRAITS(TRIVIAL);
 
   REFLECT_COMPONENT(Billboard, REPLICATED)
@@ -1104,32 +1271,24 @@ void Core::Reflection::Initialize()
   
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
-  REFLECT_ENUM(Math::Easing)
-    ENUMERATOR(Math::Easing, LINEAR)
-    ENUMERATOR(Math::Easing, EASE_IN_SINE)
-    ENUMERATOR(Math::Easing, EASE_OUT_SINE)
-    ENUMERATOR(Math::Easing, EASE_IN_OUT_BACK)
-    ENUMERATOR(Math::Easing, EASE_IN_CUBIC)
-    ENUMERATOR(Math::Easing, EASE_OUT_CUBIC);
-
   // TODO: TwoLevelGrid reflection should be removed
   REFLECT_TYPE(TwoLevelGrid::TopLevelBrickPtr)
     DATA(TwoLevelGrid::TopLevelBrickPtr, voxelsDoBeAllSame)
-    DATA(TwoLevelGrid::TopLevelBrickPtr, voxelIfAllSame);
+    DATA_BASE(TwoLevelGrid::TopLevelBrickPtr, voxelIfAllSame);
 
   REFLECT_TYPE(TwoLevelGrid::TopLevelBrick)
-    DATA(TwoLevelGrid::TopLevelBrick, bricks);
+    DATA_BASE(TwoLevelGrid::TopLevelBrick, bricks);
   
   REFLECT_TYPE(TwoLevelGrid::BottomLevelBrickPtr)
     DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelsDoBeAllSame)
-    DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelIfAllSame);
+    DATA_BASE(TwoLevelGrid::BottomLevelBrickPtr, voxelIfAllSame);
   
   REFLECT_TYPE(TwoLevelGrid::BottomLevelBrick)
-    DATA(TwoLevelGrid::BottomLevelBrick, occupancy)
-    DATA(TwoLevelGrid::BottomLevelBrick, voxels);
+    DATA_BASE(TwoLevelGrid::BottomLevelBrick, occupancy)
+    DATA_BASE(TwoLevelGrid::BottomLevelBrick, voxels);
 
   REFLECT_TYPE(TwoLevelGrid::OccupancyBitmask)
-    DATA(TwoLevelGrid::OccupancyBitmask, bitmask);
+    DATA_BASE(TwoLevelGrid::OccupancyBitmask, bitmask);
 
   REFLECT_ENUM(voxel_t)
     ENUMERATOR(voxel_t, Air)
@@ -1162,11 +1321,11 @@ void Core::Reflection::Initialize()
     DATA(ItemIdAndCount, count);
 
   REFLECT_TYPE(Crafting::Recipe)
-    DATA(Crafting::Recipe, ingredients)
-    DATA(Crafting::Recipe, output)
-    DATA(Crafting::Recipe, craftingStation);
-
-  REFLECT_ENUM(voxel_t);
+    DATA_BASE(Crafting::Recipe, ingredients)
+    DATA_BASE(Crafting::Recipe, output)
+    DATA(Crafting::Recipe, craftingStation)
+    DATA(Crafting::Recipe, name)
+    DATA(Crafting::Recipe, description);
 
   REGISTER_RPC(DropItemRPC, RpcTraits::Server);
   REGISTER_RPC(ThrowItemRPC, RpcTraits::Server);
@@ -1207,7 +1366,10 @@ void Core::Reflection::Initialize()
     ENUMERATOR(Item::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
     ENUMERATOR(Item::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
     ENUMERATOR(Item::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
-    ENUMERATOR(Item::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"));
+    ENUMERATOR(Item::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"))
+    ENUMERATOR(Item::EffectType, HealthRegeneration, PROP_DISPLAY_NAME("Health Regeneration"))
+    ENUMERATOR(Item::EffectType, Shine, PROP_DISPLAY_NAME("Shine"))
+    ENUMERATOR(Item::EffectType, Spelunker, PROP_DISPLAY_NAME("Spelunker"));
 
   REFLECT_ENUM(ArmorAndAccessories::Slot)
     ENUMERATOR(ArmorAndAccessories::Slot, SLOT_HEAD, PROP_DISPLAY_NAME("Head"), PROP_ICON(ICON_FA_HAT_COWBOY))
@@ -1220,29 +1382,19 @@ void Core::Reflection::Initialize()
     ENUMERATOR(ArmorAndAccessories::Slot, SLOT_ACCESSORY4, PROP_DISPLAY_NAME("Accessory"), PROP_ICON(ICON_FA_GEAR));
 
   REFLECT_COMPONENT(TemporaryEffects, REPLICATED)
-    DATA(TemporaryEffects, effects);
+    DATA_BASE(TemporaryEffects, effects);
 
   REFLECT_COMPONENT(ArmorAndAccessories, REPLICATED)
-    DATA(ArmorAndAccessories, slots);
+    DATA_BASE(ArmorAndAccessories, slots);
 
   REFLECT_COMPONENT(Pathfinding::CachedPath)
-    DATA(Pathfinding::CachedPath, path)
+    DATA_BASE(Pathfinding::CachedPath, path)
     TRAITS(TRANSIENT)
     DATA(Pathfinding::CachedPath, progress)
     DATA(Pathfinding::CachedPath, updateAccum)
     DATA(Pathfinding::CachedPath, timeBetweenUpdates);
 
   REFLECT_COMPONENT(DoNotRenderIfAncestorIsLocalPlayer, REPLICATED);
-
-  REFLECT_ENUM(Item::EffectType)
-    ENUMERATOR(Item::EffectType, MovementSpeedModifier)
-    ENUMERATOR(Item::EffectType, JumpImpulseModifier)
-    ENUMERATOR(Item::EffectType, ArmorModifier)
-    ENUMERATOR(Item::EffectType, BaseDamage)
-    ENUMERATOR(Item::EffectType, Knockback)
-    ENUMERATOR(Item::EffectType, HealthRegeneration)
-    ENUMERATOR(Item::EffectType, Shine)
-    ENUMERATOR(Item::EffectType, Spelunker);
 
   REFLECT_ENUM(Item::EffectCondition)
     ENUMERATOR(Item::EffectCondition, OnUse)
@@ -1272,7 +1424,7 @@ void Core::Reflection::Initialize()
     DATA(Item::Component::ColliderWhenDropped, rotation)
     DATA(Item::Component::ColliderWhenDropped, friction);
   
-  REFLECT_COMPONENT(Item::Component::AllowedSlots, ITEM_COMPONENT | REPLICATED);
+  REFLECT_COMPONENT_BASE(Item::Component::AllowedSlots, ITEM_COMPONENT | REPLICATED);
 
   REFLECT_ENUM(Item::Component::AllowedSlots)
     ENUMERATOR(Item::Component::AllowedSlots, Normal)
@@ -1289,7 +1441,7 @@ void Core::Reflection::Initialize()
     DATA(Item::Component::StaticEffect, amount);
 
   REFLECT_COMPONENT(Item::Component::StaticEffects, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::StaticEffects, effects);
+    DATA_BASE(Item::Component::StaticEffects, effects);
   
   REFLECT_COMPONENT(Item::Component::Gun, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::Gun, model)
@@ -1304,7 +1456,7 @@ void Core::Reflection::Initialize()
     DATA(Item::Component::Gun, vrecoilDev)
     DATA(Item::Component::Gun, hrecoil)
     DATA(Item::Component::Gun, hrecoilDev)
-    DATA(Item::Component::Gun, light)
+    DATA_BASE(Item::Component::Gun, light)
     DATA(Item::Component::Gun, sticky)
     DATA(Item::Component::Gun, stickyDist);
 
@@ -1317,7 +1469,7 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Item::Component::Tool, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::Tool, blockDamage)
     DATA(Item::Component::Tool, blockDamageTier)
-    DATA(Item::Component::Tool, blockDamageFlags);
+    DATA_BASE(Item::Component::Tool, blockDamageFlags);
 
   REFLECT_COMPONENT(Item::Component::SpawnEntityPrefabOnUse, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::SpawnEntityPrefabOnUse, tag);
@@ -1333,7 +1485,7 @@ void Core::Reflection::Initialize()
     DATA(Item::Component::SpawnTempHurtboxOnUse, position)
     DATA(Item::Component::SpawnTempHurtboxOnUse, damage)
     DATA(Item::Component::SpawnTempHurtboxOnUse, knockback)
-    DATA(Item::Component::SpawnTempHurtboxOnUse, duration);
+    DATA_BASE(Item::Component::SpawnTempHurtboxOnUse, duration);
 
   // TODO: reflect AnimatePathOnUse
 
@@ -1352,7 +1504,7 @@ void Core::Reflection::Initialize()
     ENUMERATOR(BlockDamageFlagBit, NO_LOOT_95_PERCENT);
 
   REFLECT_TYPE(BlockDamageFlags)
-    DATA(BlockDamageFlags, flags);
+    DATA_BASE(BlockDamageFlags, flags);
 
   using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
   REFLECT_TYPE(LootType)
@@ -1361,8 +1513,8 @@ void Core::Reflection::Initialize()
   REFLECT_COMPONENT(Block::Component::Breakable, BLOCK_COMPONENT | REPLICATED)
     DATA(Block::Component::Breakable, initialHealth)
     DATA(Block::Component::Breakable, damageTier)
-    DATA(Block::Component::Breakable, damageFlags)
-    DATA(Block::Component::Breakable, dropWhenBroken);
+    DATA_BASE(Block::Component::Breakable, damageFlags)
+    DATA_BASE(Block::Component::Breakable, dropWhenBroken);
 
   REFLECT_COMPONENT(Block::Component::Valuable, BLOCK_COMPONENT | REPLICATED);
 
@@ -1370,9 +1522,9 @@ void Core::Reflection::Initialize()
 
   REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube, BLOCK_COMPONENT | REPLICATED)
     DATA(Block::Component::RenderAsTexturedCube, randomizeTexcoordRotation)
-    DATA(Block::Component::RenderAsTexturedCube, baseColorTexture)
+    DATA_BASE(Block::Component::RenderAsTexturedCube, baseColorTexture)
     DATA(Block::Component::RenderAsTexturedCube, baseColorFactor)
-    DATA(Block::Component::RenderAsTexturedCube, emissionTexture)
+    DATA_BASE(Block::Component::RenderAsTexturedCube, emissionTexture)
     DATA(Block::Component::RenderAsTexturedCube, emissionFactor);
 
   REFLECT_COMPONENT(Block::Component::PhysicalProperties, BLOCK_COMPONENT | REPLICATED)

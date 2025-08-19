@@ -20,6 +20,7 @@
 #include "VoxLoader.h"
 #include "World.h"
 #include "Game/Audio.h"
+#include "Game/Scripting.h"
 
 #include "tracy/Tracy.hpp"
 #include "entt/signal/dispatcher.hpp"
@@ -373,6 +374,7 @@ void OnLinearPathRemove(entt::registry& registryRaw, entt::entity entity)
 
 static Head* gHead_HORRIBLE_HACK{};
 static std::unique_ptr<Networking::Interface>* gNetworking_HORRIBLE_HACK{};
+static Scripting* scripting{};
 Game::Game(uint32_t)
 {
   Core::Logging::Initialize();
@@ -398,9 +400,10 @@ Game::Game(uint32_t)
 #endif
   gNetworking_HORRIBLE_HACK = &networking_;
 
+  scripting = new Scripting();
   CreateContextVariablesAndObservers(*world_);
 
-  Core::Reflection::Initialize();
+  Core::Reflection::Initialize(*scripting);
   Core::Serialization::Initialize();
 }
 
@@ -426,6 +429,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<NpcSpawnDirector>(world);
   registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
   registry.ctx().emplace<SunInfo>();
+  registry.ctx().emplace<Scripting*>(scripting);
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();
