@@ -23,7 +23,7 @@ vec4 FogAtPoint(vec3 wPos)
   vec3 t = vec3(.2, 0.1, .3) * uniforms.time;
   //float d = max((snoise(vec4(wPos * 0.11 + t, t * 1.2)) + 0.5), 0.0);
   //d *= uniforms.groundFogDensity;
-  float d = .1;
+  float d = 1.0;
 
   // Fade out fog if too low or too high.
   d *= (1.0 - smoothstep(0, 100, wPos.y)) * (smoothstep(-15, 0, wPos.y));
