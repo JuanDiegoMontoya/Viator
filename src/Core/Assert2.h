@@ -24,6 +24,7 @@ namespace Assert::detail
     #define ASSUME(x)   __assume(x)
   #else // GCC, Clang
     #define UNREACHABLE __builtin_unreachable()
+    #define ASSUME(x)   [[assume(x)]]
   #endif
 #endif
 
