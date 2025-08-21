@@ -1743,7 +1743,8 @@ entt::entity World::GetNearestPlayer(glm::vec3 position)
 
 float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, BlockDamageFlags damageType)
 {
-  auto& grid     = registry_.ctx().get<TwoLevelGrid>();
+  ZoneScoped;
+  auto& grid = registry_.ctx().get<TwoLevelGrid>();
   const auto prevVoxel = grid.GetVoxelAt(voxelPos);
   if (prevVoxel == voxel_t::Air)
   {

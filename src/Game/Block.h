@@ -71,6 +71,11 @@ namespace Block
     {
       ItemId item;
     };
+
+    struct Script
+    {
+      std::filesystem::path path;
+    };
   }
 
   class Registry

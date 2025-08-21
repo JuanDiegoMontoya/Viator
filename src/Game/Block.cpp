@@ -4,6 +4,9 @@
 #include "Core/Assert2.h"
 #include "Networking/RPC.h"
 #include "Audio.h"
+#include "Scripting.h"
+
+#include "tracy/Tracy.hpp"
 
 Block::Registry::Registry()
 {
@@ -32,6 +35,8 @@ BlockId Block::Registry::Create(std::string tag)
 
 bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
 {
+  ZoneScoped;
+
   const auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
   auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
   if (grid.IsPositionInGrid(voxelPosition))
@@ -63,6 +68,8 @@ bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId bloc
 
 void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
 {
+  ZoneScoped;
+
   auto& registry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
 
   Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, voxel_t::Air);
@@ -111,6 +118,11 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
     auto entity = world.GetBlockEntity(voxelPosition);
     ASSERT(entity != entt::null && "Block entity didn't exist!");
     world.GetRegistry().emplace<DeferredDelete>(entity);
+  }
+
+  if (const auto* p = registry.try_get<Component::Script>(entt::entity(block)))
+  {
+    world.GetRegistry().ctx().get<Scripting*>()->ExecuteScript(p->path, "OnDestroyBlock", {&world, voxelPosition, block});
   }
 }
 
@@ -217,6 +229,8 @@ std::string Block::GetName(const World& world,  BlockId block)
 
 BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params)
 {
+  ZoneScoped;
+
   auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
   auto& bReg   = blocks.GetRegistry();
 

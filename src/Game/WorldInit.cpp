@@ -552,6 +552,7 @@ void World::InitializeGameDefinitions()
       .name = "Bomb",
       .breakable = Block::Component::Breakable{
         .initialHealth = 40,
+        .dropWhenBroken = std::monostate{},
       },
       .render = Block::Component::RenderAsTexturedCube{
         .baseColorFactor = {0.8f, 0.2f, 0.2f},
@@ -574,6 +575,7 @@ void World::InitializeGameDefinitions()
       .name = "Big Bomb",
       .breakable = Block::Component::Breakable{
         .initialHealth = 40,
+        .dropWhenBroken = std::monostate{},
       },
       .render = Block::Component::RenderAsTexturedCube{
         .baseColorFactor = {0.8f, 0.2f, 0.2f},

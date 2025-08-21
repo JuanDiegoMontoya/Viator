@@ -2,10 +2,15 @@
 #include "ClassImplMacros.h"
 
 #include "entt/entity/fwd.hpp"
+#include "entt/meta/meta.hpp"
 
 #include <cstdint>
 #include <unordered_map>
 #include <filesystem>
+#include <vector>
+#include <string_view>
+
+class World;
 
 class Scripting
 {
@@ -15,7 +20,7 @@ public:
   NO_COPY_NO_MOVE(Scripting);
 
   bool AddScriptIfNotExist(const std::filesystem::path& path);
-  void ExecuteScriptW(const std::filesystem::path& path, class World& world, entt::entity entity);
+  void ExecuteScript(const std::filesystem::path& path, const char* decl, std::vector<entt::meta_any> args);
   void PollAndReloadModifiedScripts();
 
   [[nodiscard]] auto& GetEngine()

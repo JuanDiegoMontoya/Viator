@@ -1,6 +1,7 @@
 #include "Scripting.h"
 #include "Core/Assert2.h"
 #include "Game/Assets.h"
+#include "Game/World.h"
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/std.h"
@@ -8,6 +9,8 @@
 #include "angelscript.h"
 #include "angelscript/sdk/add_on/scriptstdstring/scriptstdstring.h"
 #include "angelscript/sdk/add_on/scriptbuilder/scriptbuilder.h"
+
+#include "tracy/Tracy.hpp"
 
 namespace
 {
@@ -28,6 +31,7 @@ static void MessageCallback(asSMessageInfo* msg, void*)
 
 Scripting::Scripting()
 {
+  spdlog::info("Initializing scripting engine.");
   engine = asCreateScriptEngine();
   ASSERT(engine->SetMessageCallback(asFUNCTION(MessageCallback), nullptr, asCALL_CDECL) >= 0);
   RegisterStdString(engine);
@@ -36,6 +40,7 @@ Scripting::Scripting()
 
 Scripting::~Scripting()
 {
+  spdlog::info("Terminating scripting engine.");
   for (const auto& [path, script] : scripts)
   {
     script.context->Release();
@@ -46,6 +51,8 @@ Scripting::~Scripting()
 
 bool Scripting::AddScriptIfNotExist(const std::filesystem::path& path)
 {
+  ZoneScoped;
+
   if (scripts.contains(path))
   {
     spdlog::warn("Failed to add script {}.\n"
@@ -75,6 +82,7 @@ bool Scripting::AddScriptIfNotExist(const std::filesystem::path& path)
     return false;
   }
 
+  spdlog::info("Loaded script {}", path);
   scripts.emplace(path,
     ScriptInfo{
       .path          = path,
@@ -84,8 +92,10 @@ bool Scripting::AddScriptIfNotExist(const std::filesystem::path& path)
   return true;
 }
 
-void Scripting::ExecuteScriptW(const std::filesystem::path& path, World& world, entt::entity entity)
+void Scripting::ExecuteScript(const std::filesystem::path& path, const char* decl, std::vector<entt::meta_any> args)
 {
+  ZoneScoped;
+
   auto it = scripts.find(path);
   if (it == scripts.end())
   {
@@ -105,9 +115,8 @@ void Scripting::ExecuteScriptW(const std::filesystem::path& path, World& world, 
       path);
     return;
   }
-
-  const char* const decl = "void main(World& inout, entity)";
-  auto* func = mod->GetFunctionByDecl(decl);
+  
+  auto* func = mod->GetFunctionByName(decl);
   if (func == nullptr)
   {
     spdlog::warn("Tried to execute a function that doesn't exist.\n"
@@ -124,17 +133,37 @@ void Scripting::ExecuteScriptW(const std::filesystem::path& path, World& world, 
                  "Module: {}\n"
                  "Function: {}",
       mod->GetName(),
-      func->GetName());
+      func->GetDeclaration());
     return;
   }
-  
-  script.context->SetArgObject(0, &world);
-  script.context->SetArgObject(1, &entity);
+
+  if (func->GetParamCount() != args.size())
+  {
+    spdlog::warn("Number of args provided ({}) does not match the number of function parameters ({}).\n"
+                 "Module: {}\n"
+                 "Function: {}",
+      args.size(),
+      func->GetParamCount(),
+      mod->GetName(),
+      func->GetDeclaration());
+    return;
+  }
+
+  for (int i = 0; auto& arg : args)
+  {
+    ZoneScopedN("Argument");
+    const auto argIdx = i++;
+    using namespace entt::literals;
+    auto fn = arg.type().func("ASSetArg"_hs);
+    ASSERT(fn);
+    ASSERT(fn.invoke({}, (void*)script.context, argIdx, arg));
+  }
 
   try
   {
+    ZoneScopedN("script.context->Execute()");
     const auto ret = script.context->Execute();
-
+    
     if (ret == asEXECUTION_EXCEPTION)
     {
       const auto* exceptFn = script.context->GetExceptionFunction();
@@ -180,11 +209,14 @@ void Scripting::ExecuteScriptW(const std::filesystem::path& path, World& world, 
 
 void Scripting::PollAndReloadModifiedScripts()
 {
+  ZoneScoped;
+
   for (auto& [path, script] : scripts)
   {
     const auto lastWriteTime = static_cast<uint64_t>(std::filesystem::last_write_time(path).time_since_epoch().count());
     if (lastWriteTime > script.lastWriteTime)
     {
+      spdlog::info("Recompiling script {}", path);
       script.lastWriteTime = lastWriteTime;
 
       const auto pathStr = path.string();
@@ -213,6 +245,8 @@ void Scripting::PollAndReloadModifiedScripts()
 
 void Scripting::DrawDebugUI(World& world)
 {
+  ZoneScoped;
+
   // TODO: temp
   PollAndReloadModifiedScripts();
 
@@ -234,7 +268,7 @@ void Scripting::DrawDebugUI(World& world)
       ImGui::PushID(i++);
       if (ImGui::Button("Execute"))
       {
-        ExecuteScriptW(path, world, entt::entity(ent));
+        ExecuteScript(path, "main", {&world, entt::entity(ent), 42});
       }
 
       ImGui::SameLine();

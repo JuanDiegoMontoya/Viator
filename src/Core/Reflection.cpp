@@ -247,7 +247,7 @@ namespace
     {
       throw std::runtime_error("Invalid entity");
     }
-    if (auto* ptr = world.GetRegistry().try_get<T>(entity))
+    if (const auto* ptr = world.GetRegistry().try_get<const T>(entity))
     {
       return *ptr;
     }
@@ -712,11 +712,18 @@ void Core::Reflection::Initialize(Scripting& scripting)
   auto& asEngine  = scripting.GetEngine();
 
   ASSERT(asEngine.RegisterObjectType("World", 0, asOBJ_REF | asOBJ_NOCOUNT) >= 0);
+  entt::meta_factory<World>{}.func<[](void* ctx, int argIdx, World& v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
+  entt::meta_factory<World*>{}.func<[](void* ctx, int argIdx, World* v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterObjectType("entity", sizeof(entt::entity), asOBJ_VALUE | asOBJ_POD | asOBJ_APP_PRIMITIVE) >= 0);
+  entt::meta_factory<entt::entity>{}.func<[](void* ctx, int argIdx, entt::entity v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterObjectType("vec3", sizeof(glm::vec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  entt::meta_factory<glm::vec3>{}.func<[](void* ctx, int argIdx, glm::vec3 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterObjectType("ivec3", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  entt::meta_factory<glm::ivec3>{}.func<[](void* ctx, int argIdx, glm::ivec3 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterObjectType("ivec2", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  entt::meta_factory<glm::ivec2>{}.func<[](void* ctx, int argIdx, glm::ivec2 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
+  entt::meta_factory<glm::quat>{}.func<[](void* ctx, int argIdx, glm::quat v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine.RegisterTypedef("short", "uint16") >= 0);
 
 #define MAKE_IDENTIFIER() CONCAT(factory_, __LINE__)
@@ -754,10 +761,13 @@ void Core::Reflection::Initialize(Scripting& scripting)
 #define REGISTER_ENUM_VALUE(Enum, Value) ASSERT(asEngine.RegisterEnumValue(RemoveNamespaces(#Enum).c_str(), RemoveNamespaces(#Value).c_str(), static_cast<int>(Enum::Value)) >= 0)
 
 #define REGISTER_OBJECT_TYPE(Type)                                                                                                                                   \
-  /*if constexpr (!is_variant_v<Type>)*/                                                                                                                                           \
+  /*if constexpr (!is_variant_v<Type>)*/                                                                                                                             \
   {                                                                                                                                                                  \
+    entt::meta_factory<Type>{}.func<[](void* ctx, int argIdx, Type v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);                                \
     const auto MAKE_IDENTIFIER2(name) = RemoveNamespaces(#Type);                                                                                                     \
-    ASSERT(asEngine.RegisterObjectType(MAKE_IDENTIFIER2(name).c_str(), sizeof(Type), asOBJ_VALUE | asGetTypeTraits<Type>()) >= 0);                                   \
+    ASSERT(asEngine.RegisterObjectType(MAKE_IDENTIFIER2(name).c_str(),                                                                                               \
+             sizeof(Type),                                                                                                                                           \
+             asOBJ_VALUE | asGetTypeTraits<Type>() | (alignof(Type) == 8 ? asOBJ_APP_CLASS_ALIGN8 : 0)) >= 0);                                                         \
     ASSERT(                                                                                                                                                          \
       asEngine.RegisterObjectBehaviour(MAKE_IDENTIFIER2(name).c_str(), asBEHAVE_CONSTRUCT, "void f()", asFUNCTION(std::construct_at<Type>), asCALL_CDECL_OBJLAST) >= \
       0);                                                                                                                                                            \
@@ -894,11 +904,31 @@ void Core::Reflection::Initialize(Scripting& scripting)
     .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Function}}) \
     .traits<RpcTraits>(Traits)
 
-  entt::meta_factory<int>().func<&EditorWriteScalar<int>>("EditorWrite"_hs).func<&EditorReadScalar<int>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<uint32_t>().func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint32_t>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<uint16_t>().func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint16_t>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<uint8_t>().func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs).func<&EditorReadScalar<uint8_t>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<float>().func<&EditorWriteScalar<float>>("EditorWrite"_hs).func<&EditorReadScalar<float>>("EditorRead"_hs).traits(TRIVIAL);
+  entt::meta_factory<int>()
+    .func<&EditorWriteScalar<int>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<int>>("EditorRead"_hs)
+    .traits(TRIVIAL)
+    .func<[](void* ctx, int argIdx, int v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
+  entt::meta_factory<uint32_t>()
+    .func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<uint32_t>>("EditorRead"_hs)
+    .traits(TRIVIAL)
+    .func<[](void* ctx, int argIdx, uint32_t v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
+  entt::meta_factory<uint16_t>()
+    .func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<uint16_t>>("EditorRead"_hs)
+    .traits(TRIVIAL)
+    .func<[](void* ctx, int argIdx, uint16_t v) { ((asIScriptContext*)ctx)->SetArgWord(argIdx, std::bit_cast<asWORD>(v)); }>("ASSetArg"_hs);
+  entt::meta_factory<uint8_t>()
+    .func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<uint8_t>>("EditorRead"_hs)
+    .traits(TRIVIAL)
+    .func<[](void* ctx, int argIdx, uint8_t v) { ((asIScriptContext*)ctx)->SetArgByte(argIdx, std::bit_cast<asBYTE>(v)); }>("ASSetArg"_hs);
+  entt::meta_factory<float>()
+    .func<&EditorWriteScalar<float>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<float>>("EditorRead"_hs)
+    .traits(TRIVIAL)
+    .func<[](void* ctx, int argIdx, float v) { ((asIScriptContext*)ctx)->SetArgFloat(argIdx, v); }>("ASSetArg"_hs);
   entt::meta_factory<glm::vec3>()
     .func<&EditorWriteVec3>("EditorWrite"_hs)
     .func<&EditorReadVec3>("EditorRead"_hs)
@@ -1542,4 +1572,7 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(Block::Component::CorrespondingItem, BLOCK_COMPONENT | REPLICATED)
     DATA(Block::Component::CorrespondingItem, item);
+  
+  REFLECT_COMPONENT(Block::Component::Script, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::Script, path);
 }
