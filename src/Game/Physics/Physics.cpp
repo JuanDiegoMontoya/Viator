@@ -149,6 +149,8 @@ namespace Physics
 
     struct StaticVars
     {
+      ~StaticVars();
+
       std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
       std::unique_ptr<JPH::JobSystemThreadPool> jobSystem;
 #ifdef JPH_DEBUG_RENDERER
@@ -227,6 +229,8 @@ namespace Physics
         s->contactAddedPairs.emplace_back(static_cast<entt::entity>(inCharacter->GetUserData()), e2);
       }
     };
+
+    StaticVars::~StaticVars() = default;
   }
 
   template<class... Ts>
