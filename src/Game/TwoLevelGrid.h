@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <mutex>
 #include <memory>
+#include <functional>
 
 // Modifying operations are NOT thread-safe.
 struct TwoLevelGrid
@@ -51,6 +52,8 @@ struct TwoLevelGrid
     glm::vec3 flatNormalWorld;
     glm::vec2 texCoords;
   };
+  // Predicate is called at each step and returns true to continue ray march or false to stop it.
+  bool TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, std::function<bool(voxel_t)>&& predicate) const;
   bool TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, bool skipNonSolid = false) const;
 
   // The storage of a "chunk"

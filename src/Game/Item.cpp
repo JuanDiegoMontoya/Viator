@@ -311,7 +311,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       // TODO: do not hit block if an entity is in the way.
       auto& grid = reg.ctx().get<TwoLevelGrid>();
       auto hit   = TwoLevelGrid::HitSurfaceParameters();
-      if (grid.TraceRaySimple(pos, dir, 10, hit))
+      if (grid.TraceRaySimple(pos, dir, 5, hit))
       {
         const auto damage = world.DamageBlock(glm::ivec3(hit.voxelPosition), p->blockDamage, p->blockDamageTier, p->blockDamageFlags);
         world.GetAudio()->PlaySound({.name = "hurt", .minDistance = 3, .pitch = 0.5f, .position = hit.positionWorld});
@@ -339,7 +339,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       auto hit   = TwoLevelGrid::HitSurfaceParameters();
       if (GetMaxStackSize(world, state.id) > 0)
       {
-        if (grid.TraceRaySimple(pos, dir, 10, hit))
+        if (grid.TraceRaySimple(pos, dir, 5, hit))
         {
           const auto newPos = glm::ivec3(hit.voxelPosition + hit.flatNormalWorld);
           if (grid.GetVoxelAt(newPos) == voxel_t::Air)

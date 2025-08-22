@@ -113,7 +113,7 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
     }
   }
 
-  if (const auto* p = registry.try_get<Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block)))
+  if (registry.all_of<Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block)))
   {
     auto entity = world.GetBlockEntity(voxelPosition);
     ASSERT(entity != entt::null && "Block entity didn't exist!");
@@ -123,6 +123,12 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
   if (const auto* p = registry.try_get<Component::Script>(entt::entity(block)))
   {
     world.GetRegistry().ctx().get<Scripting*>()->ExecuteScript(p->path, "OnDestroyBlock", {&world, voxelPosition, block});
+  }
+
+  for (int i = 0; i < 6; i++)
+  {
+    const auto dir = static_cast<Direction>(i);
+    OnUpdateBlock(world, voxelPosition + DirectionToNeighbor(dir));
   }
 }
 
@@ -148,6 +154,88 @@ std::variant<std::monostate, ItemState, std::string> Block::GetLootDropType(cons
     }
   }
   return std::monostate{};
+}
+
+void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
+{
+  ZoneScoped;
+
+  auto& grid       = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  const auto block = grid.GetVoxelAt(voxelPosition);
+  auto& reg        = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+
+  // Check whether block requires support from a specific side.
+  bool isSupported = true;
+  if (const auto* p = reg.try_get<const Block::Component::RequiresSupport>(entt::entity(block)))
+  {
+    const auto neighborPos = voxelPosition + DirectionToNeighbor(p->supportingSide);
+    const auto neighbor = grid.GetVoxelAt(neighborPos);
+    if (const auto* b = reg.try_get<const Block::Component::RequiresSupportByBlock>(entt::entity(block)))
+    {
+      if (b->block != neighbor)
+      {
+        isSupported = false;
+      }
+    }
+    else
+    {
+      if (const auto* pp = reg.try_get<const Block::Component::PhysicalProperties>(entt::entity(block)))
+      {
+        if (!pp->isSolid)
+        {
+          isSupported = false;
+        }
+      }
+      else
+      {
+        isSupported = false;
+      }
+    }
+  }
+
+  if (!isSupported)
+  {
+    SpawnLootDropFromBlock(world, voxelPosition, block);
+    OnDestroyBlock(world, voxelPosition, block);
+  }
+}
+
+void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId block)
+{
+  auto& registry = world.GetRegistry();
+  const auto worldPos = glm::vec3(voxelPos) + 0.5f;
+
+  const auto dropType = Block::GetLootDropType(world, block);
+  if (auto* ip = std::get_if<ItemState>(&dropType))
+  {
+    auto itemSelf = Item::Materialize(world, ip->id);
+
+    registry.get<LocalTransform>(itemSelf).position = worldPos;
+    world.UpdateLocalTransform(itemSelf);
+    Item::GiveCollider(world, ip->id, itemSelf);
+    registry.emplace<DroppedItem>(itemSelf).item = *ip;
+
+    const auto throwdir                                  = glm::vec3(world.Rng().RandFloat(-0.25f, 0.25f), 1, world.Rng().RandFloat(-0.25f, 0.25f));
+    registry.get_or_emplace<LinearVelocity>(itemSelf).v = throwdir * 2.0f;
+  }
+  else if (auto* lp = std::get_if<std::string>(&dropType))
+  {
+    auto* table = registry.ctx().get<LootRegistry>().Get(*lp);
+    ASSERT(table);
+    for (auto drop : table->Collect(world.Rng()))
+    {
+      auto droppedEntity = Item::Materialize(world, drop.item);
+      Item::GiveCollider(world, drop.item, droppedEntity);
+      registry.get<LocalTransform>(droppedEntity).position = worldPos;
+      world.UpdateLocalTransform(droppedEntity);
+      registry.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
+      auto velocity = glm::vec3(0);
+      const auto newEntityVelocity =
+        velocity +
+        world.Rng().RandFloat(1, 3) * Math::RandVecInCone({world.Rng().RandFloat(), world.Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
+      registry.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
+    }
+  }
 }
 
 bool Block::IsVisible(const World& world, BlockId block)
@@ -268,5 +356,19 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
   Item::RegisterItemForBlock(world, block);
 
   return block;
+}
+
+glm::ivec3 Block::DirectionToNeighbor(Direction direction)
+{
+  switch (direction)
+  {
+  case Direction::North: return {0, 0, 1};
+  case Direction::South: return {0, 0, -1};
+  case Direction::East: return {1, 0, 0};
+  case Direction::West: return {-1, 0, 0};
+  case Direction::Up: return {0, 1, 0};
+  case Direction::Down: return {0, -1, 0};
+  default: UNREACHABLE;
+  }
 }
 

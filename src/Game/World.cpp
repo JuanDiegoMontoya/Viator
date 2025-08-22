@@ -1787,36 +1787,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
     const auto hasNoLoot95 = damageType & BlockDamageFlagBit::NO_LOOT_95_PERCENT;
     if ((!hasNoLoot95 || Rng().RandFloat() >= 0.95) && !(damageType & BlockDamageFlagBit::NO_LOOT))
     {
-      const auto dropType = Block::GetLootDropType(*this, prevVoxel);
-      if (auto* ip = std::get_if<ItemState>(&dropType))
-      {
-        auto itemSelf = Item::Materialize(*this, ip->id);
-
-        registry_.get<LocalTransform>(itemSelf).position = worldPos;
-        UpdateLocalTransform(itemSelf);
-        Item::GiveCollider(*this, ip->id, itemSelf);
-        registry_.emplace<DroppedItem>(itemSelf).item = *ip;
-
-        const auto throwdir                                  = glm::vec3(Rng().RandFloat(-0.25f, 0.25f), 1, Rng().RandFloat(-0.25f, 0.25f));
-        registry_.get_or_emplace<LinearVelocity>(itemSelf).v = throwdir * 2.0f;
-      }
-      else if (auto* lp = std::get_if<std::string>(&dropType))
-      {
-        auto* table = registry_.ctx().get<LootRegistry>().Get(*lp);
-        ASSERT(table);
-        for (auto drop : table->Collect(Rng()))
-        {
-          auto droppedEntity = Item::Materialize(*this, drop.item);
-          Item::GiveCollider(*this, drop.item, droppedEntity);
-          registry_.get<LocalTransform>(droppedEntity).position = worldPos;
-          UpdateLocalTransform(droppedEntity);
-          registry_.emplace<DroppedItem>(droppedEntity, DroppedItem{{.id = drop.item, .count = drop.count}});
-          auto velocity = glm::vec3(0);
-          const auto newEntityVelocity =
-            velocity + Rng().RandFloat(1, 3) * Math::RandVecInCone({Rng().RandFloat(), Rng().RandFloat()}, glm::vec3(0, 1, 0), glm::half_pi<float>());
-          registry_.emplace_or_replace<LinearVelocity>(droppedEntity, newEntityVelocity);
-        }
-      }
+      Block::SpawnLootDropFromBlock(*this, voxelPos, prevVoxel);
     }
 
     // Awaken bodies that are adjacent to destroyed voxel in case they were resting on it.

@@ -722,6 +722,7 @@ void World::InitializeGameDefinitions()
         .physicalProperties = {.isSolid = false},
         .entityPrefab       = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = torchId},
       }));
+  blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(blocks.Get("torch")));
 
   [[maybe_unused]] const auto chestItemId = Block::GetItemId(*this,
     Block::CreateStandardBlock(*this,

@@ -18,7 +18,7 @@ static_assert(std::is_trivially_constructible_v<TwoLevelGrid::TopLevelBrickPtr>)
 static_assert(std::is_trivially_constructible_v<TwoLevelGrid::BottomLevelBrick>);
 static_assert(std::is_trivially_constructible_v<TwoLevelGrid::BottomLevelBrickPtr>);
 
-bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, bool skipNonSolid) const
+bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, std::function<bool(voxel_t)>&& predicate) const
 {
   using namespace glm;
   // https://www.shadertoy.com/view/X3BXDd
@@ -36,7 +36,7 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
   // initial distance to cell sides, then relative difference between traveled sides
   vec3 sideDist = (S - stepDir * fract(rayPosition)) * deltaDist; // alternative: //sideDist = (S-stepDir * (pos - map)) * deltaDist;
 
-  for (int i = 0; i < tMax; i++)
+  for (int i = 0; i < tMax * 3; i++)
   {
     // Decide which way to go!
     vec4 conds = step(vec4(sideDist.x, sideDist.x, sideDist.y, sideDist.y), vec4(sideDist.y, sideDist.z, sideDist.z, sideDist.x)); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
@@ -57,18 +57,24 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
 
     mapPos += cases * stepDir;
 
+    const vec3 p      = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
+    const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+
+    // Solve ray plane intersection equation: dot(n, ro + t * rd - p) = 0.
+    // for t :
+    const float t = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
+
+    if (t >= tMax)
+    {
+      return false;
+    }
+
     // Putting the exit condition down here implicitly skips the first voxel
     if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(dimensions_))))
     {
       const voxel_t voxel = GetVoxelAt(ivec3(mapPos));
-      if (voxel != voxel_t::Air && (!skipNonSolid || materials_[(uint32_t)voxel].isSolid))
+      if (predicate(voxel))
       {
-        const vec3 p      = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
-        const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
-
-        // Solve ray plane intersection equation: dot(n, ro + t * rd - p) = 0.
-        // for t :
-        const float t          = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
         const vec3 hitWorldPos = rayPosition + rayDirection * t;
         const vec3 uvw         = hitWorldPos - mapPos; // Don't use fract here
 
@@ -83,6 +89,15 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
   }
 
   return false;
+}
+
+bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, bool skipNonSolid) const
+{
+  return TraceRaySimple(rayPosition,
+    rayDirection,
+    tMax,
+    hit,
+    [&](voxel_t voxel) { return voxel != voxel_t::Air && (!skipNonSolid || materials_[(uint32_t)voxel].isSolid); });
 }
 
 TwoLevelGrid::TwoLevelGrid() : buffer(16) {}

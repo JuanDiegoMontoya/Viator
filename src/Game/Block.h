@@ -20,6 +20,16 @@ namespace Block
     bool operator==(const DropSelf&) const = default;
   };
 
+  enum class Direction : uint32_t
+  {
+    North,
+    South,
+    East,
+    West,
+    Up,
+    Down,
+  };
+
   namespace Component
   {
     struct Breakable
@@ -66,7 +76,7 @@ namespace Block
       EntityPrefabId id;
     };
 
-    // Automatically added when 
+    // Automatically added when Item::RegisterItemForBlock is called.
     struct CorrespondingItem
     {
       ItemId item;
@@ -75,6 +85,16 @@ namespace Block
     struct Script
     {
       std::filesystem::path path;
+    };
+
+    struct RequiresSupport
+    {
+      Direction supportingSide = Direction::Down;
+    };
+
+    struct RequiresSupportByBlock
+    {
+      BlockId block;
     };
   }
 
@@ -126,6 +146,9 @@ namespace Block
   bool OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
   void OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
   [[nodiscard]] std::variant<std::monostate, ItemState, std::string> GetLootDropType(const World& world, BlockId block);
+  void OnUpdateBlock(World& world, glm::ivec3 voxelPosition);
+
+  void SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId block);
 
   [[nodiscard]] bool IsVisible(const World& world, BlockId block);
   [[nodiscard]] bool IsSolid(const World& world, BlockId block);
@@ -146,7 +169,10 @@ namespace Block
     std::optional<Component::Valuable> valuable;
     std::optional<Component::ExplodeWhenBroken> explode;
     std::optional<Component::SpawnDependentEntityPrefabWhenPlaced> entityPrefab;
+    std::optional<Component::RequiresSupport> support;
   };
 
   BlockId CreateStandardBlock(World& world, const CreateBlockParams& params);
+
+  [[nodiscard]] glm::ivec3 DirectionToNeighbor(Direction direction);
 }
