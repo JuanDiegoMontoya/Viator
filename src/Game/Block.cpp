@@ -41,6 +41,31 @@ bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId bloc
   auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
   if (grid.IsPositionInGrid(voxelPosition))
   {
+    // Ensure the block is supported, if necessary.
+    if (const auto* support = blockRegistry.try_get<const Block::Component::RequiresSupport>(entt::entity(block)))
+    {
+      const auto neighborPos = DirectionToNeighbor(support->supportingSide);
+      const auto neighbor    = grid.GetVoxelAt(voxelPosition + neighborPos);
+      if (const auto* pp = blockRegistry.try_get<const Block::Component::RequiresSupportByBlock>(entt::entity(block)))
+      {
+        if (neighbor != pp->block)
+        {
+          return false;
+        }
+      }
+      else if (const auto* ppp = blockRegistry.try_get<const Block::Component::PhysicalProperties>(entt::entity(neighbor)))
+      {
+        if (!ppp->isSolid)
+        {
+          return false;
+        }
+      }
+      else
+      {
+        return false;
+      }
+    }
+
     Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, block);
 
     if (const auto* p = blockRegistry.try_get<Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block)))
@@ -179,7 +204,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
     }
     else
     {
-      if (const auto* pp = reg.try_get<const Block::Component::PhysicalProperties>(entt::entity(block)))
+      if (const auto* pp = reg.try_get<const Block::Component::PhysicalProperties>(entt::entity(neighbor)))
       {
         if (!pp->isSolid)
         {
