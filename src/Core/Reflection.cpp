@@ -1581,4 +1581,26 @@ void Core::Reflection::Initialize(Scripting& scripting)
   
   REFLECT_COMPONENT(Block::Component::Script, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::Script, path);
+
+  REFLECT_ENUM(Block::Direction)
+    ENUMERATOR(Block::Direction, North)
+    ENUMERATOR(Block::Direction, South)
+    ENUMERATOR(Block::Direction, East)
+    ENUMERATOR(Block::Direction, West)
+    ENUMERATOR(Block::Direction, Up)
+    ENUMERATOR(Block::Direction, Down);
+
+  REFLECT_COMPONENT(Block::Component::RequiresSupport, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::RequiresSupport, supportingSide);
+  
+  REFLECT_COMPONENT(Block::Component::RequiresSupportByBlock, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::RequiresSupportByBlock, block);
+  
+  REFLECT_COMPONENT(Block::Component::BaseVariant, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::BaseVariant, block);
+  
+  REFLECT_COMPONENT(Block::Component::StandardRotatedVariants, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::StandardRotatedVariants, east)
+    DATA_BASE(Block::Component::StandardRotatedVariants, south)
+    DATA_BASE(Block::Component::StandardRotatedVariants, west);
 }

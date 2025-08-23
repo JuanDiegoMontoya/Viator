@@ -164,6 +164,10 @@ std::variant<std::monostate, ItemState, std::string> Block::GetLootDropType(cons
   {
     if (std::get_if<DropSelf>(&b->dropWhenBroken))
     {
+      if (const auto* bv = registry.try_get<const Component::BaseVariant>(entt::entity(block)))
+      {
+        return GetLootDropType(world, bv->block);
+      }
       if (const auto* i = registry.try_get<const Component::CorrespondingItem>(entt::entity(block)))
       {
         return ItemState{.id = i->item};
@@ -458,10 +462,35 @@ static Block::Component::RenderAsTexturedCube2 MakeRotatedCubeFaceMaterials(cons
   return ret;
 }
 
+#include "Core/Reflection.h"
+#include "entt/meta/meta.hpp"
+static void CopyEntity(entt::registry& registry, entt::entity srcEntity, entt::entity dstEntity)
+{
+  for (auto&& [type, storage] : registry.storage())
+  {
+    if (storage.contains(srcEntity))
+    {
+      const auto meta         = entt::resolve(type);
+      const bool isEmptyType  = meta.traits<Core::Reflection::Traits>() & Core::Reflection::Traits::EMPTY;
+      auto emplaceDefaultFunc = meta.func("EmplaceDefault"_hs);
+      DEBUG_ASSERT(emplaceDefaultFunc);
+      emplaceDefaultFunc.invoke({}, &registry, dstEntity);
+      if (!isEmptyType)
+      {
+        auto oldComp = meta.from_void(storage.value(srcEntity));
+        auto newComp = meta.from_void(storage.value(dstEntity));
+        newComp.assign(oldComp);
+      }
+    }
+  }
+}
+
 void Block::CreateStandardRotatedVariants(World& world, BlockId base)
 {
   auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
   auto& bReg   = blocks.GetRegistry();
+
+  auto rotatedVariants = Component::StandardRotatedVariants{};
 
   ASSERT(!bReg.any_of<Component::RenderAsTexturedCube>(entt::entity(base)));
 
@@ -475,33 +504,45 @@ void Block::CreateStandardRotatedVariants(World& world, BlockId base)
 
   for (int i = 0; i < 3; i++)
   {
+    const auto dir    = directions[i];
     const auto tag    = blocks.GetIdToTagMap().at(base);
     const auto newTag = tag + suffixes[i];
     const auto block  = blocks.Create(newTag);
-    bReg.emplace<Name>(entt::entity(block), newTag);
-    if (const auto* pp = bReg.try_get<const Component::PhysicalProperties>(entt::entity(base)))
-    {
-      bReg.emplace<Block::Component::PhysicalProperties>(entt::entity(block), *pp);
-    }
-    if (const auto* bp = bReg.try_get<const Component::Breakable>(entt::entity(base)))
-    {
-      bReg.emplace<Block::Component::Breakable>(entt::entity(block), *bp);
-    }
+
+    CopyEntity(bReg, entt::entity(base), entt::entity(block));
+
+    bReg.emplace_or_replace<Name>(entt::entity(block), newTag);
 
     if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(base)))
     {
       const auto rot = rotateFromNorth[i];
-      bReg.emplace<Component::RenderAsSubGrid>(entt::entity(block), std::make_shared<TwoLevelGrid::SubGrid>(MakeRotatedSubGrid(*p->subGrid, rot)));
+      bReg.emplace_or_replace<Component::RenderAsSubGrid>(entt::entity(block), std::make_shared<TwoLevelGrid::SubGrid>(MakeRotatedSubGrid(*p->subGrid, rot)));
     }
 
     if (const auto* p = bReg.try_get<const Component::RenderAsTexturedCube2>(entt::entity(base)))
     {
-      const auto dir = directions[i];
-      bReg.emplace<Component::RenderAsTexturedCube2>(entt::entity(block), MakeRotatedCubeFaceMaterials(*p, dir));
+      bReg.emplace_or_replace<Component::RenderAsTexturedCube2>(entt::entity(block), MakeRotatedCubeFaceMaterials(*p, dir));
     }
 
+    bReg.emplace<Component::BaseVariant>(entt::entity(block), base);
+
     Item::RegisterItemForBlock(world, block);
+
+    if (dir == Direction::East)
+    {
+      rotatedVariants.east = block;
+    }
+    if (dir == Direction::South)
+    {
+      rotatedVariants.south = block;
+    }
+    if (dir == Direction::West)
+    {
+      rotatedVariants.west = block;
+    }
   }
+
+  bReg.emplace<Component::StandardRotatedVariants>(entt::entity(base), rotatedVariants);
 }
 
 glm::ivec3 Block::DirectionToNeighbor(Direction direction)

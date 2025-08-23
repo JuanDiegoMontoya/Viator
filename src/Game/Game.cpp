@@ -401,9 +401,9 @@ Game::Game(uint32_t)
   gNetworking_HORRIBLE_HACK = &networking_;
 
   scripting = new Scripting();
+  Core::Reflection::Initialize(*scripting);
   CreateContextVariablesAndObservers(*world_);
 
-  Core::Reflection::Initialize(*scripting);
   Core::Serialization::Initialize();
 }
 
