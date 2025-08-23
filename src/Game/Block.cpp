@@ -266,7 +266,7 @@ void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId bl
 bool Block::IsVisible(const World& world, BlockId block)
 {
   const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
-  return bReg.any_of<Component::RenderAsTexturedCube, Component::RenderAsSubGrid>(entt::entity(block));
+  return bReg.any_of<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>(entt::entity(block));
 }
 
 bool Block::IsSolid(const World& world, BlockId block)
@@ -376,6 +376,16 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
   if (params.entityPrefab.has_value())
   {
     bReg.emplace<Block::Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block), *params.entityPrefab);
+  }
+
+  if (params.support.has_value())
+  {
+    bReg.emplace<Block::Component::RequiresSupport>(entt::entity(block), *params.support);
+  }
+
+  if (params.supportByBlock.has_value())
+  {
+    bReg.emplace<Block::Component::RequiresSupportByBlock>(entt::entity(block), *params.supportByBlock);
   }
 
   Item::RegisterItemForBlock(world, block);

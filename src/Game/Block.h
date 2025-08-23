@@ -30,6 +30,15 @@ namespace Block
     Down,
   };
 
+  struct CubeFaceMaterial
+  {
+    bool randomizeTexcoordRotation = false;
+    std::optional<std::string> baseColorTexture;
+    glm::vec3 baseColorFactor = {1, 1, 1};
+    std::optional<std::string> emissionTexture;
+    glm::vec3 emissionFactor = {0, 0, 0};
+  };
+
   namespace Component
   {
     struct Breakable
@@ -48,13 +57,16 @@ namespace Block
       std::shared_ptr<TwoLevelGrid::SubGrid> subGrid;
     };
 
+    // One material for every face.
     struct RenderAsTexturedCube
     {
-      bool randomizeTexcoordRotation = false;
-      std::optional<std::string> baseColorTexture;
-      glm::vec3 baseColorFactor = {1, 1, 1};
-      std::optional<std::string> emissionTexture;
-      glm::vec3 emissionFactor = {0, 0, 0};
+      CubeFaceMaterial material;
+    };
+
+    // One material per face, in the order specified by Direction enum above.
+    struct RenderAsTexturedCube2
+    {
+      std::array<CubeFaceMaterial, 6> faces;
     };
 
     struct PhysicalProperties
@@ -164,12 +176,13 @@ namespace Block
     std::string tag;
     std::string name;
     std::optional<Component::Breakable> breakable;
-    std::optional<std::variant<Component::RenderAsTexturedCube, Component::RenderAsSubGrid>> render;
+    std::optional<std::variant<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>> render;
     const Component::PhysicalProperties& physicalProperties = {};
     std::optional<Component::Valuable> valuable;
     std::optional<Component::ExplodeWhenBroken> explode;
     std::optional<Component::SpawnDependentEntityPrefabWhenPlaced> entityPrefab;
     std::optional<Component::RequiresSupport> support;
+    std::optional<Component::RequiresSupportByBlock> supportByBlock;
   };
 
   BlockId CreateStandardBlock(World& world, const CreateBlockParams& params);

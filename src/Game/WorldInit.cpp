@@ -433,10 +433,10 @@ void World::InitializeGameDefinitions()
         .damageTier    = 2,
         .damageFlags   = BlockDamageFlagBit::PICKAXE,
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "stone_albedo",
-      },
+      }},
     });
 
   [[maybe_unused]] const auto dirtBlock = Block::CreateStandardBlock(*this,
@@ -448,10 +448,10 @@ void World::InitializeGameDefinitions()
         .damageTier    = 2,
         .damageFlags   = BlockDamageFlagBit::PICKAXE,
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "dirt_albedo",
-      },
+      }},
     });
 
   Block::CreateStandardBlock(*this,
@@ -462,9 +462,9 @@ void World::InitializeGameDefinitions()
         .initialHealth = 50,
         .damageTier    = 1,
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .baseColorFactor = {0.85f, 0.85f, 0.85f},
-      },
+      }},
     });
 
   [[maybe_unused]] const auto stoneBlockId = Block::GetItemId(*this, stoneBlock);
@@ -477,12 +477,20 @@ void World::InitializeGameDefinitions()
         Block::Component::Breakable{
           .initialHealth = 50,
         },
-        Block::Component::RenderAsTexturedCube{
+        Block::Component::RenderAsTexturedCube{{
           .baseColorFactor = {0, 0, 0},
           .emissionFactor  = {1, 5, 1},
-        },
+        }},
       }));
 
+  const auto grassMat = Block::CubeFaceMaterial{
+    .randomizeTexcoordRotation = true,
+    .baseColorTexture          = "grass_albedo",
+  };
+  const auto dirtMat = Block::CubeFaceMaterial{
+    .randomizeTexcoordRotation = true,
+    .baseColorTexture          = "dirt_albedo",
+  };
   [[maybe_unused]] const auto grassBlockId = Block::GetItemId(*this,
     Block::CreateStandardBlock(*this,
       {
@@ -493,10 +501,7 @@ void World::InitializeGameDefinitions()
           .damageTier    = 1,
           .damageFlags   = BlockDamageFlagBit::PICKAXE,
         },
-        Block::Component::RenderAsTexturedCube{
-          .randomizeTexcoordRotation = true,
-          .baseColorTexture          = "grass_albedo",
-        },
+        Block::Component::RenderAsTexturedCube2{dirtMat, dirtMat, dirtMat, dirtMat, grassMat, dirtMat},
       }));
 
   const auto malachiteBlockId = Block::CreateStandardBlock(*this,
@@ -507,10 +512,10 @@ void World::InitializeGameDefinitions()
         .damageTier    = 2,
         .damageFlags   = BlockDamageFlagBit::PICKAXE,
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "malachite_albedo",
-      }});
+      }}});
   blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(malachiteBlockId));
 
   const auto galenaBlockId = Block::CreateStandardBlock(*this,
@@ -522,10 +527,10 @@ void World::InitializeGameDefinitions()
         .damageTier    = 3,
         .damageFlags   = BlockDamageFlagBit::PICKAXE,
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .randomizeTexcoordRotation = true,
         .baseColorTexture          = "galena_albedo",
-      },
+      }},
     });
   blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(galenaBlockId));
 
@@ -539,11 +544,11 @@ void World::InitializeGameDefinitions()
           .damageTier    = 1,
           .damageFlags   = BlockDamageFlagBit::PICKAXE,
         },
-        Block::Component::RenderAsTexturedCube{
+        Block::Component::RenderAsTexturedCube{{
           .baseColorTexture = "forge_side_albedo",
           .emissionTexture  = "forge_side_emission",
           .emissionFactor   = {3, 3, 3},
-        },
+        },}
       }));
 
   const auto bombBlockId = Block::CreateStandardBlock(*this,
@@ -554,10 +559,10 @@ void World::InitializeGameDefinitions()
         .initialHealth = 40,
         .dropWhenBroken = std::monostate{},
       },
-      .render = Block::Component::RenderAsTexturedCube{
+      .render = Block::Component::RenderAsTexturedCube{{
         .baseColorFactor = {0.8f, 0.2f, 0.2f},
         .emissionFactor  = {0.1f, 0.01f, 0.01f},
-      },
+      }},
       .explode = Block::Component::ExplodeWhenBroken{
         .radius      = 3,
         .damage      = 100,
@@ -577,10 +582,10 @@ void World::InitializeGameDefinitions()
         .initialHealth = 40,
         .dropWhenBroken = std::monostate{},
       },
-      .render = Block::Component::RenderAsTexturedCube{
+      .render = Block::Component::RenderAsTexturedCube{{
         .baseColorFactor = {0.8f, 0.2f, 0.2f},
         .emissionFactor  = {0.5f, 0.1f, 0.1f},
-      },
+      }},
       .explode = Block::Component::ExplodeWhenBroken{
         .radius      = 8,
         .damage      = 100,
@@ -602,9 +607,9 @@ void World::InitializeGameDefinitions()
         .damageFlags    = BlockDamageFlagBit::AXE,
         .dropWhenBroken = "tree",
       },
-      Block::Component::RenderAsTexturedCube{
+      Block::Component::RenderAsTexturedCube{{
         .baseColorFactor = {0.39f, 0.24f, 0.08f},
-      },
+      }},
     });
 
   Block::CreateStandardBlock(*this,
@@ -618,8 +623,9 @@ void World::InitializeGameDefinitions()
         .dropWhenBroken = "tree",
       },
       Block::Component::RenderAsTexturedCube{
-        .baseColorTexture = "wood_plank_albedo",
-      },
+        {
+          .baseColorTexture = "wood_plank_albedo",
+        }},
     });
 
   auto RegisterFoliageBlock = [&](const char* tag, const char* name, bool dropsSelf) -> BlockId
@@ -709,7 +715,7 @@ void World::InitializeGameDefinitions()
         "light",
         "Light",
         {},
-        Block::Component::RenderAsTexturedCube{.emissionFactor = {5, 3, 2}},
+        Block::Component::RenderAsTexturedCube{{.emissionFactor = {5, 3, 2}}},
       }));
 
   [[maybe_unused]] const auto torchItemId = Block::GetItemId(*this,

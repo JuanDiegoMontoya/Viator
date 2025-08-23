@@ -16,6 +16,29 @@ struct Voxels
   FVOG_UINT32 globalUniformsIndex;
 };
 
+#define VOXEL_IS_INVISIBLE (1 << 0)
+#define VOXEL_IS_SUBGRID   (1 << 1)
+
+#define FACE_HAS_BASE_COLOR_TEXTURE       (1 << 0)
+#define FACE_HAS_EMISSION_TEXTURE         (1 << 1)
+#define FACE_RANDOMIZE_TEXCOORDS_ROTATION (1 << 2)
+
+struct CubeFaceMaterial
+{
+  FVOG_UINT32 materialFlags;
+  FVOG_SHARED Texture2D baseColorTexture;
+  FVOG_VEC3 baseColorFactor;
+  FVOG_SHARED Texture2D emissionTexture;
+  FVOG_VEC3 emissionFactor;
+};
+
+struct GpuVoxelMaterial
+{
+  FVOG_UINT32 voxelFlags;
+  CubeFaceMaterial faces[6];
+  FVOG_UINT32 subGridIndex;
+};
+
 #ifndef __cplusplus
 #include "../GlobalUniforms.h.glsl"
 #include "../Hash.h.glsl"
@@ -83,22 +106,6 @@ FVOG_DECLARE_STORAGE_BUFFERS(restrict BottomLevelBricks)
   BottomLevelBrick bottomLevelBricks[];
 }
 bottomLevelBricksBuffers[];
-
-#define HAS_BASE_COLOR_TEXTURE       (1 << 0)
-#define HAS_EMISSION_TEXTURE         (1 << 1)
-#define RANDOMIZE_TEXCOORDS_ROTATION (1 << 2)
-#define IS_INVISIBLE                 (1 << 3)
-#define IS_SUBGRID                   (1 << 4)
-
-struct GpuVoxelMaterial
-{
-  FVOG_UINT32 materialFlags;
-  Texture2D baseColorTexture;
-  FVOG_VEC3 baseColorFactor;
-  Texture2D emissionTexture;
-  FVOG_VEC3 emissionFactor;
-  FVOG_UINT32 subGridIndex;
-};
 
 FVOG_DECLARE_STORAGE_BUFFERS_2(restrict VoxelMaterials)
 {
@@ -285,6 +292,21 @@ struct vx_InitialDDAState
   i8vec3 stepDir;
 };
 
+int vx_NormalToFaceIndex(vec3 normal)
+{
+  if (normal.z > 0) // North
+    return 0;
+  if (normal.z < 0) // South
+    return 1;
+  if (normal.x > 0) // East
+    return 2;
+  if (normal.x < 0) // West
+    return 3;
+  if (normal.y > 0) // Up
+    return 4;
+  return 5; // Down
+}
+
 vec2 vx_GetTexCoords(vec3 normal, vec3 uvw)
 {
   // Ugly, hacky way to get texCoords, but squirreled away in a function
@@ -308,7 +330,7 @@ bool vx_IsVisible(voxel_t voxel)
     return false;
   }
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-  return !bool(material.materialFlags & IS_INVISIBLE);
+  return !bool(material.voxelFlags & VOXEL_IS_INVISIBLE);
 }
 
 // Ray position in [0, subGrid.dimensions)
@@ -393,7 +415,7 @@ bool vx_TraceRayVoxels(vec3 rayPosition, vec3 rayDirection, BottomLevelBrickPtr 
       if (vx_IsVisible(voxel))
       {
         GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-        if (bool(material.materialFlags & IS_SUBGRID))
+        if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
         {
           if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, hit))
           {
@@ -575,7 +597,8 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
   if (hasHit)
   {
     GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
-    if (bool(material.materialFlags & RANDOMIZE_TEXCOORDS_ROTATION))
+    CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];
+    if (bool(face.materialFlags & FACE_RANDOMIZE_TEXCOORDS_ROTATION))
     {
       // Random quarter turn
       const float cos90[4] = {1, 0, -1, 0};
@@ -650,7 +673,7 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
         if (vx_IsVisible(voxel))
         {
           GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-          if (bool(material.materialFlags & IS_SUBGRID))
+          if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
             vx_InitialDDAState init;
             init.deltaDist = deltaDist;
@@ -853,7 +876,7 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
           hit.voxelPosition = ivec3(frames[rayState].mapPos);
 
           GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-          if (!bool(material.materialFlags & IS_SUBGRID))
+          if (!bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
             hit.positionWorld   = hitWorldPos;
             hit.texCoords       = vx_GetTexCoords(normal, uvw);
@@ -951,7 +974,8 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
     }
 
     GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
-    if (bool(material.materialFlags & RANDOMIZE_TEXCOORDS_ROTATION))
+    CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];
+    if (bool(face.materialFlags & FACE_RANDOMIZE_TEXCOORDS_ROTATION))
     {
       // Random quarter turn
       const float cos90[4] = {1, 0, -1, 0};
@@ -971,16 +995,17 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 {
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
 
-  if (bool(material.materialFlags & IS_SUBGRID))
+  if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
   {
     const vec3 albedo_srgb_nonlinear = SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
     return color_sRGB_EOTF(albedo_srgb_nonlinear);
   }
 
-  vec3 albedo = material.baseColorFactor;
-  if (bool(material.materialFlags & HAS_BASE_COLOR_TEXTURE))
+  CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];
+  vec3 albedo = face.baseColorFactor;
+  if (bool(face.materialFlags & FACE_HAS_BASE_COLOR_TEXTURE))
   {
-    albedo *= textureLod(material.baseColorTexture, g_voxels.voxelSampler, hit.texCoords, 0).rgb;
+    albedo *= textureLod(face.baseColorTexture, g_voxels.voxelSampler, hit.texCoords, 0).rgb;
   }
   return albedo;
   // return vec3(hsv_to_rgb(vec3(MM_Hash3(ivec3(hit.voxelPosition) % 3), 0.55, 0.8)));
@@ -994,14 +1019,16 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 vec3 GetHitEmission(HitSurfaceParameters hit)
 {
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
-  if (bool(material.materialFlags & IS_SUBGRID))
+  if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
   {
     return SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].emissionSrgb.rgb;
   }
-  vec3 emission             = material.emissionFactor;
-  if (bool(material.materialFlags & HAS_EMISSION_TEXTURE))
+
+  CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];
+  vec3 emission         = face.emissionFactor;
+  if (bool(face.materialFlags & FACE_HAS_EMISSION_TEXTURE))
   {
-    const vec4 texEmission = textureLod(material.emissionTexture, g_voxels.voxelSampler, hit.texCoords, 0);
+    const vec4 texEmission = textureLod(face.emissionTexture, g_voxels.voxelSampler, hit.texCoords, 0);
     emission *= texEmission.rgb * texEmission.a;
   }
   return emission;

@@ -73,12 +73,12 @@ entt::entity Item::Materialize(World& world, ItemId item)
 
     if (const auto* material = bReg.try_get<const Block::Component::RenderAsTexturedCube>(entt::entity(p->voxel)))
     {
-      world.GetRegistry().emplace<Tint>(self, material->baseColorFactor);
-      if (!material->emissionTexture && glm::length(material->emissionFactor) > 0.01f)
+      world.GetRegistry().emplace<Tint>(self, material->material.baseColorFactor);
+      if (!material->material.emissionTexture && glm::length(material->material.emissionFactor) > 0.01f)
       {
         // TODO: Convert from luminance (cd/m^2) to luminous intensity (cd)
         auto light      = GpuLight();
-        light.color     = material->emissionFactor;
+        light.color     = material->material.emissionFactor;
         light.intensity = 1;
         light.type      = LIGHT_TYPE_POINT;
         light.range     = 100;

@@ -1550,12 +1550,18 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(Block::Component::RenderAsSubGrid, BLOCK_COMPONENT | REPLICATED);
 
+  REFLECT_TYPE(Block::CubeFaceMaterial);
+    DATA(Block::CubeFaceMaterial, randomizeTexcoordRotation)
+    DATA_BASE(Block::CubeFaceMaterial, baseColorTexture)
+    DATA(Block::CubeFaceMaterial, baseColorFactor)
+    DATA_BASE(Block::CubeFaceMaterial, emissionTexture)
+    DATA(Block::CubeFaceMaterial, emissionFactor);
+
   REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::RenderAsTexturedCube, randomizeTexcoordRotation)
-    DATA_BASE(Block::Component::RenderAsTexturedCube, baseColorTexture)
-    DATA(Block::Component::RenderAsTexturedCube, baseColorFactor)
-    DATA_BASE(Block::Component::RenderAsTexturedCube, emissionTexture)
-    DATA(Block::Component::RenderAsTexturedCube, emissionFactor);
+    DATA(Block::Component::RenderAsTexturedCube, material);
+
+  REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube2, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::RenderAsTexturedCube2, faces);
 
   REFLECT_COMPONENT(Block::Component::PhysicalProperties, BLOCK_COMPONENT | REPLICATED)
     DATA(Block::Component::PhysicalProperties, isSolid);

@@ -15,6 +15,7 @@
 #include "shaders/Config.shared.h"
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
 #include "shaders/voxels/ShadeDeferred.shared.h"
+#include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/DebugProbesCommon.h.glsl"
 
 #ifdef JPH_DEBUG_RENDERER
@@ -43,26 +44,6 @@ namespace
     glm::vec3 position{};
     glm::vec3 normal{};
     glm::vec3 color{};
-  };
-
-  enum class MaterialFlagBit
-  {
-    HAS_BASE_COLOR_TEXTURE       = 1 << 0,
-    HAS_EMISSION_TEXTURE         = 1 << 1,
-    RANDOMIZE_TEXCOORDS_ROTATION = 1 << 2,
-    IS_INVISIBLE                 = 1 << 3,
-    IS_SUBGRID                   = 1 << 4,
-  };
-  FVOG_DECLARE_FLAG_TYPE(VoxelMaterialFlags, MaterialFlagBit, uint32_t);
-
-  struct GpuVoxelMaterial
-  {
-    VoxelMaterialFlags materialFlags;
-    shared::Texture2D baseColorTexture;
-    glm::vec3 baseColorFactor;
-    shared::Texture2D emissionTexture;
-    glm::vec3 emissionFactor;
-    FVOG_UINT32 subGridIndex;
   };
 
   struct GpuMesh
@@ -601,32 +582,60 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
     if (const auto* p = bReg.try_get<const Block::Component::RenderAsTexturedCube>(block))
     {
-      gpuMat.baseColorFactor = p->baseColorFactor;
-      gpuMat.emissionFactor  = p->emissionFactor;
-      if (p->randomizeTexcoordRotation)
+      for (auto& face : gpuMat.faces)
       {
-        gpuMat.materialFlags |= MaterialFlagBit::RANDOMIZE_TEXCOORDS_ROTATION;
+        face.baseColorFactor = p->material.baseColorFactor;
+        face.emissionFactor  = p->material.emissionFactor;
+        if (p->material.randomizeTexcoordRotation)
+        {
+          face.materialFlags |= FACE_RANDOMIZE_TEXCOORDS_ROTATION;
+        }
+        if (p->material.baseColorTexture)
+        {
+          face.materialFlags |= FACE_HAS_BASE_COLOR_TEXTURE;
+          face.baseColorTexture = GetOrEmplaceCachedTexture(*p->material.baseColorTexture, true).ImageView().GetTexture2D();
+        }
+        if (p->material.emissionTexture)
+        {
+          face.materialFlags |= FACE_HAS_EMISSION_TEXTURE;
+          face.emissionTexture = GetOrEmplaceCachedTexture(*p->material.emissionTexture, true).ImageView().GetTexture2D();
+        }
       }
-      if (p->baseColorTexture)
+    }
+
+    if (const auto* p = bReg.try_get<const Block::Component::RenderAsTexturedCube2>(block))
+    {
+      for (int i = 0; i < 6; i++)
       {
-        gpuMat.materialFlags |= MaterialFlagBit::HAS_BASE_COLOR_TEXTURE;
-        gpuMat.baseColorTexture = GetOrEmplaceCachedTexture(*p->baseColorTexture, true).ImageView().GetTexture2D();
-      }
-      if (p->emissionTexture)
-      {
-        gpuMat.materialFlags |= MaterialFlagBit::HAS_EMISSION_TEXTURE;
-        gpuMat.emissionTexture = GetOrEmplaceCachedTexture(*p->emissionTexture, true).ImageView().GetTexture2D();
+        auto& face = gpuMat.faces[i];
+
+        face.baseColorFactor = p->faces[i].baseColorFactor;
+        face.emissionFactor  = p->faces[i].emissionFactor;
+        if (p->faces[i].randomizeTexcoordRotation)
+        {
+          face.materialFlags |= FACE_RANDOMIZE_TEXCOORDS_ROTATION;
+        }
+        if (p->faces[i].baseColorTexture)
+        {
+          face.materialFlags |= FACE_HAS_BASE_COLOR_TEXTURE;
+          face.baseColorTexture = GetOrEmplaceCachedTexture(*p->faces[i].baseColorTexture, true).ImageView().GetTexture2D();
+        }
+        if (p->faces[i].emissionTexture)
+        {
+          face.materialFlags |= FACE_HAS_EMISSION_TEXTURE;
+          face.emissionTexture = GetOrEmplaceCachedTexture(*p->faces[i].emissionTexture, true).ImageView().GetTexture2D();
+        }
       }
     }
 
     if (!Block::IsVisible(world, BlockId(block)))
     {
-      gpuMat.materialFlags |= MaterialFlagBit::IS_INVISIBLE;
+      gpuMat.voxelFlags |= VOXEL_IS_INVISIBLE;
     }
 
     if (const auto* subGrid = Block::GetSubGrid(world, BlockId(block)))
     {
-      gpuMat.materialFlags |= MaterialFlagBit::IS_SUBGRID;
+      gpuMat.voxelFlags |= VOXEL_IS_SUBGRID;
       gpuMat.subGridIndex =  subGrid->myIndexINTERNAL;
     }
 
@@ -634,7 +643,7 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
     if (!bReg.all_of<Block::Component::Valuable>(block))
     {
-      gpuMat.materialFlags |= MaterialFlagBit::IS_INVISIBLE;
+      gpuMat.voxelFlags |= VOXEL_IS_INVISIBLE;
     }
     voxelMaterialsSpelunker.emplace_back(gpuMat);
   }
