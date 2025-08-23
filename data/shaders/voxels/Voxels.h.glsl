@@ -26,6 +26,7 @@ struct Voxels
 struct CubeFaceMaterial
 {
   FVOG_UINT32 materialFlags;
+  FVOG_UINT32 texcoordsQuarterTurns;
   FVOG_SHARED Texture2D baseColorTexture;
   FVOG_VEC3 baseColorFactor;
   FVOG_SHARED Texture2D emissionTexture;
@@ -294,9 +295,9 @@ struct vx_InitialDDAState
 
 int vx_NormalToFaceIndex(vec3 normal)
 {
-  if (normal.z > 0) // North
+  if (normal.z < 0) // North
     return 0;
-  if (normal.z < 0) // South
+  if (normal.z > 0) // South
     return 1;
   if (normal.x > 0) // East
     return 2;
@@ -598,18 +599,21 @@ bool vx_TraceRayMultiLevel(vec3 rayPosition, vec3 rayDirection, float tMax, out 
   {
     GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
     CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];
+
+    // Random quarter turn
+    const float cos90[4] = {1, 0, -1, 0};
+    uint quarters        = face.texcoordsQuarterTurns;
+
     if (bool(face.materialFlags & FACE_RANDOMIZE_TEXCOORDS_ROTATION))
     {
-      // Random quarter turn
-      const float cos90[4] = {1, 0, -1, 0};
-      const uint quarters  = uint(10000 * MM_Hash3(hit.voxelPosition + hit.flatNormalWorld * 0.5));
-      const float cosTheta = cos90[quarters % 4];
-      const float sinTheta = cos90[(quarters + 1) % 4];
-      const mat2 rot       = {{cosTheta, sinTheta}, {-sinTheta, cosTheta}};
-      hit.texCoords -= 0.5;
-      hit.texCoords = rot * hit.texCoords;
-      hit.texCoords += 0.5;
+      quarters += uint(10000 * MM_Hash3(hit.voxelPosition + hit.flatNormalWorld * 0.5));
     }
+    const float cosTheta = cos90[quarters % 4];
+    const float sinTheta = cos90[(quarters + 1) % 4];
+    const mat2 rot       = {{cosTheta, sinTheta}, {-sinTheta, cosTheta}};
+    hit.texCoords -= 0.5;
+    hit.texCoords = rot * hit.texCoords;
+    hit.texCoords += 0.5;
   }
   return hasHit;
 }

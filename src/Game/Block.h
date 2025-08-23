@@ -32,7 +32,9 @@ namespace Block
 
   struct CubeFaceMaterial
   {
+    // TODO: ability to specify an exact rotation.
     bool randomizeTexcoordRotation = false;
+    uint32_t texcoordsQuarterTurns = 0; // Number of quarter turn rotations to apply to texture coordinates.
     std::optional<std::string> baseColorTexture;
     glm::vec3 baseColorFactor = {1, 1, 1};
     std::optional<std::string> emissionTexture;
@@ -108,6 +110,21 @@ namespace Block
     {
       BlockId block;
     };
+
+    // Automatically added when a block variant is made.
+    // The base variant is the variant that will be dropped when the block is destroyed.
+    struct BaseVariant
+    {
+      BlockId block;
+    };
+
+    // The base variant points north.
+    struct StandardRotatedVariants
+    {
+      BlockId east;
+      BlockId south;
+      BlockId west;
+    };
   }
 
   class Registry
@@ -177,7 +194,7 @@ namespace Block
     std::string name;
     std::optional<Component::Breakable> breakable;
     std::optional<std::variant<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>> render;
-    const Component::PhysicalProperties& physicalProperties = {};
+    Component::PhysicalProperties physicalProperties = {};
     std::optional<Component::Valuable> valuable;
     std::optional<Component::ExplodeWhenBroken> explode;
     std::optional<Component::SpawnDependentEntityPrefabWhenPlaced> entityPrefab;
@@ -186,6 +203,8 @@ namespace Block
   };
 
   BlockId CreateStandardBlock(World& world, const CreateBlockParams& params);
+
+  void CreateStandardRotatedVariants(World& world, BlockId base);
 
   [[nodiscard]] glm::ivec3 DirectionToNeighbor(Direction direction);
 }

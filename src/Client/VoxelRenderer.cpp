@@ -609,6 +609,7 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
       {
         auto& face = gpuMat.faces[i];
 
+        face.texcoordsQuarterTurns = p->faces[i].texcoordsQuarterTurns;
         face.baseColorFactor = p->faces[i].baseColorFactor;
         face.emissionFactor  = p->faces[i].emissionFactor;
         if (p->faces[i].randomizeTexcoordRotation)

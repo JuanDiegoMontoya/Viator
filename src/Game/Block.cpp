@@ -393,6 +393,117 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
   return block;
 }
 
+static TwoLevelGrid::SubGrid MakeRotatedSubGrid(const TwoLevelGrid::SubGrid& subGrid, const glm::mat3& rotation)
+{
+  auto newGrid            = TwoLevelGrid::SubGrid{};
+  newGrid.dimensions      = subGrid.dimensions;
+  const auto numSubVoxels = newGrid.dimensions.x * newGrid.dimensions.y * newGrid.dimensions.z;
+  newGrid.grid            = std::make_unique<TwoLevelGrid::SubVoxel[]>(numSubVoxels);
+  std::ranges::copy(subGrid.materials, newGrid.materials);
+
+  for (int z = 0; z < newGrid.dimensions.z; z++)
+  for (int y = 0; y < newGrid.dimensions.y; y++)
+  for (int x = 0; x < newGrid.dimensions.x; x++)
+  {
+    const auto centeredCoord = glm::vec3(x, y, z) - (0.5f * (glm::vec3(newGrid.dimensions) - 1.0f));
+    const auto rotated       = rotation * centeredCoord;
+    const auto rotatedCoord  = glm::ivec3(glm::round(rotated + (0.5f * (glm::vec3(newGrid.dimensions) - 1.0f))));
+    const auto outIndex      = TwoLevelGrid::FlattenGenericCoord(glm::ivec3(newGrid.dimensions), rotatedCoord);
+    const auto inIndex       = TwoLevelGrid::FlattenGenericCoord(glm::ivec3(subGrid.dimensions), {x, y, z});
+    DEBUG_ASSERT(outIndex < numSubVoxels);
+    DEBUG_ASSERT(inIndex < numSubVoxels);
+    newGrid.grid[outIndex] = subGrid.grid[inIndex];
+  }
+
+  return newGrid;
+}
+
+// Reference orientation: North.
+static Block::Component::RenderAsTexturedCube2 MakeRotatedCubeFaceMaterials(const Block::Component::RenderAsTexturedCube2& cube, Block::Direction newDir)
+{
+  ASSERT(newDir == Block::Direction::East || newDir == Block::Direction::South || newDir == Block::Direction::West);
+  auto ret = Block::Component::RenderAsTexturedCube2(cube);
+
+  using Block::Direction;
+  if (newDir == Block::Direction::East)
+  {
+    ret.faces[int(Direction::Up)].texcoordsQuarterTurns   = 1;
+    ret.faces[int(Direction::Down)].texcoordsQuarterTurns = 1;
+    ret.faces[int(Direction::East)]  = cube.faces[int(Direction::North)];
+    ret.faces[int(Direction::South)] = cube.faces[int(Direction::East)];
+    ret.faces[int(Direction::West)]  = cube.faces[int(Direction::South)];
+    ret.faces[int(Direction::North)] = cube.faces[int(Direction::West)];
+  }
+
+  if (newDir == Block::Direction::South)
+  {
+    ret.faces[int(Direction::Up)].texcoordsQuarterTurns   = 2;
+    ret.faces[int(Direction::Down)].texcoordsQuarterTurns = 2;
+    ret.faces[int(Direction::East)]  = cube.faces[int(Direction::West)];
+    ret.faces[int(Direction::South)] = cube.faces[int(Direction::North)];
+    ret.faces[int(Direction::West)]  = cube.faces[int(Direction::East)];
+    ret.faces[int(Direction::North)] = cube.faces[int(Direction::South)];
+  }
+
+  if (newDir == Block::Direction::West)
+  {
+    ret.faces[int(Direction::Up)].texcoordsQuarterTurns   = 3;
+    ret.faces[int(Direction::Down)].texcoordsQuarterTurns = 3;
+    ret.faces[int(Direction::East)]  = cube.faces[int(Direction::South)];
+    ret.faces[int(Direction::South)] = cube.faces[int(Direction::West)];
+    ret.faces[int(Direction::West)]  = cube.faces[int(Direction::North)];
+    ret.faces[int(Direction::North)] = cube.faces[int(Direction::East)];
+  }
+
+  return ret;
+}
+
+void Block::CreateStandardRotatedVariants(World& world, BlockId base)
+{
+  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& bReg   = blocks.GetRegistry();
+
+  ASSERT(!bReg.any_of<Component::RenderAsTexturedCube>(entt::entity(base)));
+
+  constexpr Direction directions[] = {Direction::East, Direction::South, Direction::West};
+  const glm::mat3 rotateFromNorth[] = {
+    glm::mat3_cast(glm::angleAxis(glm::half_pi<float>(), glm::vec3{0, -1, 0})),
+    glm::mat3_cast(glm::angleAxis(glm::pi<float>(), glm::vec3{0, -1, 0})),
+    glm::mat3_cast(glm::angleAxis(glm::three_over_two_pi<float>(), glm::vec3{0, -1, 0})),
+  };
+  constexpr const char* suffixes[] = {"_east", "_south", "_west"};
+
+  for (int i = 0; i < 3; i++)
+  {
+    const auto tag    = blocks.GetIdToTagMap().at(base);
+    const auto newTag = tag + suffixes[i];
+    const auto block  = blocks.Create(newTag);
+    bReg.emplace<Name>(entt::entity(block), newTag);
+    if (const auto* pp = bReg.try_get<const Component::PhysicalProperties>(entt::entity(base)))
+    {
+      bReg.emplace<Block::Component::PhysicalProperties>(entt::entity(block), *pp);
+    }
+    if (const auto* bp = bReg.try_get<const Component::Breakable>(entt::entity(base)))
+    {
+      bReg.emplace<Block::Component::Breakable>(entt::entity(block), *bp);
+    }
+
+    if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(base)))
+    {
+      const auto rot = rotateFromNorth[i];
+      bReg.emplace<Component::RenderAsSubGrid>(entt::entity(block), std::make_shared<TwoLevelGrid::SubGrid>(MakeRotatedSubGrid(*p->subGrid, rot)));
+    }
+
+    if (const auto* p = bReg.try_get<const Component::RenderAsTexturedCube2>(entt::entity(base)))
+    {
+      const auto dir = directions[i];
+      bReg.emplace<Component::RenderAsTexturedCube2>(entt::entity(block), MakeRotatedCubeFaceMaterials(*p, dir));
+    }
+
+    Item::RegisterItemForBlock(world, block);
+  }
+}
+
 glm::ivec3 Block::DirectionToNeighbor(Direction direction)
 {
   switch (direction)

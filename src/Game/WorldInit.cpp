@@ -534,6 +534,14 @@ void World::InitializeGameDefinitions()
     });
   blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(galenaBlockId));
 
+  const auto forgeFace = Block::CubeFaceMaterial{
+    .baseColorTexture = "forge_side_albedo",
+    .emissionTexture  = "forge_side_emission",
+    .emissionFactor   = {3, 3, 3},
+  };
+  const auto stoneFace = Block::CubeFaceMaterial{
+    .baseColorTexture = "stone_albedo",
+  };
   [[maybe_unused]] const auto forgeBlockItemId = Block::GetItemId(*this,
     Block::CreateStandardBlock(*this,
       {
@@ -544,12 +552,29 @@ void World::InitializeGameDefinitions()
           .damageTier    = 1,
           .damageFlags   = BlockDamageFlagBit::PICKAXE,
         },
-        Block::Component::RenderAsTexturedCube{{
-          .baseColorTexture = "forge_side_albedo",
-          .emissionTexture  = "forge_side_emission",
-          .emissionFactor   = {3, 3, 3},
-        },}
+        Block::Component::RenderAsTexturedCube2{forgeFace, stoneFace, stoneFace, stoneFace, stoneFace, stoneFace},
       }));
+  Block::CreateStandardRotatedVariants(*this, blocks.Get("forge"));
+
+  const auto orientId = Block::CreateStandardBlock(*this,
+    {
+      "orient",
+      "Orient",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 1,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube2{
+        Block::CubeFaceMaterial{.baseColorTexture = "north"},
+        {.baseColorTexture = "south"},
+        {.baseColorTexture = "east"},
+        {.baseColorTexture = "west"},
+        {.baseColorTexture = "up"},
+        {.baseColorTexture = "down"},
+      },
+    });
+  Block::CreateStandardRotatedVariants(*this, orientId);
 
   const auto bombBlockId = Block::CreateStandardBlock(*this,
     {
@@ -674,6 +699,8 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("table", "Table", true);
   RegisterFoliageBlock("cloud", "Cloud", true);
   RegisterFoliageBlock("anvil_lead", "Lead Anvil", true);
+  const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
+  Block::CreateStandardRotatedVariants(*this, arrow);
 
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);

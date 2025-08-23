@@ -502,7 +502,7 @@ void TwoLevelGrid::SetMaterialArray(std::vector<Material> materials)
   for (auto& material : materials_)
   {
     i++;
-    // TODO: Make allocations.
+
     if (auto* grid = material.subGrid)
     {
       // Raw voxel data.
