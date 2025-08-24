@@ -344,6 +344,38 @@ std::string Block::GetName(const World& world,  BlockId block)
   return blocks.GetIdToTagMap().at(block);
 }
 
+BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, glm::vec3 viewDir, [[maybe_unused]] glm::vec3 normal)
+{
+  const auto& blocks = world.GetRegistry().ctx().get<Registry>();
+  const auto& bReg   = blocks.GetRegistry();
+
+  if (const auto* p = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(block)))
+  {
+    float* big = &viewDir.x;
+    // if (abs(viewDir.y) > abs(*big))
+    //   big = &viewDir.y;
+    if (abs(viewDir.z) > abs(*big))
+    {
+      big = &viewDir.z;
+    }
+
+    if (big == &viewDir.x)
+    {
+      if (*big < 0)
+      {
+        return p->west;
+      }
+      return p->east;
+    }
+    if (*big > 0)
+    {
+      return p->south;
+    }
+  }
+
+  return block;
+}
+
 BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params)
 {
   ZoneScoped;
@@ -557,5 +589,20 @@ glm::ivec3 Block::DirectionToNeighbor(Direction direction)
   case Direction::Down: return {0, -1, 0};
   default: UNREACHABLE;
   }
+}
+
+Block::Direction Block::NormalToDirection(glm::vec3 normal)
+{
+  if (normal.z < 0)
+    return Direction::North;
+  if (normal.z > 0)
+    return Direction::South;
+  if (normal.x > 0)
+    return Direction::East;
+  if (normal.x < 0)
+    return Direction::West;
+  if (normal.y > 0)
+    return Direction::Up;
+  return Direction::Down;
 }
 

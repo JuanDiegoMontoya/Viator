@@ -356,7 +356,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
               Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
               Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE));
 
-            if (!collector.HadHit() && Block::OnTryPlaceBlock(world, newPos, p->voxel))
+            if (!collector.HadHit() && Block::OnTryPlaceBlock(world, newPos, Block::GetRotatedBlockVariant(world, p->voxel, dir, hit.flatNormalWorld)))
             {
               subtractCountFromState = true;
             }

@@ -187,6 +187,7 @@ namespace Block
   [[nodiscard]] BlockDamageFlags GetDamageFlags(const World& world, BlockId block);
   [[nodiscard]] int GetDamageTier(const World& world, BlockId block);
   [[nodiscard]] std::string GetName(const World& world, BlockId block);
+  [[nodiscard]] BlockId GetRotatedBlockVariant(const World& world, BlockId block, glm::vec3 viewDir, glm::vec3 normal);
 
   struct CreateBlockParams
   {
@@ -207,4 +208,5 @@ namespace Block
   void CreateStandardRotatedVariants(World& world, BlockId base);
 
   [[nodiscard]] glm::ivec3 DirectionToNeighbor(Direction direction);
+  [[nodiscard]] Direction NormalToDirection(glm::vec3 normal);
 }
