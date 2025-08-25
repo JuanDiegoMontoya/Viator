@@ -22,12 +22,12 @@ namespace Block
 
   enum class Direction : uint32_t
   {
-    North,
-    South,
-    East,
-    West,
-    Up,
-    Down,
+    North, // -Z
+    South, // +Z
+    East,  // +X
+    West,  // -X
+    Up,    // +Y
+    Down,  // -Y
   };
 
   struct CubeFaceMaterial
@@ -111,6 +111,11 @@ namespace Block
       BlockId block;
     };
 
+    struct RequiresSupportByBlocks
+    {
+      std::array<std::optional<BlockId>, 6> blocks;
+    };
+
     // Automatically added when a block variant is made.
     // The base variant is the variant that will be dropped when the block is destroyed.
     struct BaseVariant
@@ -124,6 +129,24 @@ namespace Block
       BlockId east;
       BlockId south;
       BlockId west;
+    };
+
+    struct SpawnExtraBlockOnPlace
+    {
+      BlockId block;
+      Direction direction;
+    };
+
+    // Whatever happens to this block will also happen to the interlinked block.
+    // e.g. being destroyed or transformed.
+    struct InterlinkedBlock
+    {
+      Direction direction;
+    };
+
+    struct TransformWhenUsed
+    {
+      BlockId block;
     };
   }
 
@@ -176,6 +199,7 @@ namespace Block
   void OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
   [[nodiscard]] std::variant<std::monostate, ItemState, std::string> GetLootDropType(const World& world, BlockId block);
   void OnUpdateBlock(World& world, glm::ivec3 voxelPosition);
+  void OnUseBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
 
   void SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId block);
 
@@ -188,6 +212,7 @@ namespace Block
   [[nodiscard]] int GetDamageTier(const World& world, BlockId block);
   [[nodiscard]] std::string GetName(const World& world, BlockId block);
   [[nodiscard]] BlockId GetRotatedBlockVariant(const World& world, BlockId block, glm::vec3 viewDir, glm::vec3 normal);
+  [[nodiscard]] BlockId GetRotatedBlockVariant(const World& world, BlockId block, Direction direction);
 
   struct CreateBlockParams
   {
@@ -201,12 +226,15 @@ namespace Block
     std::optional<Component::SpawnDependentEntityPrefabWhenPlaced> entityPrefab;
     std::optional<Component::RequiresSupport> support;
     std::optional<Component::RequiresSupportByBlock> supportByBlock;
+    std::optional<Component::RequiresSupportByBlocks> supportByBlocks;
   };
 
   BlockId CreateStandardBlock(World& world, const CreateBlockParams& params);
 
-  void CreateStandardRotatedVariants(World& world, BlockId base);
+  Component::StandardRotatedVariants& CreateStandardRotatedVariants(World& world, BlockId base);
+  void UpdateTransformedForRotatedVariants(World& world, BlockId base);
 
   [[nodiscard]] glm::ivec3 DirectionToNeighbor(Direction direction);
   [[nodiscard]] Direction NormalToDirection(glm::vec3 normal);
+  [[nodiscard]] Direction WhichRotatedVariantAmI(const World& world, BlockId block);
 }

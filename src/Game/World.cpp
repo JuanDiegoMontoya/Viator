@@ -973,6 +973,8 @@ void World::FixedUpdate(float dt)
         auto rayCast               = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(forward * RAY_LENGTH));
         entt::entity hitEntity     = entt::null;
 
+        bool showInteractPrompt = false;
+
         auto result = JPH::RayCastResult();
         if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
               result,
@@ -980,35 +982,43 @@ void World::FixedUpdate(float dt)
               Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
               *Physics::GetIgnoreEntityAndChildrenFilter({registryOld_, entity})))
         {
+          const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
+          const auto voxelHitPos = glm::ivec3(hitPos);
+          const auto hitVoxel    = registry_.ctx().get<TwoLevelGrid>().GetVoxelAt(voxelHitPos);
+
           hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
           if (registry_.valid(hitEntity))
           {
             // Ray actually hit a voxel... see if it hit a voxel with a corresponding block entity.
             if (registry_.all_of<VoxelsComponent>(hitEntity))
             {
-              const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
-              const auto voxelHitPos = glm::ivec3(hitPos);
               if (auto e2 = GetBlockEntity(voxelHitPos); e2 != entt::null)
               {
                 hitEntity = e2;
               }
             }
 
+            // Handle voxels with inventories.
             if (auto [e3, _] = GetComponentFromAncestorOrDescendant<Inventory>(hitEntity); e3 != entt::null)
             {
-              hitEntity                 = e3;
-              player.showInteractPrompt = true;
+              hitEntity          = e3;
+              showInteractPrompt = true;
             }
-            else
+
+            // Handle other interactable voxels like doors.
+            if (registry_.ctx().get<Block::Registry>().GetRegistry().any_of<Block::Component::TransformWhenUsed>(entt::entity(hitVoxel)))
             {
-              player.showInteractPrompt = false;
+              showInteractPrompt = true;
+
+              if (input.interact)
+              {
+                Block::OnUseBlock(*this, voxelHitPos, hitVoxel);
+              }
             }
           }
         }
-        else
-        {
-          player.showInteractPrompt = false;
-        }
+
+        player.showInteractPrompt = showInteractPrompt;
 
         if (input.interact)
         {

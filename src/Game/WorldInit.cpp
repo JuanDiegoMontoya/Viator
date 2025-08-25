@@ -702,6 +702,48 @@ void World::InitializeGameDefinitions()
   const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
   Block::CreateStandardRotatedVariants(*this, arrow);
 
+  {
+    const auto doorBottom = RegisterFoliageBlock("door_bottom", "Door", true);
+    const auto doorTop = RegisterFoliageBlock("door_top", "door_top", false);
+
+    blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
+    blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};
+
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(doorBottom), Block::Direction::Up);
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(doorTop), Block::Direction::Down);
+  }
+
+  {
+    const auto doorBottom = RegisterFoliageBlock("door_bottom_open", "door_bottom_open", true);
+    const auto doorTop    = RegisterFoliageBlock("door_top_open", "door_top_open", false);
+
+    blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
+    blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};
+
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(doorBottom), Block::Direction::Up);
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(doorTop), Block::Direction::Down);
+  }
+
+  blocks.GetRegistry().emplace<Block::Component::TransformWhenUsed>(entt::entity(blocks.Get("door_bottom")), blocks.Get("door_bottom_open"));
+  blocks.GetRegistry().emplace<Block::Component::TransformWhenUsed>(entt::entity(blocks.Get("door_bottom_open")), blocks.Get("door_bottom"));
+  blocks.GetRegistry().emplace<Block::Component::TransformWhenUsed>(entt::entity(blocks.Get("door_top")), blocks.Get("door_top_open"));
+  blocks.GetRegistry().emplace<Block::Component::TransformWhenUsed>(entt::entity(blocks.Get("door_top_open")), blocks.Get("door_top"));
+
+  blocks.GetRegistry().get<Block::Component::Breakable>(entt::entity(blocks.Get("door_bottom"))).dropWhenBroken =
+    ItemState{.id = blocks.GetRegistry().get<Block::Component::CorrespondingItem>(entt::entity(blocks.Get("door_bottom"))).item};
+  blocks.GetRegistry().get<Block::Component::Breakable>(entt::entity(blocks.Get("door_bottom_open"))).dropWhenBroken =
+    ItemState{.id = blocks.GetRegistry().get<Block::Component::CorrespondingItem>(entt::entity(blocks.Get("door_bottom"))).item};
+
+  Block::CreateStandardRotatedVariants(*this, blocks.Get("door_bottom"));
+  Block::CreateStandardRotatedVariants(*this, blocks.Get("door_bottom_open"));
+  Block::CreateStandardRotatedVariants(*this, blocks.Get("door_top"));
+  Block::CreateStandardRotatedVariants(*this, blocks.Get("door_top_open"));
+
+  Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_bottom"));
+  Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_bottom_open"));
+  Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top"));
+  Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top_open"));
+
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
 

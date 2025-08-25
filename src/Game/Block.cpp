@@ -33,12 +33,11 @@ BlockId Block::Registry::Create(std::string tag)
   return id;
 }
 
-bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
-{
-  ZoneScoped;
 
+static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId block, bool isBeingTransformed = false)
+{
   const auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
-  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& grid                = world.GetRegistry().ctx().get<TwoLevelGrid>();
   if (grid.IsPositionInGrid(voxelPosition))
   {
     // Ensure the block is supported, if necessary.
@@ -66,9 +65,32 @@ bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId bloc
       }
     }
 
+    if (const auto* sp = blockRegistry.try_get<const Block::Component::SpawnExtraBlockOnPlace>(entt::entity(block)); sp && !isBeingTransformed)
+    {
+      const auto neighborPos = Block::DirectionToNeighbor(sp->direction);
+      if (!grid.IsPositionInGrid(voxelPosition + neighborPos))
+      {
+        return false;
+      }
+
+      const auto neighbor = grid.GetVoxelAt(voxelPosition + neighborPos);
+      if (neighbor != voxel_t::Air)
+      {
+        return false;
+      }
+    }
+
     Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, block);
 
-    if (const auto* p = blockRegistry.try_get<Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block)))
+    // Defer the actual placement of blocks that potentially depend on the base to exist.
+    if (const auto* sp = blockRegistry.try_get<const Block::Component::SpawnExtraBlockOnPlace>(entt::entity(block)); sp && !isBeingTransformed)
+    {
+      const auto neighborPos          = Block::DirectionToNeighbor(sp->direction);
+      [[maybe_unused]] const bool res = Block::OnTryPlaceBlock(world, voxelPosition + neighborPos, sp->block);
+      DEBUG_ASSERT(res);
+    }
+
+    if (const auto* p = blockRegistry.try_get<Block::Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(block)); p && !isBeingTransformed)
     {
       const auto worldPosition = glm::vec3(voxelPosition) + glm::vec3(0.5f);
 
@@ -91,6 +113,12 @@ bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId bloc
   return false;
 }
 
+bool Block::OnTryPlaceBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
+{
+  ZoneScoped;
+  return OnTryPlaceBlockExt(world, voxelPosition, block);
+}
+
 void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
 {
   ZoneScoped;
@@ -98,6 +126,14 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
   auto& registry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
 
   Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, voxel_t::Air);
+
+  if (const auto* p = registry.try_get<const Component::InterlinkedBlock>(entt::entity(block)))
+  {
+    const auto neighborPos = voxelPosition + DirectionToNeighbor(p->direction);
+    const auto neighbor    = world.GetRegistry().ctx().get<TwoLevelGrid>().GetVoxelAt(neighborPos);
+    SpawnLootDropFromBlock(world, neighborPos, neighbor);
+    OnDestroyBlock(world, neighborPos, neighbor);
+  }
 
   if (const auto* explode = registry.try_get<const Component::ExplodeWhenBroken>(entt::entity(block)))
   {
@@ -222,11 +258,50 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
     }
   }
 
+  if (const auto* p = reg.try_get<const Block::Component::RequiresSupportByBlocks>(entt::entity(block)))
+  {
+    for (int i = 0; i < 6; i++)
+    {
+      const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
+      const auto neighbor    = grid.GetVoxelAt(neighborPos);
+      if (p->blocks[i] && *p->blocks[i] != neighbor)
+      {
+        isSupported = false;
+        break;
+      }
+    }
+  }
+
   if (!isSupported)
   {
     SpawnLootDropFromBlock(world, voxelPosition, block);
     OnDestroyBlock(world, voxelPosition, block);
   }
+}
+
+void OnUseBlockHelper(World& world, glm::ivec3 voxelPosition, BlockId block, int remainingDepth)
+{
+  ZoneScoped;
+
+  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+
+  if (const auto* p = reg.try_get<const Block::Component::TransformWhenUsed>(entt::entity(block)))
+  {
+    OnTryPlaceBlockExt(world, voxelPosition, p->block, true);
+  }
+
+  if (const auto* p = reg.try_get<const Block::Component::InterlinkedBlock>(entt::entity(block)); p && remainingDepth > 0)
+  {
+    const auto neighborPos = voxelPosition + Block::DirectionToNeighbor(p->direction);
+    OnUseBlockHelper(world, neighborPos, grid.GetVoxelAt(neighborPos), remainingDepth - 1);
+  }
+}
+
+void Block::OnUseBlock(World& world, glm::ivec3 voxelPosition, BlockId block)
+{
+  ZoneScoped;
+  OnUseBlockHelper(world, voxelPosition, block, 1);
 }
 
 void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId block)
@@ -376,6 +451,47 @@ BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, glm::ve
   return block;
 }
 
+BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, Direction direction)
+{
+  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& bReg   = blocks.GetRegistry();
+
+  const auto dir = WhichRotatedVariantAmI(world, block);
+  if (dir == direction)
+  {
+    return block;
+  }
+
+  auto rotated = Component::StandardRotatedVariants{};
+  if (const auto* p = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(block))) // Only the North variant (base) should have this.
+  {
+    rotated = *p;
+  }
+
+  if (const auto* bp = bReg.try_get<const Component::BaseVariant>(entt::entity(block)))
+  {
+    ASSERT(bReg.all_of<Component::StandardRotatedVariants>(entt::entity(bp->block)));
+    rotated = bReg.get<const Component::StandardRotatedVariants>(entt::entity(bp->block));
+  }
+
+  if (direction == Direction::East)
+  {
+    return rotated.east;
+  }
+
+  if (direction == Direction::South)
+  {
+    return rotated.south;
+  }
+
+  if (direction == Direction::West)
+  {
+    return rotated.west;
+  }
+
+  return block;
+}
+
 BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params)
 {
   ZoneScoped;
@@ -517,7 +633,7 @@ static void CopyEntity(entt::registry& registry, entt::entity srcEntity, entt::e
   }
 }
 
-void Block::CreateStandardRotatedVariants(World& world, BlockId base)
+Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(World& world, BlockId base)
 {
   auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
   auto& bReg   = blocks.GetRegistry();
@@ -574,7 +690,40 @@ void Block::CreateStandardRotatedVariants(World& world, BlockId base)
     }
   }
 
-  bReg.emplace<Component::StandardRotatedVariants>(entt::entity(base), rotatedVariants);
+  return bReg.emplace<Component::StandardRotatedVariants>(entt::entity(base), rotatedVariants);
+}
+
+void Block::UpdateTransformedForRotatedVariants(World& world, BlockId base)
+{
+  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& bReg   = blocks.GetRegistry();
+
+  const auto* rotated = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(base));
+  ASSERT(rotated);
+
+  // Update transformed variants of this block.
+  {
+    auto& eTransformed = bReg.get<Component::TransformWhenUsed>(entt::entity(rotated->east));
+    eTransformed.block = GetRotatedBlockVariant(world, eTransformed.block, Direction::East);
+
+    auto& sTransformed = bReg.get<Component::TransformWhenUsed>(entt::entity(rotated->south));
+    sTransformed.block = GetRotatedBlockVariant(world, sTransformed.block, Direction::South);
+
+    auto& wTransformed = bReg.get<Component::TransformWhenUsed>(entt::entity(rotated->west));
+    wTransformed.block = GetRotatedBlockVariant(world, wTransformed.block, Direction::West);
+  }
+
+  if (bReg.all_of<Component::SpawnExtraBlockOnPlace>(entt::entity(base)))
+  {
+    auto& eSpawn = bReg.get<Component::SpawnExtraBlockOnPlace>(entt::entity(rotated->east));
+    eSpawn.block = GetRotatedBlockVariant(world, eSpawn.block, Direction::East);
+
+    auto& sSpawn = bReg.get<Component::SpawnExtraBlockOnPlace>(entt::entity(rotated->south));
+    sSpawn.block = GetRotatedBlockVariant(world, sSpawn.block, Direction::South);
+
+    auto& wSpawn = bReg.get<Component::SpawnExtraBlockOnPlace>(entt::entity(rotated->west));
+    wSpawn.block = GetRotatedBlockVariant(world, wSpawn.block, Direction::West);
+  }
 }
 
 glm::ivec3 Block::DirectionToNeighbor(Direction direction)
@@ -604,5 +753,33 @@ Block::Direction Block::NormalToDirection(glm::vec3 normal)
   if (normal.y > 0)
     return Direction::Up;
   return Direction::Down;
+}
+
+Block::Direction Block::WhichRotatedVariantAmI(const World& world, BlockId block)
+{
+  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& bReg   = blocks.GetRegistry();
+
+  if (const auto* base = bReg.try_get<const Component::BaseVariant>(entt::entity(block)))
+  {
+    if (const auto* baseRotated = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(base->block)))
+    {
+      if (baseRotated->east == block)
+      {
+        return Direction::East;
+      }
+      if (baseRotated->south == block)
+      {
+        return Direction::South;
+      }
+      if (baseRotated->west == block)
+      {
+        return Direction::West;
+      }
+      PANIC;
+    }
+  }
+
+  return Direction::North;
 }
 

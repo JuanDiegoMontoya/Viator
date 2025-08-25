@@ -853,7 +853,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
                              ImGuiWindowFlags_NoSavedSettings;
       if (ImGui::Begin("Interact", nullptr, flags))
       {
-        ImGui::Text("Press F to pay respects");
+        ImGui::Text("Press F to use");
       }
       ImGui::End();
     }

@@ -1596,6 +1596,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_COMPONENT(Block::Component::RequiresSupportByBlock, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::RequiresSupportByBlock, block);
   
+  REFLECT_COMPONENT(Block::Component::RequiresSupportByBlocks, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::RequiresSupportByBlocks, blocks);
+  
   REFLECT_COMPONENT(Block::Component::BaseVariant, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::BaseVariant, block);
   
@@ -1603,4 +1606,14 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA_BASE(Block::Component::StandardRotatedVariants, east)
     DATA_BASE(Block::Component::StandardRotatedVariants, south)
     DATA_BASE(Block::Component::StandardRotatedVariants, west);
+  
+  REFLECT_COMPONENT(Block::Component::SpawnExtraBlockOnPlace, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::SpawnExtraBlockOnPlace, block)
+    DATA_BASE(Block::Component::SpawnExtraBlockOnPlace, direction);
+  
+  REFLECT_COMPONENT(Block::Component::InterlinkedBlock, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::InterlinkedBlock, direction);
+  
+  REFLECT_COMPONENT(Block::Component::TransformWhenUsed, BLOCK_COMPONENT | REPLICATED)
+    DATA_BASE(Block::Component::TransformWhenUsed, block);
 }
