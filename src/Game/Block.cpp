@@ -6,6 +6,8 @@
 #include "Audio.h"
 #include "Scripting.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/hash.hpp"
 #include "tracy/Tracy.hpp"
 
 Block::Registry::Registry()
@@ -80,7 +82,14 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
       }
     }
 
-    Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, block);
+    if (!world.IsHosting())
+    {
+      SetVoxelAtRPC(world, voxelPosition, block);
+    }
+    else
+    {
+      Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, block);
+    }
 
     // Defer the actual placement of blocks that potentially depend on the base to exist.
     if (const auto* sp = blockRegistry.try_get<const Block::Component::SpawnExtraBlockOnPlace>(entt::entity(block)); sp && !isBeingTransformed)
@@ -106,6 +115,11 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
       registry.emplace<Name>(parent, "Block Entity");
       world.SetParent(spawnedEntity, parent);
       world.UpdateLocalTransform(parent);
+    }
+
+    if (blockRegistry.any_of<Block::Component::Flows, Block::Component::BaseFlow>(entt::entity(block)))
+    {
+      world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
     }
 
     return true;
@@ -225,9 +239,9 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
 {
   ZoneScoped;
 
-  auto& grid       = world.GetRegistry().ctx().get<TwoLevelGrid>();
-  const auto block = grid.GetVoxelAt(voxelPosition);
-  auto& reg        = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto block = grid.GetVoxelAt(voxelPosition);
+  auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
 
   // Check whether block requires support from a specific side.
   bool isSupported = true;
@@ -276,6 +290,136 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
   {
     SpawnLootDropFromBlock(world, voxelPosition, block);
     OnDestroyBlock(world, voxelPosition, block);
+  }
+
+  if (const auto* p = reg.try_get<const Block::Component::Flows>(entt::entity(block)))
+  {
+    ZoneScopedN("Component::Flows");
+
+    const auto GetFlowIndex = [&reg](BlockId block) -> int
+    {
+      if (block == voxel_t::Air)
+      {
+        return 0;
+      }
+
+      if (const auto* p = reg.try_get<const Block::Component::Flows>(entt::entity(block)))
+      {
+        if (const auto* baseFlow = reg.try_get<const Block::Component::BaseFlow>(entt::entity(p->base)))
+        {
+          for (int i = 0; i < baseFlow->blocks.size(); i++)
+          {
+            if (block == baseFlow->blocks[i])
+            {
+              return i + 1;
+            }
+          }
+        }
+      }
+
+      return -1;
+    };
+
+    const auto GetBlockFromFlowIndex = [&reg](BlockId block, int flowIdx) -> BlockId
+    {
+      if (flowIdx == 0)
+      {
+        return voxel_t::Air;
+      }
+
+      if (const auto* p = reg.try_get<const Block::Component::Flows>(entt::entity(block)))
+      {
+        if (const auto* baseFlow = reg.try_get<const Block::Component::BaseFlow>(entt::entity(p->base)))
+        {
+          return baseFlow->blocks.at(flowIdx - 1);
+        }
+      }
+
+      PANIC;
+    };
+
+    const auto QueueUpdateNeighbors = [&](glm::ivec3 position)
+    {
+      auto& queue = world.GetRegistry().ctx().get<World::WaterQueue>();
+      queue.push(position + DirectionToNeighbor(Direction::Up));
+      queue.push(position + DirectionToNeighbor(Direction::North));
+      queue.push(position + DirectionToNeighbor(Direction::East));
+      queue.push(position + DirectionToNeighbor(Direction::South));
+      queue.push(position + DirectionToNeighbor(Direction::West));
+    };
+
+    const auto TransferFlowTo = [&](Direction direction)
+    {
+      ZoneScopedN("TransferFlowTo");
+      const auto neighborDir   = DirectionToNeighbor(direction);
+      const auto neighborPos   = voxelPosition + neighborDir;
+      const auto neighborBlock = grid.GetVoxelAt(neighborPos);
+      const auto neighborFlow  = GetFlowIndex(neighborBlock);
+      const auto myFlow        = GetFlowIndex(block);
+      if (neighborFlow < 0)
+      {
+        return;
+      }
+
+      // Transfer as much flow downwards as possible.
+      if (direction == Direction::Down)
+      {
+        const auto newBlock = GetBlockFromFlowIndex(block, (myFlow + neighborFlow <= 8) ? 0 : ((myFlow + neighborFlow) - 8));
+        if (newBlock == block)
+        {
+          return;
+        }
+        OnTryPlaceBlock(world, voxelPosition, newBlock);
+        OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, glm::min(myFlow + neighborFlow, 8)));
+        world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
+        world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
+        QueueUpdateNeighbors(voxelPosition);
+        QueueUpdateNeighbors(neighborPos);
+        block = newBlock;
+      }
+      else if (myFlow > neighborFlow)
+      {
+        // Stochastically stop updates when gradient is small (prevents some endless update patterns).
+        if (myFlow == neighborFlow + 1 && world.Rng().RandFloat() < 0.50f)
+        {
+          world.GetRegistry().ctx().get<World::WaterSet>().emplace(voxelPosition);
+          return;
+        }
+
+        // "Evaporate" small gradients.
+        if (myFlow == 1 && world.Rng().RandFloat() < 0.01f)
+        {
+          OnTryPlaceBlock(world, voxelPosition, voxel_t::Air);
+          QueueUpdateNeighbors(voxelPosition);
+          return;
+        }
+        const auto newBlock = GetBlockFromFlowIndex(block, myFlow - 1);
+        OnTryPlaceBlock(world, voxelPosition, newBlock);
+        OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, neighborFlow + 1));
+        world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
+        world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
+        QueueUpdateNeighbors(voxelPosition);
+        QueueUpdateNeighbors(neighborPos);
+        block = newBlock;
+      }
+    };
+
+    TransferFlowTo(Direction::Down);
+#if 1
+    auto dirs = std::vector{Direction::North, Direction::West, Direction::South, Direction::East};
+    while (!dirs.empty())
+    {
+      const auto idx = dirs.size() > 1 ? world.Rng().RandU32(0, (uint32_t)dirs.size() - 1) : 0;
+      TransferFlowTo(dirs[idx]);
+      std::swap(dirs[idx], dirs.back());
+      dirs.pop_back();
+    }
+#else
+    TransferFlowTo(Direction::North);
+    TransferFlowTo(Direction::West);
+    TransferFlowTo(Direction::South);
+    TransferFlowTo(Direction::East);
+#endif
   }
 }
 
@@ -730,8 +874,8 @@ glm::ivec3 Block::DirectionToNeighbor(Direction direction)
 {
   switch (direction)
   {
-  case Direction::North: return {0, 0, 1};
-  case Direction::South: return {0, 0, -1};
+  case Direction::North: return {0, 0, -1};
+  case Direction::South: return {0, 0, 1};
   case Direction::East: return {1, 0, 0};
   case Direction::West: return {-1, 0, 0};
   case Direction::Up: return {0, 1, 0};

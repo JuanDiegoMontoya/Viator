@@ -39,6 +39,9 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
       ASSERT(success);
     }
   }
-  auto result = func.invoke({}, args.data(), args.size());
-  ASSERT(result);
+  {
+    ZoneScopedN("func.invoke()");
+    auto result = func.invoke({}, args.data(), args.size());
+    ASSERT(result);
+  }
 }

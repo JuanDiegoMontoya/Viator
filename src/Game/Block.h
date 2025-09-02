@@ -148,6 +148,20 @@ namespace Block
     {
       BlockId block;
     };
+
+    // List of blocks participating in flow behavior for a particular kind of liquid.
+    struct BaseFlow
+    {
+      // Blocks containing the liquid from lowest to highest quantity.
+      std::vector<BlockId> blocks;
+    };
+
+    // Block has water flowing-like behavior.
+    struct Flows
+    {
+      // Refers to the block that contains the BaseFlow component.
+      BlockId base;
+    };
   }
 
   class Registry

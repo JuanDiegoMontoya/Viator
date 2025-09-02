@@ -744,6 +744,45 @@ void World::InitializeGameDefinitions()
   Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top"));
   Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top_open"));
 
+  {
+    auto waters = std::vector<BlockId>();
+
+    for (int i = 1; i <= 8; i++)
+    {
+      auto id          = "water_" + std::to_string(i);
+      const auto block = RegisterFoliageBlock(id.c_str(), id.c_str(), true);
+      waters.push_back(block);
+    }
+
+    blocks.GetRegistry().emplace<Block::Component::BaseFlow>(entt::entity(blocks.Get("water_8")), waters);
+
+    const auto water8 = blocks.Get("water_8");
+    for (int i = 1; i <= 8; i++)
+    {
+      auto id = "water_" + std::to_string(i);
+      blocks.GetRegistry().emplace<Block::Component::Flows>(entt::entity(blocks.Get(id)), water8);
+    }
+  }
+
+  Item::CreateGun(items,
+    "weapon_watergun",
+    "Water Gun",
+    1000,
+    {
+      .model           = "ar15",
+      .damage          = 1,
+      .knockback       = 1,
+      .bullets         = 9,
+      .velocity        = 150,
+      .accuracyMoa     = 300,
+      .vrecoil         = 0,
+      .vrecoilDev      = 0,
+      .hrecoil         = 0,
+      .hrecoilDev      = 0,
+      .spawnBlockOnHit = blocks.Get("water_8"),
+      .particles = false,
+    });
+
   constexpr auto szz = glm::ivec3{4, 4, 4};
   auto subGrid       = std::make_unique<TwoLevelGrid::SubVoxel[]>(szz.x * szz.y * szz.z);
 

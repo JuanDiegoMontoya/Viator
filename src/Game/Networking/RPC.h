@@ -58,6 +58,7 @@ namespace Networking
 
     if (execLocally)
     {
+      ZoneScopedN("func.invoke()");
       // Directly invoking a function does NOT allow for overload resolution. This is fine as EnTT seemingly
       // does not offer a way to select an overload prior to its execution, which would be needed to query
       // its traits and therefore determine executability.

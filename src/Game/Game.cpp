@@ -100,7 +100,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
   TryTwice(pair,
     [&](entt::entity entity1, entt::entity entity2)
     {
-      if (world.GetRegistry().all_of<Projectile>(entity1))
+      if (const auto* p = world.GetRegistry().try_get<Projectile>(entity1))
       {
         if (auto len = glm::length(world.GetRegistry().get<LinearVelocity>(entity1).v); len > 2.0f)
         {
@@ -111,7 +111,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
           });
 
           // Particles are already spawned when projectiles hit creatures.
-          if (!world.GetRegistry().all_of<Health>(entity2))
+          if (p->particles && !world.GetRegistry().all_of<Health>(entity2))
           {
             const auto numParticles = uint32_t(glm::clamp(glm::ceil(glm::mix(1.0f, 4.0f, len / 80.0f)), 0.0f, 4.0f));
             world.SpawnHitParticles({
@@ -216,6 +216,36 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
             world.GetRegistry().remove<DroppedItem>(entity2);
             world.GetRegistry().get_or_emplace<DeferredDelete>(entity2);
           }
+        }
+        return true;
+      }
+      return false;
+    });
+
+  TryTwice(pair,
+    [&](entt::entity entity1, entt::entity)
+    {
+      if (const auto* p = world.GetRegistry().try_get<const SpawnBlockOnContact>(entity1))
+      {
+        auto& grid               = world.GetRegistry().ctx().get<TwoLevelGrid>();
+        const auto voxelPosition = ppair->position + ppair->normal * 1e-3f;
+        if (grid.IsPositionInGrid(voxelPosition) && grid.GetVoxelAtUnchecked(voxelPosition) == voxel_t::Air)
+        {
+          Block::OnTryPlaceBlock(world, voxelPosition, p->block);
+        }
+        return true;
+      }
+      return false;
+    });
+
+  TryTwice(pair,
+    [&](entt::entity entity1, entt::entity)
+    {
+      if (auto* p = world.GetRegistry().try_get<DespawnOnCollision>(entity1))
+      {
+        if (--p->count <= 0)
+        {
+          world.GetRegistry().emplace_or_replace<DeferredDelete>(entity1);
         }
         return true;
       }
@@ -430,6 +460,8 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
   registry.ctx().emplace<SunInfo>();
   registry.ctx().emplace<Scripting*>(scripting);
+  registry.ctx().emplace<World::WaterQueue>();
+  registry.ctx().emplace<World::WaterSet>();
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();

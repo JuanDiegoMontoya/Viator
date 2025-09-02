@@ -116,6 +116,9 @@ namespace Item
       std::optional<GpuLight> light;
       bool sticky      = false;
       float stickyDist = 1e-3f;
+      int maxBounces   = 0;
+      std::optional<BlockId> spawnBlockOnHit;
+      bool particles = true;
     };
 
     struct MaterializeAsSprite

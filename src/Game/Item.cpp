@@ -249,6 +249,11 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         reg.emplace<Name>(b).name                 = "Bullet";
         reg.emplace<Mesh>(b).name                 = "frog";
         reg.emplace<Lifetime>(b).remainingSeconds = 8;
+        reg.emplace<DespawnOnCollision>(b, p->maxBounces + 1);
+        if (p->spawnBlockOnHit)
+        {
+          reg.emplace<SpawnBlockOnContact>(b, *p->spawnBlockOnHit);
+        }
 
         if (p->light)
         {
@@ -262,6 +267,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         projectile.restitution       = 0.25f;
         projectile.sticky            = p->sticky;
         projectile.stickyDist        = p->stickyDist;
+        projectile.particles         = p->particles;
 
         reg.emplace<LinearVelocity>(b, dir * p->velocity + inheritedVelocity);
 
@@ -386,7 +392,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       reg.emplace_or_replace<LinearPath>(self, *p);
     }
 
-    if (subtractCountFromState)
+    if (subtractCountFromState && !world.GetRegistry().ctx().get<Debugging>().infiniteItems)
     {
       state.count -= 1;
     }

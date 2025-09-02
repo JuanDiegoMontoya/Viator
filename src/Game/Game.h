@@ -63,6 +63,7 @@ struct Debugging
   bool drawPathLines       = false;
   bool showFps             = true;
   bool disableAllUi        = false;
+  bool infiniteItems       = false;
 };
 
 struct LocalTransform
@@ -400,6 +401,7 @@ struct Projectile
   bool sticky       = false;
   float stickyDist  = 1e-3f;
   bool isStuck      = false;
+  bool particles    = true;
 };
 
 struct LinearVelocity
@@ -577,6 +579,17 @@ struct DespawnWhenFarFromPlayer
 {
   float maxDistance = 60;
   float gracePeriod = 10;
+};
+
+struct DespawnOnCollision
+{
+  // Entity will be deleted after reaching this many collisions.
+  int count = 1;
+};
+
+struct SpawnBlockOnContact
+{
+  BlockId block = voxel_t::Null;
 };
 
 class NpcSpawnDirector

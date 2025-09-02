@@ -5,7 +5,10 @@
 #include "ItemFwd.h"
 #include "entt/entity/entity.hpp"
 #include "entt/entity/registry.hpp"
+
 #include <optional>
+#include <unordered_set>
+#include <queue>
 
 namespace PCG
 {
@@ -219,6 +222,8 @@ public:
   };
   void SpawnHitParticles(const SpawnHitParticlesParams& params);
 
+  using WaterQueue = std::queue<glm::ivec3>;
+  using WaterSet = std::unordered_set<glm::ivec3>;
 private:
   uint64_t ticks_ = 0;
   entt::registry registryOld_;
