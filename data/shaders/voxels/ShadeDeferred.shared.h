@@ -7,19 +7,25 @@
 #define DDGI_NO_PUSH_CONSTANTS
 #include "../ddgi/ProbeCommon.shared.h"
 
-#ifdef __cplusplus
-using namespace shared;
-#endif
+FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
+{
+  FVOG_SHARED Texture2D gAlbedo;
+  FVOG_SHARED Texture2D gDepth;
+  FVOG_SHARED Texture2D gNormal;
+  FVOG_SHARED Texture2D gRadiance;
+  FVOG_SHARED Texture2D gIndirectIlluminance;
+  FVOG_SHARED UImage2D gSpecial;
+  FVOG_SHARED Image2D gTransmission;
+  FVOG_SHARED Image2D gAlbedoTranslucent;
+  FVOG_SHARED Image2D gNormalTranslucent;
+  FVOG_SHARED Image2D gDepthTranslucent;
+};
+
 FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
 {
   Voxels voxels;
-  Texture2D gAlbedo;
-  Texture2D gDepth;
-  Texture2D gNormal;
-  Texture2D gRadiance;
-  Texture2D gIndirectIlluminance;
-  UImage2D gSpecial;
-  Image2D sceneColor;
+  GBuffer gBuffer;
+  FVOG_SHARED Image2D sceneColor;
   FVOG_UINT32 internalColorSpace;
   FVOG_UINT32 uniformBufferIndex;
   
@@ -28,10 +34,10 @@ FVOG_DECLARE_ARGUMENTS(ShadingPushConstants)
 #else
   VkDeviceAddress ddgi;
 #endif
-  Sampler samplerr;
+  FVOG_SHARED Sampler samplerr;
   FVOG_UINT32 giMethod; // 1 = per-pixel PT. 2 = DDGI
   FVOG_BOOL32 applySpelunkerEffect;
-  Texture2D ambientOcclusion;
+  FVOG_SHARED Texture2D ambientOcclusion;
 };
 
 #endif

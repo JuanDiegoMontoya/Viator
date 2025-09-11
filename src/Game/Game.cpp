@@ -729,6 +729,10 @@ std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
         // TODO: Fix color space.
         subGrid->materials[i].emissionSrgb = subGrid->materials[i].colorSrgb * emissionInfo->emission * exp2(emissionInfo->power);
       }
+      if (const auto glassInfo = Vox::ParseGlassInfoFromDict(processed.materials[i]->attributes))
+      {
+        subGrid->materials[i].density = glassInfo->density;
+      }
     }
   }
 

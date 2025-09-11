@@ -16,6 +16,7 @@
 #include "shaders/post/TonemapAndDither.shared.h"
 #include "shaders/GlobalUniforms.h.glsl"
 #include "shaders/sky/SkyShared.h.glsl"
+#include "shaders/voxels/ShadeDeferred.shared.h"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -109,15 +110,21 @@ private:
   {
     // G-buffer
     std::optional<Fvog::Texture> sceneAlbedo;
-    constexpr static Fvog::Format sceneAlbedoFormat = Fvog::Format::R8G8B8A8_SRGB;
     std::optional<Fvog::Texture> sceneNormal;
-    constexpr static Fvog::Format sceneNormalFormat = Fvog::Format::R16G16B16A16_SNORM; // TODO: should be oct
     std::optional<Fvog::Texture> sceneRadiance;
     std::optional<Fvog::Texture> sceneIlluminance;
     std::optional<Fvog::Texture> sceneIlluminancePingPong; // Used in denoising.
-    constexpr static Fvog::Format sceneIlluminanceFormat = Fvog::Format::R16G16B16A16_SFLOAT;
     std::optional<Fvog::Texture> sceneSpecial;
-    constexpr static Fvog::Format sceneSpecialFormat = Fvog::Format::R8_UINT;
+
+    constexpr static Fvog::Format sceneAlbedoFormat      = Fvog::Format::R8G8B8A8_SRGB;
+    constexpr static Fvog::Format sceneNormalFormat      = Fvog::Format::R16G16B16A16_SNORM; // TODO: should be oct
+    constexpr static Fvog::Format sceneIlluminanceFormat = Fvog::Format::R16G16B16A16_SFLOAT;
+    constexpr static Fvog::Format sceneSpecialFormat     = Fvog::Format::R8_UINT;
+
+    std::optional<Fvog::Texture> sceneTransmission;
+    std::optional<Fvog::Texture> sceneAlbedoTranslucent;
+    std::optional<Fvog::Texture> sceneNormalTranslucent;
+    std::optional<Fvog::Texture> sceneDepthTranslucent;
 
     // Pre-tonemap
     std::optional<Fvog::Texture> sceneColor;
@@ -162,6 +169,7 @@ private:
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
+  std::optional<Fvog::TypedBuffer<GBuffer_t>> gBufferBuffer;
 
   // Sky
   std::optional<Fvog::Texture> transmittanceLut;

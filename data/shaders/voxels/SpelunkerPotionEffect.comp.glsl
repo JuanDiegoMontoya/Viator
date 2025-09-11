@@ -21,7 +21,7 @@ void main()
   
   const vec2 uv = (vec2(gid) + 0.5) / imageSize(sceneColor);
   
-  const float depth = texelFetch(gDepth, gid, 0).x;
+  const float depth = texelFetch(gBuffer.gDepth, gid, 0).x;
   const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
 
   uint valueToWrite = 0;
@@ -29,22 +29,22 @@ void main()
   const vec3 rayDir = CreateRay(uv, uniforms.invProj, uniforms.invView);
   const vec3 rayPos = positionWorld;
   
+  const float effectDistance = 12 + 2 * MM_Hash2(uv);
+  const float tMax = effectDistance - dot(rayDir, positionWorld - uniforms.cameraPos.xyz);
   // This shader will be invoked with a different voxel material buffer, so any hit will be a specially marked material.
   HitSurfaceParameters hit;
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 4, hit))
+  //if (vx_TraceRayMultiLevel(rayPos, rayDir, tMax, hit))
+  if (vx_TraceRaySimple(rayPos, rayDir, tMax, hit))
   {
-    if (distance(hit.positionWorld, uniforms.cameraPos.xyz) < 12 + 2 * MM_Hash2(uv))
+    if (distance(positionWorld, hit.positionWorld) > 1e-3)
     {
-      if (distance(positionWorld, hit.positionWorld) > 1e-3)
-      {
-        valueToWrite = 1;
-      }
-      else
-      {
-        valueToWrite = 2;
-      }
+      valueToWrite = 1;
+    }
+    else
+    {
+      valueToWrite = 2;
     }
   }
 
-  imageStore(gSpecial, gid, uvec4(valueToWrite));
+  imageStore(gBuffer.gSpecial, gid, uvec4(valueToWrite));
 }

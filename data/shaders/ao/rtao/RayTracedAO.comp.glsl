@@ -62,7 +62,7 @@ void main()
 
     // Miss, increase visibility
     HitSurfaceParameters hit;
-    if (!vx_TraceRaySimple(rayOrigin + normal * 1e-3, rayDir, 4, hit) || distance(hit.positionWorld, rayOrigin) > rayLength)
+    if (!vx_TraceRaySimple(rayOrigin + normal * 1e-3, rayDir, rayLength, hit))
     {
       // cos_theta * lambertian(1) / pdf
       // cosine weighted sampling pdf = cos_theta / pi

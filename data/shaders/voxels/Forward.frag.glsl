@@ -1,12 +1,9 @@
 #include "Forward.h.glsl"
+#include "GBuffer.h.glsl"
 
 layout(location = 0) in vec3 i_color;
 layout(location = 1) in vec3 i_normal;
 layout(location = 2) in vec3 i_worldPosition;
-
-layout(location = 0) out vec4 o_albedo;
-layout(location = 1) out vec4 o_normal;
-layout(location = 2) out vec4 o_radiance;
 
 void main()
 {

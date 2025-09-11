@@ -5,12 +5,7 @@ layout(location = 1) in vec4 v_leftColor;
 layout(location = 2) in vec4 v_rightColor;
 layout(location = 3) in float v_middle;
 
-layout(location = 0) out vec4 o_albedo;
-layout(location = 1) out vec4 o_normal;
-layout(location = 2) out vec4 o_radiance;
-
-// FSR 2 reactive mask. Unused when FSR 2 is disabled
-//layout(location = 1) out float o_reactiveMask;
+#include "voxels/GBuffer.h.glsl"
 
 void main()
 {

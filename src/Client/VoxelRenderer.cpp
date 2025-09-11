@@ -231,6 +231,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };
   head_->guiCallback_ = [this](DeltaTime dt, World& world, VkCommandBuffer cmd) { OnGui(dt, world, cmd); };
 
+  const auto gBufferFormats = std::vector{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat};
+
   voxelsPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Render voxels",
     .vertexModuleInfo =
@@ -249,7 +251,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = gBufferFormats,
             .depthAttachmentFormat = Frame::sceneDepthFormat,
           },
       },
@@ -273,7 +275,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
         .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER},
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = gBufferFormats,
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -331,7 +333,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = gBufferFormats,
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -364,7 +366,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = gBufferFormats,
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -397,7 +399,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
           },
         .renderTargetFormats =
           {
-            .colorAttachmentFormats = {{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat}},
+            .colorAttachmentFormats = gBufferFormats,
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -538,6 +540,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
   multiscatteringLutView = multiscatteringLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
   skyViewLutView         = skyViewLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
 
+  gBufferBuffer.emplace();
+
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
@@ -672,6 +676,11 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneColor       = Fvog::CreateTexture2D(extent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color");
   frame.sceneSpecial     = Fvog::CreateTexture2D(extent, Frame::sceneSpecialFormat, Fvog::TextureUsage::GENERAL, "Scene special");
 
+  frame.sceneTransmission      = Fvog::CreateTexture2D(extent, Frame::sceneAlbedoFormat, Fvog::TextureUsage::GENERAL, "Scene transmission");
+  frame.sceneAlbedoTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneAlbedoFormat, Fvog::TextureUsage::GENERAL, "Scene albedo (translucent)");
+  frame.sceneNormalTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneNormalFormat, Fvog::TextureUsage::GENERAL, "Scene normal (translucent)");
+  frame.sceneDepthTranslucent  = Fvog::CreateTexture2D(extent, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "Scene depth (translucent)");
+
   frame.sceneColorBloomScratch = Fvog::CreateTexture2DMip({extent.width / 2, extent.height / 2}, Frame::sceneColorFormat, 8, Fvog::TextureUsage::GENERAL, "Scene color (bloom scratch buffer)");
 
   frame.sceneColorTonemapped = Fvog::CreateTexture2D(extent, Frame::sceneColorTonemappedFormat, Fvog::TextureUsage::GENERAL, "Scene color tonemapped");
@@ -773,6 +782,20 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
     grid.buffer.FlushWritesToGPU(commandBuffer);
   }
+
+  ctx.TeenyBufferUpdate(gBufferBuffer.value(),
+    GBuffer_t{
+      .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
+      .gDepth               = frame.sceneDepth->ImageView().GetTexture2D(),
+      .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
+      .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
+      .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
+      .gSpecial             = frame.sceneSpecial->ImageView().GetUImage2D(),
+      .gTransmission        = frame.sceneTransmission->ImageView().GetImage2D(),
+      .gAlbedoTranslucent   = frame.sceneAlbedoTranslucent->ImageView().GetImage2D(),
+      .gNormalTranslucent   = frame.sceneNormalTranslucent->ImageView().GetImage2D(),
+      .gDepthTranslucent    = frame.sceneDepthTranslucent->ImageView().GetImage2D(),
+    });
 
   tonemapUniformBuffer.UpdateData(commandBuffer, tonemapUniforms);
 
@@ -1236,6 +1259,15 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
 
+    ctx.ImageBarrierDiscard(*frame.sceneTransmission, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneAlbedoTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneNormalTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneDepthTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    // Translucency pass
+    {
+      
+    }
+
     // Spelunker effect, if active
     const bool applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0;
     if (applySpelunkerEffect)
@@ -1246,12 +1278,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.BindComputePipeline(spelunkerEffectPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels2,
-        .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
-        .gDepth               = frame.sceneDepth->ImageView().GetTexture2D(),
-        .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
-        .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
-        .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
-        .gSpecial             = frame.sceneSpecial->ImageView().GetUImage2D(),
+        .gBuffer              = gBufferBuffer->GetDeviceAddress(),
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
@@ -1285,12 +1312,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels,
-        .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
-        .gDepth               = frame.sceneDepth->ImageView().GetTexture2D(),
-        .gNormal              = frame.sceneNormal->ImageView().GetTexture2D(),
-        .gRadiance            = frame.sceneRadiance->ImageView().GetTexture2D(),
-        .gIndirectIlluminance = frame.sceneIlluminance->ImageView().GetTexture2D(),
-        .gSpecial             = frame.sceneSpecial->ImageView().GetUImage2D(),
+        .gBuffer              = gBufferBuffer->GetDeviceAddress(),
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,

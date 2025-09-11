@@ -1,13 +1,10 @@
 #version 450 core
 #include "Resources.h.glsl"
+#include "voxels/GBuffer.h.glsl"
 
 layout(location = 0) in vec2 v_uv;
 layout(location = 1) flat in Texture2D v_texture;
 layout(location = 2) in vec3 v_tint;
-
-layout(location = 0) out vec4 o_albedo;
-layout(location = 1) out vec4 o_normal;
-layout(location = 2) out vec4 o_radiance;
 
 FVOG_DECLARE_ARGUMENTS(BillboardPushConstants)
 {
@@ -17,9 +14,6 @@ FVOG_DECLARE_ARGUMENTS(BillboardPushConstants)
   FVOG_VEC3 cameraUp;
   Sampler texSampler;
 }pc;
-
-// FSR 2 reactive mask. Unused when FSR 2 is disabled
-//layout(location = 1) out float o_reactiveMask;
 
 void main()
 {

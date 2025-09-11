@@ -117,16 +117,16 @@ void main()
   
   const vec2 uv = (vec2(gid) + 0.5) / imageSize(sceneColor);
 
-  const vec3 albedo_internal = color_convert_src_to_dst(texelFetch(gAlbedo, gid, 0).rgb, 
+  const vec3 albedo_internal = color_convert_src_to_dst(texelFetch(gBuffer.gAlbedo, gid, 0).rgb, 
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
-  const vec3 normal = normalize(texelFetch(gNormal, gid, 0).xyz);
-  const float depth = texelFetch(gDepth, gid, 0).x;
+  const vec3 normal = normalize(texelFetch(gBuffer.gNormal, gid, 0).xyz);
+  const float depth = texelFetch(gBuffer.gDepth, gid, 0).x;
   const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
   const vec3 viewDirWS = normalize(positionWorld - uniforms.cameraPos.xyz);
-  const uint special = imageLoad(gSpecial, gid).x;
+  const uint special = imageLoad(gBuffer.gSpecial, gid).x;
 
-  vec3 radiance_internal = color_convert_src_to_dst(texelFetch(gRadiance, gid, 0).rgb,
+  vec3 radiance_internal = color_convert_src_to_dst(texelFetch(gBuffer.gRadiance, gid, 0).rgb,
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
 
@@ -148,7 +148,7 @@ void main()
   vec3 irradiance_internal = vec3(0);
   if (giMethod == 1)
   {
-    irradiance_internal = color_convert_src_to_dst(texelFetch(gIndirectIlluminance, gid, 0).rgb,
+    irradiance_internal = color_convert_src_to_dst(texelFetch(gBuffer.gIndirectIlluminance, gid, 0).rgb,
       COLOR_SPACE_sRGB_LINEAR,
       internalColorSpace);
   }

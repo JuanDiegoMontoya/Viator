@@ -141,6 +141,7 @@ struct TwoLevelGrid
   {
     glm::vec4 colorSrgb;
     glm::vec4 emissionSrgb;
+    float density = -1;
   };
 
   // Describes a block composed of a grid of sub-blocks.

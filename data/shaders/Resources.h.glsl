@@ -33,9 +33,9 @@
 #define FVOG_DECLARE_ARGUMENTS(name) \
   struct name
 
-#define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) \
-  using typename = VkDeviceAddress; \
-  struct typename ## _t
+#define FVOG_DECLARE_BUFFER_REFERENCE_2(typeName) \
+  using typeName = VkDeviceAddress; \
+  struct typeName ## _t
 
 #else // GLSL
 

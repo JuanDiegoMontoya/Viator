@@ -7,11 +7,9 @@
 #include "../sky/SkyUtil.h.glsl"
 
 #include "Voxels.h.glsl"
+#include "GBuffer.h.glsl"
 
 layout(location = 0) in vec2 uv;
-layout(location = 0) out vec4 o_albedo;
-layout(location = 1) out vec4 o_normal;
-layout(location = 2) out vec4 o_radiance;
 
 FVOG_DECLARE_ARGUMENTS(PushConstants)
 {
@@ -32,8 +30,8 @@ void main()
   vec3 radiance = {0, 0, 0};
 
   HitSurfaceParameters hit;
-  //if (vx_TraceRaySimple(rayPos, rayDir, 512, hit))
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 32, hit))
+  //if (vx_TraceRaySimple(rayPos, rayDir, 40, hit))
+  if (vx_TraceRayMultiLevel(rayPos, rayDir, 1024, hit))
   //if (vx_TraceRayUnified(rayPos, rayDir, 132, hit))
   {
     albedo = GetHitAlbedo(hit);
@@ -45,15 +43,15 @@ void main()
   }
   else
   {
-    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
+    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos) * hit.transmission;
     gl_FragDepth = FAR_DEPTH;
   }
 
-  o_albedo = vec4(albedo, 1);
+  o_albedo = vec4(albedo * hit.transmission, 1);
   o_normal = vec4(normal, 1);
   vec3 bonus = vec3(0);
   // bonus.r += gSubGridVoxelsTraversed / 5;
   // bonus.g += gVoxelsTraversed / 30;
   // bonus.b += gBottomLevelBricksTraversed / 4;
-  o_radiance = vec4(radiance + bonus, 1);
+  o_radiance = vec4((radiance + 1000 * bonus) * hit.transmission, 1);
 }

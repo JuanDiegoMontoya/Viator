@@ -312,4 +312,47 @@ namespace Vox
 
     return info;
   }
+
+  std::optional<VoxMaterialGlassInfo> ParseGlassInfoFromDict(const Dict& attribs)
+  {
+    auto info = VoxMaterialGlassInfo{
+      .transparency = 1,
+      .indexOfRefraction = 1.33f,
+      .density = -1,
+    };
+
+    bool isGlass = false;
+
+    for (uint32_t i = 0; i < attribs.count; i++)
+    {
+      const auto& attrib = attribs.pairs[i];
+      auto key           = std::string_view(attrib.key.data.get(), attrib.key.sizeBytes);
+      auto value         = std::string_view(attrib.value.data.get(), attrib.value.sizeBytes);
+
+      if (key == "_type" && value == "_glass")
+      {
+        isGlass = true;
+      }
+
+      if (key == "_trans")
+      {
+        info.transparency = std::stof(std::string(value));
+      }
+      if (key == "_ri")
+      {
+        info.indexOfRefraction = std::stof(std::string(value));
+      }
+      if (key == "_d")
+      {
+        info.density = std::stof(std::string(value));
+      }
+    }
+
+    if (!isGlass)
+    {
+      return std::nullopt;
+    }
+
+    return info;
+  }
 } // namespace Vox

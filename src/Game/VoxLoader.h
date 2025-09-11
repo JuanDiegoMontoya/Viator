@@ -166,4 +166,12 @@ namespace Vox
     float ldr; // [0, 1]. ???
   };
   std::optional<VoxMaterialEmissionInfo> ParseEmissionInfoFromDict(const Dict& attribs);
+
+  struct VoxMaterialGlassInfo
+  {
+    float transparency; // [0, 1]. _trans
+    float indexOfRefraction; // [1, 10]. _ri
+    float density; // [0, 1]. _d
+  };
+  std::optional<VoxMaterialGlassInfo> ParseGlassInfoFromDict(const Dict& attribs);
 } // namespace Vox

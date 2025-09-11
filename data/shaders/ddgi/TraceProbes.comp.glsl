@@ -37,7 +37,7 @@ void main()
   
   const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
   HitSurfaceParameters hit;
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 8, hit))
+  if (vx_TraceRayMultiLevel(rayPos, rayDir, 512, hit))
   {
     // Pixel is black if hit is extremely close (i.e. probe is inside geometry).
     const float hitDist2 = distance2(rayPos, hit.positionWorld);
