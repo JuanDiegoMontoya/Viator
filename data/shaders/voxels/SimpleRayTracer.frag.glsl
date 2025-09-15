@@ -32,7 +32,7 @@ void main()
 
   HitSurfaceParameters hit;
   //if (vx_TraceRaySimple(rayPos, rayDir, 40, hit))
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 1024, hit, TRANSLUCENCY_MODE_ALL_OPAQUE))
+  if (vx_TraceRayMultiLevel(rayPos, rayDir, 1024, hit, TRANSLUCENCY_MODE_ALL))
   //if (vx_TraceRayUnified(rayPos, rayDir, 132, hit))
   {
     albedo = GetHitAlbedo(hit);

@@ -14,7 +14,7 @@
 #define WATER_SHADING_REFLECTION                2 // Meshes don't appear in reflections.
 #define WATER_SHADING_REFLECTION_AND_REFRACTION 3 // Reflection and refraction. Meshes don't appear in either.
 
-#define WATER_SHADING 1
+#define WATER_SHADING 2
 
 
 
