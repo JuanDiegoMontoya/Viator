@@ -414,6 +414,15 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
       },
   });
 
+  translucentVoxelsPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Translucent Voxels",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "voxels/TranslucentVoxels.comp.glsl",
+      },
+  });
+
   shadeDeferredPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
     .name = "Shade Deferred",
     .shaderModuleInfo =
@@ -676,7 +685,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneColor       = Fvog::CreateTexture2D(extent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color");
   frame.sceneSpecial     = Fvog::CreateTexture2D(extent, Frame::sceneSpecialFormat, Fvog::TextureUsage::GENERAL, "Scene special");
 
-  frame.sceneTransmission      = Fvog::CreateTexture2D(extent, Frame::sceneAlbedoFormat, Fvog::TextureUsage::GENERAL, "Scene transmission");
+  frame.sceneTransmission      = Fvog::CreateTexture2D(extent, Fvog::Format::B10G11R11_UFLOAT, Fvog::TextureUsage::GENERAL, "Scene transmission");
   frame.sceneAlbedoTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneAlbedoFormat, Fvog::TextureUsage::GENERAL, "Scene albedo (translucent)");
   frame.sceneNormalTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneNormalFormat, Fvog::TextureUsage::GENERAL, "Scene normal (translucent)");
   frame.sceneDepthTranslucent  = Fvog::CreateTexture2D(extent, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "Scene depth (translucent)");
@@ -890,6 +899,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .skyViewLut             = skyViewLut.value().ImageView().GetTexture2D(),
       .transmittanceLut       = transmittanceLut.value().ImageView().GetTexture2D(),
       .linearSampler          = linearClampSampler,
+      .gBuffer                = gBufferBuffer->GetDeviceAddress(),
     });
 
   ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1149,6 +1159,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .clearValue = {.depth = FAR_DEPTH},
     };
+    ctx.ImageBarrierDiscard(*frame.sceneAlbedoTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneNormalTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneDepthTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    ctx.ImageBarrierDiscard(*frame.sceneTransmission, VK_IMAGE_LAYOUT_GENERAL);
     ctx.BeginRendering({
       .name             = "Render voxels",
       .colorAttachments = colorAttachments,
@@ -1259,17 +1273,28 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     
     ctx.ImageBarrier(*frame.sceneIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
 
-    ctx.ImageBarrierDiscard(*frame.sceneTransmission, VK_IMAGE_LAYOUT_GENERAL);
-    ctx.ImageBarrierDiscard(*frame.sceneAlbedoTranslucent, VK_IMAGE_LAYOUT_GENERAL);
-    ctx.ImageBarrierDiscard(*frame.sceneNormalTranslucent, VK_IMAGE_LAYOUT_GENERAL);
-    ctx.ImageBarrierDiscard(*frame.sceneDepthTranslucent, VK_IMAGE_LAYOUT_GENERAL);
+    const bool applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0;
+    if (applySpelunkerEffect)
+    {
+      ctx.ImageBarrierDiscard(*frame.sceneSpecial, VK_IMAGE_LAYOUT_GENERAL);
+    }
+
     // Translucency pass
     {
-      
+      ctx.BindComputePipeline(translucentVoxelsPipeline.GetPipeline());
+      ctx.SetPushConstants(ShadingPushConstants{
+        .voxels             = voxels,
+        .sceneColor         = frame.sceneColor->ImageView().GetImage2D(),
+        .internalColorSpace = COLOR_SPACE_sRGB_LINEAR,
+        .uniformBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .ddgi               = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+        .samplerr           = linearClampSampler,
+        .giMethod           = uint32_t(giMethod_),
+      });
+      ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
     }
 
     // Spelunker effect, if active
-    const bool applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0;
     if (applySpelunkerEffect)
     {
       auto voxels2              = voxels;
@@ -1278,7 +1303,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.BindComputePipeline(spelunkerEffectPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels2,
-        .gBuffer              = gBufferBuffer->GetDeviceAddress(),
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
@@ -1286,9 +1310,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         .samplerr             = linearClampSampler,
         .giMethod             = uint32_t(giMethod_),
       });
-      ctx.ImageBarrierDiscard(*frame.sceneSpecial, VK_IMAGE_LAYOUT_GENERAL);
       ctx.DispatchInvocations(frame.sceneColor->GetCreateInfo().extent);
-      ctx.Barrier();
     }
 
     Fvog::Texture* aoTexture = &whiteTexture_.value();
@@ -1312,7 +1334,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels,
-        .gBuffer              = gBufferBuffer->GetDeviceAddress(),
         .sceneColor           = frame.sceneColor->ImageView().GetImage2D(),
         .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
         .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,

@@ -270,10 +270,10 @@ bool GetOccupancyAt(ivec3 voxelCoord)
   return bool(BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].occupancy.bitmask[localVoxelIndex / 32u] & (1u << localVoxelIndex % 32u));
 }
 
-#define TRANSLUCENCY_MODE_ALL              0 
-//#define TRANSLUCENCY_MODE_OPAQUE_ONLY      1
-#define TRANSLUCENCY_MODE_TRANSLUCENT_ONLY 2 // Opaque surfaces are invisible
-#define TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY 3 // 
+#define TRANSLUCENCY_MODE_ALL                    0  // Trace opaque and translucent voxels normally.
+#define TRANSLUCENCY_MODE_TRANSLUCENT_ONLY       1 // Trace only translucent surfaces.
+#define TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY 2 // Stop when hitting first translucent surface.
+#define TRANSLUCENCY_MODE_ALL_OPAQUE             3 // Treat all surfaces as though they are opaque.
 
 struct HitSurfaceParameters
 {
@@ -361,7 +361,7 @@ float vx_Density(voxel_t voxel)
 }
 
 // Ray position in [0, subGrid.dimensions)
-bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit)
+bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit, const uint translucencyMode)
 {
   GpuSubGrid subGrid   = SUBGRIDS[subGridIndex];
   rayPosLocal          = clamp(rayPosLocal, vec3(EPSILON), vec3(subGrid.dimensions - EPSILON));
@@ -379,9 +379,9 @@ bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, 
     const uint8_t subVoxel = SUBVOXELS[subGrid.gridBase + subVoxelIndex];
 
     const float density = SUBGRIDS[subGridIndex].materials[subVoxel - 1].density;
-    const vec3 albedo = SUBGRIDS[subGridIndex].materials[subVoxel - 1].colorSrgb.rgb;
+    const vec3 albedo = color_sRGB_EOTF(SUBGRIDS[subGridIndex].materials[subVoxel - 1].colorSrgb.rgb);
 
-    if (subVoxel != 0 && density < 0)
+    if (subVoxel != 0 && ((density < 0 && translucencyMode == TRANSLUCENCY_MODE_ALL) || (density >= 0 && translucencyMode == TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY) || translucencyMode == TRANSLUCENCY_MODE_ALL_OPAQUE))
     {
       gSubGridVoxelsTraversed++;
 
@@ -404,15 +404,15 @@ bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, 
     normal = i8vec3(vec3(cases) * -vec3(init.stepDir));
     const float tLocal = (dot(normal, p - rayPosLocal)) / dot(normal, rayDirection);
     const float tDelta = min((tLocal - tLocalPrev) / subGrid.dimensions.x, tMax - t);
+    const float tOld = t;
     t += tDelta;
 
     if (subVoxel != 0 && density >= 0)
     {
-      //hit.transmission *= exp(-density * tDist * (1 - vec3(.45, .8, .96)));
-      hit.transmission *= exp(-density * 10 * tDelta * (1 - vec3(.96, .2, .4)));
+      hit.transmission *= exp(-density * 20 * tDelta * (1 - albedo));
       if (!hit.hitTranslucent)
       {
-        hit.firstTranslucentHitT = t;
+        hit.firstTranslucentHitT = tOld;
         hit.hitTranslucent = true;
       }
     }
@@ -429,7 +429,7 @@ bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, 
 }
 
 // Ray position in (0, BL_BRICK_SIDE_LENGTH)
-bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr bottomLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit)
+bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr bottomLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit, const uint translucencyMode)
 {
   rayPosLocal   = clamp(rayPosLocal, vec3(EPSILON), vec3(BL_BRICK_SIDE_LENGTH - EPSILON));
   vec3 mapPos   = vec3(floor(rayPosLocal));
@@ -466,13 +466,13 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
       if (vx_IsVisible(voxel))
       {
         density = vx_Density(voxel);
-        if (density < 0)
+        if (density < 0 || translucencyMode == TRANSLUCENCY_MODE_ALL_OPAQUE)
         {
           GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
           if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
             const float oldT = t;
-            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, t, tMax, hit))
+            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, t, tMax, hit, translucencyMode))
             {
               return true;
             }
@@ -509,7 +509,6 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
     
     if (occupancy && vx_IsVisible(voxel) && density >= 0)
     {
-      //hit.transmission *= exp(-density * tDist * (1 - vec3(.45, .8, .96)));
       hit.transmission *= exp(-density * tDelta * (1 - vec3(.96, .2, .4)));
       if (!hit.hitTranslucent)
       {
@@ -530,7 +529,7 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
 }
 
 // Ray position in (0, TL_BRICK_SIDE_LENGTH)
-bool vx_TraceRayBottomLevelBricks(vec3 rayPosLocal, vec3 rayDirection, TopLevelBrickPtr topLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit)
+bool vx_TraceRayBottomLevelBricks(vec3 rayPosLocal, vec3 rayDirection, TopLevelBrickPtr topLevelBrickPtr, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit, const uint translucencyMode)
 {
   rayPosLocal          = clamp(rayPosLocal, vec3(EPSILON), vec3(TL_BRICK_SIDE_LENGTH - EPSILON));
   vec3 mapPos          = vec3(floor(rayPosLocal));
@@ -574,7 +573,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosLocal, vec3 rayDirection, TopLevelB
       }
 
       const float oldT = t;
-      if (vx_TraceRayVoxels(uvw * BL_BRICK_SIDE_LENGTH, rayDirection, bottomLevelBrickPtr, init, bvec3(cases), t, tMax, hit))
+      if (vx_TraceRayVoxels(uvw * BL_BRICK_SIDE_LENGTH, rayDirection, bottomLevelBrickPtr, init, bvec3(cases), t, tMax, hit, translucencyMode))
       {
         hit.voxelPosition += ivec3(mapPos * BL_BRICK_SIDE_LENGTH);
         return true;
@@ -624,7 +623,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosLocal, vec3 rayDirection, TopLevelB
 }
 
 // Trace ray that traverses top-level grids, then lower-level grids when there's a hit.
-bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
+bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out HitSurfaceParameters hit, const uint translucencyMode)
 {
   float t = 0;
   hit = HitSurfaceParameters_init();
@@ -681,7 +680,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out
         }
 
         const float oldT = t;
-        if (vx_TraceRayBottomLevelBricks(uvw * TL_BRICK_SIDE_LENGTH, rayDirection, topLevelBrickPtr, init, cases, t, tMax, hit))
+        if (vx_TraceRayBottomLevelBricks(uvw * TL_BRICK_SIDE_LENGTH, rayDirection, topLevelBrickPtr, init, cases, t, tMax, hit, translucencyMode))
         {
           hit.voxelPosition += mapPos * TL_BRICK_VOXELS_PER_SIDE;
           hasHit = true;
@@ -759,7 +758,12 @@ bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out
   return hasHit;
 }
 
-bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
+bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
+{
+  return vx_TraceRayMultiLevel(rayPosGlobal, rayDirection, tMax, hit, TRANSLUCENCY_MODE_ALL);
+}
+
+bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitSurfaceParameters hit, const uint translucencyMode)
 {
   hit = HitSurfaceParameters_init();
   // https://www.shadertoy.com/view/X3BXDd
@@ -784,7 +788,8 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
   float t     = 0;
   float tLocalPrev = 0;
 
-  for (int i = 0; i < 1024; i++)
+  const int maxIterations = 1024;
+  for (int i = 0; i < maxIterations; i++)
   {
     gVoxelsTraversed++;
     const uint localVoxelIndex = FlattenVoxelCoord(ivec3(mapPos));
@@ -808,33 +813,30 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
         if (vx_IsVisible(voxel))
         {
           density = vx_Density(voxel);
-          if (density < 0)
+          GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+          if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
-            GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
-            if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
+            vx_InitialDDAState init;
+            init.deltaDist = deltaDist;
+            init.S = bvec3(S);
+            init.stepDir = i8vec3(stepDir);
+            const float oldT = t;
+            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, bvec3(cases), t, tMax, hit, translucencyMode))
             {
-              vx_InitialDDAState init;
-              init.deltaDist = deltaDist;
-              init.S = bvec3(S);
-              init.stepDir = i8vec3(stepDir);
-              const float oldT = t;
-              if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, bvec3(cases), t, tMax, hit))
-              {
-                hit.positionWorld = rayPosition + rayDirection * t;
-                return true;
-              }
-              else
-              {
-                t = oldT;
-              }
+              hit.positionWorld = rayPosition + rayDirection * t;
+              return true;
             }
             else
             {
-              hit.positionWorld   = hitWorldPos;
-              hit.texCoords       = vx_GetTexCoords(normal, uvw);
-              hit.flatNormalWorld = normal;
-              return true;
+              t = oldT;
             }
+          }
+          else if ((density < 0 && translucencyMode == TRANSLUCENCY_MODE_ALL) || (density >= 0 && translucencyMode == TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY))
+          {
+            hit.positionWorld   = hitWorldPos;
+            hit.texCoords       = vx_GetTexCoords(normal, uvw);
+            hit.flatNormalWorld = normal;
+            return true;
           }
         }
       }
@@ -883,8 +885,13 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
     tLocalPrev = tLocal;
   }
 
-  printf("TraceRaySimple max iterations reached! (iterations: %d)", 1024);
+  printf("TraceRaySimple max iterations reached! (iterations: %d)", maxIterations);
   return false;
+}
+
+bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitSurfaceParameters hit)
+{
+  return vx_TraceRaySimple(rayPosition, rayDirection, tMax, hit, TRANSLUCENCY_MODE_ALL);
 }
 
 // Hierarchical DDA with a single loop and a manually managed stack.
@@ -1228,15 +1235,15 @@ vec3 GetHitEmission(HitSurfaceParameters hit)
   // return vec3(0);
 }
 
-float TraceSunRay(vec3 rayPosition, vec3 sunDir)
+vec3 TraceSunRay(vec3 rayPosition, vec3 sunDir)
 {
-  HitSurfaceParameters hit2 = HitSurfaceParameters_init();
-  if (vx_TraceRayMultiLevel(rayPosition, sunDir, 512, hit2))
+  HitSurfaceParameters hit;
+  if (vx_TraceRayMultiLevel(rayPosition, sunDir, 512, hit))
   {
-    return 0;
+    return vec3(0);
   }
 
-  return 1;
+  return hit.transmission;
 }
 
 float GetPunctualLightVisibility(vec3 surfacePos, uint lightIndex)

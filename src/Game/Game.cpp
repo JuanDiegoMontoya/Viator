@@ -717,7 +717,7 @@ std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
     .dimensions = dims,
     .grid       = std::move(subVoxels),
   });
-
+  
   for (int i = 0; i < 255; i++)
   {
     const auto color                = processed.paletteChunk->colors[i];

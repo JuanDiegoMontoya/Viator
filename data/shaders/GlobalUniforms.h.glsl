@@ -11,6 +11,20 @@
 #define CULL_PRIMITIVE_VSM      (1 << 5)
 #define USE_HASHED_TRANSPARENCY (1 << 6)
 
+FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
+{
+  FVOG_SHARED Texture2D gAlbedo;
+  FVOG_SHARED Texture2D gDepth;
+  FVOG_SHARED Texture2D gNormal;
+  FVOG_SHARED Texture2D gRadiance;
+  FVOG_SHARED Texture2D gIndirectIlluminance;
+  FVOG_SHARED UImage2D gSpecial;
+  FVOG_SHARED Image2D gTransmission;
+  FVOG_SHARED Image2D gAlbedoTranslucent;
+  FVOG_SHARED Image2D gNormalTranslucent;
+  FVOG_SHARED Image2D gDepthTranslucent;
+};
+
 #define PROFILE_LAYER_COUNT 2
 // An atmosphere layer density which can be calculated as:
 //   density = exp_term * exp(exp_scale * h) + linear_term * h + constant_term,
@@ -94,6 +108,7 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
   FVOG_SHARED Texture2D skyViewLut;
   FVOG_SHARED Texture2D transmittanceLut;
   FVOG_SHARED Sampler linearSampler;
+  GBuffer gBuffer;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

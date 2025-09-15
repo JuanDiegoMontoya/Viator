@@ -21,7 +21,7 @@ void main()
   
   const vec2 uv = (vec2(gid) + 0.5) / imageSize(sceneColor);
   
-  const float depth = texelFetch(gBuffer.gDepth, gid, 0).x;
+  const float depth = texelFetch(uniforms.gBuffer.gDepth, gid, 0).x;
   const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
 
   uint valueToWrite = 0;
@@ -46,5 +46,5 @@ void main()
     }
   }
 
-  imageStore(gBuffer.gSpecial, gid, uvec4(valueToWrite));
+  imageStore(uniforms.gBuffer.gSpecial, gid, uvec4(valueToWrite));
 }

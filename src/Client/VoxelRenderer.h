@@ -151,6 +151,7 @@ private:
   PipelineManager::GraphicsPipelineKey billboardSpritesPipeline;
 
   PipelineManager::ComputePipelineKey spelunkerEffectPipeline;
+  PipelineManager::ComputePipelineKey translucentVoxelsPipeline;
   PipelineManager::ComputePipelineKey shadeDeferredPipeline;
   PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
   PipelineManager::ComputePipelineKey tonemapPipeline;
