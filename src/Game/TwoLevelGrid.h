@@ -51,7 +51,17 @@ struct TwoLevelGrid
     glm::vec3 positionWorld;
     glm::vec3 flatNormalWorld;
     glm::vec2 texCoords;
+    glm::uint subVoxelMaterialIndex;
   };
+
+  enum class TraceTranslucencyMode
+  {
+    ALL,
+    TRANSLUCENT_ONLY,
+    FIRST_TRANSLUCENT_ONLY,
+    ALL_OPAQUE,
+  };
+
   // Predicate is called at each step and returns true to continue ray march or false to stop it.
   bool TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, std::function<bool(voxel_t)>&& predicate) const;
   bool TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, bool skipNonSolid = false) const;
@@ -161,6 +171,23 @@ struct TwoLevelGrid
   };
 
 private:
+  struct InitialDDAState
+  {
+    glm::vec3 deltaDist;
+    glm::bvec3 S;
+    glm::i8vec3 stepDir;
+  };
+
+  bool TraceRaySubGrid(glm::vec3 rayPosLocal,
+    glm::vec3 rayDirection,
+    const SubGrid& subGrid,
+    InitialDDAState init,
+    glm::bvec3 cases,
+    float& t,
+    float tMax,
+    HitSurfaceParameters& hit,
+    TraceTranslucencyMode translucencyMode) const;
+
   struct GpuSubGrid
   {
     glm::ivec3 dimensions;

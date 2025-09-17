@@ -18,6 +18,82 @@ static_assert(std::is_trivially_constructible_v<TwoLevelGrid::TopLevelBrickPtr>)
 static_assert(std::is_trivially_constructible_v<TwoLevelGrid::BottomLevelBrick>);
 static_assert(std::is_trivially_constructible_v<TwoLevelGrid::BottomLevelBrickPtr>);
 
+// Ray position in [0, subGrid.dimensions)
+bool TwoLevelGrid::TraceRaySubGrid(glm::vec3 rayPosLocal,
+  glm::vec3 rayDirection,
+  const SubGrid& subGrid,
+  InitialDDAState init,
+  glm::bvec3 cases,
+  float& t,
+  float tMax,
+  TwoLevelGrid::HitSurfaceParameters& hit,
+  TraceTranslucencyMode translucencyMode) const
+{
+  using namespace glm;
+  constexpr auto EPSILON = 1e-3f;
+  rayPosLocal        = clamp(rayPosLocal, vec3(EPSILON), vec3(vec3(subGrid.dimensions) - EPSILON));
+  vec3 mapPos        = (floor(rayPosLocal));
+  vec3 sideDist      = (vec3(init.S) - vec3(init.stepDir) * fract(rayPosLocal)) * init.deltaDist;
+
+  float tLocalPrev = 0.0;
+  vec3 p           = mapPos + 0.5f - vec3(init.stepDir) * 0.5f; // Point on axis plane
+  vec3 normal      = i8vec3(vec3(cases) * -vec3(init.stepDir));
+  
+  while (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(subGrid.dimensions))))
+  {
+    const uint subVoxelIndex = FlattenGenericCoord(subGrid.dimensions, ivec3(mapPos));
+    const SubVoxel subVoxel  = subGrid.grid[subVoxelIndex];
+
+    const float density = subGrid.materials[int(subVoxel) - 1].density;
+    //const vec3 albedo   = color_sRGB_EOTF(SUBGRIDS[subGridIndex].materials[int(subVoxel) - 1].colorSrgb.rgb);
+
+    if (subVoxel != SubVoxel::Air &&
+        ((density < 0 && translucencyMode == TraceTranslucencyMode::ALL) || (density >= 0 && translucencyMode == TraceTranslucencyMode::FIRST_TRANSLUCENT_ONLY) ||
+          translucencyMode == TraceTranslucencyMode::ALL_OPAQUE))
+    {
+      hit.flatNormalWorld       = normal;
+      hit.subVoxelMaterialIndex = uint(subVoxel) - 1;
+      return true;
+    }
+
+    bvec4 conds = lessThan(vec4(sideDist.x, sideDist.x, sideDist.y, sideDist.y), vec4(sideDist.y, sideDist.z, sideDist.z, sideDist.x));
+
+    cases.x = conds.x && conds.y;
+    cases.y = (!cases.x) && conds.z && conds.w;
+    cases.z = (!cases.x) && (!cases.y);
+
+    sideDist += (max((2.0f * vec3(cases) - 1.0f) * init.deltaDist, 0.0f));
+
+    mapPos += (i8vec3(cases) * init.stepDir);
+
+    p                  = mapPos + 0.5f - vec3(init.stepDir) * 0.5f; // Point on axis plane
+    normal             = i8vec3(vec3(cases) * -vec3(init.stepDir));
+    const float tLocal = (dot(normal, p - rayPosLocal)) / dot(normal, rayDirection);
+    const float tDelta = min((tLocal - tLocalPrev) / subGrid.dimensions.x, tMax - t);
+    [[maybe_unused]] const float tOld   = t;
+    t += tDelta;
+
+    if (subVoxel != SubVoxel::Air && density >= 0)
+    {
+      //hit.transmission *= exp(-density * 20 * tDelta * (1 - albedo));
+      //if (!hit.hitTranslucent)
+      //{
+      //  hit.firstTranslucentHitT = tOld;
+      //  hit.hitTranslucent       = true;
+      //}
+    }
+
+    if (t >= tMax)
+    {
+      return false;
+    }
+
+    tLocalPrev = tLocal;
+  }
+
+  return false;
+}
+
 bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection, float tMax, HitSurfaceParameters& hit, std::function<bool(voxel_t)>&& predicate) const
 {
   using namespace glm;
@@ -36,56 +112,82 @@ bool TwoLevelGrid::TraceRaySimple(glm::vec3 rayPosition, glm::vec3 rayDirection,
   // initial distance to cell sides, then relative difference between traveled sides
   vec3 sideDist = (S - stepDir * fract(rayPosition)) * deltaDist; // alternative: //sideDist = (S-stepDir * (pos - map)) * deltaDist;
 
+  bvec3 cases = bvec3(sideDist);
+
+  vec3 p           = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
+  vec3 normal      = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
+  float t          = 0;
+  float tLocalPrev = 0;
+
   for (int i = 0; i < tMax * 3; i++)
   {
+    if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(dimensions_))))
+    {
+      const voxel_t voxel    = GetVoxelAt(ivec3(mapPos));
+      const vec3 hitWorldPos = rayPosition + rayDirection * t;
+      const vec3 uvw         = hitWorldPos - mapPos; // Don't use fract here
+
+      hit.voxel         = voxel;
+      hit.voxelPosition = ivec3(mapPos);
+
+      const auto& material = materials_[int(voxel)];
+      // TODO: This is a hack that ignores the predicate. The predicate must account for subgrids.
+      if (material.subGrid)
+      {
+        InitialDDAState init;
+        init.deltaDist   = deltaDist;
+        init.S           = bvec3(S);
+        init.stepDir     = i8vec3(stepDir);
+        const float oldT = t;
+        if (TraceRaySubGrid(uvw * vec3(material.subGrid->dimensions), rayDirection, *material.subGrid, init, bvec3(cases), t, tMax, hit, TraceTranslucencyMode::ALL))
+        {
+          hit.positionWorld = rayPosition + rayDirection * t;
+          return true;
+        }
+        else
+        {
+          t = oldT;
+        }
+      }
+      else if (predicate(voxel))
+      {
+        hit.positionWorld   = hitWorldPos;
+        hit.texCoords       = {}; // vx_GetTexCoords(normal, uvw);
+        hit.flatNormalWorld = normal;
+        return true;
+      }
+    }
+
     // Decide which way to go!
-    vec4 conds = step(vec4(sideDist.x, sideDist.x, sideDist.y, sideDist.y), vec4(sideDist.y, sideDist.z, sideDist.z, sideDist.x)); // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    bvec4 conds = lessThan(vec4(sideDist.x, sideDist.x, sideDist.y, sideDist.y), vec4(sideDist.y, sideDist.z, sideDist.z, sideDist.x));
 
     // This mimics the if, elseif and else clauses
     // * is 'and', 1.-x is negation
-    vec3 cases = vec3(0);
-    cases.x    = conds.x * conds.y;                   // if       x dir
-    cases.y    = (1.0f - cases.x) * conds.z * conds.w; // else if  y dir
-    cases.z    = (1.0f - cases.x) * (1.0f - cases.y);   // else     z dir
+    cases.x    = conds.x && conds.y;                   // if       x dir
+    cases.y    = !cases.x && conds.z && conds.w; // else if  y dir
+    cases.z    = !cases.x && !cases.y;   // else     z dir
 
     // usually would have been:     sideDist += cases * deltaDist;
     // but this gives NaN when  cases[i] * deltaDist[i]  becomes  0. * inf
     // This gives NaN result in a component that should not have been affected,
     // so we instead give negative results for inf by mapping 'cases' to +/- 1
     // and then clamp negative values to zero afterwards, giving the correct result! :)
-    sideDist += max((2.0f * cases - 1.0f) * deltaDist, 0.0f);
+    sideDist += max((2.0f * vec3(cases) - 1.0f) * deltaDist, 0.0f);
 
-    mapPos += cases * stepDir;
+    mapPos += vec3(cases) * stepDir;
 
-    const vec3 p      = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
-    const vec3 normal = vec3(ivec3(vec3(cases))) * -vec3(stepDir);
-
-    // Solve ray plane intersection equation: dot(n, ro + t * rd - p) = 0.
-    // for t :
-    const float t = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
+    p                  = mapPos + 0.5f - stepDir * 0.5f; // Point on axis plane
+    normal             = i8vec3(vec3(cases) * -vec3(stepDir));
+    float tLocal       = (dot(normal, p - rayPosition)) / dot(normal, rayDirection);
+    const float tDelta = min(tLocal - tLocalPrev, tMax - t);
+    t += tDelta;
 
     if (t >= tMax)
     {
       return false;
     }
 
-    // Putting the exit condition down here implicitly skips the first voxel
-    if (all(greaterThanEqual(mapPos, vec3(0))) && all(lessThan(mapPos, vec3(dimensions_))))
-    {
-      const voxel_t voxel = GetVoxelAt(ivec3(mapPos));
-      if (predicate(voxel))
-      {
-        const vec3 hitWorldPos = rayPosition + rayDirection * t;
-        const vec3 uvw         = hitWorldPos - mapPos; // Don't use fract here
-
-        hit.voxel           = voxel;
-        hit.voxelPosition   = ivec3(mapPos);
-        hit.positionWorld   = hitWorldPos;
-        hit.texCoords       = {};//vx_GetTexCoords(normal, uvw);
-        hit.flatNormalWorld = normal;
-        return true;
-      }
-    }
+    tLocalPrev = tLocal;
   }
 
   return false;
