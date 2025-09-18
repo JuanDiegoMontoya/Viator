@@ -1,8 +1,14 @@
 #include "SketchyBuffer.h"
 
+#ifndef GAME_HEADLESS
+  #include "Client/Fvog/Buffer2.h"
+  #include <unordered_set>
+#endif
+
 #include "Client/Fvog/detail/Common.h"
 #include "tracy/Tracy.hpp"
 #include "vk_mem_alloc.h"
+#include <memory>
 
 #include <bit>
 
@@ -13,7 +19,82 @@ namespace
   [[maybe_unused]] constexpr auto poolTracyHeapName = "Voxel Storage (CPU & GPU)";
 } // namespace
 
-SketchyBuffer::SketchyBuffer(size_t bufferSize, [[maybe_unused]] std::string name)
+class SketchyBufferImpl final : public SketchyBuffer
+{
+public:
+  explicit SketchyBufferImpl(size_t bufferSize, std::string name = {});
+  ~SketchyBufferImpl() override;
+
+  NO_COPY(SketchyBufferImpl);
+
+  SketchyBufferImpl(SketchyBufferImpl&& old) noexcept;
+  SketchyBufferImpl& operator=(SketchyBufferImpl&& old) noexcept;
+
+  Alloc Allocate(size_t size, size_t alignment) override;
+  void Free(Alloc alloc) override;
+
+  VmaVirtualBlock GetAllocator() const override
+  {
+    return allocator_;
+  }
+
+  size_t SizeBytes() const override
+  {
+    return gpuBuffer_.SizeBytes();
+  }
+
+  size_t PageSize() const override
+  {
+    return PAGE_SIZE;
+  }
+
+  void* GetCpuBuffer() override
+  {
+    return cpuBuffer_.get();
+  }
+
+  const void* GetCpuBuffer() const override
+  {
+    return cpuBuffer_.get();
+  }
+
+private:
+  static constexpr size_t PAGE_SIZE = 1024;
+  std::unique_ptr<std::byte[]> cpuBuffer_;
+  VmaVirtualBlock allocator_{};
+
+#ifndef GAME_HEADLESS
+public:
+  void FlushWritesToGPU(VkCommandBuffer cmd) override;
+
+  Fvog::Buffer& GetGpuBuffer() override
+  {
+    return gpuBuffer_;
+  }
+
+  void MarkRange(size_t offset, size_t size) override
+  {
+    const auto minPage = offset / PAGE_SIZE;
+    const auto maxPage = (offset + size) / PAGE_SIZE;
+    for (auto i = minPage; i <= maxPage; i++)
+    {
+      dirtyPages_.insert(uint32_t(i));
+    }
+  }
+
+private:
+  Fvog::Buffer gpuBuffer_;
+  std::unordered_set<uint32_t> dirtyPages_;
+#endif
+};
+
+std::unique_ptr<SketchyBuffer> SketchyBuffer::Create(size_t bufferSize, std::string name)
+{
+  return std::make_unique<SketchyBufferImpl>(bufferSize, name);
+}
+
+
+SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] std::string name)
 #ifndef GAME_HEADLESS
   : gpuBuffer_({.size = bufferSize, .flag = Fvog::BufferFlagThingy::NONE}, std::move(name))
 #endif
@@ -24,7 +105,7 @@ SketchyBuffer::SketchyBuffer(size_t bufferSize, [[maybe_unused]] std::string nam
   Fvog::detail::CheckVkResult(vmaCreateVirtualBlock(Fvog::detail::Address(VmaVirtualBlockCreateInfo{.size = bufferSize}), &allocator_));
 }
 
-SketchyBuffer::~SketchyBuffer()
+SketchyBufferImpl::~SketchyBufferImpl()
 {
   // March 18, 2025: waiting for next release of Tracy, which will have TracyMemoryDiscard. Without it, the client will disconnect
   // sometime later upon seeing the same address allocated twice, as it has not observed the pool's destruction here.
@@ -40,7 +121,7 @@ SketchyBuffer::~SketchyBuffer()
   }
 }
 
-SketchyBuffer::SketchyBuffer(SketchyBuffer&& old) noexcept
+SketchyBufferImpl::SketchyBufferImpl(SketchyBufferImpl&& old) noexcept
   : cpuBuffer_(std::move(old.cpuBuffer_)),
     allocator_(std::exchange(old.allocator_, nullptr))
 #ifndef GAME_HEADLESS
@@ -49,15 +130,15 @@ SketchyBuffer::SketchyBuffer(SketchyBuffer&& old) noexcept
 #endif
 {}
 
-SketchyBuffer& SketchyBuffer::operator=(SketchyBuffer&& old) noexcept
+SketchyBufferImpl& SketchyBufferImpl::operator=(SketchyBufferImpl&& old) noexcept
 {
   if (&old == this)
     return *this;
-  this->~SketchyBuffer();
-  return *new (this) SketchyBuffer(std::move(old));
+  this->~SketchyBufferImpl();
+  return *new (this) SketchyBufferImpl(std::move(old));
 }
 
-SketchyBuffer::Alloc SketchyBuffer::Allocate(size_t size, size_t alignment)
+SketchyBufferImpl::Alloc SketchyBufferImpl::Allocate(size_t size, size_t alignment)
 {
   ZoneScoped;
   auto vmaAlign = alignment;
@@ -90,7 +171,7 @@ SketchyBuffer::Alloc SketchyBuffer::Allocate(size_t size, size_t alignment)
   return {offset, allocation};
 }
 
-void SketchyBuffer::Free(Alloc alloc)
+void SketchyBufferImpl::Free(Alloc alloc)
 {
   ZoneScoped;
   if constexpr (profileVoxelPool)
@@ -101,7 +182,7 @@ void SketchyBuffer::Free(Alloc alloc)
 }
 
 #ifndef GAME_HEADLESS
-void SketchyBuffer::FlushWritesToGPU(VkCommandBuffer cmd)
+void SketchyBufferImpl::FlushWritesToGPU(VkCommandBuffer cmd)
 {
   ZoneScoped;
   // All pages need to be flushed or the underlying data may have invalid references/indices

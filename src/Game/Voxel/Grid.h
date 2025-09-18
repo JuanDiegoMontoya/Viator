@@ -231,7 +231,7 @@ namespace Voxel
 
     [[nodiscard]] SketchyBuffer& Buffer()
     {
-      return buffer;
+      return *buffer;
     }
 
     [[nodiscard]] uint32_t TopLevelBrickPtrsBaseIndex() const
@@ -250,7 +250,7 @@ namespace Voxel
     }
 
   private:
-    SketchyBuffer buffer;
+    std::unique_ptr<SketchyBuffer> buffer;
     SketchyBuffer::Alloc topLevelBrickPtrs{};
     uint32_t topLevelBrickPtrsBaseIndex{};
 

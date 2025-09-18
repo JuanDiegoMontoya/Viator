@@ -204,10 +204,10 @@ namespace Voxel
       [&](voxel_t voxel) { return voxel != voxel_t::Air && (!skipNonSolid || materials_[(uint32_t)voxel].isSolid); });
   }
 
-  Grid::Grid() : buffer(16) {}
+  Grid::Grid() : buffer(SketchyBuffer::Create(16)) {}
 
   Grid::Grid(glm::ivec3 topLevelBrickDims)
-    : buffer(1'500'000'000, "World"),
+    : buffer(SketchyBuffer::Create(1'500'000'000, "World")),
       topLevelBricksDims_(topLevelBrickDims),
       dimensions_(topLevelBricksDims_.x * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.y * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.z * TL_BRICK_VOXELS_PER_SIDE)
   {
@@ -215,14 +215,14 @@ namespace Voxel
     numTopLevelBricks_ = topLevelBricksDims_.x * topLevelBricksDims_.y * topLevelBricksDims_.z;
     DEBUG_ASSERT(topLevelBricksDims_.x > 0 && topLevelBricksDims_.y > 0 && topLevelBricksDims_.z > 0);
 
-    topLevelBrickPtrs = buffer.Allocate(sizeof(TopLevelBrickPtr) * numTopLevelBricks_, sizeof(TopLevelBrickPtr));
+    topLevelBrickPtrs = buffer->Allocate(sizeof(TopLevelBrickPtr) * numTopLevelBricks_, sizeof(TopLevelBrickPtr));
     for (size_t i = 0; i < numTopLevelBricks_; i++)
     {
-      auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
+      auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
       std::construct_at(&topLevelBrickPtr);
       topLevelBrickPtr = {.voxelsDoBeAllSame = true, .voxelIfAllSame = voxel_t::Air};
 #ifndef GAME_HEADLESS
-      buffer.MarkDirtyPages(&topLevelBrickPtr);
+      buffer->MarkDirtyPages(&topLevelBrickPtr);
 #endif
     }
     topLevelBrickPtrsBaseIndex = uint32_t(topLevelBrickPtrs.offset / sizeof(TopLevelBrickPtr));
@@ -261,7 +261,7 @@ namespace Voxel
 
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
     DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
-    const auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
+    const auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
     if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
@@ -270,7 +270,7 @@ namespace Voxel
 
     const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
     DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
-    const auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
+    const auto& bottomLevelBrickPtr = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
     if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
@@ -279,7 +279,7 @@ namespace Voxel
 
     const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
     DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
-    return buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels[localVoxelIndex];
+    return buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels[localVoxelIndex];
   }
 
   void Grid::SetVoxelAt(glm::ivec3 voxelCoord, voxel_t voxel)
@@ -299,40 +299,40 @@ namespace Voxel
 
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
     DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
-    auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
+    auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
     if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
       // Make a top-level brick
       topLevelBrickPtr = TopLevelBrickPtr{.voxelsDoBeAllSame = false, .topLevelBrick = AllocateTopLevelBrick(topLevelBrickPtr.voxelIfAllSame)};
 #ifndef GAME_HEADLESS
-      buffer.MarkDirtyPages(&topLevelBrickPtr);
+      buffer->MarkDirtyPages(&topLevelBrickPtr);
 #endif
     }
 
     const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
     DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
-    DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
-    auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
+    DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer->SizeBytes() / sizeof(TopLevelBrick));
+    auto& bottomLevelBrickPtr = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
     if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
       // Make a bottom-level brick
       bottomLevelBrickPtr = BottomLevelBrickPtr{.voxelsDoBeAllSame = false, .bottomLevelBrick = AllocateBottomLevelBrick(bottomLevelBrickPtr.voxelIfAllSame)};
 #ifndef GAME_HEADLESS
-      buffer.MarkDirtyPages(&bottomLevelBrickPtr);
+      buffer->MarkDirtyPages(&bottomLevelBrickPtr);
 #endif
     }
 
     const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
     DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
-    DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
-    auto& blBrick  = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
+    DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer->SizeBytes() / sizeof(BottomLevelBrick));
+    auto& blBrick  = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
     auto& dstVoxel = blBrick.voxels[localVoxelIndex] = voxel;
     blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
 #ifndef GAME_HEADLESS
-    buffer.MarkDirtyPages(&dstVoxel);
-    buffer.MarkDirtyPages(&blBrick.occupancy.bitmask[localVoxelIndex / 32u]);
+    buffer->MarkDirtyPages(&dstVoxel);
+    buffer->MarkDirtyPages(&blBrick.occupancy.bitmask[localVoxelIndex / 32u]);
 #endif
     dirtyTopLevelBricks.insert(&topLevelBrickPtr);
     dirtyBottomLevelBricks.insert(&bottomLevelBrickPtr);
@@ -345,13 +345,13 @@ namespace Voxel
     // Check all voxels of each bottom-level brick
     for (size_t i = 0; i < numTopLevelBricks_; i++)
     {
-      auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
+      auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
       if (topLevelBrickPtr.voxelsDoBeAllSame)
       {
         continue;
       }
 
-      for (auto& bottomLevelBrickPtr : buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
+      for (auto& bottomLevelBrickPtr : buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
       {
         CoalesceBottomLevelBrick(bottomLevelBrickPtr);
       }
@@ -360,7 +360,7 @@ namespace Voxel
     // Check just the top-level grids after collapsing bottom-levels
     for (size_t i = 0; i < numTopLevelBricks_; i++)
     {
-      auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
+      auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + i];
       if (topLevelBrickPtr.voxelsDoBeAllSame)
       {
         continue;
@@ -400,8 +400,8 @@ namespace Voxel
       return;
     }
 
-    const voxel_t firstVoxel = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[0].voxelIfAllSame;
-    for (auto& bottomLevelBrickPtr : buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
+    const voxel_t firstVoxel = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[0].voxelIfAllSame;
+    for (auto& bottomLevelBrickPtr : buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
     {
       if (!bottomLevelBrickPtr.voxelsDoBeAllSame || bottomLevelBrickPtr.voxelIfAllSame != firstVoxel)
       {
@@ -413,7 +413,7 @@ namespace Voxel
     topLevelBrickPtr.voxelsDoBeAllSame = true;
     topLevelBrickPtr.voxelIfAllSame    = firstVoxel;
 #ifndef GAME_HEADLESS
-    buffer.MarkDirtyPages(&topLevelBrickPtr);
+    buffer->MarkDirtyPages(&topLevelBrickPtr);
 #endif
   }
 
@@ -426,7 +426,7 @@ namespace Voxel
       return;
     }
 
-    for (auto& bottomLevelBrickPtr : buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
+    for (auto& bottomLevelBrickPtr : buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks)
     {
       CoalesceBottomLevelBrick(bottomLevelBrickPtr);
     }
@@ -442,8 +442,8 @@ namespace Voxel
       return;
     }
 
-    const voxel_t firstVoxel = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels[0];
-    for (const auto& voxel : buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels)
+    const voxel_t firstVoxel = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels[0];
+    for (const auto& voxel : buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick].voxels)
     {
       if (firstVoxel != voxel)
       {
@@ -456,7 +456,7 @@ namespace Voxel
     bottomLevelBrickPtr.voxelIfAllSame    = firstVoxel;
 #ifndef GAME_HEADLESS
     auto lk = std::unique_lock(*mutex_);
-    buffer.MarkDirtyPages(&bottomLevelBrickPtr);
+    buffer->MarkDirtyPages(&bottomLevelBrickPtr);
 #endif
   }
 
@@ -477,42 +477,42 @@ namespace Voxel
 
   const Grid::TopLevelBrickPtr& Grid::GetTopLevelBrickPtr(uint32_t index) const
   {
-    return buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + index];
+    return buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + index];
   }
 
   Grid::TopLevelBrickPtr& Grid::GetTopLevelBrickPtr(uint32_t index)
   {
-    return buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + index];
+    return buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + index];
   }
 
   const Grid::TopLevelBrick& Grid::GetTopLevelBrick(uint32_t ptr) const
   {
-    return buffer.GetBase<TopLevelBrick>()[ptr];
+    return buffer->GetBase<TopLevelBrick>()[ptr];
   }
 
   Grid::TopLevelBrick& Grid::GetTopLevelBrick(uint32_t ptr)
   {
-    return buffer.GetBase<TopLevelBrick>()[ptr];
+    return buffer->GetBase<TopLevelBrick>()[ptr];
   }
 
   const Grid::BottomLevelBrickPtr& Grid::GetBottomLevelBrickPtr(uint32_t ptr) const
   {
-    return buffer.GetBase<BottomLevelBrickPtr>()[ptr];
+    return buffer->GetBase<BottomLevelBrickPtr>()[ptr];
   }
 
   Grid::BottomLevelBrickPtr& Grid::GetBottomLevelBrickPtr(uint32_t ptr)
   {
-    return buffer.GetBase<BottomLevelBrickPtr>()[ptr];
+    return buffer->GetBase<BottomLevelBrickPtr>()[ptr];
   }
 
   const Grid::BottomLevelBrick& Grid::GetBottomLevelBrick(uint32_t ptr) const
   {
-    return buffer.GetBase<BottomLevelBrick>()[ptr];
+    return buffer->GetBase<BottomLevelBrick>()[ptr];
   }
 
   Grid::BottomLevelBrick& Grid::GetBottomLevelBrick(uint32_t ptr)
   {
-    return buffer.GetBase<BottomLevelBrick>()[ptr];
+    return buffer->GetBase<BottomLevelBrick>()[ptr];
   }
 
   uint32_t Grid::AllocateTopLevelBrick(voxel_t initialVoxel)
@@ -524,18 +524,18 @@ namespace Voxel
     {
       auto lk = std::unique_lock(*mutex_);
       // The alignment of the allocation should be the size of the object being allocated so it can be indexed from the base ptr
-      auto allocation = buffer.Allocate(sizeof(TopLevelBrick), sizeof(TopLevelBrick));
+      auto allocation = buffer->Allocate(sizeof(TopLevelBrick), sizeof(TopLevelBrick));
       index           = uint32_t(allocation.offset / sizeof(TopLevelBrick));
       topLevelBrickIndexToAlloc.emplace(index, allocation);
     }
 
     // Initialize
-    auto& top = buffer.GetBase<TopLevelBrick>()[index];
+    auto& top = buffer->GetBase<TopLevelBrick>()[index];
     std::construct_at(&top);
     std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .voxelIfAllSame = initialVoxel});
 #ifndef GAME_HEADLESS
     auto lk = std::unique_lock(*mutex_);
-    buffer.MarkDirtyPages(&top);
+    buffer->MarkDirtyPages(&top);
 #endif
     return index;
   }
@@ -548,19 +548,19 @@ namespace Voxel
 
     {
       auto lk         = std::unique_lock(*mutex_);
-      auto allocation = buffer.Allocate(sizeof(BottomLevelBrick), sizeof(BottomLevelBrick));
+      auto allocation = buffer->Allocate(sizeof(BottomLevelBrick), sizeof(BottomLevelBrick));
       index           = uint32_t(allocation.offset / sizeof(BottomLevelBrick));
       bottomLevelBrickIndexToAlloc.emplace(index, allocation);
     }
 
     // Initialize
-    auto& bottom = buffer.GetBase<BottomLevelBrick>()[index];
+    auto& bottom = buffer->GetBase<BottomLevelBrick>()[index];
     std::construct_at(&bottom);
     std::ranges::fill(bottom.voxels, initialVoxel);
     std::ranges::fill(bottom.occupancy.bitmask, materials_[(uint32_t)initialVoxel].isVisible ? ~0u : 0u);
 #ifndef GAME_HEADLESS
     auto lk = std::unique_lock(*mutex_);
-    buffer.MarkDirtyPages(&bottom);
+    buffer->MarkDirtyPages(&bottom);
 #endif
     return index;
   }
@@ -571,7 +571,7 @@ namespace Voxel
     auto lk = std::unique_lock(*mutex_);
     auto it = topLevelBrickIndexToAlloc.find(index);
     DEBUG_ASSERT(it != topLevelBrickIndexToAlloc.end());
-    buffer.Free(it->second);
+    buffer->Free(it->second);
     topLevelBrickIndexToAlloc.erase(it);
   }
 
@@ -581,7 +581,7 @@ namespace Voxel
     auto lk = std::unique_lock(*mutex_);
     auto it = bottomLevelBrickIndexToAlloc.find(index);
     DEBUG_ASSERT(it != bottomLevelBrickIndexToAlloc.end());
-    buffer.Free(it->second);
+    buffer->Free(it->second);
     bottomLevelBrickIndexToAlloc.erase(it);
   }
 
@@ -598,7 +598,7 @@ namespace Voxel
     // SketchyBuffer::Alloc is not RAII.
     for (auto& alloc : subGridAllocations)
     {
-      buffer.Free(alloc);
+      buffer->Free(alloc);
     }
     subGridAllocations.clear();
 
@@ -619,10 +619,10 @@ namespace Voxel
             grid->dimensions.z);
         }
         const auto gridSize = grid->dimensions.x * grid->dimensions.y * grid->dimensions.z * sizeof(SubVoxel);
-        auto gridAlloc      = buffer.Allocate(gridSize, 4);
-        auto* mem           = buffer.GetBase<SubVoxel>() + gridAlloc.offset / sizeof(SubVoxel);
+        auto gridAlloc      = buffer->Allocate(gridSize, 4);
+        auto* mem           = buffer->GetBase<SubVoxel>() + gridAlloc.offset / sizeof(SubVoxel);
         std::memcpy(mem, grid->grid.get(), gridSize);
-        buffer.MarkRange(gridAlloc.offset, gridSize);
+        buffer->MarkRange(gridAlloc.offset, gridSize);
 
         // GpuSubGrid
         ASSERT(gridAlloc.offset / sizeof(SubVoxel) <= UINT32_MAX);
@@ -632,10 +632,10 @@ namespace Voxel
           //.materials  = grid->materials,
         };
         std::ranges::copy(grid->materials, subGridInfo.materials);
-        auto gridInfoAlloc = buffer.Allocate(sizeof(subGridInfo), sizeof(subGridInfo));
-        auto* mem2         = buffer.GetBase<GpuSubGrid>() + gridInfoAlloc.offset / sizeof(subGridInfo);
+        auto gridInfoAlloc = buffer->Allocate(sizeof(subGridInfo), sizeof(subGridInfo));
+        auto* mem2         = buffer->GetBase<GpuSubGrid>() + gridInfoAlloc.offset / sizeof(subGridInfo);
         std::memcpy(mem2, &subGridInfo, sizeof(subGridInfo));
-        buffer.MarkDirtyPages(mem2);
+        buffer->MarkDirtyPages(mem2);
         material.subGrid->myIndexINTERNAL = uint32_t(gridInfoAlloc.offset / sizeof(subGridInfo));
 
         subGridAllocations.emplace_back(gridAlloc);
@@ -653,7 +653,7 @@ namespace Voxel
 
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
     DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
-    auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
+    auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
     if (topLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
@@ -663,8 +663,8 @@ namespace Voxel
 
     const auto bottomLevelIndex = FlattenBottomLevelBrickCoord(bottomLevelCoord);
     DEBUG_ASSERT(bottomLevelIndex < CELLS_PER_TL_BRICK);
-    DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer.SizeBytes() / sizeof(TopLevelBrick));
-    auto& bottomLevelBrickPtr = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
+    DEBUG_ASSERT(topLevelBrickPtr.topLevelBrick < buffer->SizeBytes() / sizeof(TopLevelBrick));
+    auto& bottomLevelBrickPtr = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick].bricks[bottomLevelIndex];
 
     if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
@@ -675,8 +675,8 @@ namespace Voxel
 
     const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
     DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
-    DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer.SizeBytes() / sizeof(BottomLevelBrick));
-    auto& blBrick                   = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
+    DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer->SizeBytes() / sizeof(BottomLevelBrick));
+    auto& blBrick                   = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
     blBrick.voxels[localVoxelIndex] = voxel;
     blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
   }
@@ -690,13 +690,13 @@ namespace Voxel
     {
       auto lk = std::unique_lock(*mutex_);
       // The alignment of the allocation should be the size of the object being allocated so it can be indexed from the base ptr
-      auto allocation = buffer.Allocate(sizeof(TopLevelBrick), sizeof(TopLevelBrick));
+      auto allocation = buffer->Allocate(sizeof(TopLevelBrick), sizeof(TopLevelBrick));
       index           = uint32_t(allocation.offset / sizeof(TopLevelBrick));
       topLevelBrickIndexToAlloc.emplace(index, allocation);
     }
 
     // Initialize
-    auto& top = buffer.GetBase<TopLevelBrick>()[index];
+    auto& top = buffer->GetBase<TopLevelBrick>()[index];
     std::construct_at(&top);
     std::ranges::fill(top.bricks, BottomLevelBrickPtr{.voxelsDoBeAllSame = true, .voxelIfAllSame = initialVoxel});
     return index;
@@ -710,13 +710,13 @@ namespace Voxel
 
     {
       auto lk         = std::unique_lock(*mutex_);
-      auto allocation = buffer.Allocate(sizeof(BottomLevelBrick), sizeof(BottomLevelBrick));
+      auto allocation = buffer->Allocate(sizeof(BottomLevelBrick), sizeof(BottomLevelBrick));
       index           = uint32_t(allocation.offset / sizeof(BottomLevelBrick));
       bottomLevelBrickIndexToAlloc.emplace(index, allocation);
     }
 
     // Initialize
-    auto& bottom = buffer.GetBase<BottomLevelBrick>()[index];
+    auto& bottom = buffer->GetBase<BottomLevelBrick>()[index];
     std::construct_at(&bottom);
     std::ranges::fill(bottom.voxels, initialVoxel);
     std::ranges::fill(bottom.occupancy.bitmask, materials_[(uint32_t)initialVoxel].isVisible ? ~0u : 0u);
@@ -728,10 +728,10 @@ namespace Voxel
     ZoneScoped;
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelBrickPos);
     DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
-    auto& topLevelBrickPtr = buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
+    auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
     auto lk = std::unique_lock(*mutex_);
-    buffer.MarkDirtyPages(&topLevelBrickPtr);
+    buffer->MarkDirtyPages(&topLevelBrickPtr);
     dirtyTopLevelBricks.emplace(&topLevelBrickPtr);
 
     if (topLevelBrickPtr.voxelsDoBeAllSame)
@@ -739,11 +739,11 @@ namespace Voxel
       return;
     }
 
-    auto& topLevelBrick = buffer.GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick];
-    buffer.MarkDirtyPages(&topLevelBrick);
+    auto& topLevelBrick = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick];
+    buffer->MarkDirtyPages(&topLevelBrick);
     for (auto& bottomLevelBrickPtr : topLevelBrick.bricks)
     {
-      buffer.MarkDirtyPages(&bottomLevelBrickPtr);
+      buffer->MarkDirtyPages(&bottomLevelBrickPtr);
       dirtyBottomLevelBricks.emplace(&bottomLevelBrickPtr);
 
       if (bottomLevelBrickPtr.voxelsDoBeAllSame)
@@ -751,8 +751,8 @@ namespace Voxel
         continue;
       }
 
-      const auto& bottomLevelBrick = buffer.GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
-      buffer.MarkDirtyPages(&bottomLevelBrick);
+      const auto& bottomLevelBrick = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
+      buffer->MarkDirtyPages(&bottomLevelBrick);
     }
   }
 
@@ -775,6 +775,6 @@ namespace Voxel
   {
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
     DEBUG_ASSERT(topLevelIndex < numTopLevelBricks_);
-    return buffer.GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
+    return buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
   }
 } // namespace Voxel
