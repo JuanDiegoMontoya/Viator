@@ -4,6 +4,9 @@
 #include "Game/Game.h"
 #include "Core/Assert2.h"
 #include "RPC.h"
+#include "ThreadSafeQueue.h"
+#include "Core/ClassImplMacros.h"
+#include "RpcInfo.h"
 
 #define ENET_IMPLEMENTATION
 #include "enet/enet.h"
@@ -18,7 +21,51 @@ static std::string format_as(const ENetAddress& addr)
   return fmt::format("[{}]:{}", name, addr.port);
 }
 
-Networking::Client::Client(World& world, const char* hostName)
+namespace Networking
+{
+  class ClientImpl final : public Client
+  {
+  public:
+    explicit ClientImpl(World& world, const char* hostName);
+    ~ClientImpl() override;
+    NO_COPY_NO_MOVE(ClientImpl);
+
+    void ProcessMessages(World& world) override;
+    void SendMessages(World& world) override;
+    void EnqueueRPC(RpcInfo rpc) override;
+    bool IsEntityOwnedByRemote(entt::entity entity) override;
+
+    [[nodiscard]] ClientStatus GetStatus() const override
+    {
+      return status_;
+    }
+
+    [[nodiscard]] const std::unordered_map<entt::entity, entt::entity>& GetRemoteToLocalEntityMap() const override
+    {
+      return remoteToLocalEntity_;
+    }
+
+  private:
+    void FlushRPCs();
+    void OnEntityDestroy(entt::registry&, entt::entity entity);
+    int32_t HandlePacket(World& world, const ENetPacket& packet);
+
+    World* world_{};
+    ENetHost* localHost_{};
+    ENetPeer* remotePeer_{};
+    ClientStatus status_ = ClientStatus::Resolving;
+    std::unordered_map<entt::entity, entt::entity> remoteToLocalEntity_;
+    std::unordered_map<entt::entity, entt::entity> localToRemoteEntity_;
+    ThreadSafeQueue<RpcInfo> rpcs_;
+  };
+
+  std::unique_ptr<Client> Client::Create(World& world, const char* hostName)
+  {
+    return std::make_unique<ClientImpl>(world, hostName);
+  }
+}
+
+Networking::ClientImpl::ClientImpl(World& world, const char* hostName)
   : world_(&world)
 {
   spdlog::info("Creating client that will attempt to connect to {}", hostName);
@@ -43,12 +90,12 @@ Networking::Client::Client(World& world, const char* hostName)
 
   ASSERT(remotePeer_);
 
-  world.GetRegistryRaw().on_destroy<entt::entity>().connect<&Client::OnEntityDestroy>(*this);
+  world.GetRegistryRaw().on_destroy<entt::entity>().connect<&ClientImpl::OnEntityDestroy>(*this);
 }
 
-Networking::Client::~Client()
+Networking::ClientImpl::~ClientImpl()
 {
-  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&Client::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&ClientImpl::OnEntityDestroy>(*this);
   if (remotePeer_)
   {
     enet_peer_disconnect_now(remotePeer_, 0);
@@ -57,7 +104,7 @@ Networking::Client::~Client()
   enet_deinitialize();
 }
 
-void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
+void Networking::ClientImpl::ProcessMessages([[maybe_unused]] World& world)
 {
   ZoneScoped;
   auto event = ENetEvent{};
@@ -121,7 +168,7 @@ void Networking::Client::ProcessMessages([[maybe_unused]] World& world)
   }
 }
 
-void Networking::Client::SendMessages(World& world)
+void Networking::ClientImpl::SendMessages(World& world)
 {
   if (status_ != ClientStatus::Connected)
   {
@@ -143,17 +190,17 @@ void Networking::Client::SendMessages(World& world)
   FlushRPCs();
 }
 
-void Networking::Client::EnqueueRPC(RpcInfo rpc)
+void Networking::ClientImpl::EnqueueRPC(RpcInfo rpc)
 {
   rpcs_.push_back(std::move(rpc));
 }
 
-bool Networking::Client::IsEntityOwnedByRemote(entt::entity entity)
+bool Networking::ClientImpl::IsEntityOwnedByRemote(entt::entity entity)
 {
   return !world_->AncestorHasComponent<LocalAuthoritative>(entity);
 }
 
-void Networking::Client::FlushRPCs()
+void Networking::ClientImpl::FlushRPCs()
 {
   ZoneScoped;
   while (!rpcs_.empty())
@@ -183,7 +230,7 @@ void Networking::Client::FlushRPCs()
   }
 }
 
-void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
+void Networking::ClientImpl::OnEntityDestroy(entt::registry&, entt::entity entity)
 {
   ZoneScoped;
   if (auto it = localToRemoteEntity_.find(entity); it != localToRemoteEntity_.end())
@@ -194,7 +241,7 @@ void Networking::Client::OnEntityDestroy(entt::registry&, entt::entity entity)
   }
 }
 
-int32_t Networking::Client::HandlePacket(World& world, const ENetPacket& enetPacket)
+int32_t Networking::ClientImpl::HandlePacket(World& world, const ENetPacket& enetPacket)
 {
   ZoneScoped;
   const char* const pData = reinterpret_cast<const char*>(enetPacket.data);

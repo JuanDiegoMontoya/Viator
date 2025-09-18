@@ -1407,7 +1407,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         {
           auto address               = (*table)["address"].value_or(std::string_view("localhost"));
           [[maybe_unused]] auto port = (*table)["port"].value_or(1234);
-          *networking = std::make_unique<Networking::Client>(world, std::string(address).c_str());
+          *networking = Networking::Client::Create(world, std::string(address).c_str());
           gameState   = GameState::LOADING_MP;
         }
         ImGui::SameLine();
