@@ -4,6 +4,7 @@
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Core/Assert2.h"
+#include "RpcInfo.h"
 
 #include "entt/meta/meta.hpp"
 #include "entt/meta/resolve.hpp"

@@ -3,10 +3,8 @@
 #include "Core/Reflection.h"
 
 #include "entt/fwd.hpp"
-#include "entt/meta/meta.hpp"
 
 #include <vector>
-#include <optional>
 
 class World;
 typedef struct _ENetCompressor ENetCompressor;
@@ -30,13 +28,6 @@ namespace Networking
     float packetLoss;
   };
 
-  struct RpcInfo
-  {
-    std::optional<entt::entity> owningConnection = std::nullopt;
-    Core::Reflection::RpcTraits traits;
-    entt::id_type funcId;
-    std::vector<entt::meta_any> args;
-  };
 
   class Interface
   {
@@ -47,7 +38,7 @@ namespace Networking
 
     virtual void ProcessMessages(World&) = 0;
     virtual void SendMessages(World&)    = 0;
-    virtual void EnqueueRPC(RpcInfo rpc) = 0;
+    virtual void EnqueueRPC(struct RpcInfo rpc) = 0;
     virtual bool IsEntityOwnedByRemote(entt::entity entity) = 0;
     const std::vector<ClientNetworkInfo>& GetClientNetworkInfos() const
     {

@@ -3,6 +3,7 @@
 #include "ThreadSafeQueue.h"
 #include "Core/ClassImplMacros.h"
 #include "EnetFwd.h"
+#include "RpcInfo.h"
 
 #include "entt/fwd.hpp"
 

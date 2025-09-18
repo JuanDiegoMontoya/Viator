@@ -1066,7 +1066,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::BeginDisabled(networking->get());
       if (ImGui::Selectable("Open Server"))
       {
-        *networking = std::make_unique<Networking::Server>(world);
+        *networking = Networking::Server::Create(world);
       }
       ImGui::EndDisabled();
 

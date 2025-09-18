@@ -1,20 +1,26 @@
 #include "Server.h"
+#include "Core/ClassImplMacros.h"
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Game/Game.h"
 #include "Game/Voxel/Grid.h"
 #include "Core/Assert2.h"
 #include "RPC.h"
+#include "ThreadSafeQueue.h"
+#include "RpcInfo.h"
 
 #include "enet/enet.h"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
 #include "zstd.h"
 #include "entt/meta/container.hpp"
+#include "entt/entity/fwd.hpp"
 
 #include <unordered_set>
+#include <unordered_map>
 #include <span>
 #include <memory>
+#include <vector>
 
 static std::string format_as(const ENetAddress& addr)
 {
@@ -23,7 +29,55 @@ static std::string format_as(const ENetAddress& addr)
   return fmt::format("[{}]:{}", name, addr.port);
 }
 
-Networking::Server::Server(World& world)
+namespace Networking
+{
+  class ServerImpl final : public Server
+  {
+  public:
+    explicit ServerImpl(World& world);
+    ~ServerImpl() override;
+    NO_COPY_NO_MOVE(ServerImpl);
+
+    void ProcessMessages(World& world) override;
+    void SendMessages(World& world) override;
+    void EnqueueRPC(RpcInfo rpc) override;
+
+    size_t GetNumberOfConnections() const override
+    {
+      return connections_.size();
+    }
+
+  private:
+    void FlushRPCs();
+    void OnEntityDestroy(entt::registry&, entt::entity entity);
+    int32_t HandlePacket(World& world, ENetPeer* peer, const ENetPacket& packet);
+    bool IsEntityOwnedByRemote(entt::entity entity) override;
+
+    ENetHost* localHost_;
+
+    struct ClientInfo
+    {
+      entt::entity entity;
+      ClientStatus status;
+    };
+    std::unordered_map<ENetPeer*, ClientInfo> connections_;
+    std::unordered_map<entt::entity, ENetPeer*> entityToConnection_;
+    std::vector<entt::entity> removedEntities_;
+    World* world_;
+    ThreadSafeQueue<RpcInfo> rpcs_;
+
+    // Number of ticks before broadcasting client network info.
+    uint32_t networkInfoFlushInterval = 50;
+    uint32_t networkInfoAccumulator   = 0;
+  };
+
+  std::unique_ptr<Server> Server::Create(World& world)
+  {
+    return std::make_unique<ServerImpl>(world);
+  }
+}
+
+Networking::ServerImpl::ServerImpl(World& world)
   : world_(&world)
 {
   spdlog::info("Creating server");
@@ -46,14 +100,14 @@ Networking::Server::Server(World& world)
   auto compressor = detail::GetCompressor();
   enet_host_compress(localHost_, &compressor);
 
-  world_->GetRegistryRaw().on_destroy<entt::entity>().connect<&Server::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().connect<&ServerImpl::OnEntityDestroy>(*this);
   spdlog::info("Created server bound to {}", address);
 }
 
-Networking::Server::~Server()
+Networking::ServerImpl::~ServerImpl()
 {
   spdlog::info("Shutting down server");
-  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&Server::OnEntityDestroy>(*this);
+  world_->GetRegistryRaw().on_destroy<entt::entity>().disconnect<&ServerImpl::OnEntityDestroy>(*this);
   for (auto& [peer, entity] : connections_)
   {
     // TODO: Destroy entity.
@@ -63,7 +117,7 @@ Networking::Server::~Server()
   enet_deinitialize();
 }
 
-void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
+void Networking::ServerImpl::ProcessMessages([[maybe_unused]] World& world)
 {
   ZoneScoped;
   auto event = ENetEvent{};
@@ -191,7 +245,7 @@ static void AddEntityAndChildrenToVector(const entt::registry& registry, entt::e
   }
 }
 
-void Networking::Server::SendMessages([[maybe_unused]] World& world)
+void Networking::ServerImpl::SendMessages([[maybe_unused]] World& world)
 {
   ZoneScoped;
   if (connections_.empty())
@@ -256,12 +310,12 @@ void Networking::Server::SendMessages([[maybe_unused]] World& world)
   FlushRPCs();
 }
 
-void Networking::Server::EnqueueRPC(RpcInfo rpc)
+void Networking::ServerImpl::EnqueueRPC(RpcInfo rpc)
 {
   rpcs_.push_back(std::move(rpc));
 }
 
-void Networking::Server::FlushRPCs()
+void Networking::ServerImpl::FlushRPCs()
 {
   ZoneScoped;
   while (!rpcs_.empty())
@@ -306,7 +360,7 @@ void Networking::Server::FlushRPCs()
   }
 }
 
-void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
+void Networking::ServerImpl::OnEntityDestroy(entt::registry&, entt::entity entity)
 {
   ZoneScoped;
   if (connections_.empty())
@@ -316,7 +370,7 @@ void Networking::Server::OnEntityDestroy(entt::registry&, entt::entity entity)
   removedEntities_.emplace_back(entity);
 }
 
-int32_t Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENetPacket& enetPacket)
+int32_t Networking::ServerImpl::HandlePacket(World& world, ENetPeer* peer, const ENetPacket& enetPacket)
 {
   ZoneScoped;
   auto peerIt = connections_.find(peer);
@@ -370,7 +424,7 @@ int32_t Networking::Server::HandlePacket(World& world, ENetPeer* peer, const ENe
   return static_cast<int32_t>(stream.tellg());
 }
 
-bool Networking::Server::IsEntityOwnedByRemote(entt::entity entity)
+bool Networking::ServerImpl::IsEntityOwnedByRemote(entt::entity entity)
 {
   return entityToConnection_.contains(entity);
 }
