@@ -14,7 +14,7 @@
 
 namespace
 {
-  constexpr bool profileVoxelPool = false;
+  constexpr bool profileVoxelPool = true;
 
   [[maybe_unused]] constexpr auto poolTracyHeapName = "Voxel Storage (CPU & GPU)";
 } // namespace
@@ -107,11 +107,9 @@ SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] std::st
 
 SketchyBufferImpl::~SketchyBufferImpl()
 {
-  // March 18, 2025: waiting for next release of Tracy, which will have TracyMemoryDiscard. Without it, the client will disconnect
-  // sometime later upon seeing the same address allocated twice, as it has not observed the pool's destruction here.
   if constexpr (profileVoxelPool)
   {
-    // TracyMemoryDiscard(poolTracyHeapName);
+    TracyMemoryDiscard(poolTracyHeapName);
   }
 
   if (allocator_)
