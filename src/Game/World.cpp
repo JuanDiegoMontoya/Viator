@@ -14,6 +14,7 @@
 #include "Networking/Server.h"
 #include "Audio.h"
 #include "shaders/Light.h.glsl"
+#include "Voxel/Grid.h"
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"

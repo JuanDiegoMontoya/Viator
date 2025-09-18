@@ -230,4 +230,8 @@ private:
   RegistryProxy registry_;
 };
 
+namespace Voxel
+{
+  struct Grid;
+}
 std::optional<glm::vec3> SampleWalkablePosition(const Voxel::Grid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable);

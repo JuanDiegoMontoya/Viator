@@ -2,6 +2,7 @@
 #include "Client/Fvog/detail/VmaFwd.h"
 #ifndef GAME_HEADLESS
   #include "Client/Fvog/Buffer2.h"
+  #include <unordered_set>
 #endif
 
 #include <cassert>

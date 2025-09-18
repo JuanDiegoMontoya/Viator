@@ -571,7 +571,6 @@ namespace Core::Reflection
   {
     const char* label = "entity";
     GetEditorName(label, properties);
-    using T = std::underlying_type_t<entt::entity>;
     if (entity == entt::null)
     {
       ImGui::Text("%s: null", label);

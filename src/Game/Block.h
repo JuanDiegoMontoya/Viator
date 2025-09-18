@@ -1,17 +1,23 @@
 #pragma once
+#include "Core/ClassImplMacros.h"
 #include "BlockFwd.h"
 #include "EntityPrefabFwd.h"
 #include "ItemFwd.h"
-#include "Voxel/Grid.h"
 
 #include "glm/vec3.hpp"
 
+#include <array>
 #include <variant>
 #include <string>
 #include <map>
 #include <unordered_map>
 
 class World;
+
+namespace Voxel
+{
+  struct SubGrid;
+}
 
 namespace Block
 {

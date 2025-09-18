@@ -1,4 +1,5 @@
 #include "Block.h"
+#include "Voxel/Grid.h"
 
 #include "Item.h"
 #include "Core/Assert2.h"

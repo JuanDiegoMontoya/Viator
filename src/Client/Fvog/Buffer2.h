@@ -3,15 +3,16 @@
 #include "TriviallyCopyableByteSpan.h"
 #include "detail/Flags.h"
 #include "detail/VmaFwd.h"
-#include "shaders/Resources.h.glsl"
 #include "detail/VkFwd.h"
 
 #include <string>
-#include <string_view>
 #include <optional>
 #include <cstddef>
-#include <memory>
-#include <unordered_set>
+
+namespace shared
+{
+  struct Buffer;
+}
 
 namespace Fvog
 {
@@ -97,20 +98,14 @@ namespace Fvog
       return descriptorInfo_.value().GpuResource();
     }
 
-    [[nodiscard]] shared::Buffer GetBuffer() noexcept
-    {
-      return {descriptorInfo_.value().GpuResource().index};
-    }
+    [[nodiscard]] shared::Buffer GetBuffer() noexcept;
 
     const std::string& GetName() const
     {
       return name_;
     }
 
-    [[nodiscard]] operator shared::Buffer() noexcept
-    {
-      return {descriptorInfo_.value().GpuResource().index};
-    }
+    [[nodiscard]] operator shared::Buffer() noexcept;
 
   protected:
     BufferCreateInfo createInfo_{};

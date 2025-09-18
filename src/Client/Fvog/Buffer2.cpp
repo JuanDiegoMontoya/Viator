@@ -4,6 +4,7 @@
 #include "detail/Common.h"
 
 #include "Rendering2.h"
+#include "shaders/Resources.h.glsl"
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -139,6 +140,16 @@ namespace Fvog
   void Buffer::FillData(VkCommandBuffer commandBuffer, const BufferFillInfo& clear)
   {
     vkCmdFillBuffer(commandBuffer, buffer_, clear.offset, clear.size, clear.data);
+  }
+
+  shared::Buffer Buffer::GetBuffer() noexcept
+  {
+    return {descriptorInfo_.value().GpuResource().index};
+  }
+
+  Buffer::operator shared::Buffer() noexcept
+  {
+    return {descriptorInfo_.value().GpuResource().index};
   }
 
   void Buffer::UpdateDataGeneric(VkCommandBuffer commandBuffer, TriviallyCopyableByteSpan data, VkDeviceSize destOffsetBytes, Buffer& stagingBuffer, Buffer& deviceBuffer)

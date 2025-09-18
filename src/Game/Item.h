@@ -7,7 +7,6 @@
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "Physics/Shape.h"
 
-#include <span>
 #include <vector>
 #include <string>
 

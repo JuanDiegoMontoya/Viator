@@ -7,6 +7,7 @@
 #include "Physics/Physics.h"
 #include "Physics/PhysicsUtils.h"
 #include "Audio.h"
+#include "Voxel/Grid.h"
 
 #include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"

@@ -1,13 +1,13 @@
 #pragma once
 #include "Block.h"
 #include "BlockFwd.h"
+#include "ItemFwd.h"
 #include "Core/ClassImplMacros.h"
 #include "EntityPrefab.h"
 #include "PCG.h"
 #include "Game/Voxel/VoxelType.h"
 #include "Client/Fvog/detail/Flags.h"
 #include "MathUtilities.h"
-#include "Voxel/Grid.h"
 #include "Networking/Interface.h"
 #include "Head.h"
 
@@ -26,7 +26,6 @@
 #include <vector>
 #include <unordered_map>
 #include <span>
-#include "ItemFwd.h"
 
 namespace Physics
 {
@@ -216,12 +215,12 @@ struct Inventory
 
   std::array<std::array<ItemState, width>, height> slots{};
 
-  auto& ActiveSlot()
+  ItemState& ActiveSlot()
   {
     return slots[activeSlotCoord.x][activeSlotCoord.y];
   }
 
-  const auto& ActiveSlot() const
+  const ItemState& ActiveSlot() const
   {
     return slots[activeSlotCoord.x][activeSlotCoord.y];
   }
@@ -637,6 +636,11 @@ private:
   std::unique_ptr<Networking::Interface> networking_;
   std::unique_ptr<World> world_;
 };
+
+namespace Voxel
+{
+  struct SubGrid;
+}
 
 namespace Vox
 {
