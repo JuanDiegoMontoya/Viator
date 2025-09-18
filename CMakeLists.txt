@@ -9,11 +9,8 @@ set(CMAKE_CXX_STANDARD 23)
 option(FROGRENDER_FSR2_ENABLE "Enable FidelityFX Super Resolution 2. Windows only!" FALSE)
 
 find_package(Vulkan REQUIRED)
-
 set(viator_client_files
-    vendor/stb_image.cpp
     vendor/tiny_obj_loader.cpp
-    vendor/miniaudio.cpp
     vendor/ma_reverb_node.cpp
     src/Client/techniques/Bloom.h
     src/Client/techniques/Bloom.cpp
@@ -192,8 +189,13 @@ target_compile_options(frogRender
     -Wno-double-promotion # stbi
     -Wno-old-style-cast
     -Wno-unused-result
-    -ftime-trace
+    -Wno-float-equal # Generated when =default'ing classes with float members.
+    -Wno-newline-eof
+    -Wno-format-nonliteral
+    -Wunused-variable
+    -ftime-trace # Emit flamegraph traces (viewable in chrome://tracing and speedscope.app) for each TU.
     -march=native # zstd requires BMI2 for precisely one function
+    -fproc-stat-report # Print memory and execution time for each compilation step.
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     -DFROG_DEBUG
     -DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
@@ -218,6 +220,9 @@ target_compile_options(frogRender
     >
     >
 )
+
+add_library(miniaudio vendor/miniaudio.cpp)
+add_library(stbi vendor/stb_image.cpp)
 
 option(FROGRENDER_DISABLE_OPTS "Disable compiler optimizations for release builds" FALSE)
 if (MSVC AND FROGRENDER_DISABLE_OPTS)
@@ -298,6 +303,8 @@ target_link_libraries(frogRender
     rapidfuzz::rapidfuzz
     angelscript
     as_addons
+    miniaudio
+    stbi
 )
 
 target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE VK_NO_PROTOTYPES GLFW_INCLUDE_NONE ImTextureID=ImU64)
