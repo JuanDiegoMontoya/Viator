@@ -1,5 +1,5 @@
 #pragma once
-#include "Game/ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "glm/vec2.hpp"
 
 class World;

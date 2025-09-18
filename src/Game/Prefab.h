@@ -1,6 +1,6 @@
 #pragma once
-#include "ClassImplMacros.h"
-#include "VoxelType.h"
+#include "Core/ClassImplMacros.h"
+#include "Game/Voxel/VoxelType.h"
 
 #include "glm/vec3.hpp"
 

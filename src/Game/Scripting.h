@@ -1,5 +1,5 @@
 #pragma once
-#include "ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 
 #include "entt/entity/fwd.hpp"
 #include "entt/meta/meta.hpp"

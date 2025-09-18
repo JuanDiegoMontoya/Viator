@@ -2,7 +2,7 @@
 #include "BlockFwd.h"
 #include "EntityPrefabFwd.h"
 #include "ItemFwd.h"
-#include "TwoLevelGrid.h"
+#include "Voxel/Grid.h"
 
 #include "glm/vec3.hpp"
 
@@ -56,7 +56,7 @@ namespace Block
 
     struct RenderAsSubGrid
     {
-      std::shared_ptr<TwoLevelGrid::SubGrid> subGrid;
+      std::shared_ptr<Voxel::SubGrid> subGrid;
     };
 
     // One material for every face.
@@ -219,7 +219,7 @@ namespace Block
 
   [[nodiscard]] bool IsVisible(const World& world, BlockId block);
   [[nodiscard]] bool IsSolid(const World& world, BlockId block);
-  [[nodiscard]] const TwoLevelGrid::SubGrid* GetSubGrid(const World& world, BlockId block);
+  [[nodiscard]] const Voxel::SubGrid* GetSubGrid(const World& world, BlockId block);
   [[nodiscard]] ItemId GetItemId(const World& world, BlockId block);
   [[nodiscard]] float GetInitialHealth(const World& world, BlockId block);
   [[nodiscard]] BlockDamageFlags GetDamageFlags(const World& world, BlockId block);

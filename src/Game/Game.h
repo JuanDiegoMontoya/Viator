@@ -1,13 +1,13 @@
 #pragma once
 #include "Block.h"
 #include "BlockFwd.h"
-#include "ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "EntityPrefab.h"
 #include "PCG.h"
-#include "VoxelType.h"
+#include "Game/Voxel/VoxelType.h"
 #include "Client/Fvog/detail/Flags.h"
 #include "MathUtilities.h"
-#include "TwoLevelGrid.h"
+#include "Voxel/Grid.h"
 #include "Networking/Interface.h"
 #include "Head.h"
 
@@ -642,4 +642,4 @@ namespace Vox
 {
   struct Chunk;
 }
-std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root);
+std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root);

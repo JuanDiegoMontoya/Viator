@@ -739,9 +739,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (ImGui::Begin("Test"))
       {
         ImGui::Text("Framerate: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
-        auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+        auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
         VmaStatistics stats{};
-        vmaGetVirtualBlockStatistics(grid.buffer.GetAllocator(), &stats);
+        vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
         auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
         auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
         ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
@@ -864,7 +864,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         // Get set of blocks around player. This is used to find the "crafting stations" that are near the player, which some recipes call for.
         auto nearVoxels  = std::unordered_set<BlockId>();
-        const auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+        const auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
         for (int z = -5; z <= 5; z++)
           for (int y = -5; y <= 5; y++)
             for (int x = -5; x <= 5; x++)

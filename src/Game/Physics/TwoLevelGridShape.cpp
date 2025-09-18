@@ -22,9 +22,9 @@ constexpr float VX_EPSILON = 0;
 // Amount by which to expand the AABB of shapes tested against the grid. This is a hack to make the player not stick to surfaces.
 constexpr float VX_AABB_EPSILON = 1e-1f;
 
-const TwoLevelGrid& Physics::TwoLevelGridShape::GetTwoLevelGrid() const
+const Voxel::Grid& Physics::TwoLevelGridShape::GetTwoLevelGrid() const
 {
-  return registry_->ctx().get<TwoLevelGrid>();
+  return registry_->ctx().get<Voxel::Grid>();
 }
 
 void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
@@ -69,7 +69,7 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
       inCenterOfMassTransform2,
       // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
       // Each collision with a different voxel needs a unique shape ID.
-      inSubShapeIDCreator1.PushID(TwoLevelGrid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
+      inSubShapeIDCreator1.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
       inSubShapeIDCreator2,
       inCollideShapeSettings,
       ioCollector,
@@ -138,7 +138,7 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
       inSubShapeIDCreator1,
       // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
       // Each collision with a different voxel needs a unique shape ID.
-      inSubShapeIDCreator2.PushID(TwoLevelGrid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
+      inSubShapeIDCreator2.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
       ioCollector);
   }
 }
@@ -160,13 +160,13 @@ void Physics::TwoLevelGridShape::CastRay(const JPH::RayCast& inRay,
   JPH::CastRayCollector& ioCollector,
   [[maybe_unused]] const JPH::ShapeFilter& inShapeFilter) const
 {
-  auto hit = TwoLevelGrid::HitSurfaceParameters();
+  auto hit = Voxel::Grid::HitSurfaceParameters();
   const auto direction = Physics::ToGlm(inRay.mDirection.Normalized());
   auto tMax = inRay.mDirection.Length();
   const auto origin = Physics::ToGlm(inRay.mOrigin);
   if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
   {
-    auto id     = inSubShapeIDCreator.PushID(TwoLevelGrid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
+    auto id     = inSubShapeIDCreator.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
     auto result = JPH::CastRayCollector::ResultType();
     result.mSubShapeID2 = id;
     result.mBodyID      = inShapeFilter.mBodyID2;
@@ -185,7 +185,7 @@ bool Physics::TwoLevelGridShape::CastRay([[maybe_unused]] const JPH::RayCast& in
   const auto origin    = Physics::ToGlm(inRay.mOrigin);
   const auto direction = glm::normalize(Physics::ToGlm(inRay.mDirection));
   const auto tMax      = inRay.mDirection.Length();
-  auto hit = TwoLevelGrid::HitSurfaceParameters();
+  auto hit = Voxel::Grid::HitSurfaceParameters();
   if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
   {
     const auto hitFraction = glm::distance(origin, hit.positionWorld) / tMax;
@@ -194,7 +194,7 @@ bool Physics::TwoLevelGridShape::CastRay([[maybe_unused]] const JPH::RayCast& in
       return false;
     }
 
-    auto id            = inSubShapeIDCreator.PushID(TwoLevelGrid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
+    auto id            = inSubShapeIDCreator.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
     ioHit.mSubShapeID2 = id;
     ioHit.mBodyID      = {}; // TODO?
     ioHit.mFraction    = hitFraction;
@@ -225,13 +225,13 @@ void Physics::TwoLevelGridShape::CollideSoftBodyVertices([[maybe_unused]] JPH::M
 
 float Physics::TwoLevelGridShape::GetInnerRadius() const
 {
-  return float(glm::compMin(GetTwoLevelGrid().dimensions_)) / 2.0f;
+  return float(glm::compMin(GetTwoLevelGrid().Dimensions())) / 2.0f;
 }
 
 JPH::AABox Physics::TwoLevelGridShape::GetLocalBounds() const
 {
   return JPH::AABox(JPH::Vec3Arg(0, 0, 0),
-    JPH::Vec3Arg((float)GetTwoLevelGrid().dimensions_.x, (float)GetTwoLevelGrid().dimensions_.y, (float)GetTwoLevelGrid().dimensions_.z));
+    JPH::Vec3Arg((float)GetTwoLevelGrid().Dimensions().x, (float)GetTwoLevelGrid().Dimensions().y, (float)GetTwoLevelGrid().Dimensions().z));
 }
 
 JPH::MassProperties Physics::TwoLevelGridShape::GetMassProperties() const

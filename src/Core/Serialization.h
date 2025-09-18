@@ -13,7 +13,10 @@
 #include <iosfwd>
 
 class World;
-struct TwoLevelGrid;
+namespace Voxel
+{
+  struct Grid;
+}
 struct InputState;
 
 namespace Core::Serialization

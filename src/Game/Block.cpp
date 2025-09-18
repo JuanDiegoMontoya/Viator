@@ -39,7 +39,7 @@ BlockId Block::Registry::Create(std::string tag)
 static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId block, bool isBeingTransformed = false)
 {
   const auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
-  auto& grid                = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& grid                = world.GetRegistry().ctx().get<Voxel::Grid>();
   if (grid.IsPositionInGrid(voxelPosition))
   {
     // Ensure the block is supported, if necessary.
@@ -144,7 +144,7 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
   if (const auto* p = registry.try_get<const Component::InterlinkedBlock>(entt::entity(block)))
   {
     const auto neighborPos = voxelPosition + DirectionToNeighbor(p->direction);
-    const auto neighbor    = world.GetRegistry().ctx().get<TwoLevelGrid>().GetVoxelAt(neighborPos);
+    const auto neighbor    = world.GetRegistry().ctx().get<Voxel::Grid>().GetVoxelAt(neighborPos);
     SpawnLootDropFromBlock(world, neighborPos, neighbor);
     OnDestroyBlock(world, neighborPos, neighbor);
   }
@@ -239,7 +239,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
 {
   ZoneScoped;
 
-  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
   auto block = grid.GetVoxelAt(voxelPosition);
   auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
 
@@ -427,7 +427,7 @@ void OnUseBlockHelper(World& world, glm::ivec3 voxelPosition, BlockId block, int
 {
   ZoneScoped;
 
-  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
   auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
 
   if (const auto* p = reg.try_get<const Block::Component::TransformWhenUsed>(entt::entity(block)))
@@ -502,7 +502,7 @@ bool Block::IsSolid(const World& world, BlockId block)
   return false;
 }
 
-const TwoLevelGrid::SubGrid* Block::GetSubGrid(const World& world, BlockId block)
+const Voxel::SubGrid* Block::GetSubGrid(const World& world, BlockId block)
 {
   const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
   if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(block)))
@@ -689,12 +689,12 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
   return block;
 }
 
-static TwoLevelGrid::SubGrid MakeRotatedSubGrid(const TwoLevelGrid::SubGrid& subGrid, const glm::mat3& rotation)
+static Voxel::SubGrid MakeRotatedSubGrid(const Voxel::SubGrid& subGrid, const glm::mat3& rotation)
 {
-  auto newGrid            = TwoLevelGrid::SubGrid{};
+  auto newGrid            = Voxel::SubGrid{};
   newGrid.dimensions      = subGrid.dimensions;
   const auto numSubVoxels = newGrid.dimensions.x * newGrid.dimensions.y * newGrid.dimensions.z;
-  newGrid.grid            = std::make_unique<TwoLevelGrid::SubVoxel[]>(numSubVoxels);
+  newGrid.grid            = std::make_unique<Voxel::SubVoxel[]>(numSubVoxels);
   std::ranges::copy(subGrid.materials, newGrid.materials);
 
   for (int z = 0; z < newGrid.dimensions.z; z++)
@@ -704,8 +704,8 @@ static TwoLevelGrid::SubGrid MakeRotatedSubGrid(const TwoLevelGrid::SubGrid& sub
     const auto centeredCoord = glm::vec3(x, y, z) - (0.5f * (glm::vec3(newGrid.dimensions) - 1.0f));
     const auto rotated       = rotation * centeredCoord;
     const auto rotatedCoord  = glm::ivec3(glm::round(rotated + (0.5f * (glm::vec3(newGrid.dimensions) - 1.0f))));
-    const auto outIndex      = TwoLevelGrid::FlattenGenericCoord(glm::ivec3(newGrid.dimensions), rotatedCoord);
-    const auto inIndex       = TwoLevelGrid::FlattenGenericCoord(glm::ivec3(subGrid.dimensions), {x, y, z});
+    const auto outIndex      = Voxel::Grid::FlattenGenericCoord(glm::ivec3(newGrid.dimensions), rotatedCoord);
+    const auto inIndex       = Voxel::Grid::FlattenGenericCoord(glm::ivec3(subGrid.dimensions), {x, y, z});
     DEBUG_ASSERT(outIndex < numSubVoxels);
     DEBUG_ASSERT(inIndex < numSubVoxels);
     newGrid.grid[outIndex] = subGrid.grid[inIndex];
@@ -808,7 +808,7 @@ Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(
     if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(base)))
     {
       const auto rot = rotateFromNorth[i];
-      bReg.emplace_or_replace<Component::RenderAsSubGrid>(entt::entity(block), std::make_shared<TwoLevelGrid::SubGrid>(MakeRotatedSubGrid(*p->subGrid, rot)));
+      bReg.emplace_or_replace<Component::RenderAsSubGrid>(entt::entity(block), std::make_shared<Voxel::SubGrid>(MakeRotatedSubGrid(*p->subGrid, rot)));
     }
 
     if (const auto* p = bReg.try_get<const Component::RenderAsTexturedCube2>(entt::entity(base)))

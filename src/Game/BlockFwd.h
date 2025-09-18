@@ -1,6 +1,6 @@
 #pragma once
 #include "Client/Fvog/detail/Flags.h"
-#include "Game/VoxelType.h"
+#include "Game/Voxel/VoxelType.h"
 
 using BlockId               = voxel_t;
 constexpr BlockId nullBlock = voxel_t::Null;

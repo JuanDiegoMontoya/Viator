@@ -87,13 +87,13 @@ add_executable(frogRender
     src/PCG.h
     src/Game/Game.cpp
     src/Game/Game.h
-    src/Game/ClassImplMacros.h
+    src/Core/ClassImplMacros.h
     src/Game/Assets.h
     src/Game/Assets.cpp
-    src/Game/TwoLevelGrid.h
-    src/Game/TwoLevelGrid.cpp
-    src/Game/SketchyBuffer.h
-    src/Game/SketchyBuffer.cpp
+    src/Game/Voxel/Grid.h
+    src/Game/Voxel/Grid.cpp
+    src/Game/Voxel/SketchyBuffer.h
+    src/Game/Voxel/SketchyBuffer.cpp
     src/Game/Physics/Physics.h
     src/Game/Physics/Physics.cpp
     src/Game/Physics/TwoLevelGridShape.h
@@ -108,7 +108,7 @@ add_executable(frogRender
     src/Game/HashGrid.h
     src/Game/Prefab.h
     src/Game/Prefab.cpp
-    src/Game/VoxelType.h
+    src/Game/Voxel/VoxelType.h
     src/Game/Networking/Server.h
     src/Game/Networking/Client.h
     src/Game/Networking/EnetFwd.h
@@ -163,13 +163,13 @@ target_precompile_headers(frogRender PRIVATE
     <filesystem>
     <functional>
     <memory>
-#    <optional>
+    <optional>
     <string>
-#    <span>
-#    <unordered_map>
-#    <unordered_set>
-#    <variant>
-#    <vector>
+    <span>
+    <unordered_map>
+    <unordered_set>
+    <variant>
+    <vector>
 )
 
 target_compile_options(frogRender

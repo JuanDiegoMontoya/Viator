@@ -315,8 +315,8 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       const auto dir = GetForward(pt.rotation);
 
       // TODO: do not hit block if an entity is in the way.
-      auto& grid = reg.ctx().get<TwoLevelGrid>();
-      auto hit   = TwoLevelGrid::HitSurfaceParameters();
+      auto& grid = reg.ctx().get<Voxel::Grid>();
+      auto hit   = Voxel::Grid::HitSurfaceParameters();
       if (grid.TraceRaySimple(pos, dir, 5, hit))
       {
         const auto damage = world.DamageBlock(glm::ivec3(hit.voxelPosition), p->blockDamage, p->blockDamageTier, p->blockDamageFlags);
@@ -341,8 +341,8 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       const auto pos = pt.position;
       const auto dir = GetForward(pt.rotation);
 
-      auto& grid = reg.ctx().get<TwoLevelGrid>();
-      auto hit   = TwoLevelGrid::HitSurfaceParameters();
+      auto& grid = reg.ctx().get<Voxel::Grid>();
+      auto hit   = Voxel::Grid::HitSurfaceParameters();
       if (GetMaxStackSize(world, state.id) > 0)
       {
         if (grid.TraceRaySimple(pos, dir, 5, hit))

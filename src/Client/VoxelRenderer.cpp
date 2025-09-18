@@ -786,10 +786,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 {
   auto ctx = Fvog::Context(commandBuffer);
 
-  if (world.GetRegistry().ctx().contains<TwoLevelGrid>())
+  if (world.GetRegistry().ctx().contains<Voxel::Grid>())
   {
-    auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
-    grid.buffer.FlushWritesToGPU(commandBuffer);
+    auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+    grid.Buffer().FlushWritesToGPU(commandBuffer);
   }
 
   ctx.TeenyBufferUpdate(gBufferBuffer.value(),
@@ -999,7 +999,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     lights.emplace_back(light);
   }
 
-  if (world.GetRegistry().ctx().contains<TwoLevelGrid>())
+  if (world.GetRegistry().ctx().contains<Voxel::Grid>())
   {
     auto lines           = std::vector<Debug::Line>();
     const auto& ecsLines = world.GetRegistry().ctx().get<std::vector<Debug::Line>>();
@@ -1055,12 +1055,12 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
     }
 
-    auto& grid        = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    auto& grid        = world.GetRegistry().ctx().get<Voxel::Grid>();
     const auto voxels = Voxels{
-      .topLevelBricksDims         = grid.topLevelBricksDims_,
-      .topLevelBrickPtrsBaseIndex = grid.topLevelBrickPtrsBaseIndex,
-      .dimensions                 = grid.dimensions_,
-      .bufferIdx                  = grid.buffer.GetGpuBuffer().GetResourceHandle().index,
+      .topLevelBricksDims         = grid.TopLevelBricksDims(),
+      .topLevelBrickPtrsBaseIndex = grid.TopLevelBrickPtrsBaseIndex(),
+      .dimensions                 = grid.Dimensions(),
+      .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
       .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
       .voxelSampler               = voxelSampler,
       .numLights                  = (uint32_t)lights.size(),

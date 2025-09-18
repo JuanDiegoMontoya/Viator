@@ -1,6 +1,6 @@
 #pragma once
 #include "RegistryProxy.h"
-#include "ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "Game.h"
 #include "ItemFwd.h"
 #include "entt/entity/entity.hpp"
@@ -230,4 +230,4 @@ private:
   RegistryProxy registry_;
 };
 
-std::optional<glm::vec3> SampleWalkablePosition(const TwoLevelGrid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable);
+std::optional<glm::vec3> SampleWalkablePosition(const Voxel::Grid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable);

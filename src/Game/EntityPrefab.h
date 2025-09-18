@@ -1,6 +1,6 @@
 #pragma once
 #include "EntityPrefabFwd.h"
-#include "Game/ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 
 #include "entt/entity/fwd.hpp"
 

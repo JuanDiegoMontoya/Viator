@@ -1,5 +1,5 @@
 #pragma once
-#include "Game/ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "Core/Reflection.h"
 
 #include "entt/fwd.hpp"
@@ -72,8 +72,8 @@ namespace Networking
     // InputState + InputLookState
     InputState,
 
-    // TwoLevelGrid
-    TwoLevelGrid,
+    // Grid
+    VoxelGrid,
 
     // Stream of modified components.
     ModifiedComponents,

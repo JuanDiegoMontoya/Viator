@@ -1,5 +1,5 @@
 #pragma once
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
@@ -16,7 +16,7 @@ namespace Physics
 
   private:
     const entt::registry* registry_;
-    const TwoLevelGrid& GetTwoLevelGrid() const;
+    const Voxel::Grid& GetTwoLevelGrid() const;
   public:
 
     static void CollideTwoLevelGrid(const Shape* inShape1,

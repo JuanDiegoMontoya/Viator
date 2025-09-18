@@ -1,6 +1,6 @@
 #pragma once
 #include "Game/Head.h"
-#include "Game/ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "Client/Input.h"
 
 #include "vulkan/vulkan_core.h"

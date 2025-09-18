@@ -3,7 +3,7 @@
 #include "Fvog/Texture2.h"
 #include "PipelineManager.h"
 #include "PlayerHead.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 #include "debug/Shapes.h"
 #include "techniques/denoising/spatial/Bilateral.h"
 #include "techniques/Bloom.h"

@@ -1,6 +1,6 @@
 #include "Pathfinding.h"
 
-#include "TwoLevelGrid.h"
+#include "Voxel/Grid.h"
 
 #ifndef GAME_HEADLESS
 #include "Client/debug/Shapes.h"
@@ -24,7 +24,7 @@ namespace Pathfinding
   namespace
   {
     // height = number of blocks of clearance above the floor to fit through a gap
-    auto GetNeighbors(const TwoLevelGrid& grid, glm::ivec3 pos, int height)
+    auto GetNeighbors(const Voxel::Grid& grid, glm::ivec3 pos, int height)
     {
       ZoneScoped;
       auto neighbors = std::vector<glm::ivec3>();
@@ -70,7 +70,7 @@ namespace Pathfinding
       return neighbors;
     }
 
-    auto GetNeighborsForFlying(const TwoLevelGrid& grid, glm::ivec3 pos, int height)
+    auto GetNeighborsForFlying(const Voxel::Grid& grid, glm::ivec3 pos, int height)
     {
       auto neighbors = std::vector<glm::ivec3>();
 
@@ -109,7 +109,7 @@ namespace Pathfinding
     }
 
     // The actual cost to move from posFrom to posTo (they must be adjacent)
-    float DetermineCost([[maybe_unused]] const TwoLevelGrid& grid, [[maybe_unused]] glm::ivec3 posFrom, [[maybe_unused]] glm::ivec3 posTo)
+    float DetermineCost([[maybe_unused]] const Voxel::Grid& grid, [[maybe_unused]] glm::ivec3 posFrom, [[maybe_unused]] glm::ivec3 posTo)
     {
       // Reduce cost of falling.
       if (posFrom.y > posTo.y)
@@ -126,13 +126,13 @@ namespace Pathfinding
       return 1;
     }
 
-    float DetermineCostForFlying([[maybe_unused]] const TwoLevelGrid& grid, [[maybe_unused]] glm::ivec3 posFrom, [[maybe_unused]] glm::ivec3 posTo)
+    float DetermineCostForFlying([[maybe_unused]] const Voxel::Grid& grid, [[maybe_unused]] glm::ivec3 posFrom, [[maybe_unused]] glm::ivec3 posTo)
     {
       return 1;
     }
 
     // The approximate cost to move from pos0 to pos1. If it exceeds the actual cost, imperfect paths will be generated.
-    float HeuristicCost([[maybe_unused]] const TwoLevelGrid& grid, [[maybe_unused]] glm::ivec3 pos0, [[maybe_unused]] glm::ivec3 pos1)
+    float HeuristicCost([[maybe_unused]] const Voxel::Grid& grid, [[maybe_unused]] glm::ivec3 pos0, [[maybe_unused]] glm::ivec3 pos1)
     {
       return (float)glm::compAdd(glm::abs(pos0 - pos1)); // Manhattan
     }
@@ -166,7 +166,7 @@ namespace Pathfinding
     costSoFar.emplace(params.start, 0.0f);
     cameFrom.emplace(params.start, params.start);
     
-    const auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+    const auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
     for (int i = 0; !frontier.empty() && i < params.maxNodesToSearch; i++)
     {
       const auto [current, currentPriority] = frontier.top();

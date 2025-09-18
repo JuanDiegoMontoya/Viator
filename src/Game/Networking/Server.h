@@ -1,7 +1,7 @@
 #pragma once
 #include "Interface.h"
 #include "ThreadSafeQueue.h"
-#include "../ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 #include "EnetFwd.h"
 
 #include "entt/fwd.hpp"

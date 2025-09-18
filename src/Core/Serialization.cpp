@@ -1,6 +1,6 @@
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
 #include "Client/Fvog/Device.h" // TODO: bad bad
@@ -211,11 +211,11 @@ namespace Core::Serialization
   }
 
 
-  // Ugly manual serialization to improve TwoLevelGrid serialization perf.
+  // Ugly manual serialization to improve Grid serialization perf.
   namespace
   {
     template<typename Archive>
-    void Serialize2(Archive& ar, TwoLevelGrid::BottomLevelBrick& blBrick)
+    void Serialize2(Archive& ar, Voxel::Grid::BottomLevelBrick& blBrick)
     {
       for (auto& bits : blBrick.occupancy.bitmask)
       {
@@ -229,7 +229,7 @@ namespace Core::Serialization
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, const TwoLevelGrid::BottomLevelBrick& blBrick)
+    void Serialize2(Archive& ar, const Voxel::Grid::BottomLevelBrick& blBrick)
     {
       for (auto& bits : blBrick.occupancy.bitmask)
       {
@@ -243,21 +243,21 @@ namespace Core::Serialization
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, TwoLevelGrid::BottomLevelBrickPtr& blBrickPtr)
+    void Serialize2(Archive& ar, Voxel::Grid::BottomLevelBrickPtr& blBrickPtr)
     {
       Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
       Serialize2(ar, blBrickPtr.bottomLevelBrick);
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, const TwoLevelGrid::BottomLevelBrickPtr& blBrickPtr)
+    void Serialize2(Archive& ar, const Voxel::Grid::BottomLevelBrickPtr& blBrickPtr)
     {
       Serialize2(ar, blBrickPtr.voxelsDoBeAllSame);
       Serialize2(ar, blBrickPtr.bottomLevelBrick);
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, TwoLevelGrid::TopLevelBrick& tlBrick)
+    void Serialize2(Archive& ar, Voxel::Grid::TopLevelBrick& tlBrick)
     {
       for (auto& blBrickPtr : tlBrick.bricks)
       {
@@ -266,7 +266,7 @@ namespace Core::Serialization
     }
 
     template<typename Archive>
-    void Serialize2(Archive& ar, const TwoLevelGrid::TopLevelBrick& tlBrick)
+    void Serialize2(Archive& ar, const Voxel::Grid::TopLevelBrick& tlBrick)
     {
       for (auto& blBrickPtr : tlBrick.bricks)
       {
@@ -276,7 +276,7 @@ namespace Core::Serialization
   } // namespace
 
   template<bool Save, typename Archive>
-  static void SerializeGrid(Archive& ar, std::conditional_t<Save, const TwoLevelGrid, TwoLevelGrid>& grid, const SerializationContext& = {})
+  static void SerializeGrid(Archive& ar, std::conditional_t<Save, const Voxel::Grid, Voxel::Grid>& grid, const SerializationContext& = {})
   {
     ZoneScoped;
     if constexpr (Save)
@@ -286,11 +286,11 @@ namespace Core::Serialization
     }
     else
     {
-      auto materials = std::vector<TwoLevelGrid::Material>();
+      auto materials = std::vector<Voxel::Grid::Material>();
       Serialize<Save>(ar, entt::forward_as_meta(materials));
       auto dims = glm::ivec3();
       Serialize<Save>(ar, entt::forward_as_meta(dims));
-      grid = TwoLevelGrid(dims);
+      grid = Voxel::Grid(dims);
       grid.SetMaterialArray(std::move(materials));
     }
 
@@ -365,7 +365,7 @@ namespace Core::Serialization
       .func<Serialize3<cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
       .func<Serialize2<cereal::BinaryOutputArchive, const entt::entity>>("BinaryOutputArchive"_hs);
 
-    entt::meta_factory<TwoLevelGrid>()
+    entt::meta_factory<Voxel::Grid>()
       .func<SerializeGrid<false, cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
       .func<SerializeGrid<true, cereal::BinaryOutputArchive>>("BinaryOutputArchive"_hs);
       //.func<SerializeGrid<false, cereal::XMLInputArchive>>("XMLInputArchive"_hs)
@@ -385,7 +385,7 @@ namespace Core::Serialization
     auto outputArchive   = cereal::BinaryOutputArchive(file);
 
     // Save relevant context variables.
-    auto& grid = registry.ctx().get<TwoLevelGrid>();
+    auto& grid = registry.ctx().get<Voxel::Grid>();
     SerializeGrid<true>(outputArchive, grid);
 
     const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(), [](const auto& p) { return entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT; });
@@ -431,11 +431,11 @@ namespace Core::Serialization
     {
       // Load relevant context variables.
       auto inputArchive = cereal::BinaryInputArchive(file);
-      auto grid         = TwoLevelGrid();
+      auto grid         = Voxel::Grid();
       SerializeGrid<false>(inputArchive, grid);
       grid.CoalesceBricksSLOW();
       grid.MarkAllBricksDirty();
-      registry.ctx().emplace<TwoLevelGrid>(std::move(grid));
+      registry.ctx().emplace<Voxel::Grid>(std::move(grid));
 
       // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
       //auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
@@ -504,7 +504,7 @@ namespace Core::Serialization
         {
           return false;
         }
-        const auto traits = entt::resolve(p.first).traits<Traits>();
+        const auto traits = entt::resolve(p.first).template traits<Traits>();
         return traits & Traits::COMPONENT && traits & Traits::REPLICATED;
       });
     Serialize<true>(outputArchive, numSets);

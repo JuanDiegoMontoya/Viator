@@ -1,6 +1,6 @@
 #include "Physics.h"
 #include "Game/World.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 
 #include "PhysicsUtils.h"
 #include "TwoLevelGridShape.h"

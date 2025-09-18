@@ -2,7 +2,7 @@
 
 #include "Assert2.h"
 #include "Serialization.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"
@@ -1146,9 +1146,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(RigidBodySettings, layer)
     DATA(RigidBodySettings, degreesOfFreedom);
 
-  REFLECT_TYPE(TwoLevelGrid::Material)
-    DATA(TwoLevelGrid::Material, isVisible)
-    DATA(TwoLevelGrid::Material, isSolid);
+  REFLECT_TYPE(Voxel::Grid::Material)
+    DATA(Voxel::Grid::Material, isVisible)
+    DATA(Voxel::Grid::Material, isSolid);
 
   REFLECT_COMPONENT(DeferredDelete);
 
@@ -1301,24 +1301,24 @@ void Core::Reflection::Initialize(Scripting& scripting)
   
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
-  // TODO: TwoLevelGrid reflection should be removed
-  REFLECT_TYPE(TwoLevelGrid::TopLevelBrickPtr)
-    DATA(TwoLevelGrid::TopLevelBrickPtr, voxelsDoBeAllSame)
-    DATA_BASE(TwoLevelGrid::TopLevelBrickPtr, voxelIfAllSame);
+  // TODO: Grid reflection should be removed
+  REFLECT_TYPE(Voxel::Grid::TopLevelBrickPtr)
+    DATA(Voxel::Grid::TopLevelBrickPtr, voxelsDoBeAllSame)
+    DATA_BASE(Voxel::Grid::TopLevelBrickPtr, voxelIfAllSame);
 
-  REFLECT_TYPE(TwoLevelGrid::TopLevelBrick)
-    DATA_BASE(TwoLevelGrid::TopLevelBrick, bricks);
+  REFLECT_TYPE(Voxel::Grid::TopLevelBrick)
+    DATA_BASE(Voxel::Grid::TopLevelBrick, bricks);
   
-  REFLECT_TYPE(TwoLevelGrid::BottomLevelBrickPtr)
-    DATA(TwoLevelGrid::BottomLevelBrickPtr, voxelsDoBeAllSame)
-    DATA_BASE(TwoLevelGrid::BottomLevelBrickPtr, voxelIfAllSame);
+  REFLECT_TYPE(Voxel::Grid::BottomLevelBrickPtr)
+    DATA(Voxel::Grid::BottomLevelBrickPtr, voxelsDoBeAllSame)
+    DATA_BASE(Voxel::Grid::BottomLevelBrickPtr, voxelIfAllSame);
   
-  REFLECT_TYPE(TwoLevelGrid::BottomLevelBrick)
-    DATA_BASE(TwoLevelGrid::BottomLevelBrick, occupancy)
-    DATA_BASE(TwoLevelGrid::BottomLevelBrick, voxels);
+  REFLECT_TYPE(Voxel::Grid::BottomLevelBrick)
+    DATA_BASE(Voxel::Grid::BottomLevelBrick, occupancy)
+    DATA_BASE(Voxel::Grid::BottomLevelBrick, voxels);
 
-  REFLECT_TYPE(TwoLevelGrid::OccupancyBitmask)
-    DATA_BASE(TwoLevelGrid::OccupancyBitmask, bitmask);
+  REFLECT_TYPE(Voxel::Grid::OccupancyBitmask)
+    DATA_BASE(Voxel::Grid::OccupancyBitmask, bitmask);
 
   REFLECT_ENUM(voxel_t)
     ENUMERATOR(voxel_t, Air)

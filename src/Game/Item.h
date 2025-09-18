@@ -1,8 +1,8 @@
 #pragma once
 #include "BlockFwd.h"
 #include "ItemFwd.h"
-#include "ClassImplMacros.h"
-#include "VoxelType.h"
+#include "Core/ClassImplMacros.h"
+#include "Game/Voxel/VoxelType.h"
 #include "entt/entity/fwd.hpp"
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "Physics/Shape.h"

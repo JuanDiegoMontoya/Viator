@@ -1,5 +1,5 @@
 #pragma once
-#include "../ClassImplMacros.h"
+#include "Core/ClassImplMacros.h"
 
 #include <shared_mutex>
 #include <mutex>

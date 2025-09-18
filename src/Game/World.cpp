@@ -23,7 +23,7 @@
 #include <execution>
 #include <stack>
 
-std::optional<glm::vec3> SampleWalkablePosition(const TwoLevelGrid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable)
+std::optional<glm::vec3> SampleWalkablePosition(const Voxel::Grid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable)
 {
   // Pick a random position in the sphere with a minimum distance from the player.
   const float r     = rng.RandFloat(minDistance, maxDistance);
@@ -605,7 +605,7 @@ void World::FixedUpdate(float dt)
           if (wb->accumulator > wb->timeBetweenMoves)
           {
             wb->accumulator  = 0;
-            const auto& grid = registry_.ctx().get<TwoLevelGrid>();
+            const auto& grid = registry_.ctx().get<Voxel::Grid>();
             auto& rng        = registry_.ctx().get<PCG::Rng>();
             for (int i = 0; i < 5; i++)
             {
@@ -984,7 +984,7 @@ void World::FixedUpdate(float dt)
         {
           const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
           const auto voxelHitPos = glm::ivec3(hitPos);
-          const auto hitVoxel    = registry_.ctx().get<TwoLevelGrid>().GetVoxelAt(voxelHitPos);
+          const auto hitVoxel    = registry_.ctx().get<Voxel::Grid>().GetVoxelAt(voxelHitPos);
 
           hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
           if (registry_.valid(hitEntity))
@@ -1779,7 +1779,7 @@ entt::entity World::GetNearestPlayer(glm::vec3 position)
 float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, BlockDamageFlags damageType)
 {
   ZoneScoped;
-  auto& grid = registry_.ctx().get<TwoLevelGrid>();
+  auto& grid = registry_.ctx().get<Voxel::Grid>();
   const auto prevVoxel = grid.GetVoxelAt(voxelPos);
   if (prevVoxel == voxel_t::Air)
   {

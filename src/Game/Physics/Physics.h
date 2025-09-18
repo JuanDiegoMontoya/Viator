@@ -23,7 +23,10 @@
 #include <variant>
 
 class World;
-struct TwoLevelGrid;
+namespace Voxel
+{
+  struct Grid;
+}
 
 namespace Physics
 {

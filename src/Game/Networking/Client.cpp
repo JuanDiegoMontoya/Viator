@@ -1,5 +1,5 @@
 #include "Client.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 #include "Core/Serialization.h"
 #include "Game/Game.h"
 #include "Core/Assert2.h"
@@ -229,13 +229,13 @@ int32_t Networking::Client::HandlePacket(World& world, const ENetPacket& enetPac
       readBytes += HandlePacket(world, {.data = enetPacket.data + readBytes, .dataLength = enetPacket.dataLength - readBytes});
     }
   }
-  else if ((packetType & PacketType::TypeMask) == PacketType::TwoLevelGrid)
+  else if ((packetType & PacketType::TypeMask) == PacketType::VoxelGrid)
   {
-    ZoneScopedN("PacketType::TwoLevelGrid");
+    ZoneScopedN("PacketType::VoxelGrid");
     spdlog::info("Finished downloading world.");
     status_   = ClientStatus::Connected;
-    auto grid = Core::Serialization::DeserializeObjectStream<TwoLevelGrid>(stream);
-    world.GetRegistry().ctx().insert_or_assign<TwoLevelGrid>(std::move(grid));
+    auto grid = Core::Serialization::DeserializeObjectStream<Voxel::Grid>(stream);
+    world.GetRegistry().ctx().insert_or_assign<Voxel::Grid>(std::move(grid));
     world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
     
     world.CreateRenderingMaterials();

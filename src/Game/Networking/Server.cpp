@@ -2,7 +2,7 @@
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Game/Game.h"
-#include "Game/TwoLevelGrid.h"
+#include "Game/Voxel/Grid.h"
 #include "Core/Assert2.h"
 #include "RPC.h"
 
@@ -81,16 +81,16 @@ void Networking::Server::ProcessMessages([[maybe_unused]] World& world)
         auto& pair              = *connections_.emplace(event.peer, ClientInfo{.entity = clientEntity, .status = ClientStatus::Connected}).first;
         entityToConnection_.emplace(clientEntity, event.peer);
 
-        // 1. Send TwoLevelGrid.
+        // 1. Send Grid.
         {
           auto stream = std::stringstream();
-          Core::Serialization::SerializeObjectStream(stream, PacketType::TwoLevelGrid | PacketType::Compressed);
-          const auto bytes             = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<TwoLevelGrid>()));
+          Core::Serialization::SerializeObjectStream(stream, PacketType::VoxelGrid | PacketType::Compressed);
+          const auto bytes             = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<Voxel::Grid>()));
           const auto maxCompressedSize = ZSTD_compressBound(bytes.size());
 
           auto tempBuffer = std::make_unique<char[]>(maxCompressedSize);
           auto zret       = ZSTD_compress(tempBuffer.get(), maxCompressedSize, bytes.data(), bytes.size(), ZSTD_CLEVEL_DEFAULT);
-          ASSERT(!ZSTD_isError(zret), "Failed to compress TwoLevelGrid.");
+          ASSERT(!ZSTD_isError(zret), "Failed to compress Grid.");
           stream.write(tempBuffer.get(), zret);
           spdlog::info("Compressed world from {} bytes to {} bytes.", bytes.size(), zret);
 

@@ -6,7 +6,7 @@
 #include "EntityPrefab.h"
 #include "Physics/Physics.h"
 #include "Physics/TwoLevelGridShape.h"
-#include "TwoLevelGrid.h"
+#include "Voxel/Grid.h"
 #include "Pathfinding.h"
 #include "MathUtilities.h"
 #include "HashGrid.h"
@@ -227,7 +227,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
     {
       if (const auto* p = world.GetRegistry().try_get<const SpawnBlockOnContact>(entity1))
       {
-        auto& grid               = world.GetRegistry().ctx().get<TwoLevelGrid>();
+        auto& grid               = world.GetRegistry().ctx().get<Voxel::Grid>();
         const auto voxelPosition = ppair->position + ppair->normal * 1e-3f;
         if (grid.IsPositionInGrid(voxelPosition) && grid.GetVoxelAtUnchecked(voxelPosition) == voxel_t::Air)
         {
@@ -478,7 +478,7 @@ void CreateContextVariablesAndObservers(World& world)
 
 void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel)
 {
-  auto& grid = world.GetRegistry().ctx().get<TwoLevelGrid>();
+  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
   grid.SetVoxelAt(voxelPosition, voxel);
 }
 
@@ -695,7 +695,7 @@ glm::vec3 GetRight(glm::quat rotation)
   return glm::mat3_cast(rotation)[0];
 }
 
-std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
+std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
 {
   auto processed = Vox::ProcessModel(root);
   ASSERT(processed.voxelChunk);
@@ -703,17 +703,17 @@ std::shared_ptr<TwoLevelGrid::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
   ASSERT(processed.paletteChunk);
   ASSERT(!processed.iMapChunk, "TODO: IMAP chunk");
   const auto dims = glm::ivec3(processed.sizeChunk->sizeX, processed.sizeChunk->sizeZ, processed.sizeChunk->sizeY); // Z-up
-  auto subVoxels  = std::make_unique<TwoLevelGrid::SubVoxel[]>(dims.x * dims.y * dims.z);
+  auto subVoxels  = std::make_unique<Voxel::SubVoxel[]>(dims.x * dims.y * dims.z);
 
   for (uint32_t i = 0; i < processed.voxelChunk->numVoxels; i++)
   {
     const auto voxel    = processed.voxelChunk->voxels[i];
     const auto position = glm::ivec3(dims.x - 1 - voxel.x, voxel.z, voxel.y); // Z-up RH
     ASSERT(glm::all(glm::greaterThanEqual(position, glm::ivec3(0))) && glm::all(glm::lessThan(position, dims)));
-    subVoxels[TwoLevelGrid::FlattenGenericCoord(dims, position)] = TwoLevelGrid::SubVoxel(voxel.colorIndex);
+    subVoxels[Voxel::Grid::FlattenGenericCoord(dims, position)] = Voxel::SubVoxel(voxel.colorIndex);
   }
 
-  auto subGrid = std::make_shared<TwoLevelGrid::SubGrid>(TwoLevelGrid::SubGrid{
+  auto subGrid = std::make_shared<Voxel::SubGrid>(Voxel::SubGrid{
     .dimensions = dims,
     .grid       = std::move(subVoxels),
   });
@@ -1134,7 +1134,7 @@ void NpcSpawnDirector::Update(float dt)
 
   auto& registry = world_->GetRegistry();
   auto& rng      = registry.ctx().get<PCG::Rng>();
-  auto& grid     = registry.ctx().get<TwoLevelGrid>();
+  auto& grid     = registry.ctx().get<Voxel::Grid>();
 
   while (accumulator >= timeBetweenSpawns)
   {
