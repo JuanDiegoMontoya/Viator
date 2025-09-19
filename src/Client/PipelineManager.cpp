@@ -4,10 +4,33 @@
 
 #include "tracy/Tracy.hpp"
 #include "spdlog/spdlog.h"
+#include "platform/choc_FileWatcher.h"
 
 namespace
 {
   PipelineManager* globalPipelineManagerInstance = nullptr;
+}
+
+PipelineManager::GraphicsPipelineKey::operator bool() const noexcept {
+  return id_ != 0;
+}
+
+Fvog::GraphicsPipeline& PipelineManager::GraphicsPipelineKey::GetPipeline() const {
+  ASSERT(pipelineManager_);
+  auto& pipeline = pipelineManager_->graphicsPipelines_.at(id_).pipeline;
+  ASSERT(pipeline);
+  return *pipeline;
+}
+
+PipelineManager::ComputePipelineKey::operator bool() const noexcept {
+  return id_ != 0;
+}
+
+Fvog::ComputePipeline& PipelineManager::ComputePipelineKey::GetPipeline() const {
+  ASSERT(pipelineManager_);
+  auto& pipeline = pipelineManager_->computePipelines_.at(id_).pipeline;
+  ASSERT(pipeline);
+  return *pipeline;
 }
 
 PipelineManager::ComputePipelineKey PipelineManager::EnqueueCompileComputePipeline(const ComputePipelineCreateInfo& createInfo)
@@ -132,7 +155,7 @@ void PipelineManager::EnqueueRecompileShader(const ShaderModuleCreateInfo& shade
             {
             case Fvog::PipelineStage::VERTEX_SHADER: vs = shaderModules_.at(stage)->shader.get(); break;
             case Fvog::PipelineStage::FRAGMENT_SHADER: fs = shaderModules_.at(stage)->shader.get(); break;
-            default: assert(false);
+            default: PANIC;
             }
           }
 

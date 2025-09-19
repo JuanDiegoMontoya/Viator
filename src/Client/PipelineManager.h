@@ -1,15 +1,18 @@
 #pragma once
 #include "Fvog/Pipeline2.h"
 #include "Fvog/Shader2.h"
-#include "platform/choc_FileWatcher.h"
 
-#include <cassert>
 #include <unordered_map>
 #include <memory>
 #include <filesystem>
 #include <vector>
 #include <optional>
 #include <atomic>
+
+namespace choc::file
+{
+  struct Watcher;
+}
 
 // The purpose of this class is to serve as a central place to manage shader and pipeline compilation.
 // The interface should be such that multithreaded compilation and shader deduplication could be transparently performed,
@@ -30,18 +33,9 @@ public:
   public:
     GraphicsPipelineKey() = default;
     
-    operator bool() const noexcept
-    {
-      return id_ != 0;
-    }
+    operator bool() const noexcept;
 
-    [[nodiscard]] Fvog::GraphicsPipeline& GetPipeline() const
-    {
-      assert(pipelineManager_);
-      auto& pipeline = pipelineManager_->graphicsPipelines_.at(id_).pipeline;
-      assert(pipeline);
-      return *pipeline;
-    }
+    [[nodiscard]] Fvog::GraphicsPipeline& GetPipeline() const;
 
   private:
     friend class PipelineManager;
@@ -57,18 +51,9 @@ public:
   public:
     ComputePipelineKey() = default;
 
-    operator bool() const noexcept
-    {
-      return id_ != 0;
-    }
+    operator bool() const noexcept;
 
-    [[nodiscard]] Fvog::ComputePipeline& GetPipeline() const
-    {
-      assert(pipelineManager_);
-      auto& pipeline = pipelineManager_->computePipelines_.at(id_).pipeline;
-      assert(pipeline);
-      return *pipeline;
-    }
+    [[nodiscard]] Fvog::ComputePipeline& GetPipeline() const;
 
     //[[nodiscard]] bool QueryIsCompiled
 
