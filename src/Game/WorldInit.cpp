@@ -362,6 +362,7 @@ void World::InitializeGameDefinitions()
       .light      = light,
       .sticky     = true,
       .stickyDist = 0.125f,
+      .maxBounces = 10,
     });
 
   const auto stonePickaxeId = Item::CreateTool(items, "tool_stone_pickaxe", "Stone Pickaxe", "pickaxe", {.2f, .2f, .2f}, 0.3f, {20, 2, BlockDamageFlagBit::PICKAXE});
@@ -654,7 +655,7 @@ void World::InitializeGameDefinitions()
         }},
     });
 
-  auto RegisterFoliageBlock = [&](const char* tag, const char* name, bool dropsSelf) -> BlockId
+  auto RegisterFoliageBlock = [&](const char* tag, const char* name, bool dropsSelf, bool isSolid = false) -> BlockId
   {
     auto vox       = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(tag) + ".vox"));
     using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
@@ -670,7 +671,7 @@ void World::InitializeGameDefinitions()
           .subGrid = VoxToSubGrid(*vox),
         },
         {
-          .isSolid = false,
+          .isSolid = isSolid,
         },
       });
   };
@@ -699,13 +700,13 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("chair", "Chair", true);
   RegisterFoliageBlock("table", "Table", true);
   RegisterFoliageBlock("cloud", "Cloud", true);
-  RegisterFoliageBlock("anvil_lead", "Lead Anvil", true);
+  RegisterFoliageBlock("anvil_lead", "Lead Anvil", true, true);
   const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
   Block::CreateStandardRotatedVariants(*this, arrow);
 
   {
-    const auto doorBottom = RegisterFoliageBlock("door_bottom", "Door", true);
-    const auto doorTop = RegisterFoliageBlock("door_top", "door_top", false);
+    const auto doorBottom = RegisterFoliageBlock("door_bottom", "Door", true, true);
+    const auto doorTop = RegisterFoliageBlock("door_top", "door_top", false, true);
 
     blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
     blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};
@@ -715,8 +716,8 @@ void World::InitializeGameDefinitions()
   }
 
   {
-    const auto doorBottom = RegisterFoliageBlock("door_bottom_open", "door_bottom_open", true);
-    const auto doorTop    = RegisterFoliageBlock("door_top_open", "door_top_open", false);
+    const auto doorBottom = RegisterFoliageBlock("door_bottom_open", "door_bottom_open", true, true);
+    const auto doorTop    = RegisterFoliageBlock("door_top_open", "door_top_open", false, true);
 
     blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
     blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};

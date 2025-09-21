@@ -13,8 +13,8 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/geometric.hpp"
 #include "glm/gtx/component_wise.hpp"
+#include "tracy/Tracy.hpp"
 
-#include <cassert>
 
 // Amount to shrink block size by.
 constexpr float VX_EPSILON = 0;
@@ -39,8 +39,10 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
   JPH::CollideShapeCollector& ioCollector,
   const JPH::ShapeFilter& inShapeFilter)
 {
-  assert(inShape1->GetType() == JPH::EShapeType::User1);
+  ZoneScoped;
+  ASSERT(inShape1->GetType() == JPH::EShapeType::User1);
   auto* s1 = static_cast<const TwoLevelGridShape*>(inShape1);
+  const auto& s1Grid  = s1->GetTwoLevelGrid();
   
   const auto transform2_to_1 = inCenterOfMassTransform1.InversedRotationTranslation() * inCenterOfMassTransform2;
   const auto boundsOf2InSpaceOf1 = inShape2->GetLocalBounds().Scaled(inScale2).Transformed(transform2_to_1);
@@ -55,25 +57,61 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
   for (int x = (int)std::floor(s2min.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(s2max.GetX() + VX_AABB_EPSILON); x++)
   {
     // Skip voxel if non-solid
-    if (!s1->GetTwoLevelGrid().IsVoxelSolid(s1->GetTwoLevelGrid().GetVoxelAt({x, y, z})))
+    const auto voxel = s1Grid.GetVoxelAt({x, y, z});
+    if (!s1Grid.IsVoxelSolid(voxel))
     {
       continue;
     }
 
-    const auto boxCenterOfMassTransform = inCenterOfMassTransform1.PreTranslated({x + 0.5f, y + 0.5f, z + 0.5f});
-    JPH::CollisionDispatch::sCollideShapeVsShape(&boxShape,
-      inShape2,
-      inScale1,
-      inScale2,
-      boxCenterOfMassTransform,
-      inCenterOfMassTransform2,
-      // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
-      // Each collision with a different voxel needs a unique shape ID.
-      inSubShapeIDCreator1.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
-      inSubShapeIDCreator2,
-      inCollideShapeSettings,
-      ioCollector,
-      inShapeFilter);
+    if (const auto* subGrid = s1Grid.materials_[int(voxel)].subGrid)
+    {
+      auto scaleResult       = boxShape.ScaleShape(ToJolt(1.0f / glm::vec3(subGrid->dimensions)));
+      const auto subBoxShape = scaleResult.Get();
+      subBoxShape->SetEmbedded();
+
+      for (int zs = 0; zs < subGrid->dimensions.z; zs++)
+      for (int ys = 0; ys < subGrid->dimensions.y; ys++)
+      for (int xs = 0; xs < subGrid->dimensions.x; xs++)
+      {
+        if (subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, {xs, ys, zs})] == Voxel::SubVoxel::Air)
+        {
+          continue;
+        }
+
+        const auto subVoxelOffset           = (glm::vec3{xs, ys, zs} + 0.5f) / glm::vec3(subGrid->dimensions);
+        const auto boxCenterOfMassTransform = inCenterOfMassTransform1.PreTranslated(ToJolt(glm::vec3{x, y, z} + subVoxelOffset));
+        JPH::CollisionDispatch::sCollideShapeVsShape(subBoxShape,
+          inShape2,
+          inScale1,
+          inScale2,
+          boxCenterOfMassTransform,
+          inCenterOfMassTransform2,
+          // If there's ever an ASSERT tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
+          // Each collision with a different voxel needs a unique shape ID.
+          inSubShapeIDCreator1.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16).PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({xs, ys, zs}), 16),
+          inSubShapeIDCreator2,
+          inCollideShapeSettings,
+          ioCollector,
+          inShapeFilter);
+      }
+    }
+    else
+    {
+      const auto boxCenterOfMassTransform = inCenterOfMassTransform1.PreTranslated({x + 0.5f, y + 0.5f, z + 0.5f});
+      JPH::CollisionDispatch::sCollideShapeVsShape(&boxShape,
+        inShape2,
+        inScale1,
+        inScale2,
+        boxCenterOfMassTransform,
+        inCenterOfMassTransform2,
+        // If there's ever an ASSERT tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
+        // Each collision with a different voxel needs a unique shape ID.
+        inSubShapeIDCreator1.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
+        inSubShapeIDCreator2,
+        inCollideShapeSettings,
+        ioCollector,
+        inShapeFilter);
+    }
   }
 }
 
@@ -90,8 +128,10 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
   const JPH::SubShapeIDCreator& inSubShapeIDCreator2,
   JPH::CastShapeCollector& ioCollector)
 {
-  assert(inShape->GetType() == JPH::EShapeType::User1);
-  auto* s2 = static_cast<const TwoLevelGridShape*>(inShape);
+  ZoneScoped;
+  ASSERT(inShape->GetType() == JPH::EShapeType::User1);
+  auto* s2           = static_cast<const TwoLevelGridShape*>(inShape);
+  const auto& s2Grid = s2->GetTwoLevelGrid();
 
   const auto castBoundsWorldSpaceStart = inShapeCast.mShapeWorldBounds;
   const auto extent                    = inShapeCast.mShapeWorldBounds.GetExtent();
@@ -117,29 +157,67 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
   for (int z = (int)std::floor(castMin.GetZ() - VX_AABB_EPSILON); z < (int)std::ceil(castMax.GetZ() + VX_AABB_EPSILON); z++)
   for (int y = (int)std::floor(castMin.GetY() - VX_AABB_EPSILON); y < (int)std::ceil(castMax.GetY() + VX_AABB_EPSILON); y++)
   for (int x = (int)std::floor(castMin.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(castMax.GetX() + VX_AABB_EPSILON); x++)
-  {
+    {
+    const auto voxel = s2Grid.GetVoxelAt({x, y, z});
     // Skip voxel if non-solid
-    if (!s2->GetTwoLevelGrid().IsVoxelSolid(s2->GetTwoLevelGrid().GetVoxelAt({x, y, z})))
+    if (!s2Grid.IsVoxelSolid(voxel))
     {
       continue;
     }
+    if (const auto* subGrid = s2Grid.materials_[int(voxel)].subGrid)
+    {
+      auto scaleResult       = boxShape.ScaleShape(ToJolt(1.0f / glm::vec3(subGrid->dimensions)));
+      const auto subBoxShape = scaleResult.Get();
+      subBoxShape->SetEmbedded();
 
-    auto negVec     = JPH::Vec3{-x - 0.5f, -y - 0.5f, -z - 0.5f};
-    auto posVec     = JPH::Vec3{x + 0.5f, y + 0.5f, z + 0.5f};
-    auto shapeCast2 = inShapeCast.PostTranslated(negVec);
+      for (int zs = 0; zs < subGrid->dimensions.z; zs++)
+      for (int ys = 0; ys < subGrid->dimensions.y; ys++)
+      for (int xs = 0; xs < subGrid->dimensions.x; xs++)
+      {
+        if (subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, {xs, ys, zs})] == Voxel::SubVoxel::Air)
+        {
+          continue;
+        }
 
-    const auto boxCenterOfMassTransform = inCenterOfMassTransform2.PreTranslated(posVec);
-    JPH::CollisionDispatch::sCastShapeVsShapeLocalSpace(shapeCast2,
-      shapeCastSettings2,
-      &boxShape,
-      inScale,
-      inShapeFilter,
-      boxCenterOfMassTransform,
-      inSubShapeIDCreator1,
-      // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
-      // Each collision with a different voxel needs a unique shape ID.
-      inSubShapeIDCreator2.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
-      ioCollector);
+        const auto subVoxelOffset = (glm::vec3{xs, ys, zs} + 0.5f) / glm::vec3(subGrid->dimensions);
+
+        auto negVec     = JPH::Vec3{-x - subVoxelOffset.x, -y - subVoxelOffset.y, -z - subVoxelOffset.z};
+        auto posVec     = JPH::Vec3{x + subVoxelOffset.x, y + subVoxelOffset.y, z + subVoxelOffset.z};
+        auto shapeCast2 = inShapeCast.PostTranslated(negVec);
+
+        const auto boxCenterOfMassTransform = inCenterOfMassTransform2.PreTranslated(posVec);
+        JPH::CollisionDispatch::sCastShapeVsShapeLocalSpace(shapeCast2,
+          shapeCastSettings2,
+          subBoxShape,
+          inScale,
+          inShapeFilter,
+          boxCenterOfMassTransform,
+          inSubShapeIDCreator1,
+          // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
+          // Each collision with a different voxel needs a unique shape ID.
+          inSubShapeIDCreator2.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16).PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({xs, ys, zs}), 16),
+          ioCollector);
+      }
+    }
+    else
+    {
+      auto negVec     = JPH::Vec3{-x - 0.5f, -y - 0.5f, -z - 0.5f};
+      auto posVec     = JPH::Vec3{x + 0.5f, y + 0.5f, z + 0.5f};
+      auto shapeCast2 = inShapeCast.PostTranslated(negVec);
+
+      const auto boxCenterOfMassTransform = inCenterOfMassTransform2.PreTranslated(posVec);
+      JPH::CollisionDispatch::sCastShapeVsShapeLocalSpace(shapeCast2,
+        shapeCastSettings2,
+        &boxShape,
+        inScale,
+        inShapeFilter,
+        boxCenterOfMassTransform,
+        inSubShapeIDCreator1,
+        // If there's ever an assert tripped in Jolt's hash map (e.g. for very big shapes), this hack is probably the culprit.
+        // Each collision with a different voxel needs a unique shape ID.
+        inSubShapeIDCreator2.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord({x, y, z}), 16),
+        ioCollector);
+    }
   }
 }
 
@@ -164,13 +242,13 @@ void Physics::TwoLevelGridShape::CastRay(const JPH::RayCast& inRay,
   const auto direction = Physics::ToGlm(inRay.mDirection.Normalized());
   auto tMax = inRay.mDirection.Length();
   const auto origin = Physics::ToGlm(inRay.mOrigin);
-  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
+  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, tMax, hit))
   {
     auto id     = inSubShapeIDCreator.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
     auto result = JPH::CastRayCollector::ResultType();
     result.mSubShapeID2 = id;
     result.mBodyID      = inShapeFilter.mBodyID2;
-    result.mFraction    = glm::distance(origin, hit.positionWorld) / glm::distance(origin, origin + direction * tMax);
+    result.mFraction    = glm::distance(origin, hit.positionWorld) / tMax;
     if (result.mFraction <= 1)
     {
       ioCollector.AddHit(result);
@@ -186,18 +264,12 @@ bool Physics::TwoLevelGridShape::CastRay([[maybe_unused]] const JPH::RayCast& in
   const auto direction = glm::normalize(Physics::ToGlm(inRay.mDirection));
   const auto tMax      = inRay.mDirection.Length();
   auto hit = Voxel::Grid::HitSurfaceParameters();
-  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, 100, hit)) // TODO: fix tMax
+  if (GetTwoLevelGrid().TraceRaySimple(origin, direction, tMax, hit))
   {
-    const auto hitFraction = glm::distance(origin, hit.positionWorld) / tMax;
-    if (hitFraction >= ioHit.GetEarlyOutFraction())
-    {
-      return false;
-    }
-
     auto id            = inSubShapeIDCreator.PushID(Voxel::Grid::FlattenBottomLevelBrickCoord(glm::ivec3(hit.voxelPosition)), 16).GetID();
     ioHit.mSubShapeID2 = id;
     ioHit.mBodyID      = {}; // TODO?
-    ioHit.mFraction    = hitFraction;
+    ioHit.mFraction    = glm::distance(origin, hit.positionWorld) / tMax;
     if (ioHit.mFraction <= 1)
     {
       return true;
@@ -211,7 +283,7 @@ void Physics::TwoLevelGridShape::CollidePoint([[maybe_unused]] JPH::Vec3Arg inPo
   [[maybe_unused]] JPH::CollidePointCollector& ioCollector,
   [[maybe_unused]] const JPH::ShapeFilter& inShapeFilter) const
 {
-  assert(false);
+  ASSERT(false);
 }
 
 void Physics::TwoLevelGridShape::CollideSoftBodyVertices([[maybe_unused]] JPH::Mat44Arg inCenterOfMassTransform,
@@ -220,7 +292,7 @@ void Physics::TwoLevelGridShape::CollideSoftBodyVertices([[maybe_unused]] JPH::M
   [[maybe_unused]] JPH::uint inNumVertices,
   [[maybe_unused]] int inCollidingShapeIndex) const
 {
-  assert(false);
+  ASSERT(false);
 }
 
 float Physics::TwoLevelGridShape::GetInnerRadius() const
@@ -236,7 +308,7 @@ JPH::AABox Physics::TwoLevelGridShape::GetLocalBounds() const
 
 JPH::MassProperties Physics::TwoLevelGridShape::GetMassProperties() const
 {
-  assert(false);
+  ASSERT(false);
   return {};
 }
 
@@ -252,7 +324,7 @@ JPH::Shape::Stats Physics::TwoLevelGridShape::GetStats() const
 
 JPH::uint Physics::TwoLevelGridShape::GetSubShapeIDBitsRecursive() const
 {
-  assert(0);
+  ASSERT(0);
   return 0;
 }
 
@@ -267,7 +339,36 @@ void Physics::TwoLevelGridShape::GetSubmergedVolume([[maybe_unused]] JPH::Mat44A
 #endif
 ) const
 {
-  assert(false);
+  ASSERT(false);
+}
+
+namespace
+{
+  bool IsGridPositionSolid(const Voxel::Grid& grid, glm::vec3 position)
+  {
+    const auto voxelPos = glm::ivec3(position);
+    if (!grid.IsPositionInGrid(voxelPos))
+    {
+      return false;
+    }
+    
+    const auto voxel     = grid.GetVoxelAt(voxelPos);
+    const auto& material = grid.materials_[int(voxel)];
+
+    if (!material.isSolid)
+    {
+      return false;
+    }
+
+    if (const auto* subGrid = material.subGrid)
+    {
+      const auto subGridPos   = glm::ivec3((position - glm::vec3(voxelPos)) * glm::vec3(subGrid->dimensions));
+      const auto subVoxel = subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, subGridPos)];
+      return subVoxel != Voxel::SubVoxel::Air;
+    }
+
+    return true;
+  }
 }
 
 JPH::Vec3 Physics::TwoLevelGridShape::GetSurfaceNormal([[maybe_unused]] const JPH::SubShapeID& inSubShapeID, [[maybe_unused]] JPH::Vec3Arg inLocalSurfacePosition) const
@@ -290,22 +391,56 @@ JPH::Vec3 Physics::TwoLevelGridShape::GetSurfaceNormal([[maybe_unused]] const JP
   const auto v1pos = glm::ivec3(glm::floor(ToGlm(pos1)));
 
   [[maybe_unused]] auto v0 = GetTwoLevelGrid().GetVoxelAt(v0pos);
+  [[maybe_unused]] auto v1 = GetTwoLevelGrid().GetVoxelAt(v1pos);
 
   // Choose position of solid voxel, which is the one we're colliding with. If both voxels are solid (which shouldn't happen), pick an arbitrary position.
-  auto solidVoxel = JPH::Vec3();
-  [[maybe_unused]] auto airVoxel = JPH::Vec3();
+  auto solidVoxelPos                = v1pos;
+  [[maybe_unused]] auto airVoxelPos = v0pos;
+  auto solidVoxel                   = v1;
+
   if (GetTwoLevelGrid().IsVoxelSolid(v0))
   {
-    solidVoxel = ToJolt(v0pos);
-    airVoxel   = ToJolt(v1pos);
-  }
-  else
-  {
-    solidVoxel = ToJolt(v1pos);
-    airVoxel   = ToJolt(v0pos);
+    solidVoxelPos = v0pos;
+    airVoxelPos   = v1pos;
+    solidVoxel    = v0;
   }
 
-  return airVoxel - solidVoxel;
+  const auto& material = GetTwoLevelGrid().materials_[int(solidVoxel)];
+  if (material.subGrid)
+  {
+    const auto& subGrid = *material.subGrid;
+    const auto inSubPos = ToJolt((ToGlm(inLocalSurfacePosition) - glm::vec3(solidVoxelPos)) * glm::vec3(subGrid.dimensions));
+    const auto absSubDiffFromInt =
+      JPH::Vec3(abs(inSubPos.GetX() - round(inSubPos.GetX())), abs(inSubPos.GetY() - round(inSubPos.GetY())), abs(inSubPos.GetZ() - round(inSubPos.GetZ())));
+    const auto nearestSubIntCompIdx = absSubDiffFromInt.GetLowestComponentIndex();
+
+    auto subPos0 = inSubPos;
+    subPos0.SetComponent(nearestSubIntCompIdx, round(inSubPos[nearestSubIntCompIdx]));
+
+    auto subPos1 = inSubPos;
+    subPos1.SetComponent(nearestSubIntCompIdx, round(inSubPos[nearestSubIntCompIdx] - 1.0f));
+
+    const auto v0subPos = glm::ivec3(glm::floor(ToGlm(subPos0)));
+    const auto v1SubPos = glm::ivec3(glm::floor(ToGlm(subPos1)));
+
+    auto solidSubVoxelPos                = v1SubPos;
+    [[maybe_unused]] auto airSubVoxelPos = v0subPos;
+
+    const bool isOob = any(lessThan(v0subPos, glm::ivec3(0))) || any(greaterThanEqual(v0subPos, glm::ivec3(subGrid.dimensions)));
+    if (!isOob)
+    {
+      const auto subVoxel = subGrid.grid[Voxel::Grid::FlattenGenericCoord(subGrid.dimensions, v0subPos)];
+      if (subVoxel != Voxel::SubVoxel::Air)
+      {
+        solidSubVoxelPos = v0subPos;
+        airSubVoxelPos   = v1SubPos;
+      }
+    }
+
+    return ToJolt(airSubVoxelPos - solidSubVoxelPos);
+  }
+
+  return ToJolt(airVoxelPos - solidVoxelPos);
 }
 
 int Physics::TwoLevelGridShape::GetTrianglesNext([[maybe_unused]] GetTrianglesContext& ioContext,
@@ -313,7 +448,7 @@ int Physics::TwoLevelGridShape::GetTrianglesNext([[maybe_unused]] GetTrianglesCo
   [[maybe_unused]] JPH::Float3* outTriangleVertices,
   [[maybe_unused]] const JPH::PhysicsMaterial** outMaterials) const
 {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -323,12 +458,12 @@ void Physics::TwoLevelGridShape::GetTrianglesStart([[maybe_unused]] GetTriangles
   [[maybe_unused]] JPH::QuatArg inRotation,
   [[maybe_unused]] JPH::Vec3Arg inScale) const
 {
-  assert(false);
+  ASSERT(false);
 }
 
 float Physics::TwoLevelGridShape::GetVolume() const
 {
-  assert(false);
+  ASSERT(false);
   return 0;
 }
 
@@ -340,6 +475,6 @@ void Physics::TwoLevelGridShape::Draw([[maybe_unused]] JPH::DebugRenderer* inRen
   [[maybe_unused]] bool inUseMaterialColors,
   [[maybe_unused]] bool inDrawWireframe) const
 {
-  //assert(false);
+  //ASSERT(false);
 }
 #endif
