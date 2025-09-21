@@ -901,6 +901,26 @@ namespace Physics
             ->Draw(s->debugRenderer.get(), shape_cast.mCenterOfMassStart.PostTranslated(shape_cast.mDirection), Vec3::sReplicate(1.0f), Color::sRed, false, false);
         }
       }
+
+      if (debug.drawDebugNormal)
+      {
+        const auto rayDirection = GetForward(transform.rotation);
+        const auto rayOrigin = transform.position + rayDirection * 0.5f;
+        constexpr auto rayLength = 5.0f;
+
+        auto result = JPH::RayCastResult();
+        if (Physics::GetNarrowPhaseQuery().CastRay(JPH::RRayCast(ToJolt(rayOrigin), ToJolt(rayDirection * rayLength)),
+              result,
+              s->engine->GetDefaultBroadPhaseLayerFilter(Layers::CAST_PROJECTILE),
+              Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              *Physics::GetIgnoreEntityAndChildrenFilter({world.GetRegistryRaw(), entity})))
+        {
+          const auto hitPosition = rayOrigin + result.mFraction * rayLength * rayDirection;
+          const auto hitNormal =
+            s->engine->GetBodyLockInterfaceNoLock().TryGetBody(result.mBodyID)->GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ToJolt(hitPosition));
+          s->debugRenderer->DrawArrow(ToJolt(hitPosition), ToJolt(hitPosition + ToGlm(hitNormal * .25f)), JPH::Color::sGreen, 0.06125f);
+        }
+      }
     }
 
     s->engine->DrawBodies(

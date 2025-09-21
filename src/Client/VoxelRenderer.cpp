@@ -29,6 +29,7 @@
 #include "tracy/Tracy.hpp"
 #include "tracy/TracyVulkan.hpp"
 #include "stb_image.h"
+#include "spdlog/spdlog.h"
 
 #include <format>
 #include <memory>
@@ -592,6 +593,7 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
   for (auto block : orderedBlocks)
   {
     auto gpuMat = GpuVoxelMaterial{};
+    gpuMat.density = -1; // Negative density = solid voxel
 
     if (const auto* p = bReg.try_get<const Block::Component::RenderAsTexturedCube>(block))
     {
@@ -649,8 +651,41 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
     if (const auto* subGrid = Block::GetSubGrid(world, BlockId(block)))
     {
-      gpuMat.voxelFlags |= VOXEL_IS_SUBGRID;
-      gpuMat.subGridIndex =  subGrid->myIndexINTERNAL;
+      // Check if all subvoxels are the same
+      bool allSame   = true;
+      auto lastSubVoxel = subGrid->grid[0];
+      for (int i = 1; i < subGrid->dimensions.x * subGrid->dimensions.y * subGrid->dimensions.z; i++)
+      {
+        if (subGrid->grid[i] != lastSubVoxel)
+        {
+          allSame = false;
+          break;
+        }
+      }
+
+      if (allSame)
+      {
+        spdlog::debug("Subgrid for block {} is homogeneous, converting to full voxel.", Block::GetName(world, BlockId(block)));
+        if (lastSubVoxel == Voxel::SubVoxel::Air)
+        {
+          gpuMat.voxelFlags |= VOXEL_IS_INVISIBLE;
+        }
+        else
+        {
+          const auto subGridMat = subGrid->materials[size_t(lastSubVoxel) - 1];
+          gpuMat.density = subGridMat.density;
+          for (auto& face : gpuMat.faces)
+          {
+            face.baseColorFactor = subGridMat.colorSrgb;
+            face.emissionFactor  = subGridMat.emissionSrgb;
+          }
+        }
+      }
+      else
+      {
+        gpuMat.voxelFlags |= VOXEL_IS_SUBGRID;
+        gpuMat.subGridIndex = subGrid->myIndexINTERNAL;
+      }
     }
 
     voxelMaterials.emplace_back(gpuMat);

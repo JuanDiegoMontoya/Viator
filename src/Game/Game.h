@@ -57,6 +57,7 @@ struct Debugging
   bool showDebugGui        = false;
   bool forceShowCursor     = false;
   bool drawDebugProbe      = false;
+  bool drawDebugNormal     = false;
   bool drawPhysicsShapes   = false;
   bool drawPhysicsVelocity = false;
   bool drawPathLines       = false;

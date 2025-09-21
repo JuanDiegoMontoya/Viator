@@ -38,6 +38,7 @@ struct GpuVoxelMaterial
   FVOG_UINT32 voxelFlags;
   CubeFaceMaterial faces[6];
   FVOG_UINT32 subGridIndex;
+  float density; // Negative density = solid voxel.
 };
 
 #ifndef __cplusplus
@@ -357,7 +358,8 @@ float vx_Density(voxel_t voxel)
   {
     return -1;
   }
-  return -1;
+  GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+  return material.density;
 }
 
 // Ray position in [0, subGrid.dimensions)
@@ -505,14 +507,16 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
     normal       = i8vec3(vec3(cases) * -vec3(init.stepDir));
     float tLocal = (dot(normal, p - rayPosLocal)) / dot(normal, rayDirection);
     const float tDelta = min(tLocal - tLocalPrev, tMax - t);
+    const float tOld = t;
     t += tDelta;
     
     if (occupancy && vx_IsVisible(voxel) && density >= 0)
     {
-      hit.transmission *= exp(-density * tDelta * (1 - vec3(.96, .2, .4)));
+      GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+      hit.transmission *= exp(-density * 20 * tDelta * (1 - color_sRGB_EOTF(material.faces[vx_NormalToFaceIndex(normal)].baseColorFactor)));
       if (!hit.hitTranslucent)
       {
-        hit.firstTranslucentHitT = t;
+        hit.firstTranslucentHitT = tOld;
         hit.hitTranslucent = true;
       }
     }

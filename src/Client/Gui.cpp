@@ -1524,13 +1524,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           world.GetRegistry().emplace_or_replace<NoclipCharacterController>(player);
         }
       }
-      ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
-      ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
-      ImGui::Checkbox("Show FPS", &debug.showFps);
-      ImGui::Checkbox("Draw Path Lines", &debug.drawPathLines);
-      ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
-      ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
-      ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
 
       ImGui::Text("Game state: %s", Core::Reflection::EnumToString(ctx.get<GameState>()));
       ImGui::Text("Time: %f", ctx.get<float>("time"_hs));
@@ -1541,6 +1534,15 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       auto min = uint32_t(5);
       auto max = uint32_t(120);
       ImGui::SliderScalar("Tick Rate", ImGuiDataType_U32, &world.GetRegistry().ctx().get<TickRate>().hz, &min, &max, "%u", ImGuiSliderFlags_AlwaysClamp);
+
+      ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
+      ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
+      ImGui::Checkbox("Show FPS", &debug.showFps);
+      ImGui::Checkbox("Draw Path Lines", &debug.drawPathLines);
+      ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
+      ImGui::Checkbox("Draw Debug Normal", &debug.drawDebugNormal);
+      ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
+      ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
 
       if (ImGui::Selectable("Save UI layout"))
       {
@@ -1618,10 +1620,10 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           {
             ImGui::SeparatorText("Sun position");
             auto& sunInfo = world.GetRegistry().ctx().get<SunInfo>();
+            ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
             ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
             ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
             ImGui::SliderFloat("Day length", &sunInfo.dayLength, 5, 3600, "%.0f s");
-            ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
 
             ImGui::SeparatorText("Sun appearance");
             ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);
