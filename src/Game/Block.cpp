@@ -1,5 +1,6 @@
 #include "Block.h"
 #include "Voxel/Grid.h"
+#include "Game/World.h"
 
 #include "Item.h"
 #include "Core/Assert2.h"
@@ -10,6 +11,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/hash.hpp"
 #include "tracy/Tracy.hpp"
+#include "entt/meta/resolve.hpp"
 
 Block::Registry::Registry()
 {

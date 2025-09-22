@@ -2,6 +2,7 @@
 #include "Game/Voxel/Grid.h"
 #include "Core/Serialization.h"
 #include "Game/Game.h"
+#include "Game/World.h"
 #include "Core/Assert2.h"
 #include "RPC.h"
 #include "ThreadSafeQueue.h"

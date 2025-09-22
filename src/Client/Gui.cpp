@@ -11,6 +11,8 @@
 #include "GuiHelpers.h"
 #include "Game/Item.h"
 #include "Game/Scripting.h"
+#include "Game/Game.h"
+#include "Game/World.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -36,6 +38,7 @@
 #include "imgui_internal.h"
 #include "miniaudio.h"
 #include "rapidfuzz/fuzz.hpp"
+#include "spdlog/spdlog.h"
 
 using namespace entt::literals;
 

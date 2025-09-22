@@ -1,5 +1,7 @@
 #include "Input.h"
 #include "Game/Networking/RPC.h"
+#include "Game/Game.h"
+#include "Game/World.h"
 
 #include "GLFW/glfw3.h"
 #include "glm/vec3.hpp"

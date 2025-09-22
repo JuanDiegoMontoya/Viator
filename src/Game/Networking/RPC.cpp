@@ -1,8 +1,18 @@
 #include "RPC.h"
+#include "Interface.h"
 #include "Client.h"
+#include "Core/Serialization.h"
+#include "Core/Reflection.h"
+#include "Core/Assert2.h"
+#include "RpcInfo.h"
+#include "Game/World.h"
 
 #include "tracy/Tracy.hpp"
+#include "spdlog/spdlog.h"
+#include "entt/meta/resolve.hpp"
 
+#include <span>
+#include <ranges>
 #include <sstream>
 
 void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& stream)
@@ -44,4 +54,68 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
     auto result = func.invoke({}, args.data(), args.size());
     ASSERT(result);
   }
+}
+
+void Networking::detail::CallRPCInternal(entt::id_type funcId, std::optional<entt::entity> owningConnection, World& world, entt::meta_any* args, size_t numArgs)
+{
+  ZoneScoped;
+  ASSERT(numArgs >= 1);
+  ASSERT(args[0].type().id() == entt::type_id<World>().hash());
+
+  using Core::Reflection::RpcTraits;
+
+  auto meta = entt::resolve<RpcTraits>();
+  auto func = meta.func(funcId);
+  ASSERT(func, "RPC does not exist.");
+  const auto traits = func.traits<RpcTraits>();
+  ASSERT(bool(traits & (RpcTraits::Client | RpcTraits::Server | RpcTraits::Broadcast | RpcTraits::Remote)));
+  ASSERT(!(world.IsClient() && owningConnection), "If the caller is a client, owningConnection must be null.");
+
+  // TODO: Validate argument types.
+
+  auto& networking = *world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+
+  if (owningConnection && (!networking || !networking->IsEntityOwnedByRemote(*owningConnection)))
+  {
+    owningConnection = std::nullopt;
+  }
+
+  bool execLocally = bool(traits & RpcTraits::Broadcast);
+  execLocally |= world.IsServer() && bool(traits & RpcTraits::Server);
+  execLocally |= world.IsServer() && bool(traits & RpcTraits::Client) && !owningConnection;
+  execLocally |= world.IsClient() && bool(traits & RpcTraits::Client);
+
+  bool execRemotely = bool(traits & RpcTraits::Remote);
+  execRemotely |= world.IsServer() && bool(traits & RpcTraits::Broadcast);
+  execRemotely |= world.IsServer() && bool(traits & RpcTraits::Client) && owningConnection;
+  execRemotely |= world.IsClient() && bool(traits & RpcTraits::Server);
+
+  if (!execLocally && !execRemotely)
+  {
+    spdlog::warn("RPC dropped.");
+    return;
+  }
+
+  if (execLocally)
+  {
+    ZoneScopedN("func.invoke()");
+    // Directly invoking a function does NOT allow for overload resolution. This is fine as EnTT seemingly
+    // does not offer a way to select an overload prior to its execution, which would be needed to query
+    // its traits and therefore determine executability.
+    auto ret = func.invoke({}, args, numArgs);
+    ASSERT(ret, "Failed to execute RPC locally.");
+
+    if (!(world.IsServer() && bool(traits & RpcTraits::Broadcast)))
+    {
+      return;
+    }
+  }
+
+  if (!networking)
+  {
+    return;
+  }
+
+  // Args are simply copied in to guard against use-after-free.
+  networking->EnqueueRPC({owningConnection, traits, funcId, std::ranges::to<std::vector<entt::meta_any>>(std::span{args, numArgs}.subspan(1))});
 }

@@ -20,6 +20,7 @@
 #include "tracy/Tracy.hpp"
 #include "Jolt/Physics/Collision/RayCast.h"
 #include "Jolt/Physics/Constraints/SwingTwistConstraint.h"
+#include "spdlog/spdlog.h"
 
 #include <execution>
 #include <stack>
