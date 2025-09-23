@@ -1,18 +1,22 @@
 #pragma once
-#include "Game/Voxel/Grid.h"
-
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "Jolt/Physics/Collision/CollideShape.h"
 #include "Jolt/Physics/Collision/CollisionDispatch.h"
-#include "entt/entity/registry.hpp"
+
+#include "entt/entity/fwd.hpp"
+
+namespace Voxel
+{
+  struct Grid;
+}
 
 namespace Physics
 {
   class TwoLevelGridShape final : public JPH::Shape
   {
   public:
-    TwoLevelGridShape(const entt::registry& registry) : Shape(JPH::EShapeType::User1, JPH::EShapeSubType::User1), registry_(&registry) {}
+    TwoLevelGridShape(const entt::registry& registry);
 
   private:
     const entt::registry* registry_;

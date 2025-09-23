@@ -22,6 +22,15 @@
 
 namespace Fvog
 {
+  namespace detail
+  {
+    struct ShaderCompileInfo
+    {
+      std::vector<uint32_t> binarySpv;
+      Extent3D workgroupSize_{};
+    };
+  } // namespace detail
+
   namespace
   {
     VkShaderStageFlagBits PipelineStageToVK(PipelineStage stage)
@@ -308,4 +317,19 @@ namespace Fvog
       vkDestroyShaderModule(Fvog::GetDevice().device_, shaderModule_, nullptr);
     }
   }
-}
+
+  VkShaderModule Shader::Handle() const
+  {
+    return shaderModule_;
+  }
+
+  Extent3D Shader::WorkgroupSize() const
+  {
+    return workgroupSize_;
+  }
+
+  PipelineStage Shader::GetPipelineStage() const
+  {
+    return stage_;
+  }
+} // namespace Fvog

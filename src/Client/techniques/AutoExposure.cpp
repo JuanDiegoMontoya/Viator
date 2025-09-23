@@ -7,6 +7,8 @@
 #include "../RendererUtilities.h"
 #include "Game/Assets.h"
 
+#include "volk.h"
+
 #include <cmath>
 
 namespace Techniques

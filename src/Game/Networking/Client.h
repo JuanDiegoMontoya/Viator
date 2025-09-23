@@ -1,7 +1,7 @@
 #pragma once
 #include "Interface.h"
 
-#include "entt/fwd.hpp"
+#include "entt/entity/fwd.hpp"
 
 #include <unordered_map>
 

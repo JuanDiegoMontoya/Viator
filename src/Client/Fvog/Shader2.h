@@ -1,21 +1,16 @@
 #pragma once
+#include "detail/VkFwd.h"
+#include "BasicTypes2.h"
 
-#include <volk.h>
 #include <string>
 #include <string_view>
 #include <filesystem>
-#include <vector>
-#include "BasicTypes2.h"
 
 namespace Fvog
 {
   namespace detail
   {
-    struct ShaderCompileInfo
-    {
-      std::vector<uint32_t> binarySpv;
-      Extent3D workgroupSize_{};
-    };
+    struct ShaderCompileInfo;
   }
 
   enum class PipelineStage
@@ -51,20 +46,9 @@ namespace Fvog
 
     /// @brief Gets the handle of the underlying OpenGL shader object
     /// @return The shader
-    [[nodiscard]] VkShaderModule Handle() const
-    {
-      return shaderModule_;
-    }
-
-    [[nodiscard]] Extent3D WorkgroupSize() const
-    {
-      return workgroupSize_;
-    }
-
-    [[nodiscard]] PipelineStage GetPipelineStage() const
-    {
-      return stage_;
-    }
+    [[nodiscard]] VkShaderModule Handle() const;
+    [[nodiscard]] Extent3D WorkgroupSize() const;
+    [[nodiscard]] PipelineStage GetPipelineStage() const;
 
   private:
     void Initialize(const detail::ShaderCompileInfo& info);

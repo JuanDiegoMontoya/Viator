@@ -1,9 +1,8 @@
 #pragma once
-
-#include <volk.h>
-
 #include "BasicTypes2.h"
 #include "Buffer2.h"
+
+#include "vulkan/vulkan_core.h"
 
 #include <vector>
 #include <string>

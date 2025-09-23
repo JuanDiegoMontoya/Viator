@@ -2,7 +2,7 @@
 #include "entt/entity/fwd.hpp"
 #include "entt/meta/meta.hpp"
 
-#include <sstream>
+#include <iosfwd>
 
 class World;
 

@@ -92,6 +92,9 @@
   #include "Client/Fvog/detail/ApiToEnum2.h"
   #include "Client/PipelineManager.h"
   #include "Client/RendererUtilities.h"
+
+  #include "volk.h"
+
   #include <optional>
 
   #include <stdio.h>

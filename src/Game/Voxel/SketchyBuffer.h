@@ -54,19 +54,14 @@ public:
   }
 
   [[nodiscard]] virtual VmaVirtualBlock GetAllocator() const = 0;
-
   [[nodiscard]] virtual size_t SizeBytes() const = 0;
-
   [[nodiscard]] virtual size_t PageSize() const = 0;
-
   [[nodiscard]] virtual void* GetCpuBuffer() = 0;
   [[nodiscard]] virtual const void* GetCpuBuffer() const = 0;
 
 #ifndef GAME_HEADLESS
   virtual void FlushWritesToGPU(VkCommandBuffer cmd) = 0;
-
   virtual Fvog::Buffer& GetGpuBuffer() = 0;
-
   virtual void MarkRange(size_t offset, size_t size) = 0;
 
   // Update the object at an address that aliases the array returned by GetBase.

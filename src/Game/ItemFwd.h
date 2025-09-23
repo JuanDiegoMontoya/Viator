@@ -2,8 +2,6 @@
 #include "entt/core/fwd.hpp"
 #include "entt/entity/entity.hpp"
 
-#include <cstdint>
-
 namespace entt
 {
   enum class entity : id_type;

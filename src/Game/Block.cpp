@@ -38,6 +38,25 @@ BlockId Block::Registry::Create(std::string tag)
   return id;
 }
 
+entt::registry& Block::Registry::GetRegistry()
+{
+  return *registry_;
+}
+
+const entt::registry& Block::Registry::GetRegistry() const
+{
+  return *registry_;
+}
+
+const std::unordered_map<std::string, BlockId>& Block::Registry::GetTagToIdMap() const
+{
+  return tagToId_;
+}
+
+const std::map<BlockId, std::string>& Block::Registry::GetIdToTagMap() const
+{
+  return idToTag_;
+}
 
 static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId block, bool isBeingTransformed = false)
 {

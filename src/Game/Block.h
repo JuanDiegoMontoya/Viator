@@ -9,6 +9,7 @@
 #include <array>
 #include <variant>
 #include <string>
+#include <optional>
 #include <map>
 #include <unordered_map>
 
@@ -38,7 +39,6 @@ namespace Block
 
   struct CubeFaceMaterial
   {
-    // TODO: ability to specify an exact rotation.
     bool randomizeTexcoordRotation = false;
     uint32_t texcoordsQuarterTurns = 0; // Number of quarter turn rotations to apply to texture coordinates.
     std::optional<std::string> baseColorTexture;
@@ -188,25 +188,10 @@ namespace Block
     // Use this instead of GetRegistry()->create(). This one will make a map entry.
     [[nodiscard]] BlockId Create(std::string tag);
 
-    [[nodiscard]] entt::registry& GetRegistry()
-    {
-      return *registry_;
-    }
-
-    [[nodiscard]] const entt::registry& GetRegistry() const
-    {
-      return *registry_;
-    }
-
-    [[nodiscard]] const auto& GetTagToIdMap() const
-    {
-      return tagToId_;
-    }
-
-    [[nodiscard]] const auto& GetIdToTagMap() const
-    {
-      return idToTag_;
-    }
+    [[nodiscard]] entt::registry& GetRegistry();
+    [[nodiscard]] const entt::registry& GetRegistry() const;
+    [[nodiscard]] const std::unordered_map<std::string, BlockId>& GetTagToIdMap() const;
+    [[nodiscard]] const std::map<BlockId, std::string>& GetIdToTagMap() const;
 
   private:
     BlockId nextBlockId = BlockId(0);

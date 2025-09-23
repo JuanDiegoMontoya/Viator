@@ -1,8 +1,7 @@
 #pragma once
 #include "Core/ClassImplMacros.h"
-#include "Core/Reflection.h"
 
-#include "entt/fwd.hpp"
+#include "entt/entity/fwd.hpp"
 
 #include <vector>
 
