@@ -40,6 +40,7 @@
 
 #include "glm/vec3.hpp"
 #include "glm/gtc/quaternion.hpp"
+#include "spdlog/spdlog.h"
 
 #include <shared_mutex>
 #include <mutex>
@@ -571,10 +572,24 @@ namespace Physics
     JPH::UnregisterTypes();
     delete JPH::Factory::sInstance;
   }
-  
+
   void FixedUpdate(float dt, World& world)
   {
     ZoneScoped;
+
+    // Get entity with VoxelsComponent component
+    entt::entity voxelEntity = entt::null;
+    const RigidBody* voxelRigidBody = nullptr;
+    for (auto&& [entity, rigidBody] : world.GetRegistry().view<const RigidBody, const VoxelsComponent>().each())
+    {
+      voxelEntity = entity;
+      voxelRigidBody = &rigidBody;
+    }
+    ASSERT(voxelEntity != entt::null, "No entity with VoxelsComponent found");
+
+    const auto voxelShape = s->engine->GetBodyInterface().GetShape(voxelRigidBody->body);
+    ASSERT(voxelShape->GetType() == JPH::EShapeType::User1);
+    ASSERT(dynamic_cast<const TwoLevelGridShape*>(voxelShape.GetPtr()));
 
     for (auto&& [entity, linearVelocity, friction] : world.GetRegistry().view<LinearVelocity, const Friction>().each())
     {
@@ -584,11 +599,53 @@ namespace Physics
     // Pre-update: synchronize physics and ECS representations
     for (auto&& [entity, transform, rigidBody, rigidBodySettings, linearVelocity] : world.GetRegistry().view<const GlobalTransform, const RigidBody, const RigidBodySettings, const LinearVelocity>().each())
     {
+      ZoneScopedN("Pre-update entity");
+      ZoneTextF("%s", world.GetRegistry().get<const Name>(entity).name.c_str());
+      
+      if (rigidBodySettings.motionType == JPH::EMotionType::Static)
+      {
+        continue;
+      }
+
+      auto velocity = ToJolt(linearVelocity.v);
+
+      auto collideShapeSettings                   = JPH::CollideShapeSettings();
+      collideShapeSettings.mMaxSeparationDistance = 0.12f;
+      collideShapeSettings.mBackFaceMode          = JPH::EBackFaceMode::CollideWithBackFaces;
+      auto collector                              = JPH::AnyHitCollisionCollector<JPH::CollideShapeCollector>();
+      TwoLevelGridShape::CollideTwoLevelGrid2(voxelShape.GetPtr(),
+        GetBodyInterface().GetShape(rigidBody.body).GetPtr(),
+        JPH::Vec3::sReplicate(1),
+        JPH::Vec3::sReplicate(1),
+        GetBodyInterface().GetCenterOfMassTransform(voxelRigidBody->body),
+        GetBodyInterface().GetCenterOfMassTransform(rigidBody.body),
+        JPH::SubShapeIDCreator(),
+        JPH::SubShapeIDCreator(),
+        collideShapeSettings,
+        collector,
+        JPH::ShapeFilter(),
+        [&](voxel_t voxel) -> bool
+        {
+          auto& blockReg = world.GetRegistry().ctx().get<Block::Registry>();
+          if (blockReg.GetRegistry().try_get<Block::Component::Flows>(entt::entity(voxel)))
+          {
+            return true;
+          }
+          return false;
+        });
+      if (collector.HadHit())
+      {
+        constexpr float upForce      = 30;
+        constexpr float dampingForce = 1;
+        constexpr float minForce     = 0;
+        velocity += JPH::Vec3(0, dt * upForce * glm::clamp(dampingForce / glm::max(dampingForce, velocity.GetY()), minForce, 1.0f), 0);
+      }
+
       s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
         ToJolt(transform.position),
         ToJolt(transform.rotation).Normalized(),
         JPH::EActivation::Activate);
-      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
+      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, velocity);
     }
     
     for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, const GlobalTransform, const LinearVelocity>().each())

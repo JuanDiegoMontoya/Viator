@@ -1,10 +1,14 @@
 #pragma once
+#include "Game/Voxel/VoxelType.h"
+
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Collision/Shape/Shape.h"
 #include "Jolt/Physics/Collision/CollideShape.h"
 #include "Jolt/Physics/Collision/CollisionDispatch.h"
 
 #include "entt/entity/fwd.hpp"
+
+#include <functional>
 
 namespace Voxel
 {
@@ -21,7 +25,20 @@ namespace Physics
   private:
     const entt::registry* registry_;
     const Voxel::Grid& GetTwoLevelGrid() const;
+
   public:
+    static void CollideTwoLevelGrid2(const Shape* inShape1,
+      const Shape* inShape2,
+      JPH::Vec3Arg inScale1,
+      JPH::Vec3Arg inScale2,
+      JPH::Mat44Arg inCenterOfMassTransform1,
+      JPH::Mat44Arg inCenterOfMassTransform2,
+      const JPH::SubShapeIDCreator& inSubShapeIDCreator1,
+      const JPH::SubShapeIDCreator& inSubShapeIDCreator2,
+      const JPH::CollideShapeSettings& inCollideShapeSettings,
+      JPH::CollideShapeCollector& ioCollector,
+      const JPH::ShapeFilter& inShapeFilter,
+      std::function<bool(voxel_t)> isSolidCallback);
 
     static void CollideTwoLevelGrid(const Shape* inShape1,
       const Shape* inShape2,

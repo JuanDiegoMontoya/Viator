@@ -1117,7 +1117,7 @@ void World::CreateInitialEntities()
   registry_.emplace<VoxelsComponent>(ve);
   registry_.emplace<Physics::RigidBodySettings>(ve,
     Physics::RigidBodySettings{
-      .shape      = Physics::UseTwoLevelGrid{},
+      .shape      = {Physics::UseTwoLevelGrid{}},
       .activate   = false,
       .motionType = JPH::EMotionType::Static,
       .layer      = Physics::Layers::WORLD,

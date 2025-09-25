@@ -2,6 +2,7 @@
 #include "Game/Game.h"
 #include "Game/Voxel/Grid.h"
 
+#include "Physics.h"
 #include "PhysicsUtils.h"
 
 #include "entt/entity/registry.hpp"
@@ -34,7 +35,7 @@ const Voxel::Grid& Physics::TwoLevelGridShape::GetTwoLevelGrid() const
   return registry_->ctx().get<Voxel::Grid>();
 }
 
-void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
+void Physics::TwoLevelGridShape::CollideTwoLevelGrid2(const Shape* inShape1,
   const Shape* inShape2,
   JPH::Vec3Arg inScale1,
   JPH::Vec3Arg inScale2,
@@ -44,7 +45,8 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
   const JPH::SubShapeIDCreator& inSubShapeIDCreator2,
   const JPH::CollideShapeSettings& inCollideShapeSettings,
   JPH::CollideShapeCollector& ioCollector,
-  const JPH::ShapeFilter& inShapeFilter)
+  const JPH::ShapeFilter& inShapeFilter,
+  std::function<bool(voxel_t)> isSolidCallback)
 {
   ZoneScoped;
   ASSERT(inShape1->GetType() == JPH::EShapeType::User1);
@@ -56,16 +58,25 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
 
   // Test shape against every voxel AABB in its bounds
   // TODO: Investigate using AABox4.h to accelerate collision tests
-  const auto s2min    = boundsOf2InSpaceOf1.GetCenter() - boundsOf2InSpaceOf1.GetExtent();
-  const auto s2max    = boundsOf2InSpaceOf1.GetCenter() + boundsOf2InSpaceOf1.GetExtent();
+  const auto s2min    = JPH::Vec3::sMax(boundsOf2InSpaceOf1.GetCenter() - boundsOf2InSpaceOf1.GetExtent(), JPH::Vec3::sReplicate(0));
+  const auto s2max    = JPH::Vec3::sMin(boundsOf2InSpaceOf1.GetCenter() + boundsOf2InSpaceOf1.GetExtent(), ToJolt(s1Grid.Dimensions() - 1));
   const auto boxShape = JPH::BoxShape({0.5f - VX_EPSILON, 0.5f - VX_EPSILON, 0.5f - VX_EPSILON});
+
   for (int z = (int)std::floor(s2min.GetZ() - VX_AABB_EPSILON); z < (int)std::ceil(s2max.GetZ() + VX_AABB_EPSILON); z++)
   for (int y = (int)std::floor(s2min.GetY() - VX_AABB_EPSILON); y < (int)std::ceil(s2max.GetY() + VX_AABB_EPSILON); y++)
   for (int x = (int)std::floor(s2min.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(s2max.GetX() + VX_AABB_EPSILON); x++)
   {
-    // Skip voxel if non-solid
-    const auto voxel = s1Grid.GetVoxelAt({x, y, z});
-    if (!s1Grid.IsVoxelSolid(voxel))
+    const auto voxelPosWS = glm::vec3{x, y, z};
+    const auto voxel = s1Grid.GetVoxelAt(voxelPosWS);
+
+    if (isSolidCallback)
+    {
+      if (isSolidCallback(voxel) == false)
+      {
+        continue;
+      } 
+    }
+    else if (!s1Grid.IsVoxelSolid(voxel))
     {
       continue;
     }
@@ -76,9 +87,15 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
       const auto subBoxShape = scaleResult.Get();
       subBoxShape->SetEmbedded();
 
-      for (int zs = 0; zs < subGrid->dimensions.z; zs++)
-      for (int ys = 0; ys < subGrid->dimensions.y; ys++)
-      for (int xs = 0; xs < subGrid->dimensions.x; xs++)
+      // Calculate bounds of object in sub-grid space.
+      const auto subGridDims = glm::vec3(subGrid->dimensions);
+      const auto voxelPosSS = voxelPosWS * subGridDims;
+      const auto s2minSS = glm::ivec3(glm::max(glm::floor(ToGlm(s2min) * subGridDims - voxelPosSS - 5 * VX_AABB_EPSILON), glm::vec3(0)));
+      const auto s2maxSS = glm::ivec3(glm::min(glm::ceil(ToGlm(s2max) * subGridDims - voxelPosSS + 5 * VX_AABB_EPSILON), subGridDims));
+
+      for (int zs = s2minSS.z; zs < s2maxSS.z; zs++)
+      for (int ys = s2minSS.y; ys < s2maxSS.y; ys++)
+      for (int xs = s2minSS.x; xs < s2maxSS.x; xs++)
       {
         if (subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, {xs, ys, zs})] == Voxel::SubVoxel::Air)
         {
@@ -120,6 +137,32 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
         inShapeFilter);
     }
   }
+}
+
+void Physics::TwoLevelGridShape::CollideTwoLevelGrid(const Shape* inShape1,
+  const Shape* inShape2,
+  JPH::Vec3Arg inScale1,
+  JPH::Vec3Arg inScale2,
+  JPH::Mat44Arg inCenterOfMassTransform1,
+  JPH::Mat44Arg inCenterOfMassTransform2,
+  const JPH::SubShapeIDCreator& inSubShapeIDCreator1,
+  const JPH::SubShapeIDCreator& inSubShapeIDCreator2,
+  const JPH::CollideShapeSettings& inCollideShapeSettings,
+  JPH::CollideShapeCollector& ioCollector,
+  const JPH::ShapeFilter& inShapeFilter)
+{
+  CollideTwoLevelGrid2(inShape1,
+    inShape2,
+    inScale1,
+    inScale2,
+    inCenterOfMassTransform1,
+    inCenterOfMassTransform2,
+    inSubShapeIDCreator1,
+    inSubShapeIDCreator2,
+    inCollideShapeSettings,
+    ioCollector,
+    inShapeFilter,
+    nullptr);
 }
 
 // inShapeCast == any other shape
@@ -164,8 +207,9 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
   for (int z = (int)std::floor(castMin.GetZ() - VX_AABB_EPSILON); z < (int)std::ceil(castMax.GetZ() + VX_AABB_EPSILON); z++)
   for (int y = (int)std::floor(castMin.GetY() - VX_AABB_EPSILON); y < (int)std::ceil(castMax.GetY() + VX_AABB_EPSILON); y++)
   for (int x = (int)std::floor(castMin.GetX() - VX_AABB_EPSILON); x < (int)std::ceil(castMax.GetX() + VX_AABB_EPSILON); x++)
-    {
-    const auto voxel = s2Grid.GetVoxelAt({x, y, z});
+  {
+    const auto voxelPosWS = glm::vec3{x, y, z};
+    const auto voxel = s2Grid.GetVoxelAt(voxelPosWS);
     // Skip voxel if non-solid
     if (!s2Grid.IsVoxelSolid(voxel))
     {
@@ -177,9 +221,15 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
       const auto subBoxShape = scaleResult.Get();
       subBoxShape->SetEmbedded();
 
-      for (int zs = 0; zs < subGrid->dimensions.z; zs++)
-      for (int ys = 0; ys < subGrid->dimensions.y; ys++)
-      for (int xs = 0; xs < subGrid->dimensions.x; xs++)
+      // Calculate bounds of cast in sub-grid space.
+      const auto subGridDims = glm::vec3(subGrid->dimensions);
+      const auto voxelPosSS = voxelPosWS * subGridDims;
+      const auto s2minSS = glm::ivec3(glm::max(glm::floor(ToGlm(castMin) * subGridDims - voxelPosSS - 5 * VX_AABB_EPSILON), glm::vec3(0)));
+      const auto s2maxSS = glm::ivec3(glm::min(glm::ceil(ToGlm(castMax) * subGridDims - voxelPosSS + 5 * VX_AABB_EPSILON), subGridDims));
+
+      for (int zs = s2minSS.z; zs < s2maxSS.z; zs++)
+      for (int ys = s2minSS.y; ys < s2maxSS.y; ys++)
+      for (int xs = s2minSS.x; xs < s2maxSS.x; xs++)
       {
         if (subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, {xs, ys, zs})] == Voxel::SubVoxel::Air)
         {
