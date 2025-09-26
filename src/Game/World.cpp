@@ -740,8 +740,10 @@ void World::FixedUpdate(float dt)
           float tempSpeed = attribs->acceleration * dt;
           tempSpeed *= input.walk ? attribs->walkModifier : 1.0f;
 
+          const bool isInWater = DescendantHasComponent<IsInWater>(entity).has_value();
+
           auto deltaVelocity = glm::vec3(0);
-          deltaVelocity.y = attribs->gravity * dt;
+          deltaVelocity.y = (isInWater ? attribs->waterGravity : attribs->gravity) * dt;
           attribs->timeSinceJumped += dt;
 
           if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))
@@ -751,10 +753,11 @@ void World::FixedUpdate(float dt)
             velocity                = glm::mix(realVelocity, velocity, glm::lessThan(glm::abs(velocity), glm::abs(realVelocity)));
 
             const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
-            deltaVelocity +=
-              input.forward * forward * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
-            deltaVelocity +=
-              input.strafe * right * (isOnGround ? attribs->acceleration : attribs->airAcceleration) * (input.walk ? attribs->walkModifier : 1.0f) * dt;
+            const float acceleration = isInWater
+                                         ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterAccelerationModifier, attribs->waterAcceleration)
+                                         : (isOnGround ? attribs->acceleration : attribs->airAcceleration);
+            deltaVelocity += input.forward * forward * acceleration * (input.walk ? attribs->walkModifier : 1.0f) * dt;
+            deltaVelocity += input.strafe * right * acceleration * (input.walk ? attribs->walkModifier : 1.0f) * dt;
 
             auto* emitter = registry_.try_get<SoundEmitter>(entity);
             if (isOnGround && glm::length(glm::vec2(velocity.x, velocity.z)) >= attribs->runMaxSpeed * 0.5f)
@@ -798,12 +801,15 @@ void World::FixedUpdate(float dt)
                   .pitch       = 0.8f,
                   .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
                 });
-                velocity.y      = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::JumpImpulseModifier, attribs->jumpInitialImpulse);
+                velocity.y      = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::JumpImpulseModifier, isInWater ? attribs->waterJumpImpulse : attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
               }
               attribs->timeSinceJumped = 0;
             }
-            if (input.jump && attribs->timeSinceJumped < attribs->jumpControlTime)
+            if (input.jump &&
+                attribs->timeSinceJumped <
+                  (isInWater ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterJumpControlTimeModifier, attribs->waterJumpControlTime)
+                             : attribs->jumpControlTime))
             {
               velocity.y += attribs->jumpAcceleration * dt;
             }
@@ -812,7 +818,9 @@ void World::FixedUpdate(float dt)
             auto deltaXZ1           = glm::vec2(deltaVelocity.x, deltaVelocity.z);
             auto xzVel              = glm::vec2(velocity.x, velocity.z);
             const auto xzSpeed      = glm::length(xzVel);
-            const auto baseMaxSpeed = attribs->runMaxSpeed * (input.walk ? attribs->walkModifier : 1.0f);
+            const auto baseMaxSpeed =
+              (isInWater ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterMaxSpeedModifier, attribs->waterMaxSpeed) : attribs->runMaxSpeed) *
+              (input.walk ? attribs->walkModifier : 1.0f);
             const auto realMaxSpeed = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::MovementSpeedModifier, baseMaxSpeed);
             if (glm::length(deltaXZ1 + xzVel) > realMaxSpeed)
             {
@@ -822,6 +830,8 @@ void World::FixedUpdate(float dt)
               deltaVelocity.z      = deltaXZ1[1];
             }
 
+            const float deceleration = isInWater ? attribs->waterDeceleration : (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration);
+
             // Decelerate when no forward input is present.
             const auto velocityXZ = glm::vec2(velocity.x, velocity.z);
             const auto forwardXZ  = glm::normalize(glm::vec2(forward.x, forward.z));
@@ -829,7 +839,7 @@ void World::FixedUpdate(float dt)
             if (input.forward == 0 && glm::length(forwardVel) > 1e-3f)
             {
               auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
-              auto offs    = -glm::normalize(forwardVel) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
+              auto offs    = -glm::normalize(forwardVel) * deceleration * dt;
               if (glm::dot(offs + forwardVel, forwardVel) < 0)
               { 
                 offs = -forwardVel;
@@ -845,7 +855,7 @@ void World::FixedUpdate(float dt)
             if (input.strafe == 0 && glm::length(rightVel) > 1e-3f)
             {
               auto deltaXZ = glm::vec2(deltaVelocity.x, deltaVelocity.z);
-              auto offs    = -glm::normalize(rightVel) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
+              auto offs    = -glm::normalize(rightVel) * deceleration * dt;
               if (glm::dot(offs + rightVel, rightVel) < 0)
               {
                 offs = -rightVel;
@@ -862,7 +872,7 @@ void World::FixedUpdate(float dt)
             const auto xzSpeed2 = glm::length(xzVel2);
             if (xzSpeed2 > realMaxSpeed)
             {
-              xzVel2 += -glm::normalize(xzVel2) * (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration) * dt;
+              xzVel2 += -glm::normalize(xzVel2) * deceleration * dt;
               // Set speed to max if this penalty would put us under it.
               if (glm::length(xzVel2) < realMaxSpeed)
               {
@@ -877,7 +887,7 @@ void World::FixedUpdate(float dt)
               velocity.z = xzVel2[1];
             }
 
-            velocity.y = glm::max(velocity.y, attribs->terminalVelocity);
+            velocity.y = glm::max(velocity.y, isInWater ? attribs->waterTerminalVelocity : attribs->terminalVelocity);
           }
           else
           {
@@ -942,6 +952,32 @@ void World::FixedUpdate(float dt)
     {
       for (auto&& [entity, player, transform] : registry_.view<Player, const GlobalTransform>().each())
       {
+        auto& reg   = registry_;
+        auto& world = *this;
+        auto& grid  = reg.ctx().get<Voxel::Grid>();
+        auto hit    = Voxel::Grid::HitSurfaceParameters();
+        auto child  = world.GetChildNamed(entity, "baller");
+        if (grid.TraceRaySimple(transform.position, GetForward(transform.rotation), 5, hit))
+        {
+          if (child == entt::null)
+          {
+            child = world.CreateRenderableEntityNoHashGrid({}, glm::identity<glm::quat>(), 0.125f);
+            reg.emplace<Name>(child, "baller");
+            reg.emplace<Mesh>(child, "icosphere_3");
+            world.SetParent(child, entity);
+            reg.get<Hierarchy>(child).useLocalPositionAsGlobal = true;
+          }
+          reg.get<LocalTransform>(child).position = hit.positionWorld;
+          world.UpdateLocalTransform(child);
+        }
+        else
+        {
+          if (child != entt::null)
+          {
+            reg.emplace<DeferredDelete>(child);
+          }
+        }
+
         if (registry_.valid(player.openContainerId))
         {
           player.showInteractPrompt = false;

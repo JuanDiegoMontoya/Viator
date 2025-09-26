@@ -24,6 +24,9 @@ namespace Item
   {
     MovementSpeedModifier,
     JumpImpulseModifier,
+    WaterJumpControlTimeModifier,
+    WaterAccelerationModifier,
+    WaterMaxSpeedModifier,
     ArmorModifier,
     BaseDamage,
     Knockback,

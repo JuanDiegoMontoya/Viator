@@ -424,6 +424,10 @@ struct Friction
   glm::vec3 axes; // Amount to apply to each axis
 };
 
+struct IsInWater
+{
+};
+
 struct TimeScale
 {
   float scale = 1;
@@ -560,6 +564,15 @@ struct WalkingMovementAttributes
   float deceleration = 55;
   float airAcceleration = 15;
   float airDeceleration = 3.5f;
+
+  // Water modifiers.
+  float waterMaxSpeed         = 3.5f;
+  float waterAcceleration     = 15;
+  float waterDeceleration     = 10;
+  float waterTerminalVelocity = -8;
+  float waterGravity          = -10;
+  float waterJumpImpulse      = 4;
+  float waterJumpControlTime  = 0.4f;
 };
 
 struct KnockbackMultiplier

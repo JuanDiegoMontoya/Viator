@@ -591,24 +591,16 @@ namespace Physics
     ASSERT(voxelShape->GetType() == JPH::EShapeType::User1);
     ASSERT(dynamic_cast<const TwoLevelGridShape*>(voxelShape.GetPtr()));
 
-    for (auto&& [entity, linearVelocity, friction] : world.GetRegistry().view<LinearVelocity, const Friction>().each())
-    {
-      linearVelocity.v -= friction.axes * linearVelocity.v * dt;
-    }
-
-    // Pre-update: synchronize physics and ECS representations
     for (auto&& [entity, transform, rigidBody, rigidBodySettings, linearVelocity] : world.GetRegistry().view<const GlobalTransform, const RigidBody, const RigidBodySettings, const LinearVelocity>().each())
     {
-      ZoneScopedN("Pre-update entity");
+      ZoneScopedN("Detect water collision");
       ZoneTextF("%s", world.GetRegistry().get<const Name>(entity).name.c_str());
-      
+
       if (rigidBodySettings.motionType == JPH::EMotionType::Static)
       {
         continue;
       }
-
-      auto velocity = ToJolt(linearVelocity.v);
-
+      
       auto collideShapeSettings                   = JPH::CollideShapeSettings();
       collideShapeSettings.mMaxSeparationDistance = 0.12f;
       collideShapeSettings.mBackFaceMode          = JPH::EBackFaceMode::CollideWithBackFaces;
@@ -635,17 +627,66 @@ namespace Physics
         });
       if (collector.HadHit())
       {
-        constexpr float upForce      = 30;
-        constexpr float dampingForce = 1;
-        constexpr float minForce     = 0;
-        velocity += JPH::Vec3(0, dt * upForce * glm::clamp(dampingForce / glm::max(dampingForce, velocity.GetY()), minForce, 1.0f), 0);
+        [[maybe_unused]] constexpr float upForce      = 30;
+        [[maybe_unused]] constexpr float dampingForce = 1;
+        [[maybe_unused]] constexpr float minForce     = 0;
+
+        //world.GetRegistry().get<LinearVelocity>(entity).v.y += dt * upForce * glm::clamp(dampingForce / glm::max(dampingForce, linearVelocity.v.y), minForce, 1.0f);
+        world.GetRegistry().get<LinearVelocity>(entity).v.y += dt * upForce;
+
+        if (!world.GetRegistry().all_of<IsInWater>(entity))
+        {
+          world.GetRegistry().emplace<IsInWater>(entity);
+          const auto entitySpeed = glm::length(linearVelocity.v);
+          if (rigidBodySettings.layer != Layers::DEBRIS && entitySpeed > 1)
+          {
+            world.SpawnHitParticles({
+              .numParticles    = (uint32_t)Math::Remap(glm::clamp(entitySpeed, 2.0f, 20.0f), 2.0f, 20.0f, 5.0f, 20.0f),
+              .position        = transform.position + glm::vec3(0, -world.GetHeight(entity) / 2.0f, 0),
+              .normal          = glm::vec3(0, 1, 0),
+              .spreadConeAngle = 3.14f / 4,
+              .tint            = {0.4f, 0.5f, 0.8f},
+              .speed           = entitySpeed * .8f,
+            });
+          }
+        }
+      }
+      else
+      {
+        world.GetRegistry().remove<IsInWater>(entity);
+      }
+    }
+
+    for (auto&& [entity, linearVelocity, friction] : world.GetRegistry().view<LinearVelocity, const Friction>().each())
+    {
+      linearVelocity.v -= friction.axes * linearVelocity.v * dt;
+    }
+
+    for (auto&& [entity, linearVelocity] : world.GetRegistry().view<LinearVelocity>().each())
+    {
+      if (world.DescendantHasComponent<IsInWater>(entity))
+      {
+        constexpr float waterFrictionCoefficient = 3.0f;
+        linearVelocity.v -= waterFrictionCoefficient * linearVelocity.v * dt;
+      }
+    }
+
+    // Pre-update: synchronize physics and ECS representations
+    for (auto&& [entity, transform, rigidBody, rigidBodySettings, linearVelocity] : world.GetRegistry().view<const GlobalTransform, const RigidBody, const RigidBodySettings, const LinearVelocity>().each())
+    {
+      ZoneScopedN("Pre-update entity");
+      ZoneTextF("%s", world.GetRegistry().get<const Name>(entity).name.c_str());
+      
+      if (rigidBodySettings.motionType == JPH::EMotionType::Static)
+      {
+        continue;
       }
 
       s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
         ToJolt(transform.position),
         ToJolt(transform.rotation).Normalized(),
         JPH::EActivation::Activate);
-      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, velocity);
+      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
     }
     
     for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, const GlobalTransform, const LinearVelocity>().each())

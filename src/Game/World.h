@@ -91,7 +91,7 @@ public:
     {
       return {entity, component};
     }
-    if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+    if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
     {
       return GetComponentFromAncestor<T>(h->parent);
     }
@@ -106,7 +106,7 @@ public:
     {
       return true;
     }
-    if (auto* h = registry_.try_get<Hierarchy>(entity); h && h->parent != entt::null)
+    if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
     {
       return AncestorHasComponent<T>(h->parent);
     }
@@ -121,7 +121,7 @@ public:
     {
       return {entity, component};
     }
-    if (auto* h = registry_.try_get<Hierarchy>(entity))
+    if (auto* h = registry_.try_get<const Hierarchy>(entity))
     {
       for (auto child : h->children)
       {
@@ -132,6 +132,27 @@ public:
       }
     }
     return {entt::null, nullptr};
+  }
+
+  template<typename T>
+  [[nodiscard]] std::optional<entt::entity> DescendantHasComponent(entt::entity entity)
+  {
+    assert(registry_.valid(entity));
+    if (registry_.all_of<T>(entity))
+    {
+      return entity;
+    }
+    if (auto* h = registry_.try_get<const Hierarchy>(entity))
+    {
+      for (auto child : h->children)
+      {
+        if (auto descendant = DescendantHasComponent<const T>(child))
+        {
+          return descendant;
+        }
+      }
+    }
+    return std::nullopt;
   }
 
   template<typename T>

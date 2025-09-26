@@ -1296,7 +1296,14 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(WalkingMovementAttributes, acceleration, PROP_MAX(100.0f))
     DATA(WalkingMovementAttributes, deceleration, PROP_MAX(100.0f))
     DATA(WalkingMovementAttributes, airAcceleration, PROP_MAX(100.0f))
-    DATA(WalkingMovementAttributes, airDeceleration, PROP_MAX(100.0f));
+    DATA(WalkingMovementAttributes, airDeceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, waterMaxSpeed, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, waterAcceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, waterDeceleration, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, waterTerminalVelocity, PROP_MIN(-100.0f))
+    DATA(WalkingMovementAttributes, waterGravity, PROP_MIN(-100.0f))
+    DATA(WalkingMovementAttributes, waterJumpImpulse, PROP_MAX(100.0f))
+    DATA(WalkingMovementAttributes, waterJumpControlTime, PROP_MAX(100.0f));
   
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
@@ -1393,6 +1400,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_ENUM(Item::EffectType)
     ENUMERATOR(Item::EffectType, MovementSpeedModifier, PROP_DISPLAY_NAME("Speed"))
     ENUMERATOR(Item::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
+    ENUMERATOR(Item::EffectType, WaterJumpControlTimeModifier, PROP_DISPLAY_NAME("Water Jump Control Time"))
+    ENUMERATOR(Item::EffectType, WaterAccelerationModifier, PROP_DISPLAY_NAME("Water Acceleration"))
+    ENUMERATOR(Item::EffectType, WaterMaxSpeedModifier, PROP_DISPLAY_NAME("Water Max Speed"))
     ENUMERATOR(Item::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
     ENUMERATOR(Item::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
     ENUMERATOR(Item::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"))
@@ -1615,4 +1625,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
   
   REFLECT_COMPONENT(Block::Component::TransformWhenUsed, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::TransformWhenUsed, block);
+
+  REFLECT_COMPONENT(IsInWater, REPLICATED | TRIVIAL);
 }

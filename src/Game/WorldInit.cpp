@@ -424,6 +424,27 @@ void World::InitializeGameDefinitions()
   const auto leadShirtId  = Item::CreateArmor(items, "armor_lead_chest", "Lead Polo", Item::Component::AllowedSlots::Body, 3, "potion_healing");
   const auto leadPantsId  = Item::CreateArmor(items, "armor_lead_leg", "Lead Shoes", Item::Component::AllowedSlots::Legs, 3, "potion_healing");
 
+  const auto flippersId = Item::CreateArmor(items, "armor_flippers", "Flippers", Item::Component::AllowedSlots::Accessory, 0, "potion_healing");
+  items.GetRegistry().emplace<Item::Component::StaticEffects>(flippersId).effects = std::vector<Item::Component::StaticEffect>{{
+    .condition = Item::EffectCondition::OnWorn,
+    .quantityType = Item::EffectQuantityType::Additive,
+    .type   = Item::EffectType::WaterJumpControlTimeModifier,
+    .amount = 4.6f,
+    },
+    {
+      .condition    = Item::EffectCondition::OnWorn,
+      .quantityType = Item::EffectQuantityType::Additive,
+      .type         = Item::EffectType::WaterAccelerationModifier,
+      .amount       = 15.0f,
+    },
+    {
+      .condition    = Item::EffectCondition::OnWorn,
+      .quantityType = Item::EffectQuantityType::Additive,
+      .type         = Item::EffectType::WaterMaxSpeedModifier,
+      .amount       = 1.0f,
+    },
+  };
+
   auto& blocks = registry_.ctx().insert_or_assign<Block::Registry>({});
 
   const auto stoneBlock = Block::CreateStandardBlock(*this,

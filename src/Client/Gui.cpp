@@ -58,7 +58,7 @@ using namespace entt::literals;
 #include <filesystem>
 #include <format>
 #include <map>
- 
+
 namespace
 {
   const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
