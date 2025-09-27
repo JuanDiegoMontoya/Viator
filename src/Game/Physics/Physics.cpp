@@ -232,6 +232,31 @@ namespace Physics
     };
 
     StaticVars::~StaticVars() = default;
+
+    void SpawnWaterParticlesIfHitWater(World& world, entt::entity entity, bool isProjectile = false)
+    {
+      auto& reg = world.GetRegistry();
+      if (!reg.all_of<IsInWater>(entity))
+      {
+        reg.emplace<IsInWater>(entity);
+        const auto entitySpeed = glm::length(reg.get<const LinearVelocity>(entity).v);
+        if (const auto* rigidBodySettings = reg.try_get<const RigidBodySettings>(entity); !rigidBodySettings || (rigidBodySettings->layer != Layers::DEBRIS))
+        {
+          if (entitySpeed > 2)
+          {
+            const auto& transform = reg.get<const GlobalTransform>(entity);
+            world.SpawnHitParticles({
+              .numParticles    = isProjectile ? 5 : (uint32_t)Math::Remap(glm::clamp(entitySpeed, 2.0f, 20.0f), 2.0f, 20.0f, 5.0f, 20.0f),
+              .position        = transform.position + glm::vec3(0, -world.GetHeight(entity) / 2.0f, 0),
+              .normal          = glm::vec3(0, 1, 0),
+              .spreadConeAngle = 3.14f / 4,
+              .tint            = {0.4f, 0.5f, 0.8f},
+              .speed           = entitySpeed * (isProjectile ? 0.1f : 0.8f),
+            });
+          }
+        }
+      }
+    }
   }
 
   template<class... Ts>
@@ -634,22 +659,7 @@ namespace Physics
         //world.GetRegistry().get<LinearVelocity>(entity).v.y += dt * upForce * glm::clamp(dampingForce / glm::max(dampingForce, linearVelocity.v.y), minForce, 1.0f);
         world.GetRegistry().get<LinearVelocity>(entity).v.y += dt * upForce;
 
-        if (!world.GetRegistry().all_of<IsInWater>(entity))
-        {
-          world.GetRegistry().emplace<IsInWater>(entity);
-          const auto entitySpeed = glm::length(linearVelocity.v);
-          if (rigidBodySettings.layer != Layers::DEBRIS && entitySpeed > 1)
-          {
-            world.SpawnHitParticles({
-              .numParticles    = (uint32_t)Math::Remap(glm::clamp(entitySpeed, 2.0f, 20.0f), 2.0f, 20.0f, 5.0f, 20.0f),
-              .position        = transform.position + glm::vec3(0, -world.GetHeight(entity) / 2.0f, 0),
-              .normal          = glm::vec3(0, 1, 0),
-              .spreadConeAngle = 3.14f / 4,
-              .tint            = {0.4f, 0.5f, 0.8f},
-              .speed           = entitySpeed * .8f,
-            });
-          }
-        }
+        SpawnWaterParticlesIfHitWater(world, entity);
       }
       else
       {
@@ -785,8 +795,29 @@ namespace Physics
     // Simulate projectiles
     for (auto&& [entity, gt, lt, projectile, linearVelocity] : world.GetRegistry().view<const GlobalTransform, LocalTransform, Projectile, LinearVelocity>().each())
     {
+      auto& grid       = world.GetRegistry().ctx().get<Voxel::Grid>();
+      const auto voxel = grid.GetVoxelAt(gt.position);
+      if (world.GetRegistry().ctx().get<Block::Registry>().GetRegistry().all_of<Block::Component::Flows>(entt::entity(voxel)))
+      {
+        if (const auto* subGrid = grid.materials_[(int)voxel].subGrid)
+        {
+          // Get subvoxel at projectile position
+          const auto voxelPosSS = glm::clamp(glm::ivec3(glm::fract(gt.position) * glm::vec3(subGrid->dimensions)), glm::ivec3(0), glm::ivec3(subGrid->dimensions) - 1);
+          const auto subVoxel = subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, voxelPosSS)];
+          if (subVoxel != Voxel::SubVoxel::Air)
+          {
+            SpawnWaterParticlesIfHitWater(world, entity, true);
+          }
+          else
+          {
+            world.GetRegistry().remove<IsInWater>(entity);
+          }
+        }
+      }
+
       // Calculate updated velocity
-      const auto acceleration = -9.81f * glm::vec3(0, 1, 0) + -linearVelocity.v * projectile.drag;
+      const auto isInWater    = world.DescendantHasComponent<IsInWater>(entity);
+      const auto acceleration = -9.81f * glm::vec3(0, 1, 0) + -linearVelocity.v * (projectile.drag + (isInWater ? 5.0f : 0.0f));
       const auto newVelocity  = linearVelocity.v + acceleration * dt;
 
       // Cast ray against characters and world
