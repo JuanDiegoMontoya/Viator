@@ -22,12 +22,13 @@ namespace Item
 {
   enum class EffectType : int32_t
   {
+    ArmorModifier,
     MovementSpeedModifier,
     JumpImpulseModifier,
     WaterJumpControlTimeModifier,
     WaterAccelerationModifier,
     WaterMaxSpeedModifier,
-    ArmorModifier,
+    WaterGravityModifier,
     BaseDamage,
     Knockback,
     HealthRegeneration,

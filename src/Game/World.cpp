@@ -743,7 +743,7 @@ void World::FixedUpdate(float dt)
           const bool isInWater = DescendantHasComponent<IsInWater>(entity).has_value();
 
           auto deltaVelocity = glm::vec3(0);
-          deltaVelocity.y = (isInWater ? attribs->waterGravity : attribs->gravity) * dt;
+          deltaVelocity.y = (isInWater ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterGravityModifier, attribs->waterGravity) : attribs->gravity) * dt;
           attribs->timeSinceJumped += dt;
 
           if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))

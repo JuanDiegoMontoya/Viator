@@ -424,12 +424,43 @@ void World::InitializeGameDefinitions()
   const auto leadShirtId  = Item::CreateArmor(items, "armor_lead_chest", "Lead Polo", Item::Component::AllowedSlots::Body, 3, "potion_healing");
   const auto leadPantsId  = Item::CreateArmor(items, "armor_lead_leg", "Lead Shoes", Item::Component::AllowedSlots::Legs, 3, "potion_healing");
 
+  const auto addLeadArmorModifiers = [&](ItemId id)
+  {
+    auto& effects = items.GetRegistry().get_or_emplace<Item::Component::StaticEffects>(id).effects;
+
+    effects.append_range(std::vector<Item::Component::StaticEffect>{
+      {
+        .condition    = Item::EffectCondition::OnWorn,
+        .quantityType = Item::EffectQuantityType::Multiplicative,
+        .type         = Item::EffectType::MovementSpeedModifier,
+        .amount       = 0.95f,
+      },
+      {
+        .condition    = Item::EffectCondition::OnWorn,
+        .quantityType = Item::EffectQuantityType::Additive,
+        .type         = Item::EffectType::WaterGravityModifier,
+        .amount       = -2.0f,
+      },
+      {
+        .condition    = Item::EffectCondition::OnWorn,
+        .quantityType = Item::EffectQuantityType::Multiplicative,
+        .type         = Item::EffectType::WaterAccelerationModifier,
+        .amount       = 0.95f,
+      },
+    });
+  };
+
+  addLeadArmorModifiers(leadHelmetId);
+  addLeadArmorModifiers(leadShirtId);
+  addLeadArmorModifiers(leadPantsId);
+
   const auto flippersId = Item::CreateArmor(items, "armor_flippers", "Flippers", Item::Component::AllowedSlots::Accessory, 0, "potion_healing");
-  items.GetRegistry().emplace<Item::Component::StaticEffects>(flippersId).effects = std::vector<Item::Component::StaticEffect>{{
-    .condition = Item::EffectCondition::OnWorn,
-    .quantityType = Item::EffectQuantityType::Additive,
-    .type   = Item::EffectType::WaterJumpControlTimeModifier,
-    .amount = 4.6f,
+  items.GetRegistry().emplace<Item::Component::StaticEffects>(flippersId).effects = std::vector<Item::Component::StaticEffect>{
+    {
+      .condition    = Item::EffectCondition::OnWorn,
+      .quantityType = Item::EffectQuantityType::Additive,
+      .type         = Item::EffectType::WaterJumpControlTimeModifier,
+      .amount       = 4.6f,
     },
     {
       .condition    = Item::EffectCondition::OnWorn,

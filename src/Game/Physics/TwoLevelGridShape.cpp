@@ -25,7 +25,7 @@ constexpr float VX_EPSILON = 0;
 // Amount by which to expand the AABB of shapes tested against the grid. This is a hack to make the player not stick to surfaces.
 constexpr float VX_AABB_EPSILON = 1e-1f;
 
-Physics::TwoLevelGridShape::TwoLevelGridShape(const class entt::registry& registry)
+Physics::TwoLevelGridShape::TwoLevelGridShape(const entt::registry& registry)
   : Shape(JPH::EShapeType::User1, JPH::EShapeSubType::User1), registry_(&registry)
 {
 }

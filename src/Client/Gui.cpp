@@ -58,6 +58,32 @@ using namespace entt::literals;
 #include <filesystem>
 #include <format>
 #include <map>
+#include <string>
+
+// Helpers
+namespace
+{
+  std::string TrimTrailingZeros(std::string str)
+  {
+    const auto decimalPos = str.find('.');
+    if (decimalPos == std::string::npos)
+    {
+      return str;
+    }
+
+    const auto lastNonZero = str.find_last_not_of('0');
+    if (lastNonZero == decimalPos)
+    {
+      str.erase(decimalPos);
+    }
+    else if (lastNonZero != std::string::npos)
+    {
+      str.erase(lastNonZero + 1);
+    }
+
+    return str;
+  }
+}
 
 namespace
 {
@@ -161,7 +187,7 @@ namespace
       const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnWorn, EffectQuantityType::Multiplicative, type);
       if (effectAmount != 1)
       {
-        return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
+        return std::format("{:+.0f}% {}\n", (effectAmount - 1) * 100, name);
       }
 
       return std::string();
@@ -171,7 +197,7 @@ namespace
       const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnWorn, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
-        return std::format("+{:.0f} {}\n", effectAmount, name);
+        return std::format("{} {}\n", TrimTrailingZeros(std::format("{:+.2f}", effectAmount)), name);
       }
 
       return std::string();
@@ -182,7 +208,7 @@ namespace
       const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnHeld, EffectQuantityType::Multiplicative, type);
       if (effectAmount != 1)
       {
-        return std::format("+{:.0f}% {}\n", (effectAmount - 1) * 100, name);
+        return std::format("{:+.0f}% {}\n", (effectAmount - 1) * 100, name);
       }
 
       return std::string();
@@ -192,7 +218,7 @@ namespace
       const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnHeld, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
-        return std::format("+{:.0f} {}\n", effectAmount, name);
+        return std::format("{} {}\n", TrimTrailingZeros(std::format("{:+.2f}", effectAmount)), name);
       }
 
       return std::string();
@@ -203,7 +229,7 @@ namespace
       const auto effectAmount = Item::GetEffect(world, item.id, parent, EffectCondition::OnUse, EffectQuantityType::Additive, type);
       if (effectAmount != 0)
       {
-        return std::format("{:.0f} {}\n", effectAmount, name);
+        return std::format("{} {}\n", TrimTrailingZeros(std::format("{:+.2f}", effectAmount)), name);
       }
 
       return std::string();
