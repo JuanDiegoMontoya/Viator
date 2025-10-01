@@ -20,17 +20,41 @@ the GPU-side representation.
 
 ### Rendering
 
-Lighting is entirely path traced, with 1 sample per pixel, 2 bounces after the primary ray, and 1 NEE ray per bounce.
-Rays traverse the voxel grid with hierarchical DDA. Meshes (for dynamic game entities) can be arbitrarily placed 
-and lit, but do not themselves affect lighting.
+All voxels are rendered with ray tracing using hierarchical DDA. Voxel materials are either simple cubes (textured or not), or they can be "sub-grids" containing their own instanced grid. MagicaVoxel is used to author sub-grid materials.
+
+The renderer has two lighting methods that can be switched between at runtime: a spatial illuminance caching method based on DDGI, and path tracing. Path tracing is intended to be used as a reference, but is fast enough to be playable with the spatial denoiser enabled.
 
 Light is emitted by either voxels or by explicitly sampled local or directional lights.
 
-A primitive spatial à-trous denoiser is used to make the image more tolerable to look at.
+The renderer also supports translucent and mirror voxel materials.
+
+Rasterized meshes (for dynamic game entities) can be arbitrarily placed and lit, but do not themselves affect lighting.
+
+### Multiplayer
+
+The game supports multiplayer using a client-server architecture. It is extremely slow and insecure, so please only connect to your friends' servers.
 
 ## Building
 
-Get a modern version of CMake and do the `mkdir build && cd build && cmake ..` thing after cloning this repo. All dependencies are vendored or fetched with FetchContent. Should work on any sufficiently modern desktop GPU on Windows and Linux (I only test on Windows however).
+Ensure submodules are fetched by cloning the repository recursively. Then, get a modern version of CMake and do the `mkdir build && cd build && cmake ..`. All dependencies are vendored or fetched with FetchContent, so nothing needs to be installed manually.
+
+The game should build and run on any sufficiently modern desktop GPU on Windows and Linux (I only test on Windows however). If something doesn't work, please create an issue.
+
+## Media
+
+This project was featured in GP-Direct 2025: https://youtu.be/e9qK6EtqB-Q
+
+A link to the clip of this project by itself is here: https://youtu.be/Dxa1-D04SMU
+
+### Images
+
+![A voxel landscape at sunset, with floating islands visible in the sky. A thin fog hangs over the scene.](media/2.png)
+
+![A cave with two small cenotes filled with water, illuminated by a warm light. Vines hang from the ceiling.](media/3.png "If you look closely, you can see refraction in the water.")
+
+![A cave illuminated by blue glowing mushrooms.](media/4.png "This is the same cave as the previous pic, but illuminated by shrooms.")
+
+![A pond with a submerged light source and an equivalent light source floating above the surface.](media/1.png "The two light sources are exactly the same, but one's light has to pass through water before hitting the camera, making it look blue.")
 
 ## Dependencies
 
@@ -52,6 +76,8 @@ Get a modern version of CMake and do the `mkdir build && cd build && cmake ..` t
 - [ankerl::unordered_dense](https://github.com/martinus/unordered_dense/)
 - [CHOC](https://github.com/Tracktion/choc/)
 - [cereal](https://uscilab.github.io/cereal/)
+- [miniaudio](https://miniaud.io/)
+- [AngelScript](https://www.angelcode.com/)
 
 ### Vendored
 
