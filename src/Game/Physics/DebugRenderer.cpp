@@ -8,6 +8,7 @@ namespace Physics
 {
   void DebugRenderer::DrawLine(JPH::RVec3Arg inFrom, JPH::RVec3Arg inTo, JPH::ColorArg inColor)
   {
+    auto lk = std::lock_guard(*mutex_);
     lines_.emplace_back(Debug::Line{
       .aPosition = ToGlm(inFrom),
       .aColor    = ToGlm(inColor.ToVec4()),

@@ -6,11 +6,8 @@
 #include "Jolt/Renderer/DebugRendererSimple.h"
 
 #include <vector>
-
-namespace Fvog
-{
-  class Texture;
-}
+#include <mutex>
+#include <memory>
 
 namespace Physics
 {
@@ -33,6 +30,7 @@ namespace Physics
 
   private:
     std::vector<Debug::Line> lines_;
+    std::unique_ptr<std::mutex> mutex_ = std::make_unique<std::mutex>();
   };
 } // namespace Physics
 #endif
