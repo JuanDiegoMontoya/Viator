@@ -476,6 +476,10 @@ void World::InitializeGameDefinitions()
     },
   };
 
+  const auto ropeId = Item::CreateSimpleSpriteItem(items, "item_rope", "Rope", "potion_healing", 100, {0.5f, 0.25f, 0.1f});
+  items.GetRegistry().emplace<Item::Component::Usable>(ropeId, 0.25f);
+  items.GetRegistry().emplace<Item::Component::Rope>(ropeId);
+
   auto& blocks = registry_.ctx().insert_or_assign<Block::Registry>({});
 
   const auto stoneBlock = Block::CreateStandardBlock(*this,

@@ -340,6 +340,7 @@ struct Player
   bool inventoryIsOpen = false;
   entt::entity openContainerId = entt::null;
   bool showInteractPrompt = false; // TODO: Move to LocalPlayer since this info is purely visual.
+  bool attachedToRope = false;
 };
 
 // Tag for systems to exclude.
@@ -604,6 +605,23 @@ struct SpawnBlockOnContact
 {
   BlockId block = voxel_t::Null;
 };
+
+struct Grapple
+{
+  entt::entity shooter = entt::null;
+};
+
+struct RopeAttachmentPoint
+{
+  float distanceFromBase = 0;
+};
+
+// Intended for child entities that have physics that you want to keep synchronized with the parent.
+// This is used for giving the player pseudo-rigid body physics for grappling hooks to work.
+struct SyncWithParentPosition {};
+
+// If this entity has no constraints, it is deleted.
+struct DestroyWhenConstraintsBroken {};
 
 class NpcSpawnDirector
 {

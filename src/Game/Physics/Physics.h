@@ -12,7 +12,7 @@
 #include "Jolt/Physics/Collision/ShapeCast.h"
 #include "Jolt/Physics/Collision/CastResult.h"
 #include "Jolt/Physics/Collision/CollisionCollector.h"
-#include "Jolt/Physics/Constraints/Constraint.h"
+#include "Jolt/Physics/Constraints/TwoBodyConstraint.h"
 
 #include "entt/fwd.hpp"
 
@@ -41,12 +41,15 @@ namespace Physics
     // For damage-dealing colliders
     constexpr JPH::ObjectLayer HURTBOX          = 7;
     constexpr JPH::ObjectLayer HITBOX_AND_HURTBOX = 8;
-    constexpr JPH::ObjectLayer NUM_LAYERS       = 9;
+    constexpr JPH::ObjectLayer NO_COLLIDE       = 9;
+    constexpr JPH::ObjectLayer INTERACT         = 10;
+    constexpr JPH::ObjectLayer NUM_LAYERS       = 11;
 
     // Cast-only layers
-    constexpr JPH::ObjectLayer CAST_WORLD       = 10;
-    constexpr JPH::ObjectLayer CAST_PROJECTILE  = 11;
-    constexpr JPH::ObjectLayer CAST_CHARACTER   = 12;
+    constexpr JPH::ObjectLayer CAST_WORLD       = 12;
+    constexpr JPH::ObjectLayer CAST_PROJECTILE  = 13;
+    constexpr JPH::ObjectLayer CAST_CHARACTER   = 14;
+    constexpr JPH::ObjectLayer CAST_INTERACT    = 15;
   }
 
   struct ShapeSettings
@@ -103,7 +106,11 @@ namespace Physics
     JPH::RefConst<JPH::Shape> shape;
   };
   
-  void RegisterConstraint(JPH::Ref<JPH::Constraint> constraint, JPH::BodyID body1, JPH::BodyID body2);
+  void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint);
+  [[nodiscard]] std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body);
+  void RemoveConstraintsFromBody(JPH::BodyID body);
+  void DestroyConstraint(JPH::TwoBodyConstraint* constraint);
+
   [[nodiscard]] std::unique_ptr<JPH::IgnoreMultipleBodiesFilter> GetIgnoreEntityAndChildrenFilter(entt::handle handle);
 
   const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery();
@@ -154,4 +161,8 @@ namespace Physics
   };
 
   void CreateObservers(entt::registry& registry);
+
+#ifndef GAME_HEADLESS
+  void DrawDebugUI(World& world);
+#endif
 }

@@ -12,6 +12,7 @@
 #include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
 #include "Jolt/Physics/Collision/Shape/SphereShape.h"
+#include "Jolt/Physics/Constraints/DistanceConstraint.h"
 #include "spdlog/spdlog.h"
 
 Item::Registry::Registry()
@@ -235,8 +236,6 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       for (int i = 0; i < p->bullets; i++)
       {
         const float bulletScale = 0.05f;
-        auto bulletShape        = JPH::Ref(new JPH::SphereShape(.04f));
-        bulletShape->SetDensity(11000);
         const auto dir =
           Math::RandVecInCone({world.Rng().RandFloat(), world.Rng().RandFloat()}, GetForward(transform.rotation), glm::radians(p->accuracyMoa / 60.0f));
         auto up = glm::vec3(0, 1, 0);
@@ -259,6 +258,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         if (p->light)
         {
           reg.emplace<GpuLight>(b, *p->light);
+          reg.emplace<Grapple>(b, world.GetRegistry().get<const Hierarchy>(self).parent);
         }
 
         const auto inheritedVelocity = world.GetInheritedLinearVelocity(self);
@@ -393,7 +393,140 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       reg.emplace_or_replace<LinearPath>(self, *p);
     }
 
-    if (subtractCountFromState && !world.GetRegistry().ctx().get<Debugging>().infiniteItems)
+    if (const auto* p = iReg.try_get<const Component::Rope>(state.id))
+    {
+      const auto& transform = reg.get<const GlobalTransform>(self);
+      state.useAccum        = glm::clamp(state.useAccum - dt, 0.0f, dt);
+
+      const float bulletScale = 0.05f;
+      const auto dir = GetForward(transform.rotation);
+      auto up = glm::vec3(0, 1, 0);
+      if (glm::epsilonEqual(abs(dot(dir, glm::vec3(0, 1, 0))), 1.0f, 0.001f))
+      {
+        up = {0, 0, 1};
+      }
+      const auto rot = glm::quatLookAtRH(dir, up);
+      const auto projectilePos = transform.position + glm::vec3(0, 0.1f, 0) + GetForward(transform.rotation) * 1.0f;
+      const auto rope   = world.CreateRenderableEntity(projectilePos, rot, bulletScale);
+
+      reg.emplace<Name>(rope).name = "Rope Base";
+      reg.emplace<Mesh>(rope).name = "frog";
+
+      const auto inheritedVelocity = world.GetInheritedLinearVelocity(self);
+      const auto projectileVelocity = dir * 15.0f + inheritedVelocity;
+      auto& projectile             = reg.emplace<Projectile>(rope);
+      projectile.initialSpeed      = glm::length(projectileVelocity);
+      projectile.drag              = 0.25f;
+      projectile.restitution       = 0.25f;
+      projectile.sticky            = true;
+      projectile.stickyDist        = 0.125f;
+      projectile.particles         = true;
+
+      reg.emplace<LinearVelocity>(rope, projectileVelocity);
+
+      auto& contactDamage     = reg.emplace<ContactDamage>(rope);
+      contactDamage.damage    = 5;
+      contactDamage.knockback = 1;
+
+      if (auto* team = world.GetTeamFlags(self))
+      {
+        reg.emplace<TeamFlags>(rope, *team);
+      }
+
+      subtractCountFromState = true;
+
+      const auto ropePhysics       = world.CreateRenderableEntity(projectilePos, rot, bulletScale);
+      reg.emplace<Name>(ropePhysics).name = "Rope Physics";
+      reg.emplace<SyncWithParentPosition>(ropePhysics);
+      auto& rph = reg.get<Hierarchy>(ropePhysics);
+      rph.useLocalPositionAsGlobal = true;
+      rph.useLocalRotationAsGlobal = true;
+      reg.emplace<Physics::RigidBodySettings>(ropePhysics, Physics::RigidBodySettings{
+        .shape = {.shape = Physics::Sphere{.radius = 0.125f}},
+        .motionType = JPH::EMotionType::Kinematic,
+        .layer = Physics::Layers::NO_COLLIDE,
+      });
+      world.SetParent(ropePhysics, rope);
+
+      auto nextParent           = ropePhysics;
+      constexpr int numSegments = 5;
+      const float segmentLength = p->length / float(numSegments);
+      for (int i = 0; i < numSegments; i++)
+      {
+        const auto rope2              = world.CreateRenderableEntity(projectilePos, rot, bulletScale);
+        reg.emplace<Name>(rope2).name = "Rope Segment";
+        world.SetParent(rope2, nextParent);
+        auto& r2h                    = reg.get<Hierarchy>(rope2);
+        r2h.useLocalPositionAsGlobal = true;
+        r2h.useLocalRotationAsGlobal = true;
+        reg.emplace<Physics::RigidBodySettings>(rope2,
+          Physics::RigidBodySettings{
+            .shape      = {.shape = Physics::Sphere{.radius = 0.125f}, .density = 0.001f},
+            .motionType = JPH::EMotionType::Dynamic,
+            .layer      = Physics::Layers::CHARACTER,
+          });
+        reg.emplace<LinearVelocity>(rope2, projectileVelocity * 0.25f / float(i + 1));
+
+        // Connect rope2 to its parent
+        {
+          auto settings                 = JPH::Ref(new JPH::DistanceConstraintSettings());
+          settings->mSpace              = JPH::EConstraintSpace::LocalToBodyCOM;
+          settings->mMinDistance        = segmentLength;
+          settings->mMaxDistance        = segmentLength;
+          settings->mConstraintPriority = i;
+
+          auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2).body);
+          Physics::RegisterConstraint(constraint);
+        }
+
+        // The actual interactable thingy
+        const auto rope2i              = world.CreateRenderableEntity(projectilePos, rot, bulletScale);
+        reg.emplace<Name>(rope2i).name = "Rope Interact";
+        world.SetParent(rope2i, rope2);
+        auto& r2ih                    = reg.get<Hierarchy>(rope2i);
+        r2ih.useLocalPositionAsGlobal = true;
+        r2ih.useLocalRotationAsGlobal = true;
+        constexpr float capsuleRadius = 0.25f;
+        reg.emplace<Physics::RigidBodySettings>(rope2i,
+          Physics::RigidBodySettings{
+            .shape      = {.shape = Physics::Capsule{.radius = capsuleRadius, .cylinderHalfHeight = segmentLength / 2}, .density = 0.0001f},
+            .isSensor   = false,
+            .gravityFactor = 0,
+            .motionType = JPH::EMotionType::Dynamic,
+            .layer      = Physics::Layers::INTERACT,
+          });
+        reg.emplace<RopeAttachmentPoint>(rope2i, (i + 0.5f) * segmentLength);
+
+        // Connect rope2i to rope2 *and* its parent
+        {
+          auto settings                 = JPH::Ref(new JPH::DistanceConstraintSettings());
+          settings->mSpace              = JPH::EConstraintSpace::LocalToBodyCOM;
+          settings->mMinDistance        = 0;
+          settings->mMaxDistance        = 0.1f;
+          settings->mPoint2             = JPH::Vec3(0, segmentLength / 2, 0);
+
+          auto constraint1 = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2i).body);
+          Physics::RegisterConstraint(constraint1);
+          settings->mPoint2 = JPH::Vec3(0, -segmentLength / 2, 0);
+          auto constraint2 = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(rope2).body, reg.get<Physics::RigidBody>(rope2i).body);
+          Physics::RegisterConstraint(constraint2);
+        }
+
+        nextParent = rope2;
+      }
+
+      // Create a constraint between the first and last segments to constrain the overall length (more stable than several smaller constraints).
+      //auto settings                 = JPH::Ref(new JPH::DistanceConstraintSettings());
+      //settings->mSpace              = JPH::EConstraintSpace::LocalToBodyCOM;
+      //settings->mMinDistance        = p->length;
+      //settings->mMaxDistance        = p->length;
+      //settings->mConstraintPriority = 99;
+
+      //auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(ropePhysics).body);
+      //Physics::RegisterConstraint(constraint);
+    }
+
+    if (subtractCountFromState && !reg.ctx().get<Debugging>().infiniteItems)
     {
       state.count -= 1;
     }

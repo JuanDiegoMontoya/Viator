@@ -1537,6 +1537,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   {
     dynamic_cast<PlayerAudio*>(head_->GetAudio())->DrawDebugUI();
     world.GetRegistry().ctx().get<Scripting*>()->DrawDebugUI(world);
+    Physics::DrawDebugUI(world);
 
     ShowEditor(dt, world, EditorMode::Entities);
     ShowEditor(dt, world, EditorMode::Items);

@@ -196,7 +196,7 @@ entt::entity WormBossDefinition::Spawn(World& world, glm::vec3 position, [[maybe
 
       auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
       // constraint->SetNumPositionStepsOverride(10);
-      Physics::RegisterConstraint(constraint, *prevBody2, body);
+      Physics::RegisterConstraint(constraint);
 
       auto& h                    = registry.get<Hierarchy>(a);
       h.useLocalPositionAsGlobal = true;

@@ -172,6 +172,11 @@ namespace Item
       ItemId effectId;
       float duration;
     };
+
+    struct Rope
+    {
+      float length = 5;
+    };
   } // namespace Component
 
   class Registry

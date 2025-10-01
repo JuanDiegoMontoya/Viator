@@ -21,9 +21,11 @@
 #include "World.h"
 #include "Game/Audio.h"
 #include "Game/Scripting.h"
+#include "Physics/PhysicsUtils.h"
 
 #include "tracy/Tracy.hpp"
 #include "entt/signal/dispatcher.hpp"
+#include "Jolt/Physics/Constraints/DistanceConstraint.h"
 
 #include "FastNoise/FastNoise.h"
 
@@ -73,6 +75,8 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
   ZoneScoped;
   ASSERT(ppair);
   auto& pair = *ppair;
+
+  auto& registry = world.GetRegistry();
 
   if (world.GetRegistry().all_of<ForwardCollisionsToParent>(pair.entity1))
   {
@@ -233,6 +237,44 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         {
           Block::OnTryPlaceBlock(world, voxelPosition, p->block);
         }
+        return true;
+      }
+      return false;
+    });
+
+  // Grappling hook.
+  TryTwice(pair,
+    [&](entt::entity entity1, entt::entity)
+    {
+      if (auto* p = world.GetRegistry().try_get<Grapple>(entity1))
+      {
+        const auto& faker = world.GetChildNamed(p->shooter, "Player fake physics");
+        const auto& rb    = world.GetRegistry().get<const Physics::RigidBody>(faker);
+        const auto& body1 = rb.body;
+        registry.get<Player>(p->shooter).attachedToRope = true;
+        
+        const auto newEntity = world.CreateRenderableEntity(ppair->position);
+        registry.emplace<Physics::RigidBodySettings>(newEntity,
+          Physics::RigidBodySettings{
+            .shape      = Physics::ShapeSettings{Physics::Sphere{.125f}},
+            .activate   = true,
+            .isSensor   = true,
+            .motionType = JPH::EMotionType::Kinematic,
+            .layer      = Physics::Layers::PROJECTILE,
+          });
+        registry.emplace<Name>(newEntity, "Grappled location");
+        registry.emplace<DestroyWhenConstraintsBroken>(newEntity);
+
+        const auto& body2 = world.GetRegistry().get<const Physics::RigidBody>(newEntity).body;
+
+        const auto ropeLength  = glm::distance(registry.get<const GlobalTransform>(faker).position, ppair->position);
+        auto settings          = JPH::Ref(new JPH::DistanceConstraintSettings());
+        settings->mSpace       = JPH::EConstraintSpace::LocalToBodyCOM;
+        settings->mMinDistance = 0;
+        settings->mMaxDistance = ropeLength;
+
+        auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, body1, body2);
+        Physics::RegisterConstraint(constraint);
         return true;
       }
       return false;

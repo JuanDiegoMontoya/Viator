@@ -66,7 +66,7 @@ namespace Physics
         switch (inObject1)
         {
           using namespace Layers;
-        case WORLD: return inObject2 != HITBOX && inObject2 != HURTBOX && inObject2 != HITBOX_AND_HURTBOX;
+        case WORLD: return inObject2 != HITBOX && inObject2 != HURTBOX && inObject2 != HITBOX_AND_HURTBOX && inObject2 != NO_COLLIDE && inObject2 != INTERACT;
         case CHARACTER: return inObject2 == WORLD;
         case PROJECTILE: return inObject2 == WORLD || inObject2 == HITBOX || inObject2 == HITBOX_AND_HURTBOX;
         case DROPPED_ITEM: return inObject2 == WORLD || inObject2 == DROPPED_ITEM || inObject2 == HITBOX || inObject2 == HITBOX_AND_HURTBOX;
@@ -77,7 +77,10 @@ namespace Physics
         case CAST_WORLD: return inObject2 == WORLD;
         case CAST_PROJECTILE: return inObject2 == WORLD || inObject2 == HITBOX || inObject2 == HITBOX_AND_HURTBOX;
         case CAST_CHARACTER: return inObject2 == WORLD || inObject2 == CHARACTER;
-        default: JPH_ASSERT(false); return false;
+        case CAST_INTERACT: return inObject2 == WORLD || inObject2 == INTERACT;
+        case NO_COLLIDE: return false;
+        case INTERACT: return inObject2 == CAST_INTERACT;
+        default: ASSERT(false); return false;
         }
       }
     };
@@ -96,6 +99,8 @@ namespace Physics
         mObjectToBroadPhase[Layers::HITBOX]             = BroadPhaseLayers::MOVING;
         mObjectToBroadPhase[Layers::HURTBOX]            = BroadPhaseLayers::MOVING;
         mObjectToBroadPhase[Layers::HITBOX_AND_HURTBOX] = BroadPhaseLayers::MOVING;
+        mObjectToBroadPhase[Layers::NO_COLLIDE]         = BroadPhaseLayers::NON_MOVING;
+        mObjectToBroadPhase[Layers::INTERACT]           = BroadPhaseLayers::NON_MOVING;
       }
 
       JPH::uint GetNumBroadPhaseLayers() const override
@@ -105,7 +110,7 @@ namespace Physics
 
       JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override
       {
-        JPH_ASSERT(inLayer < Layers::NUM_LAYERS);
+        ASSERT(inLayer < Layers::NUM_LAYERS);
         return mObjectToBroadPhase[inLayer];
       }
 
@@ -116,7 +121,7 @@ namespace Physics
         {
         case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::NON_MOVING: return "NON_MOVING";
         case (JPH::BroadPhaseLayer::Type)BroadPhaseLayers::MOVING: return "MOVING";
-        default: JPH_ASSERT(false); return "INVALID";
+        default: ASSERT(false); return "INVALID";
         }
       }
 #endif // JPH_EXTERNAL_PROFILE || JPH_PROFILE_ENABLED
@@ -140,10 +145,13 @@ namespace Physics
         case Layers::HITBOX:
         case Layers::HURTBOX:
         case Layers::HITBOX_AND_HURTBOX: return inLayer2 == BroadPhaseLayers::MOVING;
+        case Layers::NO_COLLIDE: return false;
+        case Layers::INTERACT: return inLayer2 == BroadPhaseLayers::NON_MOVING;
         case Layers::CAST_WORLD: return inLayer2 == BroadPhaseLayers::NON_MOVING;
         case Layers::CAST_PROJECTILE:
         case Layers::CAST_CHARACTER: return true;
-        default: JPH_ASSERT(false); return false;
+        case Layers::CAST_INTERACT: return inLayer2 == BroadPhaseLayers::NON_MOVING;
+        default: ASSERT(false); return false;
         }
       }
     };
@@ -168,8 +176,8 @@ namespace Physics
       JPH::BodyInterface* bodyInterfaceNoLock{};
       std::shared_mutex contactListenerMutex;
 
-      std::unordered_map<JPH::Ref<JPH::Constraint>, std::pair<JPH::BodyID, JPH::BodyID>> constraintToBodyPair;
-      std::unordered_multimap<JPH::BodyID, JPH::Constraint*> bodyToConstraints;
+      std::unordered_map<JPH::Ref<JPH::TwoBodyConstraint>, std::pair<JPH::BodyID, JPH::BodyID>> constraintToBodyPair;
+      std::unordered_multimap<JPH::BodyID, JPH::TwoBodyConstraint*> bodyToConstraints;
       std::vector<JPH::CharacterVirtual*> allCharacters;
       std::vector<JPH::Character*> allCharactersShrimple;
       std::vector<ContactAddedPair> contactAddedPairs;
@@ -397,8 +405,10 @@ namespace Physics
     registry.emplace_or_replace<CharacterControllerShrimple>(entity, character);
   }
 
-  void RegisterConstraint(JPH::Ref<JPH::Constraint> constraint, JPH::BodyID body1, JPH::BodyID body2)
+  void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint)
   {
+    const auto body1 = constraint->GetBody1()->GetID();
+    const auto body2 = constraint->GetBody2()->GetID();
     s->engine->AddConstraint(constraint);
     s->constraintToBodyPair.emplace(constraint, std::make_pair(body1, body2));
     s->bodyToConstraints.emplace(body1, constraint.GetPtr());
@@ -436,7 +446,7 @@ namespace Physics
     return bodyFilter;
   }
 
-  static void RemoveConstraintsFromBody(JPH::BodyID body)
+  void RemoveConstraintsFromBody(JPH::BodyID body)
   {
     auto constraintsToRemoveFromOtherBodies = std::vector<std::pair<JPH::BodyID, JPH::Constraint*>>();
 
@@ -451,7 +461,7 @@ namespace Physics
       constraintsToRemoveFromOtherBodies.emplace_back(body == bodyPair.first ? bodyPair.second : bodyPair.first, constraint);
       s->constraintToBodyPair.erase(bodyPairIt);
     }
-
+    
     s->bodyToConstraints.erase(body);
 
     // Unmap the constraints from other bodies.
@@ -465,6 +475,46 @@ namespace Physics
           s->bodyToConstraints.erase(it);
           break;
         }
+      }
+    }
+  }
+
+  std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body)
+  {
+    auto constraints = std::vector<JPH::TwoBodyConstraint*>();
+    auto [begin, end] = s->bodyToConstraints.equal_range(body);
+    for (auto it = begin; it != end; ++it)
+    {
+      constraints.push_back(it->second);
+    }
+    return constraints;
+  }
+
+  void DestroyConstraint(JPH::TwoBodyConstraint* constraint)
+  {
+    auto it = s->constraintToBodyPair.find(constraint);
+    ASSERT(it != s->constraintToBodyPair.end());
+
+    auto bodyPair = it->second;
+    s->engine->RemoveConstraint(constraint);
+    s->constraintToBodyPair.erase(it);
+
+    auto [begin, end] = s->bodyToConstraints.equal_range(bodyPair.first);
+    for (auto it2 = begin; it2 != end; ++it2)
+    {
+      if (it2->second == constraint)
+      {
+        s->bodyToConstraints.erase(it2);
+        break;
+      }
+    }
+    auto [begin2, end2] = s->bodyToConstraints.equal_range(bodyPair.second);
+    for (auto it2 = begin2; it2 != end2; ++it2)
+    {
+      if (it2->second == constraint)
+      {
+        s->bodyToConstraints.erase(it2);
+        break;
       }
     }
   }
@@ -719,11 +769,12 @@ namespace Physics
       s->bodyInterfaceNoLock->SetLinearVelocity(cc.character->GetBodyID(), ToJolt(linearVelocity.v));
     }
 
+
     // Update character controllers
     for (auto& character : s->allCharacters)
     {
       ZoneScopedN("CharacterVirtual->ExtendedUpdate");
-
+      
       character->ExtendedUpdate(dt,
         ToJolt(s->gravity),
         JPH::CharacterVirtual::ExtendedUpdateSettings{
@@ -747,6 +798,25 @@ namespace Physics
         world.UpdateLocalTransform(entity);
       }
       world.GetRegistry().emplace_or_replace<LinearVelocity>(entity, ToGlm(character->GetLinearVelocity()));
+    }
+
+    // Sync position of entities with SyncWithParentPosition component to their parent before physics update.
+    for (auto&& [entity, transform, hierarchy, rigidBody, linearVelocity] : world.GetRegistry().view<LocalTransform, const Hierarchy, const RigidBody, LinearVelocity, const SyncWithParentPosition>().each())
+    {
+      const auto parent     = hierarchy.parent;
+      const auto& parentTransform = world.GetRegistry().get<const GlobalTransform>(parent);
+      //const auto& parentVelocity  = world.GetRegistry().get<const LinearVelocity>(parent);
+
+      transform.position = parentTransform.position;
+      //linearVelocity     = parentVelocity;
+      linearVelocity = {};
+      world.UpdateLocalTransform(entity);
+
+      s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
+        ToJolt(transform.position),
+        ToJolt(transform.rotation).Normalized(),
+        JPH::EActivation::Activate);
+      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
     }
 
     // Update world
@@ -789,6 +859,29 @@ namespace Physics
         transformMut.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
         linearVelocityMut.v   = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
         world.UpdateLocalTransform(entity);
+      }
+    }
+
+    // Update parents of entities with SyncWithParentPosition component to their child's position after physics update.
+    for (auto&& [entity, rigidBody, rigidBodySettings, transform] :
+      world.GetRegistry().view<const RigidBody, const RigidBodySettings, const LocalTransform, const SyncWithParentPosition>().each())
+    {
+      if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && s->bodyInterfaceNoLock->IsActive(rigidBody.body))
+      {
+        auto& transformMut = world.GetRegistry().get<LocalTransform>(entity);
+
+        transformMut.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
+        transformMut.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
+        world.UpdateLocalTransform(entity);
+        
+        const auto& h              = world.GetRegistry().get<Hierarchy>(entity);
+        const auto parent          = h.parent;
+        auto& parentLocalTransform = world.GetRegistry().get<LocalTransform>(parent);
+        //auto& parentVelocity       = world.GetRegistry().get<LinearVelocity>(parent);
+
+        parentLocalTransform.position = transformMut.position;
+        //parentVelocity.v              = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
+        world.UpdateLocalTransform(parent);
       }
     }
 
@@ -1104,5 +1197,77 @@ namespace Physics
   {
     unorderedHits.emplace_back(inResult);
   }
-
 } // namespace Physics
+
+#ifndef GAME_HEADLESS
+#include "ImGui.h"
+namespace Physics
+{
+  void DrawDebugUI(World& world)
+  {
+    if (ImGui::Begin("Physics"))
+    {
+      auto& registry = world.GetRegistry();
+
+      if (ImGui::BeginTabBar("PhysicsTabBar"))
+      {
+        if (ImGui::BeginTabItem("Bodies"))
+        {
+          if (ImGui::BeginTable("BodiesTable", 2))
+          {
+            ImGui::TableSetupColumn("Entity");
+            ImGui::TableSetupColumn("Layer");
+            ImGui::TableHeadersRow();
+
+            auto bodies = JPH::BodyIDVector();
+            s->engine->GetBodies(bodies);
+
+            for (auto body : bodies)
+            {
+              const auto entity = static_cast<entt::entity>(GetBodyInterface().GetUserData(body));
+              
+              ImGui::TableNextRow();
+              ImGui::TableNextColumn();
+              ImGui::Text("%d (%s)", entt::to_entity(entity), registry.get<Name>(entity).name.c_str());
+
+              ImGui::TableNextColumn();
+              ImGui::Text("%d", (int)GetBodyInterface().GetObjectLayer(body));
+            }
+
+            ImGui::EndTable();
+          }
+
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Constraints"))
+        {
+          if (ImGui::BeginTable("Constraints", 2))
+          {
+            ImGui::TableSetupColumn("Body 1");
+            ImGui::TableSetupColumn("Body 2");
+            ImGui::TableHeadersRow();
+
+            for (const auto& [constraint, bodies] : s->constraintToBodyPair)
+            {
+              const auto entity1 = static_cast<entt::entity>(GetBodyInterface().GetUserData(bodies.first));
+              const auto entity2 = static_cast<entt::entity>(GetBodyInterface().GetUserData(bodies.second));
+
+              ImGui::TableNextRow();
+              ImGui::TableNextColumn();
+              ImGui::Text("%d (%s)", entt::to_entity(entity1), registry.get<Name>(entity1).name.c_str());
+
+              ImGui::TableNextColumn();
+              ImGui::Text("%d (%s)", entt::to_entity(entity2), registry.get<Name>(entity2).name.c_str());
+            }
+            ImGui::EndTable();
+          }
+          ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+      }
+    }
+  }
+}
+#endif

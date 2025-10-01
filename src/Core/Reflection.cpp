@@ -1021,6 +1021,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(Player, openContainerId)
     TRAITS(TRANSIENT)
     DATA(Player, showInteractPrompt)
+    TRAITS(TRANSIENT)
+    DATA(Player, attachedToRope)
     TRAITS(TRANSIENT);
 
   REFLECT_COMPONENT(InputState, EDITOR_READ_ONLY)
@@ -1533,6 +1535,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(Item::Component::GiveEffectOnUse, effectId)
     DATA(Item::Component::GiveEffectOnUse, duration);
 
+  REFLECT_COMPONENT(Item::Component::Rope, ITEM_COMPONENT | REPLICATED)
+    DATA(Item::Component::Rope, length);
+
   REFLECT_TYPE(Block::DropSelf);
 
   REFLECT_ENUM(BlockDamageFlagBit)
@@ -1627,5 +1632,14 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_COMPONENT(Block::Component::TransformWhenUsed, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::TransformWhenUsed, block);
 
-  REFLECT_COMPONENT(IsInWater, REPLICATED | TRIVIAL);
+  REFLECT_COMPONENT(IsInWater, REPLICATED);
+
+  REFLECT_COMPONENT(Grapple, REPLICATED)
+    DATA(Grapple, shooter);
+
+  REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
+  REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
+
+  REFLECT_COMPONENT(RopeAttachmentPoint, REPLICATED)
+    DATA(RopeAttachmentPoint, distanceFromBase);
 }

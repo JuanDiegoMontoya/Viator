@@ -19,6 +19,7 @@
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
 #include "Jolt/Physics/Collision/RayCast.h"
+#include "Jolt/Physics/Constraints/DistanceConstraint.h"
 #include "Jolt/Physics/Constraints/SwingTwistConstraint.h"
 #include "spdlog/spdlog.h"
 
@@ -152,7 +153,7 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
         // settings->mMaxDistance = 1;
         auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
         // constraint->SetNumPositionStepsOverride(100);
-        Physics::RegisterConstraint(constraint, *prevBody2, body);
+        Physics::RegisterConstraint(constraint);
       }
       auto& h                    = registry.get<Hierarchy>(a);
       h.useLocalPositionAsGlobal = true;
@@ -750,7 +751,7 @@ void World::FixedUpdate(float dt)
           {
             auto& velocity          = registry_.get<LinearVelocity>(entity).v;
             const auto realVelocity = (transform.position - cc->previousPosition) / dt;
-            velocity                = glm::mix(realVelocity, velocity, glm::lessThan(glm::abs(velocity), glm::abs(realVelocity)));
+            velocity                = glm::length(realVelocity) < glm::length(velocity) ? realVelocity : velocity;
 
             const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
             const float acceleration = isInWater
@@ -790,7 +791,8 @@ void World::FixedUpdate(float dt)
               });
             }
 
-            if (isOnGround)
+            auto* player = registry_.try_get<Player>(entity);
+            if (isOnGround || (player && player->attachedToRope))
             {
               if (input.jump)
               {
@@ -803,9 +805,17 @@ void World::FixedUpdate(float dt)
                 });
                 velocity.y      = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::JumpImpulseModifier, isInWater ? attribs->waterJumpImpulse : attribs->jumpInitialImpulse);
                 deltaVelocity.y = 0;
+
+                if (player && player->attachedToRope)
+                {
+                  player->attachedToRope = false;
+                  const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
+                  Physics::RemoveConstraintsFromBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+                }
               }
               attribs->timeSinceJumped = 0;
             }
+
             if (input.jump &&
                 attribs->timeSinceJumped <
                   (isInWater ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterJumpControlTimeModifier, attribs->waterJumpControlTime)
@@ -830,7 +840,26 @@ void World::FixedUpdate(float dt)
               deltaVelocity.z      = deltaXZ1[1];
             }
 
-            const float deceleration = isInWater ? attribs->waterDeceleration : (isOnGround && !input.jump ? attribs->deceleration : attribs->airDeceleration);
+            const float deceleration = [&]
+            {
+              if (isInWater)
+              {
+                return attribs->waterDeceleration;
+              }
+
+              // Rope movement feels better when there's no air deceleration.
+              if (player && player->attachedToRope)
+              {
+                return 0.0f;
+              }
+
+              if (isOnGround && !input.jump)
+              {
+                return attribs->deceleration;
+              }
+
+              return attribs->airDeceleration;
+            }();
 
             // Decelerate when no forward input is present.
             const auto velocityXZ = glm::vec2(velocity.x, velocity.z);
@@ -1000,6 +1029,16 @@ void World::FixedUpdate(float dt)
       }
     }
 
+    {
+      for (auto&& [entity, rigidBody] : registry_.view<const Physics::RigidBody, const DestroyWhenConstraintsBroken>().each())
+      {
+        if (Physics::GetConstraintsForBody(rigidBody.body).empty())
+        {
+          registry_.emplace<DeferredDelete>(entity);
+        }
+      }
+    }
+
     // Player interaction
     // if (IsServer())
     {
@@ -1008,7 +1047,7 @@ void World::FixedUpdate(float dt)
       {
         const auto forward         = GetForward(transform.rotation);
         constexpr float RAY_LENGTH = 4.0f;
-        auto rayCast               = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(forward * RAY_LENGTH));
+        const auto rayCast         = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(forward * RAY_LENGTH));
         entt::entity hitEntity     = entt::null;
 
         bool showInteractPrompt = false;
@@ -1056,6 +1095,28 @@ void World::FixedUpdate(float dt)
           }
         }
 
+        if (!showInteractPrompt)
+        {
+          // Cast a ray that looks for other kinds of interactables, like rope attachment points, but only if an interact prompt is not already active.
+          auto result2 = JPH::RayCastResult();
+          if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+                result2,
+                Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::INTERACT),
+                Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_INTERACT),
+                *Physics::GetIgnoreEntityAndChildrenFilter({registryOld_, entity})))
+          {
+            const auto hitPos = transform.position + forward * (result2.mFraction * RAY_LENGTH + 1e-3f);
+            hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result2.mBodyID));
+            if (registry_.valid(hitEntity))
+            {
+              if (registry_.all_of<RopeAttachmentPoint>(hitEntity))
+              {
+                showInteractPrompt = true;
+              }
+            }
+          }
+        }
+
         player.showInteractPrompt = showInteractPrompt;
 
         if (input.interact)
@@ -1065,6 +1126,46 @@ void World::FixedUpdate(float dt)
             if (auto [ent, inv] = GetComponentFromAncestor<Inventory>(hitEntity); inv)
             {
               player.openContainerId = ent;
+            }
+
+            if (const auto* p = registry_.try_get<const RopeAttachmentPoint>(hitEntity))
+            {
+              if (!player.attachedToRope)
+              {
+                player.attachedToRope = true;
+
+                const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
+                const auto& h          = registry_.get<const Hierarchy>(hitEntity);
+
+                // Constrain player to the point on the rope that they grabbed.
+                {
+                  auto settings          = JPH::Ref(new JPH::DistanceConstraintSettings());
+                  settings->mSpace       = JPH::EConstraintSpace::LocalToBodyCOM;
+                  settings->mMinDistance = 0.0f;
+                  settings->mMaxDistance = 0.15f;
+                  settings->mConstraintPriority = 100;
+                  //settings->mPoint1             = JPH::Vec3(0, 0, -0.5f);
+                
+                  auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
+                    registry_.get<const Physics::RigidBody>(fakePhysics).body,
+                    registry_.get<const Physics::RigidBody>(h.parent).body);
+                  Physics::RegisterConstraint(constraint);
+                }
+
+                // Constrain player to the base of the rope with p->distanceFromBase.
+                {
+                  auto settings                 = JPH::Ref(new JPH::DistanceConstraintSettings());
+                  settings->mSpace              = JPH::EConstraintSpace::LocalToBodyCOM;
+                  settings->mMinDistance        = p->distanceFromBase;
+                  settings->mMaxDistance        = p->distanceFromBase;
+                  settings->mConstraintPriority = 101;
+
+                  auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
+                    registry_.get<const Physics::RigidBody>(fakePhysics).body,
+                    registry_.get<const Physics::RigidBody>(GetChildNamed(GetRootEntityOfHierarchy(hitEntity), "Rope Physics")).body);
+                  Physics::RegisterConstraint(constraint);
+                }
+              }
             }
           }
         }
@@ -1645,6 +1746,28 @@ void World::GivePlayerColliders(entt::entity playerEntity)
       .layer      = Physics::Layers::HITBOX,
     });
   SetParent(pHitbox, playerEntity);
+
+  // Rigid body at the player's location that's used just for placing contraints on the player.
+  auto pFakePhysics = registry_.create();
+  registry_.emplace<Name>(pFakePhysics).name = "Player fake physics";
+  registry_.emplace<SyncWithParentPosition>(pFakePhysics);
+  auto& tpFakePhysics = registry_.emplace<LocalTransform>(pFakePhysics);
+  tpFakePhysics.position = {};
+  tpFakePhysics.rotation = glm::identity<glm::quat>();
+  tpFakePhysics.scale    = 1;
+  registry_.emplace<GlobalTransform>(pFakePhysics) = {{}, glm::identity<glm::quat>(), 1};
+  auto& hierarchy = registry_.emplace<Hierarchy>(pFakePhysics);
+  hierarchy.useLocalPositionAsGlobal = true;
+  hierarchy.useLocalRotationAsGlobal = true;
+  registry_.emplace<Physics::RigidBodySettings>(pFakePhysics,
+    Physics::RigidBodySettings{
+      .shape      = Physics::ShapeSettings{.shape = Physics::Sphere({0.0125f}), .density = 1000},
+      .isSensor   = false,
+      .gravityFactor = 0,
+      .motionType = JPH::EMotionType::Dynamic,
+      .layer      = Physics::Layers::NO_COLLIDE,
+    });
+  SetParent(pFakePhysics, playerEntity);
 }
 
 void World::KillPlayer(entt::entity playerEntity)
@@ -1889,7 +2012,7 @@ entt::entity World::GetRootEntityOfHierarchy(entt::entity entity) const
 {
   if (auto* h = registry_.try_get<const Hierarchy>(entity); h && h->parent != entt::null)
   {
-    return GetRootEntityOfHierarchy(entity);
+    return GetRootEntityOfHierarchy(h->parent);
   }
   return entity;
 }
