@@ -480,6 +480,14 @@ void World::InitializeGameDefinitions()
   items.GetRegistry().emplace<Item::Component::Usable>(ropeId, 0.25f);
   items.GetRegistry().emplace<Item::Component::Rope>(ropeId);
 
+  const auto grappleId = Item::CreateSimpleSpriteItem(items, "item_grappling_hook", "Grappling Hook", "potion_healing");
+  items.GetRegistry().emplace<Item::Component::Usable>(grappleId, 0.25f);
+  items.GetRegistry().emplace<Item::Component::GrapplingHookLauncher>(grappleId) = {
+    .maxDistance      = 10,
+    .launchVelocity   = 30,
+    .pullAcceleration = 10,
+  };
+
   auto& blocks = registry_.ctx().insert_or_assign<Block::Registry>({});
 
   const auto stoneBlock = Block::CreateStandardBlock(*this,

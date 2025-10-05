@@ -1634,12 +1634,38 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(IsInWater, REPLICATED);
 
+  REFLECT_COMPONENT(ShortenConstraintsOverTime, REPLICATED)
+    DATA(ShortenConstraintsOverTime, velocity)
+    DATA(ShortenConstraintsOverTime, maxVelocity)
+    DATA(ShortenConstraintsOverTime, acceleration)
+    DATA(ShortenConstraintsOverTime, maxAbsLambdaPosition)
+    DATA(ShortenConstraintsOverTime, springFrequency)
+    DATA(ShortenConstraintsOverTime, maxSpringFrequency)
+    DATA(ShortenConstraintsOverTime, springFrequencyVelocity)
+    DATA(ShortenConstraintsOverTime, springDamping);
+
   REFLECT_COMPONENT(Grapple, REPLICATED)
-    DATA(Grapple, shooter);
+    DATA_BASE(Grapple, shooter)
+    DATA_BASE(Grapple, shortenConstraints);
+  
+  REFLECT_COMPONENT(Item::Component::GrapplingHookLauncher, ITEM_COMPONENT | REPLICATED)
+    DATA_BASE(Item::Component::GrapplingHookLauncher, maxDistance, PROP_MAX(100.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, launchVelocity, PROP_MAX(100.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, pullAcceleration, PROP_MAX(100.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, pullMaxVelocity, PROP_MAX(100.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, pullInitialVelocity, PROP_MAX(100.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, initialSpringFrequency, PROP_MAX(20.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, maxSpringFrequency, PROP_MAX(20.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, springFrequencyVelocity, PROP_MAX(50.0f))
+    DATA_BASE(Item::Component::GrapplingHookLauncher, springDamping);
 
   REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
   REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
 
   REFLECT_COMPONENT(RopeAttachmentPoint, REPLICATED)
     DATA(RopeAttachmentPoint, distanceFromBase);
+  
+  REFLECT_COMPONENT(DespawnWhenFarFromEntity, REPLICATED)
+    DATA(DespawnWhenFarFromEntity, entity)
+    DATA(DespawnWhenFarFromEntity, maxDistance);
 }

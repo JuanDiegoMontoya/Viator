@@ -34,6 +34,7 @@
 #include "Jolt/Physics/Collision/RayCast.h"
 #include "Jolt/Physics/Collision/CollisionCollector.h"
 #include "Jolt/Physics/Collision/CollidePointResult.h"
+#include "Jolt/Physics/Constraints/DistanceConstraint.h"
 
 #include "entt/entity/handle.hpp"
 #include "entt/signal/dispatcher.hpp"
@@ -1242,10 +1243,13 @@ namespace Physics
 
         if (ImGui::BeginTabItem("Constraints"))
         {
-          if (ImGui::BeginTable("Constraints", 2))
+          if (ImGui::BeginTable("Constraints", 5))
           {
             ImGui::TableSetupColumn("Body 1");
             ImGui::TableSetupColumn("Body 2");
+            ImGui::TableSetupColumn("Min");
+            ImGui::TableSetupColumn("Max");
+            ImGui::TableSetupColumn("Lambda");
             ImGui::TableHeadersRow();
 
             for (const auto& [constraint, bodies] : s->constraintToBodyPair)
@@ -1259,6 +1263,24 @@ namespace Physics
 
               ImGui::TableNextColumn();
               ImGui::Text("%d (%s)", entt::to_entity(entity2), registry.get<Name>(entity2).name.c_str());
+
+              ImGui::TableNextColumn();
+              if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
+              {
+                ImGui::Text("%.3f", static_cast<const JPH::DistanceConstraint*>(constraint.GetPtr())->GetMinDistance());
+              }
+
+              ImGui::TableNextColumn();
+              if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
+              {
+                ImGui::Text("%.3f", static_cast<const JPH::DistanceConstraint*>(constraint.GetPtr())->GetMaxDistance());
+              }
+
+              ImGui::TableNextColumn();
+              if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
+              {
+                ImGui::Text("%.3f", static_cast<const JPH::DistanceConstraint*>(constraint.GetPtr())->GetTotalLambdaPosition());
+              }
             }
             ImGui::EndTable();
           }

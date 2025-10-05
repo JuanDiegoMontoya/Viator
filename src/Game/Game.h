@@ -601,14 +601,34 @@ struct DespawnOnCollision
   int count = 1;
 };
 
+struct DespawnWhenFarFromEntity
+{
+  entt::entity entity = entt::null;
+  float maxDistance = 10;
+};
+
 struct SpawnBlockOnContact
 {
   BlockId block = voxel_t::Null;
 };
 
+struct ShortenConstraintsOverTime
+{
+  float velocity             = 0;
+  float maxVelocity          = 10;
+  float acceleration         = 0;
+  float maxAbsLambdaPosition = 5; // The constraint will not shorten if abs(JPH::DistanceConstraint::GetTotalLambdaPosition()) exceeds this value.
+
+  float springFrequency         = 5.0f;
+  float maxSpringFrequency      = 20.0f;
+  float springFrequencyVelocity = 8.0f;
+  float springDamping           = 0.05f;
+};
+
 struct Grapple
 {
   entt::entity shooter = entt::null;
+  std::optional<ShortenConstraintsOverTime> shortenConstraints; // Apply to spawned entity.
 };
 
 struct RopeAttachmentPoint

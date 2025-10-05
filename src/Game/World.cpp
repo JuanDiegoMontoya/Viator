@@ -747,11 +747,27 @@ void World::FixedUpdate(float dt)
           deltaVelocity.y = (isInWater ? Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::WaterGravityModifier, attribs->waterGravity) : attribs->gravity) * dt;
           attribs->timeSinceJumped += dt;
 
+
           if (auto* cc = registry_.try_get<const Physics::CharacterController>(entity))
           {
+            auto* player = registry_.try_get<Player>(entity);
             auto& velocity          = registry_.get<LinearVelocity>(entity).v;
             const auto realVelocity = (transform.position - cc->previousPosition) / dt;
-            velocity                = glm::length(realVelocity) < glm::length(velocity) ? realVelocity : velocity;
+            if (player && player->attachedToRope)
+            {
+              velocity = realVelocity;
+            }
+            else
+            {
+              velocity = glm::length(realVelocity) < glm::length(velocity) ? realVelocity : velocity;
+            }
+
+            if (player && player->attachedToRope && input.walk)
+            {
+              const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
+              player->attachedToRope = false;
+              Physics::RemoveConstraintsFromBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+            }
 
             const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
             const float acceleration = isInWater
@@ -791,26 +807,56 @@ void World::FixedUpdate(float dt)
               });
             }
 
-            auto* player = registry_.try_get<Player>(entity);
             if (isOnGround || (player && player->attachedToRope))
             {
               if (input.jump)
               {
-                GetAudio()->PlaySound({
-                  .name        = "jump",
-                  .volume      = 0.4f,
-                  .minDistance = 3,
-                  .pitch       = 0.8f,
-                  .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
-                });
-                velocity.y      = Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::JumpImpulseModifier, isInWater ? attribs->waterJumpImpulse : attribs->jumpInitialImpulse);
-                deltaVelocity.y = 0;
+                const auto doJump = [&]
+                {
+                  GetAudio()->PlaySound({
+                    .name        = "jump",
+                    .volume      = 0.4f,
+                    .minDistance = 3,
+                    .pitch       = 0.8f,
+                    .position    = registry_.all_of<LocalPlayer>(entity) ? std::nullopt : std::optional(transform.position),
+                  });
+                  velocity.y      = Item::GetTotalEffectOnEntity(*this,
+                    entity,
+                    Item::EffectType::JumpImpulseModifier,
+                    isInWater ? attribs->waterJumpImpulse : attribs->jumpInitialImpulse);
+                  deltaVelocity.y = 0;
+                };
 
                 if (player && player->attachedToRope)
                 {
                   player->attachedToRope = false;
                   const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
-                  Physics::RemoveConstraintsFromBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+                  const auto constraints = Physics::GetConstraintsForBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+                  bool shouldJump        = isOnGround;
+                  for (auto* constraint : constraints)
+                  {
+                    if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
+                    {
+                      [[maybe_unused]] const auto* dConstraint = static_cast<const JPH::DistanceConstraint*>(constraint);
+                      const auto pos1 = Physics::ToGlm(Physics::GetBodyInterface().GetPosition(constraint->GetBody1()->GetID()));
+                      const auto pos2 = Physics::ToGlm(Physics::GetBodyInterface().GetPosition(constraint->GetBody2()->GetID()));
+                      //if (abs(dConstraint->GetMinDistance() - dConstraint->GetMaxDistance()) < 0.5f)
+                      if (glm::distance(pos1, pos2) < 1.0f)
+                      {
+                        shouldJump = true;
+                      }
+                      Physics::DestroyConstraint(constraint);
+                    }
+                  }
+
+                  if (shouldJump)
+                  {
+                    doJump();
+                  }
+                }
+                else
+                {
+                  doJump();
                 }
               }
               attribs->timeSinceJumped = 0;
@@ -1142,10 +1188,15 @@ void World::FixedUpdate(float dt)
                   auto settings          = JPH::Ref(new JPH::DistanceConstraintSettings());
                   settings->mSpace       = JPH::EConstraintSpace::LocalToBodyCOM;
                   settings->mMinDistance = 0.0f;
-                  settings->mMaxDistance = 0.15f;
+                  settings->mMaxDistance = 0.0f;
                   settings->mConstraintPriority = 100;
+                  settings->mLimitsSpringSettings = JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, 8.0f, 1);
                   //settings->mPoint1             = JPH::Vec3(0, 0, -0.5f);
-                
+
+                  auto& lt = registry_.get<LocalTransform>(hitEntity);
+                  lt.position = transform.position;
+                  UpdateLocalTransform(hitEntity);
+
                   auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
                     registry_.get<const Physics::RigidBody>(fakePhysics).body,
                     registry_.get<const Physics::RigidBody>(h.parent).body);
@@ -1158,7 +1209,8 @@ void World::FixedUpdate(float dt)
                   settings->mSpace              = JPH::EConstraintSpace::LocalToBodyCOM;
                   settings->mMinDistance        = p->distanceFromBase;
                   settings->mMaxDistance        = p->distanceFromBase;
-                  settings->mConstraintPriority = 101;
+                  settings->mConstraintPriority   = 101;
+                  //settings->mLimitsSpringSettings = JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, 1.0f, 1);
 
                   auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
                     registry_.get<const Physics::RigidBody>(fakePhysics).body,
@@ -1180,6 +1232,58 @@ void World::FixedUpdate(float dt)
               inventory.OverwriteSlot(*this, inventory.activeSlotCoord, {}, entt::null);
             }
           }
+        }
+      }
+    }
+
+    // Shorten distance constraints attached to entities with ShortenConstraintsOverTime.
+    {
+      for (auto&& [entity, shortenConstraint, rigidBody] : registry_.view<ShortenConstraintsOverTime, const Physics::RigidBody>().each())
+      {
+        const auto constraints = Physics::GetConstraintsForBody(rigidBody.body);
+        for (auto* constraint : constraints)
+        {
+          if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
+          {
+            auto* dConstraint = static_cast<JPH::DistanceConstraint*>(constraint);
+            if (abs(dConstraint->GetTotalLambdaPosition()) < shortenConstraint.maxAbsLambdaPosition)
+            {
+              shortenConstraint.velocity = glm::min(shortenConstraint.maxVelocity, shortenConstraint.velocity + shortenConstraint.acceleration * dt);
+              const auto minDist = dConstraint->GetMinDistance();
+              const auto maxDist = dConstraint->GetMaxDistance();
+              dConstraint->SetDistance(minDist, glm::max(minDist, maxDist - shortenConstraint.velocity * dt));
+            }
+
+            if (shortenConstraint.springFrequency < shortenConstraint.maxSpringFrequency)
+            {
+              shortenConstraint.springFrequency =
+                glm::min(shortenConstraint.maxSpringFrequency, shortenConstraint.springFrequency + shortenConstraint.springFrequencyVelocity * dt);
+              dConstraint->SetLimitsSpringSettings(
+                JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, shortenConstraint.springFrequency, dConstraint->GetLimitsSpringSettings().mDamping));
+            }
+
+            break;
+          }
+        }
+      }
+    }
+
+    if (IsServer())
+    {
+      for (auto&& [entity, far, myTransform] : registry_.view<const DespawnWhenFarFromEntity, const GlobalTransform>().each())
+      {
+        if (!registry_.valid(far.entity))
+        {
+          registry_.emplace_or_replace<DeferredDelete>(entity);
+          continue;
+        }
+        
+        const auto* targetTransform = registry_.try_get<const GlobalTransform>(far.entity);
+        ASSERT(targetTransform);
+
+        if (Math::Distance2(myTransform.position, targetTransform->position) > far.maxDistance * far.maxDistance)
+        {
+          registry_.emplace_or_replace<DeferredDelete>(entity);
         }
       }
     }
@@ -1747,7 +1851,9 @@ void World::GivePlayerColliders(entt::entity playerEntity)
     });
   SetParent(pHitbox, playerEntity);
 
-  // Rigid body at the player's location that's used just for placing contraints on the player.
+  // Rigid body at the player's location that's used for placing contraints on the player.
+  // This body also serves as a "real" (not CharacterVirtual) collider to prevent the player from sliding through walls when being pulled by a rope.
+  // TODO: The latter functionality should be a separate, temporary body that only exists when the player is attached to a rope, as it may cause minor issues with movement otherwise.
   auto pFakePhysics = registry_.create();
   registry_.emplace<Name>(pFakePhysics).name = "Player fake physics";
   registry_.emplace<SyncWithParentPosition>(pFakePhysics);
@@ -1761,11 +1867,18 @@ void World::GivePlayerColliders(entt::entity playerEntity)
   hierarchy.useLocalRotationAsGlobal = true;
   registry_.emplace<Physics::RigidBodySettings>(pFakePhysics,
     Physics::RigidBodySettings{
-      .shape      = Physics::ShapeSettings{.shape = Physics::Sphere({0.0125f}), .density = 1000},
-      .isSensor   = false,
+      .shape =
+        Physics::ShapeSettings{
+          .shape       = Physics::Capsule(.25f, 0.50f),
+          .density     = 1000,
+          .translation = {0, -0.8f * 0.875f, 0},
+        },
+      .isSensor      = false,
       .gravityFactor = 0,
-      .motionType = JPH::EMotionType::Dynamic,
-      .layer      = Physics::Layers::NO_COLLIDE,
+      .motionType    = JPH::EMotionType::Dynamic,
+      //.motionQuality = JPH::EMotionQuality::LinearCast,
+      .layer            = Physics::Layers::CHARACTER,
+      .degreesOfFreedom = JPH::EAllowedDOFs::TranslationX | JPH::EAllowedDOFs::TranslationY | JPH::EAllowedDOFs::TranslationZ,
     });
   SetParent(pFakePhysics, playerEntity);
 }

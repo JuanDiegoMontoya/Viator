@@ -177,6 +177,20 @@ namespace Item
     {
       float length = 5;
     };
+
+    struct GrapplingHookLauncher
+    {
+      float maxDistance         = 10;
+      float launchVelocity      = 30;
+      float pullAcceleration    = 50;
+      float pullMaxVelocity     = 15;
+      float pullInitialVelocity = 5;
+
+      float initialSpringFrequency  = 5.0f;
+      float maxSpringFrequency      = 20.0f;
+      float springFrequencyVelocity = 8.0f;
+      float springDamping           = 0.05f;
+    };
   } // namespace Component
 
   class Registry

@@ -258,7 +258,6 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         if (p->light)
         {
           reg.emplace<GpuLight>(b, *p->light);
-          reg.emplace<Grapple>(b, world.GetRegistry().get<const Hierarchy>(self).parent);
         }
 
         const auto inheritedVelocity = world.GetInheritedLinearVelocity(self);
@@ -524,6 +523,66 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 
       //auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(ropePhysics).body);
       //Physics::RegisterConstraint(constraint);
+    }
+
+    if (const auto* p = iReg.try_get<const Component::GrapplingHookLauncher>(state.id))
+    {
+      const auto& transform = reg.get<const GlobalTransform>(self);
+      state.useAccum        = glm::clamp(state.useAccum - dt, 0.0f, dt);
+
+      const float bulletScale = 0.10f;
+      const auto dir          = GetForward(transform.rotation);
+      auto up                 = glm::vec3(0, 1, 0);
+      if (glm::epsilonEqual(abs(dot(dir, glm::vec3(0, 1, 0))), 1.0f, 0.001f))
+      {
+        up = {0, 0, 1};
+      }
+      const auto rot           = glm::quatLookAtRH(dir, up);
+      const auto projectilePos = transform.position + glm::vec3(0, 0.1f, 0) + GetForward(transform.rotation) * 1.0f;
+      const auto rope          = world.CreateRenderableEntity(projectilePos, rot, bulletScale);
+      const auto shooter       = world.GetRegistry().get<const Hierarchy>(self).parent;
+
+      reg.emplace<Name>(rope).name = "Rope Base";
+      reg.emplace<Mesh>(rope).name = "frog";
+      reg.emplace<Grapple>(rope)   = {
+          .shooter = shooter,
+          .shortenConstraints =
+          ShortenConstraintsOverTime{
+              .velocity     = p->pullInitialVelocity,
+              .maxVelocity  = p->pullMaxVelocity,
+              .acceleration = p->pullAcceleration,
+              // .maxAbsLambdaPosition = ,
+              .springFrequency         = p->initialSpringFrequency,
+              .maxSpringFrequency      = p->maxSpringFrequency,
+              .springFrequencyVelocity = p->springFrequencyVelocity,
+              .springDamping           = p->springDamping,
+          },
+      };
+      reg.emplace<DespawnOnCollision>(rope, 1);
+      reg.emplace<DespawnWhenFarFromEntity>(rope) = {.entity = shooter, .maxDistance = p->maxDistance};
+
+      const auto inheritedVelocity  = world.GetInheritedLinearVelocity(self);
+      const auto projectileVelocity = dir * p->launchVelocity + inheritedVelocity;
+      auto& projectile              = reg.emplace<Projectile>(rope);
+      projectile.initialSpeed       = glm::length(projectileVelocity);
+      projectile.drag               = 0.25f;
+      projectile.restitution        = 0.25f;
+      projectile.sticky             = true;
+      projectile.stickyDist         = 0.125f;
+      projectile.particles          = true;
+
+      reg.emplace<LinearVelocity>(rope, projectileVelocity);
+
+      auto& contactDamage     = reg.emplace<ContactDamage>(rope);
+      contactDamage.damage    = 5;
+      contactDamage.knockback = 1;
+
+      if (auto* team = world.GetTeamFlags(self))
+      {
+        reg.emplace<TeamFlags>(rope, *team);
+      }
+
+      subtractCountFromState = true;
     }
 
     if (subtractCountFromState && !reg.ctx().get<Debugging>().infiniteItems)

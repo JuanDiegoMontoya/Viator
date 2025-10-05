@@ -265,14 +265,22 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         registry.emplace<Name>(newEntity, "Grappled location");
         registry.emplace<DestroyWhenConstraintsBroken>(newEntity);
 
-        const auto& body2 = world.GetRegistry().get<const Physics::RigidBody>(newEntity).body;
-
         const auto ropeLength  = glm::distance(registry.get<const GlobalTransform>(faker).position, ppair->position);
         auto settings          = JPH::Ref(new JPH::DistanceConstraintSettings());
         settings->mSpace       = JPH::EConstraintSpace::LocalToBodyCOM;
         settings->mMinDistance = 0;
         settings->mMaxDistance = ropeLength;
+        if (p->shortenConstraints)
+        {
+          registry.emplace<ShortenConstraintsOverTime>(newEntity, *p->shortenConstraints);
+          settings->mLimitsSpringSettings = JPH::SpringSettings{
+            JPH::ESpringMode::FrequencyAndDamping,
+            p->shortenConstraints->springFrequency,
+            p->shortenConstraints->springDamping,
+          };
+        }
 
+        const auto& body2 = world.GetRegistry().get<const Physics::RigidBody>(newEntity).body;
         auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, body1, body2);
         Physics::RegisterConstraint(constraint);
         return true;
