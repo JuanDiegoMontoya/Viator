@@ -549,8 +549,20 @@ void Game::Run()
       const double tickDuration = 1.0 / tickHz;
 
       const auto currentTimestamp = std::chrono::steady_clock::now();
-      const auto realDeltaTime    = std::chrono::duration_cast<std::chrono::microseconds>(currentTimestamp - previousTimestamp).count() / 1'000'000.0;
-      previousTimestamp           = currentTimestamp;
+      const auto realDeltaTime = [&] -> double
+      {
+        const auto dt = std::chrono::duration_cast<std::chrono::microseconds>(currentTimestamp - previousTimestamp).count() / 1'000'000.0;
+        constexpr float realDtThreshold = 3.0f;
+        if (dt > realDtThreshold)
+        {
+          constexpr float clampedDt = 0.0167f;
+          spdlog::warn("Frame time ({:.3f} seconds) exceeded threshold ({:.3f}), clamping to {:.3f}.", dt, realDtThreshold, clampedDt);
+          return clampedDt;
+        }
+        return dt;
+      }();
+
+      previousTimestamp = currentTimestamp;
 
       auto dt = DeltaTime{
         .game     = static_cast<float>(realDeltaTime * timeScale),
