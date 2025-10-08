@@ -353,14 +353,14 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
             // Ensure area is clear of entities before placing
             const auto box = JPH::BoxShape(JPH::Vec3::sReplicate(0.45f));
             auto collector = JPH::AnyHitCollisionCollector<JPH::CollideShapeCollector>();
-            Physics::GetNarrowPhaseQuery().CollideShape(&box,
+            world.GetPhysicsEngine().GetNarrowPhaseQuery().CollideShape(&box,
               JPH::Vec3::sReplicate(1),
               JPH::RMat44::sTranslation(Physics::ToJolt(glm::vec3(newPos) + glm::vec3(0.5f))),
               JPH::CollideShapeSettings(),
               JPH::RVec3::sZero(),
               collector,
-              Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
-              Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE));
+              world.GetPhysicsEngine().GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              world.GetPhysicsEngine().GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE));
 
             if (!collector.HadHit() && Block::OnTryPlaceBlock(world, newPos, Block::GetRotatedBlockVariant(world, p->voxel, dir, hit.flatNormalWorld)))
             {
@@ -474,8 +474,8 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
           settings->mMaxDistance        = segmentLength;
           settings->mConstraintPriority = i;
 
-          auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2).body);
-          Physics::RegisterConstraint(constraint);
+          auto constraint = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2).body);
+          world.GetPhysicsEngine().RegisterConstraint(constraint);
         }
 
         // The actual interactable thingy
@@ -504,11 +504,11 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
           settings->mMaxDistance        = 0.1f;
           settings->mPoint2             = JPH::Vec3(0, segmentLength / 2, 0);
 
-          auto constraint1 = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2i).body);
-          Physics::RegisterConstraint(constraint1);
+          auto constraint1 = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(nextParent).body, reg.get<Physics::RigidBody>(rope2i).body);
+          world.GetPhysicsEngine().RegisterConstraint(constraint1);
           settings->mPoint2 = JPH::Vec3(0, -segmentLength / 2, 0);
-          auto constraint2 = Physics::GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(rope2).body, reg.get<Physics::RigidBody>(rope2i).body);
-          Physics::RegisterConstraint(constraint2);
+          auto constraint2 = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, reg.get<Physics::RigidBody>(rope2).body, reg.get<Physics::RigidBody>(rope2i).body);
+          world.GetPhysicsEngine().RegisterConstraint(constraint2);
         }
 
         nextParent = rope2;

@@ -15,6 +15,11 @@ namespace PCG
   struct Rng;
 }
 
+namespace Physics
+{
+  class Engine;
+}
+
 class Audio;
 
 class World
@@ -43,6 +48,9 @@ public:
   {
     return registryOld_;
   }
+
+  Physics::Engine& GetPhysicsEngine();
+  const Physics::Engine& GetPhysicsEngine() const;
 
   PCG::Rng& Rng()
   {

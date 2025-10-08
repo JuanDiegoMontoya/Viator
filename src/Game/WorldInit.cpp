@@ -286,6 +286,20 @@ public:
   }
 };
 
+Physics::Engine& World::GetPhysicsEngine()
+{
+  auto* engine = registry_.ctx().find<std::unique_ptr<Physics::Engine>>();
+  ASSERT(engine);
+  return **engine;
+}
+
+const Physics::Engine& World::GetPhysicsEngine() const
+{
+  const auto* engine = registry_.ctx().find<std::unique_ptr<Physics::Engine>>();
+  ASSERT(engine);
+  return **engine;
+}
+
 void World::InitializeGameState()
 {
   ticks_ = 0;

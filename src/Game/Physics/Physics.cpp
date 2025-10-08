@@ -163,12 +163,47 @@ namespace Physics
 
       std::unique_ptr<JPH::TempAllocatorImpl> tempAllocator;
       std::unique_ptr<JPH::JobSystemThreadPool> jobSystem;
-#ifdef JPH_DEBUG_RENDERER
-      std::unique_ptr<DebugRenderer> debugRenderer;
-#endif
       std::unique_ptr<BPLayerInterfaceImpl> broadPhaseLayerInterface;
       std::unique_ptr<ObjectVsBroadPhaseLayerFilterImpl> objectVsBroadPhaseLayerFilter;
       std::unique_ptr<ObjectLayerPairFilterImpl> objectVsObjectLayerFilter;
+    };
+    std::unique_ptr<StaticVars> s;
+
+    class EngineImpl final : public Engine
+    {
+    public:
+      EngineImpl(World& world);
+      ~EngineImpl() override = default;
+
+      void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint) override;
+      [[nodiscard]] std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body) override;
+      void RemoveConstraintsFromBody(JPH::BodyID body) override;
+      void DestroyConstraint(JPH::TwoBodyConstraint* constraint) override;
+      [[nodiscard]] const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery() const override;
+      [[nodiscard]] JPH::BodyInterface& GetBodyInterface() override;
+      [[nodiscard]] JPH::PhysicsSystem& GetPhysicsSystem() override;
+      void FixedUpdate(float dt) override;
+      entt::dispatcher& GetDispatcher() override;
+      void CreateObservers(entt::registry& registry) override;
+
+      void OnRigidBodyConstruct(entt::registry& registryRaw, entt::entity entity);
+      void OnCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity);
+      void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity);
+      void OnRigidBodyDestroy(entt::registry& registryRaw, entt::entity entity);
+      void OnCharacterControllerDestroy(entt::registry& registryRaw, entt::entity entity);
+      void OnCharacterControllerShrimpleDestroy(entt::registry& registryRaw, entt::entity entity);
+      void OnCharacterControllerUpdate(entt::registry& registryRaw, entt::entity entity);
+
+    private:
+      friend struct ContactListenerImpl;
+      friend struct CharacterContactListenerImpl;
+      friend void Physics::DrawDebugUI(World&);
+
+      World& world;
+
+#ifdef JPH_DEBUG_RENDERER
+      std::unique_ptr<DebugRenderer> debugRenderer;
+#endif
       std::unique_ptr<JPH::PhysicsSystem> engine;
       std::unique_ptr<struct ContactListenerImpl> contactListener;
       std::unique_ptr<struct CharacterContactListenerImpl> characterContactListener;
@@ -190,19 +225,19 @@ namespace Physics
 
       glm::vec3 gravity = {0, -10, 0};
     };
-    std::unique_ptr<StaticVars> s;
 
     struct ContactListenerImpl final : JPH::ContactListener
     {
-      ContactListenerImpl() = default;
+      ContactListenerImpl(EngineImpl& engine) : engine(engine) {}
+      EngineImpl& engine;
 
       void OnContactAdded(const JPH::Body& inBody1,
         const JPH::Body& inBody2,
         [[maybe_unused]] const JPH::ContactManifold& inManifold,
         [[maybe_unused]] JPH::ContactSettings& ioSettings) override
       {
-        auto lock = std::unique_lock(s->contactListenerMutex);
-        s->contactAddedPairs.push_back({
+        auto lock = std::unique_lock(engine.contactListenerMutex);
+        engine.contactAddedPairs.push_back({
           .entity1  = static_cast<entt::entity>(inBody1.GetUserData()),
           .entity2  = static_cast<entt::entity>(inBody2.GetUserData()),
           .position = ToGlm(inManifold.GetWorldSpaceContactPointOn1(0)),
@@ -215,8 +250,8 @@ namespace Physics
         [[maybe_unused]] const JPH::ContactManifold& inManifold,
         [[maybe_unused]] JPH::ContactSettings& ioSettings) override
       {
-        auto lock = std::unique_lock(s->contactListenerMutex);
-        s->contactPersistedPairs.push_back({
+        auto lock = std::unique_lock(engine.contactListenerMutex);
+        engine.contactPersistedPairs.push_back({
           .entity1  = static_cast<entt::entity>(inBody1.GetUserData()),
           .entity2  = static_cast<entt::entity>(inBody2.GetUserData()),
           .position = ToGlm(inManifold.GetWorldSpaceContactPointOn1(0)),
@@ -227,6 +262,9 @@ namespace Physics
 
     struct CharacterContactListenerImpl final : JPH::CharacterContactListener
     {
+      CharacterContactListenerImpl(EngineImpl& engine) : engine(engine) {}
+      EngineImpl& engine;
+
       void OnContactAdded(const JPH::CharacterVirtual* inCharacter,
         const JPH::BodyID& inBodyID2,
         [[maybe_unused]] const JPH::SubShapeID& inSubShapeID2,
@@ -234,9 +272,9 @@ namespace Physics
         [[maybe_unused]] JPH::Vec3Arg inContactNormal,
         [[maybe_unused]] JPH::CharacterContactSettings& ioSettings) override
       {
-        auto lock = std::unique_lock(s->contactListenerMutex);
-        auto e2 = static_cast<entt::entity>(s->bodyInterface->GetUserData(inBodyID2));
-        s->contactAddedPairs.emplace_back(static_cast<entt::entity>(inCharacter->GetUserData()), e2);
+        auto lock = std::unique_lock(engine.contactListenerMutex);
+        auto e2 = static_cast<entt::entity>(engine.bodyInterface->GetUserData(inBodyID2));
+        engine.contactAddedPairs.emplace_back(static_cast<entt::entity>(inCharacter->GetUserData()), e2);
       }
     };
 
@@ -266,7 +304,7 @@ namespace Physics
         }
       }
     }
-  }
+  } // namespace
 
   template<class... Ts>
   struct Overloads : Ts... { using Ts::operator()...; };
@@ -312,7 +350,7 @@ namespace Physics
     return finalShape;
   }
 
-  static void OnRigidBodyConstruct(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnRigidBodyConstruct(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
@@ -332,16 +370,16 @@ namespace Physics
     bodySettings.mAllowedDOFs = rigidBodySettings.degreesOfFreedom;
     bodySettings.mMotionQuality = rigidBodySettings.motionQuality;
     bodySettings.mGravityFactor = rigidBodySettings.gravityFactor;
-    auto bodyId = s->bodyInterface->CreateAndAddBody(bodySettings, rigidBodySettings.activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
+    auto bodyId = bodyInterface->CreateAndAddBody(bodySettings, rigidBodySettings.activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
 
-    s->bodyInterface->SetUserData(bodyId, static_cast<JPH::uint64>(entity));
+    bodyInterface->SetUserData(bodyId, static_cast<JPH::uint64>(entity));
 
     registry.emplace_or_replace<LinearVelocity>(entity);
     registry.emplace_or_replace<Shape>(entity, shape);
     registry.emplace_or_replace<RigidBody>(entity, bodyId);
   }
 
-  static void OnCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnCharacterControllerConstruct(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
@@ -364,17 +402,17 @@ namespace Physics
     //characterSettings.mPredictiveContactDistance = 0.22f;
     //characterSettings.mSupportingVolume = JPH::Plane(JPH::Vec3(0, 1, 0), -0.5f);
     // TODO: use mInnerBodyShape to give character a physical presence (to be detected by ray casts, etc.)
-    auto* character = new JPH::CharacterVirtual(&characterSettings, ToJolt(position), ToJolt(rotation), static_cast<JPH::uint64>(entity), s->engine.get());
-    character->SetListener(s->characterContactListener.get());
+    auto* character = new JPH::CharacterVirtual(&characterSettings, ToJolt(position), ToJolt(rotation), static_cast<JPH::uint64>(entity), engine.get());
+    character->SetListener(characterContactListener.get());
 
-    s->allCharacters.emplace_back(character);
-    s->characterCollisionInterface->Add(character);
+    allCharacters.emplace_back(character);
+    characterCollisionInterface->Add(character);
     registry.emplace_or_replace<Shape>(entity, shape);
     registry.emplace_or_replace<LinearVelocity>(entity);
     registry.emplace_or_replace<CharacterController>(entity, character, JPH::CharacterBase::EGroundState::OnGround, position);
   }
 
-  static void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto position = glm::vec3(0);
@@ -395,25 +433,55 @@ namespace Physics
     characterSettings.mShape = shape;
     //characterSettings.mSupportingVolume = JPH::Plane(JPH::Vec3(0, 1, 0), -1);
     characterSettings.mEnhancedInternalEdgeRemoval = true;
-    auto* character = new JPH::Character(&characterSettings, ToJolt(position), ToJolt(rotation), static_cast<JPH::uint64>(entity), s->engine.get());
+    auto* character = new JPH::Character(&characterSettings, ToJolt(position), ToJolt(rotation), static_cast<JPH::uint64>(entity), engine.get());
     character->AddToPhysicsSystem();
-    s->bodyInterface->SetRestitution(character->GetBodyID(), 0);
+    bodyInterface->SetRestitution(character->GetBodyID(), 0);
 
-    s->allCharactersShrimple.emplace_back(character);
+    allCharactersShrimple.emplace_back(character);
 
     registry.emplace_or_replace<LinearVelocity>(entity);
     registry.emplace_or_replace<Shape>(entity, shape);
     registry.emplace_or_replace<CharacterControllerShrimple>(entity, character);
   }
 
-  void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint)
+  EngineImpl::EngineImpl(World& world) : world(world)
+  {
+#ifdef JPH_DEBUG_RENDERER
+    debugRenderer = std::make_unique<DebugRenderer>();
+#endif
+
+    engine = std::make_unique<JPH::PhysicsSystem>();
+
+    constexpr JPH::uint cMaxBodies             = 50'000;
+    constexpr JPH::uint cNumBodyMutexes        = 0;
+    constexpr JPH::uint cMaxBodyPairs          = 50'000;
+    constexpr JPH::uint cMaxContactConstraints = 50'000;
+
+    engine->Init(cMaxBodies,
+      cNumBodyMutexes,
+      cMaxBodyPairs,
+      cMaxContactConstraints,
+      *s->broadPhaseLayerInterface,
+      *s->objectVsBroadPhaseLayerFilter,
+      *s->objectVsObjectLayerFilter);
+    engine->SetGravity(ToJolt(gravity));
+
+    contactListener             = std::make_unique<ContactListenerImpl>(*this);
+    characterContactListener    = std::make_unique<CharacterContactListenerImpl>(*this);
+    characterCollisionInterface = std::make_unique<JPH::CharacterVsCharacterCollisionSimple>();
+    engine->SetContactListener(contactListener.get());
+    bodyInterface       = &engine->GetBodyInterface();
+    bodyInterfaceNoLock = &engine->GetBodyInterfaceNoLock();
+  }
+
+  void EngineImpl::RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint)
   {
     const auto body1 = constraint->GetBody1()->GetID();
     const auto body2 = constraint->GetBody2()->GetID();
-    s->engine->AddConstraint(constraint);
-    s->constraintToBodyPair.emplace(constraint, std::make_pair(body1, body2));
-    s->bodyToConstraints.emplace(body1, constraint.GetPtr());
-    s->bodyToConstraints.emplace(body2, constraint.GetPtr());
+    engine->AddConstraint(constraint);
+    constraintToBodyPair.emplace(constraint, std::make_pair(body1, body2));
+    bodyToConstraints.emplace(body1, constraint.GetPtr());
+    bodyToConstraints.emplace(body2, constraint.GetPtr());
   }
 
   static void GetIgnoreEntityAndChildrenFilterHelper(entt::handle handle, JPH::IgnoreMultipleBodiesFilter& bodyFilter)
@@ -440,6 +508,11 @@ namespace Physics
     }
   }
 
+  std::unique_ptr<Engine> Engine::Create(World& world)
+  {
+    return std::make_unique<EngineImpl>(world);
+  }
+
   std::unique_ptr<JPH::IgnoreMultipleBodiesFilter> GetIgnoreEntityAndChildrenFilter(entt::handle handle)
   {
     auto bodyFilter = std::make_unique<JPH::IgnoreMultipleBodiesFilter>();
@@ -447,43 +520,43 @@ namespace Physics
     return bodyFilter;
   }
 
-  void RemoveConstraintsFromBody(JPH::BodyID body)
+  void EngineImpl::RemoveConstraintsFromBody(JPH::BodyID body)
   {
     auto constraintsToRemoveFromOtherBodies = std::vector<std::pair<JPH::BodyID, JPH::Constraint*>>();
 
     // Erase all the constraints attached to this body.
-    auto [begin, end] = s->bodyToConstraints.equal_range(body);
+    auto [begin, end] = bodyToConstraints.equal_range(body);
     for (auto it = begin; it != end; ++it)
     {
       auto [_, constraint] = *it;
-      s->engine->RemoveConstraint(constraint);
-      auto bodyPairIt = s->constraintToBodyPair.find(constraint);
+      engine->RemoveConstraint(constraint);
+      auto bodyPairIt = constraintToBodyPair.find(constraint);
       auto bodyPair   = bodyPairIt->second;
       constraintsToRemoveFromOtherBodies.emplace_back(body == bodyPair.first ? bodyPair.second : bodyPair.first, constraint);
-      s->constraintToBodyPair.erase(bodyPairIt);
+      constraintToBodyPair.erase(bodyPairIt);
     }
     
-    s->bodyToConstraints.erase(body);
+    bodyToConstraints.erase(body);
 
     // Unmap the constraints from other bodies.
     for (auto [body2, constraint] : constraintsToRemoveFromOtherBodies)
     {
-      auto [begin2, end2] = s->bodyToConstraints.equal_range(body2);
+      auto [begin2, end2] = bodyToConstraints.equal_range(body2);
       for (auto it = begin2; it != end2; ++it)
       {
         if (it->second == constraint)
         {
-          s->bodyToConstraints.erase(it);
+          bodyToConstraints.erase(it);
           break;
         }
       }
     }
   }
 
-  std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body)
+  std::vector<JPH::TwoBodyConstraint*> EngineImpl::GetConstraintsForBody(JPH::BodyID body)
   {
     auto constraints = std::vector<JPH::TwoBodyConstraint*>();
-    auto [begin, end] = s->bodyToConstraints.equal_range(body);
+    auto [begin, end] = bodyToConstraints.equal_range(body);
     for (auto it = begin; it != end; ++it)
     {
       constraints.push_back(it->second);
@@ -491,47 +564,47 @@ namespace Physics
     return constraints;
   }
 
-  void DestroyConstraint(JPH::TwoBodyConstraint* constraint)
+  void EngineImpl::DestroyConstraint(JPH::TwoBodyConstraint* constraint)
   {
-    auto it = s->constraintToBodyPair.find(constraint);
-    ASSERT(it != s->constraintToBodyPair.end());
+    auto it = constraintToBodyPair.find(constraint);
+    ASSERT(it != constraintToBodyPair.end());
 
     auto bodyPair = it->second;
-    s->engine->RemoveConstraint(constraint);
-    s->constraintToBodyPair.erase(it);
+    engine->RemoveConstraint(constraint);
+    constraintToBodyPair.erase(it);
 
-    auto [begin, end] = s->bodyToConstraints.equal_range(bodyPair.first);
+    auto [begin, end] = bodyToConstraints.equal_range(bodyPair.first);
     for (auto it2 = begin; it2 != end; ++it2)
     {
       if (it2->second == constraint)
       {
-        s->bodyToConstraints.erase(it2);
+        bodyToConstraints.erase(it2);
         break;
       }
     }
-    auto [begin2, end2] = s->bodyToConstraints.equal_range(bodyPair.second);
+    auto [begin2, end2] = bodyToConstraints.equal_range(bodyPair.second);
     for (auto it2 = begin2; it2 != end2; ++it2)
     {
       if (it2->second == constraint)
       {
-        s->bodyToConstraints.erase(it2);
+        bodyToConstraints.erase(it2);
         break;
       }
     }
   }
 
-  static void OnRigidBodyDestroy(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnRigidBodyDestroy(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& p = registry.get<RigidBody>(entity);
     RemoveConstraintsFromBody(p.body);
-    s->bodyInterface->RemoveBody(p.body);
-    s->bodyInterface->DestroyBody(p.body);
+    bodyInterface->RemoveBody(p.body);
+    bodyInterface->DestroyBody(p.body);
     registry.remove<Shape>(entity);
     registry.remove<RigidBodySettings>(entity);
   }
 
-  static void OnCharacterControllerDestroy(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnCharacterControllerDestroy(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& c = registry.get<CharacterController>(entity);
@@ -539,65 +612,65 @@ namespace Physics
     {
       RemoveConstraintsFromBody(c.character->GetInnerBodyID());
     }
-    s->characterCollisionInterface->Remove(c.character);
-    std::erase(s->allCharacters, c.character);
+    characterCollisionInterface->Remove(c.character);
+    std::erase(allCharacters, c.character);
     delete c.character;
     registry.remove<Shape>(entity);
     registry.remove<CharacterControllerSettings>(entity);
   }
 
-  static void OnCharacterControllerShrimpleDestroy(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnCharacterControllerShrimpleDestroy(entt::registry& registryRaw, entt::entity entity)
   {
     auto& registry = registryRaw.ctx().get<World&>().GetRegistry();
     auto& c = registry.get<CharacterControllerShrimple>(entity);
     RemoveConstraintsFromBody(c.character->GetBodyID());
     c.character->RemoveFromPhysicsSystem();
-    std::erase(s->allCharactersShrimple, c.character);
+    std::erase(allCharactersShrimple, c.character);
     delete c.character;
     registry.remove<Shape>(entity);
     registry.remove<CharacterControllerShrimpleSettings>(entity);
   }
 
-  static void OnCharacterControllerUpdate(entt::registry& registryRaw, entt::entity entity)
+  void EngineImpl::OnCharacterControllerUpdate(entt::registry& registryRaw, entt::entity entity)
   {
     OnCharacterControllerDestroy(registryRaw, entity);
     OnCharacterControllerConstruct(registryRaw, entity);
   }
 
-  const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery()
+  const JPH::NarrowPhaseQuery& EngineImpl::GetNarrowPhaseQuery() const
   {
-    return s->engine->GetNarrowPhaseQuery();
+    return engine->GetNarrowPhaseQuery();
   }
 
-  JPH::BodyInterface& GetBodyInterface()
+  JPH::BodyInterface& EngineImpl::GetBodyInterface()
   {
-    return *s->bodyInterface;
+    return *bodyInterface;
   }
 
-  JPH::PhysicsSystem& GetPhysicsSystem()
+  JPH::PhysicsSystem& EngineImpl::GetPhysicsSystem()
   {
-    return *s->engine;
+    return *engine;
   }
 
-  entt::dispatcher& GetDispatcher()
+  entt::dispatcher& EngineImpl::GetDispatcher()
   {
-    return s->dispatcher;
+    return dispatcher;
   }
 
 
-  void CreateObservers(entt::registry& registry)
+  void EngineImpl::CreateObservers(entt::registry& registry)
   {
     // TODO: Use RegistryProxy-aware observers for these.
-    registry.on_construct<RigidBodySettings>().connect<&OnRigidBodyConstruct>();
-    registry.on_construct<CharacterControllerSettings>().connect<&OnCharacterControllerConstruct>();
-    registry.on_update<CharacterControllerSettings>().connect<&OnCharacterControllerUpdate>();
-    registry.on_construct<CharacterControllerShrimpleSettings>().connect<&OnCharacterControllerShrimpleConstruct>();
-    registry.on_destroy<RigidBody>().connect<&OnRigidBodyDestroy>();
-    registry.on_destroy<CharacterController>().connect<&OnCharacterControllerDestroy>();
-    registry.on_destroy<CharacterControllerShrimple>().connect<&OnCharacterControllerShrimpleDestroy>();
+    registry.on_construct<RigidBodySettings>().connect<&EngineImpl::OnRigidBodyConstruct>(this);
+    registry.on_construct<CharacterControllerSettings>().connect<&EngineImpl::OnCharacterControllerConstruct>(this);
+    registry.on_update<CharacterControllerSettings>().connect<&EngineImpl::OnCharacterControllerUpdate>(this);
+    registry.on_construct<CharacterControllerShrimpleSettings>().connect<&EngineImpl::OnCharacterControllerShrimpleConstruct>(this);
+    registry.on_destroy<RigidBody>().connect<&EngineImpl::OnRigidBodyDestroy>(this);
+    registry.on_destroy<CharacterController>().connect<&EngineImpl::OnCharacterControllerDestroy>(this);
+    registry.on_destroy<CharacterControllerShrimple>().connect<&EngineImpl::OnCharacterControllerShrimpleDestroy>(this);
   }
 
-  void Initialize(World&)
+  void Initialize()
   {
     s = std::make_unique<StaticVars>();
 
@@ -611,35 +684,9 @@ namespace Physics
     s->tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(50 * 1024 * 1024);
     s->jobSystem     = std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, std::thread::hardware_concurrency() - 1);
 
-#ifdef JPH_DEBUG_RENDERER
-    s->debugRenderer = std::make_unique<DebugRenderer>();
-#endif
-
     s->broadPhaseLayerInterface      = std::make_unique<BPLayerInterfaceImpl>();
     s->objectVsBroadPhaseLayerFilter = std::make_unique<ObjectVsBroadPhaseLayerFilterImpl>();
     s->objectVsObjectLayerFilter     = std::make_unique<ObjectLayerPairFilterImpl>();
-    s->engine                        = std::make_unique<JPH::PhysicsSystem>();
-
-    constexpr JPH::uint cMaxBodies             = 50'000;
-    constexpr JPH::uint cNumBodyMutexes        = 0;
-    constexpr JPH::uint cMaxBodyPairs          = 50'000;
-    constexpr JPH::uint cMaxContactConstraints = 50'000;
-    
-    s->engine->Init(cMaxBodies,
-      cNumBodyMutexes,
-      cMaxBodyPairs,
-      cMaxContactConstraints,
-      *s->broadPhaseLayerInterface,
-      *s->objectVsBroadPhaseLayerFilter,
-      *s->objectVsObjectLayerFilter);
-    s->engine->SetGravity(ToJolt(s->gravity));
-
-    s->contactListener = std::make_unique<ContactListenerImpl>();
-    s->characterContactListener = std::make_unique<CharacterContactListenerImpl>();
-    s->characterCollisionInterface = std::make_unique<JPH::CharacterVsCharacterCollisionSimple>();
-    s->engine->SetContactListener(s->contactListener.get());
-    s->bodyInterface = &s->engine->GetBodyInterface();
-    s->bodyInterfaceNoLock = &s->engine->GetBodyInterfaceNoLock();
   }
 
   void Terminate()
@@ -649,7 +696,7 @@ namespace Physics
     delete JPH::Factory::sInstance;
   }
 
-  void FixedUpdate(float dt, World& world)
+  void EngineImpl::FixedUpdate(float dt)
   {
     ZoneScoped;
 
@@ -663,7 +710,7 @@ namespace Physics
     }
     ASSERT(voxelEntity != entt::null, "No entity with VoxelsComponent found");
 
-    const auto voxelShape = s->engine->GetBodyInterface().GetShape(voxelRigidBody->body);
+    const auto voxelShape = engine->GetBodyInterface().GetShape(voxelRigidBody->body);
     ASSERT(voxelShape->GetType() == JPH::EShapeType::User1);
     ASSERT(dynamic_cast<const TwoLevelGridShape*>(voxelShape.GetPtr()));
 
@@ -743,11 +790,11 @@ namespace Physics
         continue;
       }
 
-      s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
+      bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
         ToJolt(transform.position),
         ToJolt(transform.rotation).Normalized(),
         JPH::EActivation::Activate);
-      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
+      bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
     }
     
     for (auto&& [entity, cc, transform, linearVelocity] : world.GetRegistry().view<CharacterController, const GlobalTransform, const LinearVelocity>().each())
@@ -764,20 +811,20 @@ namespace Physics
     {
       cc.previousGroundState = cc.character->GetGroundState();
       
-      s->bodyInterfaceNoLock->SetPosition(cc.character->GetBodyID(),
+      bodyInterfaceNoLock->SetPosition(cc.character->GetBodyID(),
         ToJolt(transform.position),
         JPH::EActivation::Activate);
-      s->bodyInterfaceNoLock->SetLinearVelocity(cc.character->GetBodyID(), ToJolt(linearVelocity.v));
+      bodyInterfaceNoLock->SetLinearVelocity(cc.character->GetBodyID(), ToJolt(linearVelocity.v));
     }
 
 
     // Update character controllers
-    for (auto& character : s->allCharacters)
+    for (auto& character : allCharacters)
     {
       ZoneScopedN("CharacterVirtual->ExtendedUpdate");
       
       character->ExtendedUpdate(dt,
-        ToJolt(s->gravity),
+        ToJolt(gravity),
         JPH::CharacterVirtual::ExtendedUpdateSettings{
           .mStickToFloorStepDown             = JPH::Vec3::sZero(),
           //.mWalkStairsStepUp                 =,
@@ -786,8 +833,8 @@ namespace Physics
           //.mWalkStairsCosAngleForwardContact =,
           //.mWalkStairsStepDownExtra = {0, -0.22f, 0},
         },
-        s->engine->GetDefaultBroadPhaseLayerFilter(Layers::CHARACTER),
-        s->engine->GetDefaultLayerFilter(Layers::CHARACTER),
+        engine->GetDefaultBroadPhaseLayerFilter(Layers::CHARACTER),
+        engine->GetDefaultLayerFilter(Layers::CHARACTER),
         {},
         {},
         *s->tempAllocator);
@@ -813,30 +860,30 @@ namespace Physics
       linearVelocity = {};
       world.UpdateLocalTransform(entity);
 
-      s->bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
+      bodyInterfaceNoLock->SetPositionAndRotationWhenChanged(rigidBody.body,
         ToJolt(transform.position),
         ToJolt(transform.rotation).Normalized(),
         JPH::EActivation::Activate);
-      s->bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
+      bodyInterfaceNoLock->SetLinearVelocity(rigidBody.body, ToJolt(linearVelocity.v));
     }
 
     // Update world
     if (world.IsServer())
     {
       ZoneScopedN("PhysicsSystem::Update");
-      const auto substeps = static_cast<int>(std::ceil(dt / s->targetRate));
+      const auto substeps = static_cast<int>(std::ceil(dt / targetRate));
       ZoneTextF("%s%d", "Substeps: ", substeps);
-      s->engine->Update(dt, substeps, s->tempAllocator.get(), s->jobSystem.get());
+      engine->Update(dt, substeps, s->tempAllocator.get(), s->jobSystem.get());
     }
 
     if (world.IsServer())
     {
-      for (auto& character : s->allCharactersShrimple)
+      for (auto& character : allCharactersShrimple)
       {
         ZoneScopedN("Character->PostSimulation");
         character->PostSimulation(1e-4f);
 
-        auto entity = static_cast<entt::entity>(s->bodyInterface->GetUserData(character->GetBodyID()));
+        auto entity = static_cast<entt::entity>(bodyInterface->GetUserData(character->GetBodyID()));
         if (auto* t = world.GetRegistry().try_get<LocalTransform>(entity))
         {
           t->position = ToGlm(character->GetPosition());
@@ -844,7 +891,7 @@ namespace Physics
         }
 
         auto& velocity = world.GetRegistry().get<LinearVelocity>(entity).v;
-        velocity       = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(character->GetBodyID()));
+        velocity       = ToGlm(bodyInterfaceNoLock->GetLinearVelocity(character->GetBodyID()));
       }
     }
 
@@ -852,13 +899,13 @@ namespace Physics
     for (auto&& [entity, rigidBody, rigidBodySettings, transform, linearVelocity] :
       world.GetRegistry().view<const RigidBody, const RigidBodySettings, const LocalTransform, const LinearVelocity>(/*entt::exclude<CharacterControllerShrimple>*/).each())
     {
-      if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && s->bodyInterfaceNoLock->IsActive(rigidBody.body))
+      if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && bodyInterfaceNoLock->IsActive(rigidBody.body))
       {
         auto&& [transformMut, linearVelocityMut] = world.GetRegistry().get<LocalTransform, LinearVelocity>(entity);
 
-        transformMut.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
-        transformMut.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
-        linearVelocityMut.v   = ToGlm(s->bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
+        transformMut.position = ToGlm(bodyInterfaceNoLock->GetPosition(rigidBody.body));
+        transformMut.rotation = ToGlm(bodyInterfaceNoLock->GetRotation(rigidBody.body));
+        linearVelocityMut.v   = ToGlm(bodyInterfaceNoLock->GetLinearVelocity(rigidBody.body));
         world.UpdateLocalTransform(entity);
       }
     }
@@ -867,12 +914,12 @@ namespace Physics
     for (auto&& [entity, rigidBody, rigidBodySettings, transform] :
       world.GetRegistry().view<const RigidBody, const RigidBodySettings, const LocalTransform, const SyncWithParentPosition>().each())
     {
-      if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && s->bodyInterfaceNoLock->IsActive(rigidBody.body))
+      if (rigidBodySettings.motionType == JPH::EMotionType::Dynamic && bodyInterfaceNoLock->IsActive(rigidBody.body))
       {
         auto& transformMut = world.GetRegistry().get<LocalTransform>(entity);
 
-        transformMut.position = ToGlm(s->bodyInterfaceNoLock->GetPosition(rigidBody.body));
-        transformMut.rotation = ToGlm(s->bodyInterfaceNoLock->GetRotation(rigidBody.body));
+        transformMut.position = ToGlm(bodyInterfaceNoLock->GetPosition(rigidBody.body));
+        transformMut.rotation = ToGlm(bodyInterfaceNoLock->GetRotation(rigidBody.body));
         world.UpdateLocalTransform(entity);
         
         const auto& h              = world.GetRegistry().get<Hierarchy>(entity);
@@ -921,8 +968,8 @@ namespace Physics
       GetNarrowPhaseQuery().CastRay(JPH::RRayCast(ToJolt(initialPosition), ToJolt(castVelocity)),
         JPH::RayCastSettings(),
         collector,
-        s->engine->GetDefaultBroadPhaseLayerFilter(Layers::CAST_PROJECTILE),
-        s->engine->GetDefaultLayerFilter(Layers::CAST_PROJECTILE));
+        engine->GetDefaultBroadPhaseLayerFilter(Layers::CAST_PROJECTILE),
+        engine->GetDefaultLayerFilter(Layers::CAST_PROJECTILE));
 
       lt.position += castVelocity * (float)!projectile.isStuck;
       linearVelocity.v = newVelocity * (float)!projectile.isStuck;
@@ -930,7 +977,7 @@ namespace Physics
       if (collector.HadHit())
       {
         // Generate collision event.
-        const auto entity2 = static_cast<entt::entity>(s->bodyInterface->GetUserData(collector.mHit.mBodyID));
+        const auto entity2 = static_cast<entt::entity>(bodyInterface->GetUserData(collector.mHit.mBodyID));
         const auto position = gt.position + collector.mHit.mFraction * castVelocity;
 
         auto pair = ContactAddedPair{
@@ -940,7 +987,7 @@ namespace Physics
           .normal   = ToGlm(GetBodyInterface().GetTransformedShape(collector.mHit.mBodyID).GetWorldSpaceSurfaceNormal(JPH::SubShapeID(), ToJolt(position))),
         };
         auto ppair = &pair;
-        s->dispatcher.trigger(ppair);
+        dispatcher.trigger(ppair);
 
         // Object may have been destroyed in event.
         if (world.GetRegistry().any_of<DeferredDelete>(pair.entity1))
@@ -957,7 +1004,7 @@ namespace Physics
         // Calculate new velocity if it hit a surface
         const auto hitPosition = initialPosition + castVelocity * collector.mHit.mFraction;
         const auto hitNormal   = ToGlm(
-          s->engine->GetBodyLockInterfaceNoLock().TryGetBody(collector.mHit.mBodyID)->GetWorldSpaceSurfaceNormal(collector.mHit.mSubShapeID2, ToJolt(hitPosition)));
+          engine->GetBodyLockInterfaceNoLock().TryGetBody(collector.mHit.mBodyID)->GetWorldSpaceSurfaceNormal(collector.mHit.mSubShapeID2, ToJolt(hitPosition)));
 
         // The bullet's remaining dt is "stolen". This could be solved by looping until there are no more collisions, but the artifact is difficult to notice.
         lt.position = hitPosition + hitNormal * (projectile.sticky ? projectile.stickyDist : 1e-3f);
@@ -978,31 +1025,31 @@ namespace Physics
     // Dispatch events for newly-added contacts
     if (world.IsServer())
     {
-      for (auto& contactPair : s->contactAddedPairs)
+      for (auto& contactPair : contactAddedPairs)
       {
         auto ppair = &contactPair;
-        s->dispatcher.trigger(ppair);
+        dispatcher.trigger(ppair);
       }
     }
-    s->contactAddedPairs.clear();
+    contactAddedPairs.clear();
 
     // Dispatch events for persisted contacts
     if (world.IsServer())
     {
-      for (auto& contactPair : s->contactPersistedPairs)
+      for (auto& contactPair : contactPersistedPairs)
       {
         auto ppair = &contactPair;
-        s->dispatcher.trigger(ppair);
+        dispatcher.trigger(ppair);
       }
     }
-    s->contactPersistedPairs.clear();
+    contactPersistedPairs.clear();
 
 #ifdef JPH_DEBUG_RENDERER
     const auto debug = world.GetRegistry().ctx().get<Debugging>();
-    s->debugRenderer->ClearPrimitives();
+    debugRenderer->ClearPrimitives();
     for (auto&& [entity, transform] : world.GetRegistry().view<const LocalPlayer, const GlobalTransform>().each())
     {
-      s->debugRenderer->SetCameraPos(ToJolt(transform.position));
+      debugRenderer->SetCameraPos(ToJolt(transform.position));
       
       if (debug.drawDebugProbe)
       {
@@ -1033,21 +1080,21 @@ namespace Physics
         if (mMaxHits == 0)
         {
           AnyHitCollisionCollector<CastShapeCollector> collector;
-          s->engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
+          engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
           if (collector.HadHit())
             hits.push_back(collector.mHit);
         }
         else if (mMaxHits == 1)
         {
           ClosestHitCollisionCollector<CastShapeCollector> collector;
-          s->engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
+          engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
           if (collector.HadHit())
             hits.push_back(collector.mHit);
         }
         else
         {
           AllHitCollisionCollector<CastShapeCollector> collector;
-          s->engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
+          engine->GetNarrowPhaseQuery().CastShape(shape_cast, settings, base_offset, collector);
           collector.Sort();
           hits.insert(hits.end(), collector.mHits.begin(), collector.mHits.end());
           if ((int)hits.size() > mMaxHits)
@@ -1070,18 +1117,18 @@ namespace Physics
           {
             // Draw line
             RVec3 position = shape_cast.GetPointOnRay(hit.mFraction);
-            s->debugRenderer->DrawLine(prev_position, position, c ? Color::sGrey : Color::sWhite);
+            debugRenderer->DrawLine(prev_position, position, c ? Color::sGrey : Color::sWhite);
             c             = !c;
             prev_position = position;
 
-            BodyLockRead lock(s->engine->GetBodyLockInterface(), hit.mBodyID2);
+            BodyLockRead lock(engine->GetBodyLockInterface(), hit.mBodyID2);
             if (lock.Succeeded())
             {
               const Body& hit_body = lock.GetBody();
 
               // Draw shape
               Color color = hit_body.IsDynamic() ? Color::sYellow : Color::sOrange;
-              shape_cast.mShape->Draw(s->debugRenderer.get(),
+              shape_cast.mShape->Draw(debugRenderer.get(),
                 shape_cast.mCenterOfMassStart.PostTranslated(hit.mFraction * shape_cast.mDirection),
                 Vec3::sReplicate(1.0f),
                 color,
@@ -1092,36 +1139,36 @@ namespace Physics
               JPH::RVec3 contact_position1 = base_offset + hit.mContactPointOn1;
               JPH::RVec3 contact_position2 = base_offset + hit.mContactPointOn2;
               JPH::Vec3 normal             = hit.mPenetrationAxis.Normalized();
-              s->debugRenderer->DrawArrow(contact_position2, contact_position2 - normal, Color::sGreen, 0.01f); // Flip to make it point towards the cast body
+              debugRenderer->DrawArrow(contact_position2, contact_position2 - normal, Color::sGreen, 0.01f); // Flip to make it point towards the cast body
 
               // Contact position 1
-              s->debugRenderer->DrawMarker(contact_position1, Color::sGreen, 0.1f);
+              debugRenderer->DrawMarker(contact_position1, Color::sGreen, 0.1f);
 
               // Draw perpendicular axis to indicate contact position 2
               Vec3 perp1 = normal.GetNormalizedPerpendicular();
               Vec3 perp2 = normal.Cross(perp1);
-              s->debugRenderer->DrawLine(contact_position2 - 0.1f * perp1, contact_position2 + 0.1f * perp1, color);
-              s->debugRenderer->DrawLine(contact_position2 - 0.1f * perp2, contact_position2 + 0.1f * perp2, color);
+              debugRenderer->DrawLine(contact_position2 - 0.1f * perp1, contact_position2 + 0.1f * perp1, color);
+              debugRenderer->DrawLine(contact_position2 - 0.1f * perp2, contact_position2 + 0.1f * perp2, color);
 
               // Draw material
               // const PhysicsMaterial* material2 = hit_body.GetShape()->GetMaterial(hit.mSubShapeID2);
               // s->debugRenderer->DrawText3D(position, material2->GetDebugName());
 
               // Draw faces
-              s->debugRenderer->DrawWirePolygon(RMat44::sTranslation(base_offset), hit.mShape1Face, Color::sYellow, 0.01f);
-              s->debugRenderer->DrawWirePolygon(RMat44::sTranslation(base_offset), hit.mShape2Face, Color::sRed, 0.01f);
+              debugRenderer->DrawWirePolygon(RMat44::sTranslation(base_offset), hit.mShape1Face, Color::sYellow, 0.01f);
+              debugRenderer->DrawWirePolygon(RMat44::sTranslation(base_offset), hit.mShape2Face, Color::sRed, 0.01f);
             }
           }
 
           // Draw remainder of line
-          s->debugRenderer->DrawLine(shape_cast.GetPointOnRay(hits.back().mFraction), start + direction, Color::sRed);
+          debugRenderer->DrawLine(shape_cast.GetPointOnRay(hits.back().mFraction), start + direction, Color::sRed);
         }
         else
         {
           // Draw 'miss'
-          s->debugRenderer->DrawLine(start, start + direction, Color::sRed);
+          debugRenderer->DrawLine(start, start + direction, Color::sRed);
           shape_cast.mShape
-            ->Draw(s->debugRenderer.get(), shape_cast.mCenterOfMassStart.PostTranslated(shape_cast.mDirection), Vec3::sReplicate(1.0f), Color::sRed, false, false);
+            ->Draw(debugRenderer.get(), shape_cast.mCenterOfMassStart.PostTranslated(shape_cast.mDirection), Vec3::sReplicate(1.0f), Color::sRed, false, false);
         }
       }
 
@@ -1132,21 +1179,21 @@ namespace Physics
         constexpr auto rayLength = 5.0f;
 
         auto result = JPH::RayCastResult();
-        if (Physics::GetNarrowPhaseQuery().CastRay(JPH::RRayCast(ToJolt(rayOrigin), ToJolt(rayDirection * rayLength)),
+        if (GetNarrowPhaseQuery().CastRay(JPH::RRayCast(ToJolt(rayOrigin), ToJolt(rayDirection * rayLength)),
               result,
-              s->engine->GetDefaultBroadPhaseLayerFilter(Layers::CAST_PROJECTILE),
-              Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              engine->GetDefaultBroadPhaseLayerFilter(Layers::CAST_PROJECTILE),
+              GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
               *Physics::GetIgnoreEntityAndChildrenFilter({world.GetRegistryRaw(), entity})))
         {
           const auto hitPosition = rayOrigin + result.mFraction * rayLength * rayDirection;
           const auto hitNormal =
-            s->engine->GetBodyLockInterfaceNoLock().TryGetBody(result.mBodyID)->GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ToJolt(hitPosition));
-          s->debugRenderer->DrawArrow(ToJolt(hitPosition), ToJolt(hitPosition + ToGlm(hitNormal * .25f)), JPH::Color::sGreen, 0.06125f);
+            engine->GetBodyLockInterfaceNoLock().TryGetBody(result.mBodyID)->GetWorldSpaceSurfaceNormal(result.mSubShapeID2, ToJolt(hitPosition));
+          debugRenderer->DrawArrow(ToJolt(hitPosition), ToJolt(hitPosition + ToGlm(hitNormal * .25f)), JPH::Color::sGreen, 0.06125f);
         }
       }
     }
 
-    s->engine->DrawBodies(
+    engine->DrawBodies(
       JPH::BodyManager::DrawSettings{
         //.mDrawGetSupportFunction        = true,
         //.mDrawSupportDirection          = true,
@@ -1170,9 +1217,9 @@ namespace Physics
         //.mDrawSoftBodyPredictedBounds   =,
         //.mDrawSoftBodyConstraintColor   =,
       },
-      s->debugRenderer.get());
+      debugRenderer.get());
 
-    s->engine->DrawConstraints(s->debugRenderer.get());
+    engine->DrawConstraints(debugRenderer.get());
 #endif
   }
 
@@ -1206,6 +1253,8 @@ namespace Physics
 {
   void DrawDebugUI(World& world)
   {
+    EngineImpl& engine = dynamic_cast<EngineImpl&>(world.GetPhysicsEngine());
+
     if (ImGui::Begin("Physics"))
     {
       auto& registry = world.GetRegistry();
@@ -1221,18 +1270,18 @@ namespace Physics
             ImGui::TableHeadersRow();
 
             auto bodies = JPH::BodyIDVector();
-            s->engine->GetBodies(bodies);
+            engine.GetPhysicsSystem().GetBodies(bodies);
 
             for (auto body : bodies)
             {
-              const auto entity = static_cast<entt::entity>(GetBodyInterface().GetUserData(body));
+              const auto entity = static_cast<entt::entity>(engine.GetBodyInterface().GetUserData(body));
               
               ImGui::TableNextRow();
               ImGui::TableNextColumn();
               ImGui::Text("%d (%s)", entt::to_entity(entity), registry.get<Name>(entity).name.c_str());
 
               ImGui::TableNextColumn();
-              ImGui::Text("%d", (int)GetBodyInterface().GetObjectLayer(body));
+              ImGui::Text("%d", (int)engine.GetBodyInterface().GetObjectLayer(body));
             }
 
             ImGui::EndTable();
@@ -1252,10 +1301,10 @@ namespace Physics
             ImGui::TableSetupColumn("Lambda");
             ImGui::TableHeadersRow();
 
-            for (const auto& [constraint, bodies] : s->constraintToBodyPair)
+            for (const auto& [constraint, bodies] : engine.constraintToBodyPair)
             {
-              const auto entity1 = static_cast<entt::entity>(GetBodyInterface().GetUserData(bodies.first));
-              const auto entity2 = static_cast<entt::entity>(GetBodyInterface().GetUserData(bodies.second));
+              const auto entity1 = static_cast<entt::entity>(engine.GetBodyInterface().GetUserData(bodies.first));
+              const auto entity2 = static_cast<entt::entity>(engine.GetBodyInterface().GetUserData(bodies.second));
 
               ImGui::TableNextRow();
               ImGui::TableNextColumn();

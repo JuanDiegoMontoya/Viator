@@ -152,7 +152,7 @@ entt::entity WormBossDefinition::Spawn(World& world, glm::vec3 position, [[maybe
     const auto& rb = registry.get<Physics::RigidBody>(a);
     body           = rb.body;
 
-    Physics::GetBodyInterface().SetGravityFactor(rb.body, 0.0f);
+    world.GetPhysicsEngine().GetBodyInterface().SetGravityFactor(rb.body, 0.0f);
 
     registry.emplace<Friction>(a, glm::vec3(i == 0 ? 5.0f : 0.2f));
 
@@ -194,9 +194,9 @@ entt::entity WormBossDefinition::Spawn(World& world, glm::vec3 position, [[maybe
       // auto settings   = JPH::Ref(new JPH::FixedConstraintSettings());
       // settings->mAutoDetectPoint = true;
 
-      auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
+      auto constraint = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
       // constraint->SetNumPositionStepsOverride(10);
-      Physics::RegisterConstraint(constraint);
+      world.GetPhysicsEngine().RegisterConstraint(constraint);
 
       auto& h                    = registry.get<Hierarchy>(a);
       h.useLocalPositionAsGlobal = true;

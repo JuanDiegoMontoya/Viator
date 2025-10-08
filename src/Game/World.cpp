@@ -96,8 +96,8 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
       const auto& rb = registry.get<Physics::RigidBody>(a);
       body           = rb.body;
 
-      Physics::GetBodyInterface().SetGravityFactor(rb.body, 1);
-      Physics::GetBodyInterface().SetMotionQuality(rb.body, JPH::EMotionQuality::LinearCast);
+      world.GetPhysicsEngine().GetBodyInterface().SetGravityFactor(rb.body, 1);
+      world.GetPhysicsEngine().GetBodyInterface().SetMotionQuality(rb.body, JPH::EMotionQuality::LinearCast);
     }
 
     if (i == 0)
@@ -151,9 +151,9 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
         // settings->mSpace       = JPH::EConstraintSpace::LocalToBodyCOM;
         // settings->mMinDistance = 0.95f;
         // settings->mMaxDistance = 1;
-        auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
+        auto constraint = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, *prevBody2, body);
         // constraint->SetNumPositionStepsOverride(100);
-        Physics::RegisterConstraint(constraint);
+        world.GetPhysicsEngine().RegisterConstraint(constraint);
       }
       auto& h                    = registry.get<Hierarchy>(a);
       h.useLocalPositionAsGlobal = true;
@@ -231,7 +231,7 @@ void World::FixedUpdate(float dt)
       }
     }
 
-    Physics::FixedUpdate(dt, *this);
+    GetPhysicsEngine().FixedUpdate(dt);
 
     // Clamp movement input
     for (auto&& [entity, input] : registry_.view<InputState>().each())
@@ -387,10 +387,10 @@ void World::FixedUpdate(float dt)
 
           auto rayCast   = JPH::RRayCast(Physics::ToJolt(transform.position), Physics::ToJolt(target - transform.position));
           auto result    = JPH::RayCastResult();
-          const bool hit = Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+          const bool hit = GetPhysicsEngine().GetNarrowPhaseQuery().CastRay(rayCast,
             result,
-            Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD),
-            Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_WORLD));
+            GetPhysicsEngine().GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD),
+            GetPhysicsEngine().GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_WORLD));
           if (!hit)
           {
             behavior.lineOfSightDuration += dt;
@@ -573,11 +573,11 @@ void World::FixedUpdate(float dt)
               const auto* playerShape     = playerCharacter->GetShape();
               auto shapeCast              = JPH::RShapeCast::sFromWorldTransform(playerShape, {1, 1, 1}, playerCharacter->GetWorldTransform(), {0, -10, 0});
               auto shapeCastCollector     = Physics::NearestHitCollector();
-              Physics::GetNarrowPhaseQuery().CastShape(shapeCast,
+              GetPhysicsEngine().GetNarrowPhaseQuery().CastShape(shapeCast,
                 {},
                 {},
                 shapeCastCollector,
-                Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD));
+                GetPhysicsEngine().GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_WORLD));
               if (shapeCastCollector.nearest)
               {
                 targetFootPos = Physics::ToGlm(shapeCast.GetPointOnRay(shapeCastCollector.nearest->mFraction - 1e-2f));
@@ -766,7 +766,7 @@ void World::FixedUpdate(float dt)
             {
               const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
               player->attachedToRope = false;
-              Physics::RemoveConstraintsFromBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+              GetPhysicsEngine().RemoveConstraintsFromBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
             }
 
             const bool isOnGround = cc->character->GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
@@ -831,21 +831,21 @@ void World::FixedUpdate(float dt)
                 {
                   player->attachedToRope = false;
                   const auto fakePhysics = GetChildNamed(entity, "Player fake physics");
-                  const auto constraints = Physics::GetConstraintsForBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
+                  const auto constraints = GetPhysicsEngine().GetConstraintsForBody(registry_.get<const Physics::RigidBody>(fakePhysics).body);
                   bool shouldJump        = isOnGround;
                   for (auto* constraint : constraints)
                   {
                     if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
                     {
                       [[maybe_unused]] const auto* dConstraint = static_cast<const JPH::DistanceConstraint*>(constraint);
-                      const auto pos1 = Physics::ToGlm(Physics::GetBodyInterface().GetPosition(constraint->GetBody1()->GetID()));
-                      const auto pos2 = Physics::ToGlm(Physics::GetBodyInterface().GetPosition(constraint->GetBody2()->GetID()));
+                      const auto pos1 = Physics::ToGlm(GetPhysicsEngine().GetBodyInterface().GetPosition(constraint->GetBody1()->GetID()));
+                      const auto pos2 = Physics::ToGlm(GetPhysicsEngine().GetBodyInterface().GetPosition(constraint->GetBody2()->GetID()));
                       //if (abs(dConstraint->GetMinDistance() - dConstraint->GetMaxDistance()) < 0.5f)
                       if (glm::distance(pos1, pos2) < 1.0f)
                       {
                         shouldJump = true;
                       }
-                      Physics::DestroyConstraint(constraint);
+                      GetPhysicsEngine().DestroyConstraint(constraint);
                     }
                   }
 
@@ -1078,7 +1078,7 @@ void World::FixedUpdate(float dt)
     {
       for (auto&& [entity, rigidBody] : registry_.view<const Physics::RigidBody, const DestroyWhenConstraintsBroken>().each())
       {
-        if (Physics::GetConstraintsForBody(rigidBody.body).empty())
+        if (GetPhysicsEngine().GetConstraintsForBody(rigidBody.body).empty())
         {
           registry_.emplace<DeferredDelete>(entity);
         }
@@ -1099,17 +1099,17 @@ void World::FixedUpdate(float dt)
         bool showInteractPrompt = false;
 
         auto result = JPH::RayCastResult();
-        if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+        if (GetPhysicsEngine().GetNarrowPhaseQuery().CastRay(rayCast,
               result,
-              Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
-              Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              GetPhysicsEngine().GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::CAST_PROJECTILE),
+              GetPhysicsEngine().GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_PROJECTILE),
               *Physics::GetIgnoreEntityAndChildrenFilter({registryOld_, entity})))
         {
           const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
           const auto voxelHitPos = glm::ivec3(hitPos);
           const auto hitVoxel    = registry_.ctx().get<Voxel::Grid>().GetVoxelAt(voxelHitPos);
 
-          hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result.mBodyID));
+          hitEntity = static_cast<entt::entity>(GetPhysicsEngine().GetBodyInterface().GetUserData(result.mBodyID));
           if (registry_.valid(hitEntity))
           {
             // Ray actually hit a voxel... see if it hit a voxel with a corresponding block entity.
@@ -1145,14 +1145,14 @@ void World::FixedUpdate(float dt)
         {
           // Cast a ray that looks for other kinds of interactables, like rope attachment points, but only if an interact prompt is not already active.
           auto result2 = JPH::RayCastResult();
-          if (Physics::GetNarrowPhaseQuery().CastRay(rayCast,
+          if (GetPhysicsEngine().GetNarrowPhaseQuery().CastRay(rayCast,
                 result2,
-                Physics::GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::INTERACT),
-                Physics::GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_INTERACT),
+                GetPhysicsEngine().GetPhysicsSystem().GetDefaultBroadPhaseLayerFilter(Physics::Layers::INTERACT),
+                GetPhysicsEngine().GetPhysicsSystem().GetDefaultLayerFilter(Physics::Layers::CAST_INTERACT),
                 *Physics::GetIgnoreEntityAndChildrenFilter({registryOld_, entity})))
           {
             const auto hitPos = transform.position + forward * (result2.mFraction * RAY_LENGTH + 1e-3f);
-            hitEntity = static_cast<entt::entity>(Physics::GetBodyInterface().GetUserData(result2.mBodyID));
+            hitEntity = static_cast<entt::entity>(GetPhysicsEngine().GetBodyInterface().GetUserData(result2.mBodyID));
             if (registry_.valid(hitEntity))
             {
               if (registry_.all_of<RopeAttachmentPoint>(hitEntity))
@@ -1197,10 +1197,10 @@ void World::FixedUpdate(float dt)
                   lt.position = transform.position;
                   UpdateLocalTransform(hitEntity);
 
-                  auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
+                  auto constraint = GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings,
                     registry_.get<const Physics::RigidBody>(fakePhysics).body,
                     registry_.get<const Physics::RigidBody>(h.parent).body);
-                  Physics::RegisterConstraint(constraint);
+                  GetPhysicsEngine().RegisterConstraint(constraint);
                 }
 
                 // Constrain player to the base of the rope with p->distanceFromBase.
@@ -1212,10 +1212,10 @@ void World::FixedUpdate(float dt)
                   settings->mConstraintPriority   = 101;
                   //settings->mLimitsSpringSettings = JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, 1.0f, 1);
 
-                  auto constraint = Physics::GetBodyInterface().CreateConstraint(settings,
+                  auto constraint = GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings,
                     registry_.get<const Physics::RigidBody>(fakePhysics).body,
                     registry_.get<const Physics::RigidBody>(GetChildNamed(GetRootEntityOfHierarchy(hitEntity), "Rope Physics")).body);
-                  Physics::RegisterConstraint(constraint);
+                  GetPhysicsEngine().RegisterConstraint(constraint);
                 }
               }
             }
@@ -1240,7 +1240,7 @@ void World::FixedUpdate(float dt)
     {
       for (auto&& [entity, shortenConstraint, rigidBody] : registry_.view<ShortenConstraintsOverTime, const Physics::RigidBody>().each())
       {
-        const auto constraints = Physics::GetConstraintsForBody(rigidBody.body);
+        const auto constraints = GetPhysicsEngine().GetConstraintsForBody(rigidBody.body);
         for (auto* constraint : constraints)
         {
           if (constraint->GetSubType() == JPH::EConstraintSubType::Distance)
@@ -2101,7 +2101,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
 
     // Awaken bodies that are adjacent to destroyed voxel in case they were resting on it.
     // TODO: This doesn't seem to be robust. Setting mTimeBeforeSleep to 0 in PhysicsSettings seems to disable sleeping, which fixes this issue.
-    Physics::GetBodyInterface().ActivateBodiesInAABox({Physics::ToJolt(worldPos), 2.0f}, {}, {});
+    GetPhysicsEngine().GetBodyInterface().ActivateBodiesInAABox({Physics::ToJolt(worldPos), 2.0f}, {}, {});
 
     registry_.destroy(foundEntity);
   }

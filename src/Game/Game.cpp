@@ -282,8 +282,8 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         }
 
         const auto& body2 = world.GetRegistry().get<const Physics::RigidBody>(newEntity).body;
-        auto constraint = Physics::GetBodyInterface().CreateConstraint(settings, body1, body2);
-        Physics::RegisterConstraint(constraint);
+        auto constraint = world.GetPhysicsEngine().GetBodyInterface().CreateConstraint(settings, body1, body2);
+        world.GetPhysicsEngine().RegisterConstraint(constraint);
         return true;
       }
       return false;
@@ -461,9 +461,7 @@ Game::Game(uint32_t, std::optional<std::filesystem::path> worldToLoad, [[maybe_u
   Core::Logging::Initialize();
   spdlog::info("Initializing game");
   world_ = std::make_unique<World>();
-  Physics::Initialize(*world_);
-  Physics::GetDispatcher().sink<Physics::ContactAddedPair*>().connect<&OnContactAdded>(*world_);
-  Physics::GetDispatcher().sink<Physics::ContactPersistedPair*>().connect<&OnContactPersisted>(*world_);
+  Physics::Initialize();
 
 #ifdef GAME_HEADLESS
   head_ = std::make_unique<NullHead>();
@@ -527,6 +525,9 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<Scripting*>(scripting);
   registry.ctx().emplace<World::WaterQueue>();
   registry.ctx().emplace<World::WaterSet>();
+  registry.ctx().emplace<std::unique_ptr<Physics::Engine>>() = Physics::Engine::Create(world);
+  world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactAddedPair*>().connect<&OnContactAdded>(world);
+  world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactPersistedPair*>().connect<&OnContactPersisted>(world);
 
   registry.on_construct<DeferredDelete>().connect<&OnDeferredDeleteConstruct>();
   registry.on_construct<NoclipCharacterController>().connect<&OnNoclipCharacterControllerConstruct>();
@@ -536,7 +537,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.on_destroy<GlobalTransform>().connect<&OnGlobalTransformRemove>();
   registry.on_destroy<LinearPath>().connect<&OnLinearPathRemove>();
 
-  Physics::CreateObservers(registry);
+  world.GetPhysicsEngine().CreateObservers(registry);
 
   world.InitializeGameDefinitions();
 }

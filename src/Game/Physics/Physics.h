@@ -1,5 +1,6 @@
 #pragma once
 #include "Shape.h"
+#include "Core/ClassImplMacros.h"
 
 #include "Jolt/Jolt.h"
 #include "Jolt/Physics/Body/Body.h"
@@ -105,17 +106,31 @@ namespace Physics
   {
     JPH::RefConst<JPH::Shape> shape;
   };
-  
-  void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint);
-  [[nodiscard]] std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body);
-  void RemoveConstraintsFromBody(JPH::BodyID body);
-  void DestroyConstraint(JPH::TwoBodyConstraint* constraint);
 
-  [[nodiscard]] std::unique_ptr<JPH::IgnoreMultipleBodiesFilter> GetIgnoreEntityAndChildrenFilter(entt::handle handle);
+  class Engine
+  {
+  public:
+    static std::unique_ptr<Engine> Create(World& world);
 
-  const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery();
-  JPH::BodyInterface& GetBodyInterface();
-  JPH::PhysicsSystem& GetPhysicsSystem();
+    NO_COPY_NO_MOVE(Engine);
+    Engine()          = default;
+    virtual ~Engine() = default;
+
+    virtual void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint) = 0;
+    virtual [[nodiscard]] std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body) = 0;
+    virtual void RemoveConstraintsFromBody(JPH::BodyID body) = 0;
+    virtual void DestroyConstraint(JPH::TwoBodyConstraint* constraint) = 0;
+
+    virtual [[nodiscard]] const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery() const = 0;
+    virtual [[nodiscard]] JPH::BodyInterface& GetBodyInterface() = 0;
+    virtual [[nodiscard]] JPH::PhysicsSystem& GetPhysicsSystem() = 0;
+
+    virtual void FixedUpdate(float dt) = 0;
+
+    virtual [[nodiscard]] entt::dispatcher& GetDispatcher() = 0;
+
+    virtual void CreateObservers(entt::registry& registry) = 0;
+  };
 
   struct ContactAddedPair
   {
@@ -133,11 +148,10 @@ namespace Physics
     glm::vec3 normal;
   };
 
-  entt::dispatcher& GetDispatcher();
+  [[nodiscard]] std::unique_ptr<JPH::IgnoreMultipleBodiesFilter> GetIgnoreEntityAndChildrenFilter(entt::handle handle);
 
-  void Initialize(World& world);
+  void Initialize();
   void Terminate();
-  void FixedUpdate(float dt, World& world);
 
   struct NearestHitCollector : JPH::CastShapeCollector
   {
@@ -159,8 +173,6 @@ namespace Physics
 
     std::vector<ResultType> unorderedHits;
   };
-
-  void CreateObservers(entt::registry& registry);
 
 #ifndef GAME_HEADLESS
   void DrawDebugUI(World& world);
