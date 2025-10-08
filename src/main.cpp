@@ -1,5 +1,15 @@
 #include "Game/Game.h"
 #include "Game/Assets.h"
+#include "Core/Logging.h"
+#include "Game/Physics/Physics.h"
+#include "Core/Reflection.h"
+#include "Game/Scripting.h"
+#include "Core/Serialization.h"
+#ifdef GAME_HEADLESS
+  #include "Game/Head.h"
+#else
+  #include "Client/PlayerHead.h"
+#endif
 
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
@@ -15,6 +25,24 @@
 
 int main(int argc, const char* const* argv)
 {
+  Core::Logging::Initialize();
+  auto scripting = Scripting();
+  Core::Reflection::Initialize(scripting);
+  Core::Serialization::Initialize();
+  Physics::Initialize();
+  auto head = std::unique_ptr<Head>();
+
+#ifdef GAME_HEADLESS
+  head = std::make_unique<NullHead>();
+#else
+  head = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
+    .name        = "Gabagool",
+    .maximize    = false,
+    .decorate    = true,
+    .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+  });
+#endif
+
   auto worldToLoad = std::optional<std::filesystem::path>();
   auto port        = std::optional<uint16_t>();
 
@@ -42,7 +70,7 @@ int main(int argc, const char* const* argv)
       else if (!arg.starts_with("-"))
       {
         spdlog::info("Will load world: {}", arg);
-        worldToLoad = GetDataDirectory() / "saves/worlds/" / arg;
+        worldToLoad = GetDataDirectory() / "saves" / "worlds/" / arg;
       }
       else if (arg.starts_with("--port="))
       {
@@ -63,8 +91,15 @@ int main(int argc, const char* const* argv)
   }
   ParseOptions(args);
 
-  auto game = Game(30, worldToLoad, port);
+  auto params = GameParams{
+    .scripting    = &scripting,
+    .worldToLoad  = worldToLoad,
+    .port         = port,
+    .head         = head.get(),
+  };
+  auto game = Game(params);
   game.Run();
 
+  Physics::Terminate();
   return 0;
 }

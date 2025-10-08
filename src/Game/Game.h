@@ -673,19 +673,27 @@ struct SunInfo
   bool pauseDayNightCycle = false;
 };
 
+struct GameParams
+{
+  class Scripting* scripting;
+  std::optional<std::filesystem::path> worldToLoad = std::nullopt;
+  std::optional<std::uint16_t> port                = std::nullopt;
+  Head* head = nullptr;
+};
+
 // Game class used for client and server
 class Game
 {
 public:
   NO_COPY_NO_MOVE(Game);
-  explicit Game(uint32_t tickHz, std::optional<std::filesystem::path> worldToLoad = std::nullopt, std::optional<std::uint16_t> port = std::nullopt);
+  explicit Game(const GameParams& params);
   ~Game();
   void Run();
   void Tick(float dt);
 
 private:
   bool isRunning_ = false;
-  std::unique_ptr<Head> head_;
+  Head* head_;
   std::unique_ptr<Networking::Interface> networking_;
   std::unique_ptr<World> world_;
 };

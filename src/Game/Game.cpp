@@ -455,43 +455,26 @@ void OnLinearPathRemove(entt::registry& registryRaw, entt::entity entity)
 
 static Head* gHead_HORRIBLE_HACK{};
 static std::unique_ptr<Networking::Interface>* gNetworking_HORRIBLE_HACK{};
-static Scripting* scripting{};
-Game::Game(uint32_t, std::optional<std::filesystem::path> worldToLoad, [[maybe_unused]] std::optional<std::uint16_t> port)
+static Scripting* gScripting_HORRIBLE_HACK{};
+Game::Game(const GameParams& params)
 {
-  Core::Logging::Initialize();
   spdlog::info("Initializing game");
-  world_ = std::make_unique<World>();
-  Physics::Initialize();
-
-#ifdef GAME_HEADLESS
-  head_ = std::make_unique<NullHead>();
-  world_->InitializeGameState();
-#else
-  head_ = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
-    .name        = "Gabagool",
-    .maximize    = false,
-    .decorate    = true,
-    .presentMode = VK_PRESENT_MODE_FIFO_KHR,
-    .world       = world_.get(),
-  });
-#endif
-  gHead_HORRIBLE_HACK = head_.get();
+  world_                    = std::make_unique<World>();
+  head_                     = params.head;
+  gHead_HORRIBLE_HACK       = head_;
   gNetworking_HORRIBLE_HACK = &networking_;
+  gScripting_HORRIBLE_HACK  = params.scripting;
 
-  scripting = new Scripting();
-  Core::Reflection::Initialize(*scripting);
   CreateContextVariablesAndObservers(*world_);
 
-  Core::Serialization::Initialize();
-
-  if (worldToLoad)
+  if (params.worldToLoad)
   {
-    Core::Serialization::LoadRegistryFromFile(*world_, worldToLoad.value());
+    Core::Serialization::LoadRegistryFromFile(*world_, *params.worldToLoad);
     world_->GetRegistry().ctx().get<GameState>() = GameState::GAME;
     world_->CreateRenderingMaterials();
   }
 
-  if (port)
+  if (params.port)
   {
     auto server = Networking::Server::Create(*world_);
     *gNetworking_HORRIBLE_HACK = std::move(server);
@@ -522,7 +505,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.ctx().emplace<NpcSpawnDirector>(world);
   registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
   registry.ctx().emplace<SunInfo>();
-  registry.ctx().emplace<Scripting*>(scripting);
+  registry.ctx().emplace<Scripting*>(gScripting_HORRIBLE_HACK);
   registry.ctx().emplace<World::WaterQueue>();
   registry.ctx().emplace<World::WaterSet>();
   registry.ctx().emplace<std::unique_ptr<Physics::Engine>>() = Physics::Engine::Create(world);
@@ -550,7 +533,6 @@ void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel)
 
 Game::~Game()
 {
-  Physics::Terminate();
 }
 
 void Game::Run()
@@ -564,6 +546,7 @@ void Game::Run()
   while (isRunning_)
   {
     ZoneScopedN("Main Loop");
+
 #if GAME_CATCH_EXCEPTIONS
     try
 #endif

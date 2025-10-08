@@ -570,7 +570,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
   audio_         = std::make_unique<PlayerAudio>();
-  voxelRenderer_ = std::make_unique<VoxelRenderer>(this, *createInfo.world);
+  voxelRenderer_ = std::make_unique<VoxelRenderer>(this);
   inputSystem_   = std::make_unique<InputSystem>(window);
 
   // Inform the user that the renderer is done loading

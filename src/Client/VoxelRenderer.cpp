@@ -213,7 +213,7 @@ namespace
   std::unordered_map<std::string, GpuMesh> g_meshes;
 } // namespace
 
-VoxelRenderer::VoxelRenderer(PlayerHead* head, World&) : head_(head)
+VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
 {
   ZoneScoped;
   

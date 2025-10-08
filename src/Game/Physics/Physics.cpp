@@ -197,7 +197,9 @@ namespace Physics
     private:
       friend struct ContactListenerImpl;
       friend struct CharacterContactListenerImpl;
+#ifndef GAME_HEADLESS
       friend void Physics::DrawDebugUI(World&);
+#endif
 
       World& world;
 

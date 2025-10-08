@@ -8,6 +8,8 @@ NullHead::NullHead()
   audio_ = std::make_unique<NullAudio>();
 }
 
+NullHead::~NullHead() = default;
+
 void NullHead::VariableUpdatePre(DeltaTime, World&) {}
 void NullHead::VariableUpdatePost(DeltaTime, World&) {}
 

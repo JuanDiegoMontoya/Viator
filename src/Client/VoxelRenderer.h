@@ -80,7 +80,7 @@ class VoxelRenderer
 {
 public:
 
-  explicit VoxelRenderer(PlayerHead* head, World& world);
+  explicit VoxelRenderer(PlayerHead* head);
   ~VoxelRenderer();
 
   void CreateRenderingMaterials(const World& world);

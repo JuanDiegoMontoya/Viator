@@ -49,7 +49,6 @@ public:
     bool maximize                = false;
     bool decorate                = true;
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-    World* world                 = nullptr;
   };
 
   PlayerHead(const CreateInfo& createInfo);
