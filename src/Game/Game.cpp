@@ -613,28 +613,13 @@ void Game::Run()
 
       if (world_->GetRegistry().ctx().get<GameState>() == GameState::GAME)
       {
-        constexpr int MAX_TICKS = 10;
+        constexpr int MAX_TICKS = 4;
         int accumTicks          = 0;
         fixedUpdateAccum += realDeltaTime * timeScale;
         while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
         {
           fixedUpdateAccum -= tickDuration;
-          if (networking_)
-          {
-            SPDLOG_TRACE("networking_->ProcessMessages()");
-            networking_->ProcessMessages(*world_);
-
-            for (auto entity : world_->GetRegistry().view<const NetworkNeedUpdateLocalTransform>())
-            {
-              world_->UpdateLocalTransform(entity);
-            }
-            world_->GetRegistryRaw().clear<NetworkNeedUpdateLocalTransform>();
-
-            SPDLOG_TRACE("networking_->SendMessages()");
-            networking_->SendMessages(*world_);
-          }
-          SPDLOG_TRACE("world->FixedUpdate({})", tickDuration);
-          world_->FixedUpdate(static_cast<float>(tickDuration));
+          Tick(static_cast<float>(tickDuration));
         }
 
         dt.fraction = std::clamp(float(fixedUpdateAccum / tickDuration), 0.0f, 1.0f);
@@ -662,6 +647,26 @@ void Game::Run()
     }
 #endif
   }
+}
+
+void Game::Tick(float dt)
+{
+  if (networking_)
+  {
+    SPDLOG_TRACE("networking_->ProcessMessages()");
+    networking_->ProcessMessages(*world_);
+
+    for (auto entity : world_->GetRegistry().view<const NetworkNeedUpdateLocalTransform>())
+    {
+      world_->UpdateLocalTransform(entity);
+    }
+    world_->GetRegistryRaw().clear<NetworkNeedUpdateLocalTransform>();
+
+    SPDLOG_TRACE("networking_->SendMessages()");
+    networking_->SendMessages(*world_);
+  }
+  SPDLOG_TRACE("world->FixedUpdate({})", dt);
+  world_->FixedUpdate(dt);
 }
 
 bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot)

@@ -681,6 +681,7 @@ public:
   explicit Game(uint32_t tickHz, std::optional<std::filesystem::path> worldToLoad = std::nullopt, std::optional<std::uint16_t> port = std::nullopt);
   ~Game();
   void Run();
+  void Tick(float dt);
 
 private:
   bool isRunning_ = false;
