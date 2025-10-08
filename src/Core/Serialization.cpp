@@ -3,7 +3,7 @@
 #include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
-#include "Client/Fvog/Device.h" // TODO: bad bad
+//#include "Client/Fvog/Device.h" // TODO: bad bad
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -439,7 +439,7 @@ namespace Core::Serialization
 
       // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
       //auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
-      world.CreateRenderingMaterials();
+      //world.CreateRenderingMaterials();
     }
 
     DeserializeComponentStream(world, file, remoteToLocalTemp, localToRemoteTemp, false, false);
@@ -515,7 +515,7 @@ namespace Core::Serialization
       {
         continue;
       }
-      auto& set = *registry.storage(id);
+
       if (auto meta = entt::resolve(id))
       {
         const auto traits = meta.template traits<Traits>();
@@ -523,15 +523,22 @@ namespace Core::Serialization
         {
           ZoneScopedN("Component");
           ZoneText(meta.info().name().data(), meta.info().name().size());
+          auto* set = registry.storage(id);
+          if (set == nullptr)
+          {
+            spdlog::warn("No storage for component {}. Did you forget to make it const when calling try_get?", meta.info().name());
+            continue;
+          }
+
           Serialize<true>(outputArchive, id);
           const auto mapSize = (uint32_t)std::ranges::count_if(map,
-            [&](const auto& p) { return !(!bool(p.second & ActionType::Remove) && !set.contains(p.first)); });
+            [&](const auto& p) { return !(!bool(p.second & ActionType::Remove) && !set->contains(p.first)); });
           Serialize<true>(outputArchive, mapSize);
           SPDLOG_TRACE("Serializing {}x {}", mapSize, meta.info().name());
           ZoneTextF("Set elements: %u", mapSize);
           for (const auto& [entity, action] : map)
           {
-            if (!bool(action & ActionType::Remove) && !set.contains(entity))
+            if (!bool(action & ActionType::Remove) && !set->contains(entity))
             {
               continue;
             }
@@ -540,7 +547,7 @@ namespace Core::Serialization
             SPDLOG_TRACE("Entity {}, action: {}", entt::to_integral(entity), (uint32_t)action);
             if (!bool(action & ActionType::Remove) && !(traits & Traits::TRANSIENT))
             {
-              Serialize<true>(outputArchive, meta.from_void(set.value(entity)));
+              Serialize<true>(outputArchive, meta.from_void(set->value(entity)));
             }
           }
         }

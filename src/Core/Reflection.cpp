@@ -13,8 +13,11 @@
 #include "Game/Pathfinding.h"
 #include "Game/Scripting.h"
 
+#ifndef GAME_HEADLESS
+  #include "imgui.h"
+#endif
+
 #include "angelscript.h"
-#include "imgui.h"
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
 #include "entt/meta/factory.hpp"
@@ -309,6 +312,7 @@ namespace Core::Reflection
 {
   using namespace entt::literals;
 
+#ifndef GAME_HEADLESS
   template<typename Scalar>
   consteval ImGuiDataType ScalarToImGuiDataType()
   {
@@ -596,6 +600,7 @@ namespace Core::Reflection
       path.secondsElapsed = 1e-5f;
     }
   }
+#endif
 } // namespace Core::Reflection
 
 const char* Core::Reflection::EnumToString(entt::meta_any value)
@@ -904,33 +909,45 @@ void Core::Reflection::Initialize(Scripting& scripting)
     .traits<RpcTraits>(Traits)
 
   entt::meta_factory<int>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<int>>("EditorWrite"_hs)
     .func<&EditorReadScalar<int>>("EditorRead"_hs)
+#endif
     .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, int v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint32_t>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint32_t>>("EditorRead"_hs)
+#endif
     .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint32_t v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint16_t>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint16_t>>("EditorRead"_hs)
+#endif
     .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint16_t v) { ((asIScriptContext*)ctx)->SetArgWord(argIdx, std::bit_cast<asWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint8_t>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint8_t>>("EditorRead"_hs)
+#endif
     .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint8_t v) { ((asIScriptContext*)ctx)->SetArgByte(argIdx, std::bit_cast<asBYTE>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<float>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<float>>("EditorWrite"_hs)
     .func<&EditorReadScalar<float>>("EditorRead"_hs)
+#endif
     .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, float v) { ((asIScriptContext*)ctx)->SetArgFloat(argIdx, v); }>("ASSetArg"_hs);
   entt::meta_factory<glm::vec3>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteVec3>("EditorWrite"_hs)
     .func<&EditorReadVec3>("EditorRead"_hs)
+#endif
     TRAITS(TRIVIAL)
     DATA(glm::vec3, x)
     DATA(glm::vec3, y)
@@ -945,8 +962,10 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(glm::ivec2, x)
     DATA(glm::ivec2, y);
   entt::meta_factory<glm::quat>()
+#ifndef GAME_HEADLESS
     .func<&EditorWriteQuat>("EditorWrite"_hs)
     .func<&EditorReadQuat>("EditorRead"_hs)
+#endif
     TRAITS(TRIVIAL)
     DATA(glm::quat, w)
     DATA(glm::quat, x)
@@ -957,12 +976,29 @@ void Core::Reflection::Initialize(Scripting& scripting)
   AppendToPropertiesMap<glm::ivec2>("name"_hs, "glm::ivec2");
   AppendToPropertiesMap<glm::quat>("name"_hs, "glm::quat");
   AppendToPropertiesMap<std::string>("name"_hs, "std::string");
-  entt::meta_factory<std::string>().func<&EditorWriteString>("EditorWrite"_hs).func<&EditorReadString>("EditorRead"_hs);
-  entt::meta_factory<bool>().func<&EditorWriteScalar<bool>>("EditorWrite"_hs).func<&EditorReadScalar<bool>>("EditorRead"_hs).traits(TRIVIAL);
-  entt::meta_factory<entt::entity>().func<&EditorWriteEntity>("EditorWrite"_hs).func<&EditorReadEntity>("EditorRead"_hs); // NOT trivial, because they need to be remapped for networking.
+  entt::meta_factory<std::string>()
+#ifndef GAME_HEADLESS
+    .func<&EditorWriteString>("EditorWrite"_hs)
+    .func<&EditorReadString>("EditorRead"_hs)
+#endif
+  ;
+  entt::meta_factory<bool>()
+#ifndef GAME_HEADLESS
+    .func<&EditorWriteScalar<bool>>("EditorWrite"_hs)
+    .func<&EditorReadScalar<bool>>("EditorRead"_hs)
+#endif
+    .traits(TRIVIAL);
+  entt::meta_factory<entt::entity>()
+#ifndef GAME_HEADLESS
+    .func<&EditorWriteEntity>("EditorWrite"_hs)
+    .func<&EditorReadEntity>("EditorRead"_hs)
+#endif
+  ; // NOT trivial, because they need to be remapped for networking.
 
   REFLECT_COMPONENT_NO_DEFAULT(LocalTransform, REPLICATED | TRIVIAL)
+#ifndef GAME_HEADLESS
     .func<&EditorUpdateTransform>("OnUpdate"_hs)
+#endif
     .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<LocalTransform>(entity); }>("EmplaceDefault"_hs)
     .func<[](entt::registry* registry, entt::entity entity, LocalTransform& transform)
       {
@@ -1178,7 +1214,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(WormEnemyBehavior, maxTurnSpeedDegPerSec);
 
   REFLECT_COMPONENT(LinearPath, REPLICATED)
+#ifndef GAME_HEADLESS
     .func<&EditorUpdateLinearPath>("OnUpdate"_hs)
+#endif
     DATA_BASE(LinearPath, frames)
     DATA(LinearPath, secondsElapsed)
     DATA(LinearPath, originalLocalTransform)

@@ -7,77 +7,83 @@ project(Frogfood)
 set(CMAKE_CXX_STANDARD 23)
 
 option(FROGRENDER_FSR2_ENABLE "Enable FidelityFX Super Resolution 2. Windows only!" FALSE)
+option(GAME_HEADLESS "Build the game without graphics or input." FALSE)
+option(GAME_COMPILE_TESTS "Compile the game's tests." TRUE)
 
+#TODO: Use an allocator that doesn't require Vulkan.
 find_package(Vulkan REQUIRED)
-set(viator_client_files
-    vendor/tiny_obj_loader.cpp
-    vendor/ma_reverb_node.cpp
-    src/Client/techniques/Bloom.h
-    src/Client/techniques/Bloom.cpp
-    src/Client/RendererUtilities.h
-    src/Client/RendererUtilities.cpp
-    src/Client/techniques/AutoExposure.h
-    src/Client/techniques/AutoExposure.cpp
-    src/Client/Fvog/Timer2.h
-    src/Client/Fvog/Timer2.cpp
-    src/Client/Fvog/Shader2.h
-    src/Client/Fvog/Shader2.cpp
-    src/Client/Fvog/detail/Common.h
-    src/Client/Fvog/detail/Common.cpp
-    src/Client/Fvog/Pipeline2.h
-    src/Client/Fvog/Pipeline2.cpp
-    src/Client/Fvog/BasicTypes2.h
-    src/Client/Fvog/Texture2.h
-    src/Client/Fvog/Texture2.cpp
-    src/Client/Fvog/Device.h
-    src/Client/Fvog/Device.cpp
-    src/Client/Fvog/Rendering2.cpp
-    src/Client/Fvog/Rendering2.h
-    src/Client/Fvog/detail/ApiToEnum2.h
-    src/Client/Fvog/detail/ApiToEnum2.cpp
-    src/Client/Fvog/Buffer2.h
-    src/Client/Fvog/Buffer2.cpp
-    src/Client/Fvog/detail/SamplerCache2.h
-    src/Client/Fvog/detail/SamplerCache2.cpp
-    src/Client/Fvog/detail/Hash2.h
-    src/Client/Fvog/TriviallyCopyableByteSpan.h
-    src/Client/ImGui/imgui_impl_fvog.cpp
-    src/Client/ImGui/imgui_impl_fvog.h
-    src/Client/Renderables.h
-    src/Client/Fvog/AccelerationStructure.h
-    src/Client/Fvog/AccelerationStructure.cpp
-    src/Client/debug/ForwardRenderer.h
-    src/Client/debug/ForwardRenderer.cpp
-    src/Client/debug/Shapes.h
-    src/Client/techniques/ao/RayTracedAO.h
-    src/Client/techniques/ao/RayTracedAO.cpp
-    src/Client/techniques/denoising/spatial/Bilateral.h
-    src/Client/techniques/denoising/spatial/Bilateral.cpp
-    src/Client/techniques/volumetric/FroxelFog.h
-    src/Client/techniques/volumetric/FroxelFog.cpp
-    src/Client/PipelineManager.h
-    src/Client/PipelineManager.cpp
-    src/Client/VoxelRenderer.h
-    src/Client/VoxelRenderer.cpp
-    src/Client/PlayerHead.h
-    src/Client/PlayerHead.cpp
-    src/Client/Input.h
-    src/Client/Input.cpp
-    src/Client/Fvog/Descriptor.h
-    src/Client/Fvog/Descriptor.cpp
-    src/Client/Fvog/detail/VmaFwd.h
-    src/Client/Fvog/detail/VkFwd.h
-    src/Client/Gui.cpp
-    src/Client/GuiHelpers.cpp
-    src/Client/GuiHelpers.h
-    src/Client/Editor.cpp
-    src/Client/Editor.h
-    src/Client/PlayerAudio.h
-    src/Client/PlayerAudio.cpp
-)
+
+if (NOT GAME_HEADLESS)
+    set(viator_client_files
+        vendor/tiny_obj_loader.cpp
+        vendor/ma_reverb_node.cpp
+        src/Client/techniques/Bloom.h
+        src/Client/techniques/Bloom.cpp
+        src/Client/RendererUtilities.h
+        src/Client/RendererUtilities.cpp
+        src/Client/techniques/AutoExposure.h
+        src/Client/techniques/AutoExposure.cpp
+        src/Client/Fvog/Timer2.h
+        src/Client/Fvog/Timer2.cpp
+        src/Client/Fvog/Shader2.h
+        src/Client/Fvog/Shader2.cpp
+        src/Client/Fvog/Pipeline2.h
+        src/Client/Fvog/Pipeline2.cpp
+        src/Client/Fvog/BasicTypes2.h
+        src/Client/Fvog/Texture2.h
+        src/Client/Fvog/Texture2.cpp
+        src/Client/Fvog/Device.h
+        src/Client/Fvog/Device.cpp
+        src/Client/Fvog/Rendering2.cpp
+        src/Client/Fvog/Rendering2.h
+        src/Client/Fvog/detail/ApiToEnum2.h
+        src/Client/Fvog/detail/ApiToEnum2.cpp
+        src/Client/Fvog/Buffer2.h
+        src/Client/Fvog/Buffer2.cpp
+        src/Client/Fvog/detail/SamplerCache2.h
+        src/Client/Fvog/detail/SamplerCache2.cpp
+        src/Client/Fvog/detail/Hash2.h
+        src/Client/Fvog/TriviallyCopyableByteSpan.h
+        src/Client/ImGui/imgui_impl_fvog.cpp
+        src/Client/ImGui/imgui_impl_fvog.h
+        src/Client/Renderables.h
+        src/Client/Fvog/AccelerationStructure.h
+        src/Client/Fvog/AccelerationStructure.cpp
+        src/Client/debug/ForwardRenderer.h
+        src/Client/debug/ForwardRenderer.cpp
+        src/Client/debug/Shapes.h
+        src/Client/techniques/ao/RayTracedAO.h
+        src/Client/techniques/ao/RayTracedAO.cpp
+        src/Client/techniques/denoising/spatial/Bilateral.h
+        src/Client/techniques/denoising/spatial/Bilateral.cpp
+        src/Client/techniques/volumetric/FroxelFog.h
+        src/Client/techniques/volumetric/FroxelFog.cpp
+        src/Client/PipelineManager.h
+        src/Client/PipelineManager.cpp
+        src/Client/VoxelRenderer.h
+        src/Client/VoxelRenderer.cpp
+        src/Client/PlayerHead.h
+        src/Client/PlayerHead.cpp
+        src/Client/Input.h
+        src/Client/Input.cpp
+        src/Client/Fvog/Descriptor.h
+        src/Client/Fvog/Descriptor.cpp
+        src/Client/Fvog/detail/VmaFwd.h
+        src/Client/Fvog/detail/VkFwd.h
+        src/Client/Gui.cpp
+        src/Client/GuiHelpers.cpp
+        src/Client/GuiHelpers.h
+        src/Client/Editor.cpp
+        src/Client/Editor.h
+        src/Client/PlayerAudio.h
+        src/Client/PlayerAudio.cpp
+    )
+endif()
 
 add_executable(frogRender
     ${viator_client_files}
+    src/Client/Fvog/detail/Common.h
+    src/Client/Fvog/detail/Common.cpp
     vendor/zstd.cpp
     src/main.cpp
     src/Client/Fvog/detail/Flags.h
@@ -222,9 +228,6 @@ target_compile_options(frogRender
     >
 )
 
-add_library(miniaudio vendor/miniaudio.cpp)
-add_library(stbi vendor/stb_image.cpp)
-
 option(FROGRENDER_DISABLE_OPTS "Disable compiler optimizations for release builds" FALSE)
 if (MSVC AND FROGRENDER_DISABLE_OPTS)
     target_compile_options(frogRender PRIVATE -Od)
@@ -263,8 +266,21 @@ else()
     set(FSR2_LIBS "")
 endif()
 
+if (NOT GAME_COMPILE_TESTS)
+    target_compile_definitions(frogRender PUBLIC DOCTEST_CONFIG_DISABLE)
+endif()
+
+if (GAME_HEADLESS)
+    target_compile_definitions(frogRender PUBLIC GAME_HEADLESS)
+endif()
+
 target_compile_definitions(frogRender PUBLIC
     VMA_VULKAN_VERSION=1002000 # Allow VMA to use Vulkan 1.2 functions (BDA)
+    DOCTEST_CONFIG_NO_UNPREFIXED_OPTIONS
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+    VK_NO_PROTOTYPES
+    GLFW_INCLUDE_NONE
+    ImTextureID=ImU64
 )
 
 target_include_directories(frogRender
@@ -280,20 +296,30 @@ target_include_directories(frogRender
     ${enet_SOURCE_DIR}/include # hack
 )
 
+if (NOT GAME_HEADLESS)
+    add_library(stbi vendor/stb_image.cpp)
+    set(libraries_for_head
+        glfw
+        lib_imgui
+        lib_implot
+        ${FSR2_LIBS}
+        volk::volk
+        vk-bootstrap::vk-bootstrap
+        glslang
+        glslang-default-resource-limits
+        SPIRV
+        stbi
+    )
+endif()
+
+add_library(miniaudio vendor/miniaudio.cpp)
+
 target_link_libraries(frogRender
     PRIVATE
-    glfw
+    ${libraries_for_head}
     glm
-    lib_imgui
-    ${FSR2_LIBS}
     Tracy::TracyClient
-    lib_implot
-    volk::volk
-    vk-bootstrap::vk-bootstrap
-    VulkanMemoryAllocator
-    glslang
-    glslang-default-resource-limits
-    SPIRV
+    VulkanMemoryAllocator # VMA is not in GAME_HEADLESS because its virtual allocator is used in server logic
     EnTT
     FastNoise
     unordered_dense
@@ -305,10 +331,7 @@ target_link_libraries(frogRender
     angelscript
     as_addons
     miniaudio
-    stbi
 )
-
-target_compile_definitions(glm INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE VK_NO_PROTOTYPES GLFW_INCLUDE_NONE ImTextureID=ImU64)
 
 if (MSVC)
     target_compile_definitions(frogRender PUBLIC STBI_MSC_SECURE_CRT)

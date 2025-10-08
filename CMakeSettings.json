@@ -106,6 +106,29 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "name": "Debug-Headless",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "FROGRENDER_FSR2_ENABLE",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "GAME_HEADLESS",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

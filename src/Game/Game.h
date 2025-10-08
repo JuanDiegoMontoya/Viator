@@ -678,7 +678,7 @@ class Game
 {
 public:
   NO_COPY_NO_MOVE(Game);
-  explicit Game(uint32_t tickHz);
+  explicit Game(uint32_t tickHz, std::optional<std::filesystem::path> worldToLoad = std::nullopt, std::optional<std::uint16_t> port = std::nullopt);
   ~Game();
   void Run();
 

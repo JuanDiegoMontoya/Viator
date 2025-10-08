@@ -2,6 +2,7 @@
 #include "Game/Voxel/VoxelType.h"
 #include "Core/ClassImplMacros.h"
 #include "SketchyBuffer.h"
+
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "ankerl/unordered_dense.h"

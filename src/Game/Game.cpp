@@ -22,6 +22,7 @@
 #include "Game/Audio.h"
 #include "Game/Scripting.h"
 #include "Physics/PhysicsUtils.h"
+#include "Networking/Server.h"
 
 #include "tracy/Tracy.hpp"
 #include "entt/signal/dispatcher.hpp"
@@ -246,7 +247,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
   TryTwice(pair,
     [&](entt::entity entity1, entt::entity)
     {
-      if (auto* p = world.GetRegistry().try_get<Grapple>(entity1))
+      if (auto* p = world.GetRegistry().try_get<const Grapple>(entity1))
       {
         const auto& faker = world.GetChildNamed(p->shooter, "Player fake physics");
         const auto& rb    = world.GetRegistry().get<const Physics::RigidBody>(faker);
@@ -455,7 +456,7 @@ void OnLinearPathRemove(entt::registry& registryRaw, entt::entity entity)
 static Head* gHead_HORRIBLE_HACK{};
 static std::unique_ptr<Networking::Interface>* gNetworking_HORRIBLE_HACK{};
 static Scripting* scripting{};
-Game::Game(uint32_t)
+Game::Game(uint32_t, std::optional<std::filesystem::path> worldToLoad, [[maybe_unused]] std::optional<std::uint16_t> port)
 {
   Core::Logging::Initialize();
   spdlog::info("Initializing game");
@@ -465,8 +466,7 @@ Game::Game(uint32_t)
   Physics::GetDispatcher().sink<Physics::ContactPersistedPair*>().connect<&OnContactPersisted>(*world_);
 
 #ifdef GAME_HEADLESS
-  head_                                            = std::make_unique<NullHead>();
-  world_->GetRegistry().ctx().emplace<GameState>() = GameState::GAME;
+  head_ = std::make_unique<NullHead>();
   world_->InitializeGameState();
 #else
   head_ = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
@@ -476,8 +476,8 @@ Game::Game(uint32_t)
     .presentMode = VK_PRESENT_MODE_FIFO_KHR,
     .world       = world_.get(),
   });
-  gHead_HORRIBLE_HACK = head_.get();
 #endif
+  gHead_HORRIBLE_HACK = head_.get();
   gNetworking_HORRIBLE_HACK = &networking_;
 
   scripting = new Scripting();
@@ -485,6 +485,19 @@ Game::Game(uint32_t)
   CreateContextVariablesAndObservers(*world_);
 
   Core::Serialization::Initialize();
+
+  if (worldToLoad)
+  {
+    Core::Serialization::LoadRegistryFromFile(*world_, worldToLoad.value());
+    world_->GetRegistry().ctx().get<GameState>() = GameState::GAME;
+    world_->CreateRenderingMaterials();
+  }
+
+  if (port)
+  {
+    auto server = Networking::Server::Create(*world_);
+    *gNetworking_HORRIBLE_HACK = std::move(server);
+  }
 }
 
 void CreateContextVariablesAndObservers(World& world)
@@ -494,6 +507,8 @@ void CreateContextVariablesAndObservers(World& world)
 #ifndef GAME_HEADLESS
   registry.ctx().emplace<GameState>() = GameState::MENU;
   registry.ctx().emplace<std::vector<Debug::Line>>();
+#else
+  registry.ctx().emplace<GameState>() = GameState::LOADING_SP;
 #endif
 
   registry.ctx().emplace<World&>(world); // Observers only see a registry, so this is needed for flexibility and correctness.

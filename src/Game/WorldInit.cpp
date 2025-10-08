@@ -455,7 +455,7 @@ void World::InitializeGameDefinitions()
   addLeadArmorModifiers(leadPantsId);
 
   const auto flippersId = Item::CreateArmor(items, "armor_flippers", "Flippers", Item::Component::AllowedSlots::Accessory, 0, "potion_healing");
-  items.GetRegistry().emplace<Item::Component::StaticEffects>(flippersId).effects = std::vector<Item::Component::StaticEffect>{
+  items.GetRegistry().get<Item::Component::StaticEffects>(flippersId).effects.append_range(std::vector<Item::Component::StaticEffect>{
     {
       .condition    = Item::EffectCondition::OnWorn,
       .quantityType = Item::EffectQuantityType::Additive,
@@ -474,7 +474,7 @@ void World::InitializeGameDefinitions()
       .type         = Item::EffectType::WaterMaxSpeedModifier,
       .amount       = 1.0f,
     },
-  };
+  });
 
   const auto ropeId = Item::CreateSimpleSpriteItem(items, "item_rope", "Rope", "potion_healing", 100, {0.5f, 0.25f, 0.1f});
   items.GetRegistry().emplace<Item::Component::Usable>(ropeId, 0.25f);
@@ -1169,7 +1169,7 @@ void World::CreateInitialEntities()
   registry_.emplace<ContactDamage>(pe) = {.damage = 1000, .knockback = 0};
   registry_.emplace<Physics::RigidBodySettings>(pe,
     Physics::RigidBodySettings{
-      .shape      = Physics::Plane{{0, 1, 0}, 0},
+      .shape      = {Physics::Plane{{0, 1, 0}, 0}},
       .activate   = false,
       .isSensor   = true,
       .motionType = JPH::EMotionType::Static,
@@ -1719,7 +1719,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
       }
     }
 
+#ifndef GAME_HEADLESS
     progress.fetch_add(1);
+#endif
   }
 
 #ifndef GAME_HEADLESS
@@ -1810,7 +1812,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               }
             });
 
+#ifndef GAME_HEADLESS
           progress.fetch_add(1);
+#endif
           grid.MarkTopLevelBrickAndChildrenDirty(tl);
           grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
         }
@@ -1828,7 +1832,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     for (const auto& [prefab, positionWS] : prefabs)
     {
       prefab->Instantiate(*this, positionWS);
+#ifndef GAME_HEADLESS
       progress.fetch_add(1);
+#endif
     }
   }
 
@@ -1891,7 +1897,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           }
         });
 
+#ifndef GAME_HEADLESS
       progress.fetch_add(1);
+#endif
     }
   }
 
@@ -1909,7 +1917,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     for (int yt = 0; yt < grid.dimensions_.y / DUNGEON_CELL_SIZE; yt++)
     for (int xt = 0; xt < grid.dimensions_.x / DUNGEON_CELL_SIZE; xt++)
     {
+#ifndef GAME_HEADLESS
       progress.fetch_add(1);
+#endif
       if (rng.RandFloat() < 0.15f)
       {
         const auto posCell = glm::ivec3(xt, yt, zt);
@@ -1945,7 +1955,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     for (int yt = 0; yt < grid.dimensions_.y / ISLAND_CELL_SIZE; yt++)
     for (int xt = 0; xt < grid.dimensions_.x / ISLAND_CELL_SIZE; xt++)
     {
+#ifndef GAME_HEADLESS
       progress.fetch_add(1);
+#endif
       if (rng.RandFloat() < 0.1f)
       {
         const auto posCell = glm::ivec3(xt, yt, zt);

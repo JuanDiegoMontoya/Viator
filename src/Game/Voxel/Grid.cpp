@@ -328,7 +328,7 @@ namespace Voxel
     DEBUG_ASSERT(localVoxelIndex < CELLS_PER_BL_BRICK);
     DEBUG_ASSERT(bottomLevelBrickPtr.bottomLevelBrick < buffer->SizeBytes() / sizeof(BottomLevelBrick));
     auto& blBrick  = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
-    auto& dstVoxel = blBrick.voxels[localVoxelIndex] = voxel;
+    [[maybe_unused]] auto& dstVoxel = blBrick.voxels[localVoxelIndex] = voxel;
     blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
 #ifndef GAME_HEADLESS
     buffer->MarkDirtyPages(&dstVoxel);
@@ -622,7 +622,9 @@ namespace Voxel
         auto gridAlloc      = buffer->Allocate(gridSize, 4);
         auto* mem           = buffer->GetBase<SubVoxel>() + gridAlloc.offset / sizeof(SubVoxel);
         std::memcpy(mem, grid->grid.get(), gridSize);
+#ifndef GAME_HEADLESS
         buffer->MarkRange(gridAlloc.offset, gridSize);
+#endif
 
         // GpuSubGrid
         ASSERT(gridAlloc.offset / sizeof(SubVoxel) <= UINT32_MAX);
@@ -635,7 +637,9 @@ namespace Voxel
         auto gridInfoAlloc = buffer->Allocate(sizeof(subGridInfo), sizeof(subGridInfo));
         auto* mem2         = buffer->GetBase<GpuSubGrid>() + gridInfoAlloc.offset / sizeof(subGridInfo);
         std::memcpy(mem2, &subGridInfo, sizeof(subGridInfo));
+#ifndef GAME_HEADLESS
         buffer->MarkDirtyPages(mem2);
+#endif
         material.subGrid->myIndexINTERNAL = uint32_t(gridInfoAlloc.offset / sizeof(subGridInfo));
 
         subGridAllocations.emplace_back(gridAlloc);
@@ -731,7 +735,9 @@ namespace Voxel
     auto& topLevelBrickPtr = buffer->GetBase<TopLevelBrickPtr>()[topLevelBrickPtrsBaseIndex + topLevelIndex];
 
     auto lk = std::unique_lock(*mutex_);
+#ifndef GAME_HEADLESS
     buffer->MarkDirtyPages(&topLevelBrickPtr);
+#endif
     dirtyTopLevelBricks.emplace(&topLevelBrickPtr);
 
     if (topLevelBrickPtr.voxelsDoBeAllSame)
@@ -740,10 +746,14 @@ namespace Voxel
     }
 
     auto& topLevelBrick = buffer->GetBase<TopLevelBrick>()[topLevelBrickPtr.topLevelBrick];
+#ifndef GAME_HEADLESS
     buffer->MarkDirtyPages(&topLevelBrick);
+#endif
     for (auto& bottomLevelBrickPtr : topLevelBrick.bricks)
     {
+#ifndef GAME_HEADLESS
       buffer->MarkDirtyPages(&bottomLevelBrickPtr);
+#endif
       dirtyBottomLevelBricks.emplace(&bottomLevelBrickPtr);
 
       if (bottomLevelBrickPtr.voxelsDoBeAllSame)
@@ -751,8 +761,10 @@ namespace Voxel
         continue;
       }
 
-      const auto& bottomLevelBrick = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
+      [[maybe_unused]] const auto& bottomLevelBrick = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
+#ifndef GAME_HEADLESS
       buffer->MarkDirtyPages(&bottomLevelBrick);
+#endif
     }
   }
 

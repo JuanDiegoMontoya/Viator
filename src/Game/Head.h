@@ -1,6 +1,8 @@
 #pragma once
 #include "Core/ClassImplMacros.h"
 
+#include <memory>
+
 class BlockDefinition;
 struct DeltaTime;
 class World;
@@ -29,7 +31,11 @@ public:
 class NullHead final : public Head
 {
 public:
+  NullHead();
   void VariableUpdatePre(DeltaTime, World&) override;
   void VariableUpdatePost(DeltaTime, World&) override;
   Audio* GetAudio() override;
+
+private:
+  std::unique_ptr<Audio> audio_;
 };

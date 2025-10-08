@@ -2,14 +2,15 @@
 
 #ifndef GAME_HEADLESS
   #include "Client/Fvog/Buffer2.h"
+  #include "volk.h"
   #include <unordered_set>
 #endif
 
 #include "Client/Fvog/detail/Common.h"
 #include "tracy/Tracy.hpp"
 #include "vk_mem_alloc.h"
-#include <memory>
 
+#include <memory>
 #include <bit>
 
 namespace
@@ -40,7 +41,7 @@ public:
 
   size_t SizeBytes() const override
   {
-    return gpuBuffer_.SizeBytes();
+    return bufferSize_;
   }
 
   size_t PageSize() const override
@@ -60,6 +61,7 @@ public:
 
 private:
   static constexpr size_t PAGE_SIZE = 1024;
+  size_t bufferSize_{};
   std::unique_ptr<std::byte[]> cpuBuffer_;
   VmaVirtualBlock allocator_{};
 
@@ -95,8 +97,9 @@ std::unique_ptr<SketchyBuffer> SketchyBuffer::Create(size_t bufferSize, std::str
 
 
 SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] std::string name)
+  : bufferSize_(bufferSize)
 #ifndef GAME_HEADLESS
-  : gpuBuffer_({.size = bufferSize, .flag = Fvog::BufferFlagThingy::NONE}, std::move(name))
+    , gpuBuffer_({.size = bufferSize, .flag = Fvog::BufferFlagThingy::NONE}, std::move(name))
 #endif
 {
   ZoneScoped;

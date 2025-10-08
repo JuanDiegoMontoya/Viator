@@ -1188,16 +1188,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Loading world";
         CreateContextVariablesAndObservers(world);
         world.GetRegistry().ctx().get<GameState>() = GameState::LOADING_SP;
-        //world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
-        //  std::async(std::launch::async,
-        //    [&world, path = sSelectedWorld.value()]
-        //    {
-        //      Core::Serialization::LoadRegistryFromFile(world, path);
-        //      world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, path.stem().string());
-        //    }));
-        Core::Serialization::LoadRegistryFromFile(world, sSelectedWorld.value());
-        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, sSelectedWorld.value().stem().string());
-        world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
+        world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
+          std::async(std::launch::async,
+            [&world, path = sSelectedWorld.value()]
+            {
+              Core::Serialization::LoadRegistryFromFile(world, path);
+              world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, path.stem().string());
+            }));
         sSelectedWorld = std::nullopt;
       }
 
@@ -1342,6 +1339,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     {
       future.get();
       gameState = GameState::GAME;
+      world.CreateRenderingMaterials();
     }
     else
     {

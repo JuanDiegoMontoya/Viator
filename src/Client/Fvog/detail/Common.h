@@ -1,6 +1,5 @@
 #pragma once
-
-#include <volk.h>
+#include "vulkan/vulkan_core.h"
 
 #include <memory>
 
@@ -16,6 +15,6 @@ namespace Fvog::detail
   {
     return (value + alignment - 1) & ~(alignment - 1);
   }
-
+  
   void CheckVkResult(VkResult result);
 }

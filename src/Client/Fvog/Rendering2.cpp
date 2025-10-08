@@ -6,6 +6,7 @@
 #include "detail/Common.h"
 #include "detail/ApiToEnum2.h"
 
+#include "volk.h"
 #include <tracy/Tracy.hpp>
 
 #include <algorithm>
