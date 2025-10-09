@@ -648,11 +648,8 @@ namespace Voxel
     }
   }
 
-  void Grid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
+  void Grid::SetVoxelAtUncheckedNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
   {
-    // ZoneScoped;
-    DEBUG_ASSERT(IsPositionInGrid(voxelCoord));
-
     auto [topLevelCoord, bottomLevelCoord, localVoxelCoord] = GetCoordsOfVoxelAt(voxelCoord);
 
     const auto topLevelIndex = FlattenTopLevelBrickCoord(topLevelCoord);
@@ -673,8 +670,7 @@ namespace Voxel
     if (bottomLevelBrickPtr.voxelsDoBeAllSame) [[unlikely]]
     {
       // Make a bottom-level brick
-      bottomLevelBrickPtr =
-        BottomLevelBrickPtr{.voxelsDoBeAllSame = false, .bottomLevelBrick = AllocateBottomLevelBrickNoDirty(bottomLevelBrickPtr.voxelIfAllSame)};
+      bottomLevelBrickPtr = BottomLevelBrickPtr{.voxelsDoBeAllSame = false, .bottomLevelBrick = AllocateBottomLevelBrickNoDirty(bottomLevelBrickPtr.voxelIfAllSame)};
     }
 
     const auto localVoxelIndex = FlattenVoxelCoord(localVoxelCoord);
@@ -683,6 +679,13 @@ namespace Voxel
     auto& blBrick                   = buffer->GetBase<BottomLevelBrick>()[bottomLevelBrickPtr.bottomLevelBrick];
     blBrick.voxels[localVoxelIndex] = voxel;
     blBrick.occupancy.Set(localVoxelIndex, materials_[(uint32_t)voxel].isVisible);
+  }
+
+  void Grid::SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel)
+  {
+    // ZoneScoped;
+    DEBUG_ASSERT(IsPositionInGrid(voxelCoord));
+    SetVoxelAtUncheckedNoDirty(voxelCoord, voxel);
   }
 
   uint32_t Grid::AllocateTopLevelBrickNoDirty(voxel_t initialVoxel)

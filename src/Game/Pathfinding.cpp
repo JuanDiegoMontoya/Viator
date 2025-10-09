@@ -239,7 +239,6 @@ std::size_t std::hash<Pathfinding::FindPathParams>::operator()(const Pathfinding
 TEST_CASE("Pathfinding")
 {
   auto game = TestGame::Create();
-  game->InitFlatGrid();
 
   auto params = Pathfinding::FindPathParams{
     .start            = {0, 1, 0},
@@ -252,6 +251,7 @@ TEST_CASE("Pathfinding")
   
   SUBCASE("Find a straight path on flat ground")
   {
+    game->InitFlatGrid();
     const auto path = Pathfinding::FindPath(game->GetWorld(), params);
 
     REQUIRE(!path.empty());
@@ -262,6 +262,7 @@ TEST_CASE("Pathfinding")
 
   SUBCASE("Find a diagonal path on flat ground and make sure it's not too long")
   {
+    game->InitFlatGrid();
     params.goal     = {10, 1, 10};
     const auto path = Pathfinding::FindPath(game->GetWorld(), params);
 

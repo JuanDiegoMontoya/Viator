@@ -218,6 +218,7 @@ namespace Voxel
 
     // Entrusts the caller with the responsibility of marking pages dirty.
     // Intended for world loading and other cases where mass modification is needed.
+    void SetVoxelAtUncheckedNoDirty(glm::ivec3 voxelCoord, voxel_t voxel);
     void SetVoxelAtNoDirty(glm::ivec3 voxelCoord, voxel_t voxel);
     [[nodiscard]] uint32_t AllocateTopLevelBrickNoDirty(voxel_t initialVoxel);
     [[nodiscard]] uint32_t AllocateBottomLevelBrickNoDirty(voxel_t initialVoxel);

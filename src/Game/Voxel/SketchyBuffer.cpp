@@ -61,13 +61,7 @@ public:
 private:
   static constexpr size_t PAGE_SIZE = 1024;
   static inline uint32_t nextNameId_{};
-  std::string name = std::format("Voxel Storage {} ({})", nextNameId_++,
-    #ifndef GAME_HEADLESS
-    "CPU & GPU"
-    #else
-    "CPU"
-    #endif
-  );
+  std::string name_;
   size_t bufferSize_{};
   std::unique_ptr<std::byte[]> cpuBuffer_;
   VmaVirtualBlock allocator_{};
@@ -107,6 +101,14 @@ SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, bool createGpuBuffer, [[
   : bufferSize_(bufferSize)
 {
   ZoneScoped;
+  name_ = std::format("Voxel Storage {} ({})",
+    nextNameId_++,
+#ifndef GAME_HEADLESS
+    createGpuBuffer ? "CPU & GPU" : "CPU"
+#else
+    "CPU"
+#endif
+  );
 #ifndef GAME_HEADLESS
   if (createGpuBuffer)
   {
@@ -129,7 +131,7 @@ SketchyBufferImpl::~SketchyBufferImpl()
 {
   if constexpr (profileVoxelPool)
   {
-    TracyMemoryDiscard(name.c_str());
+    TracyMemoryDiscard(name_.c_str());
   }
 
   if (allocator_)
@@ -179,7 +181,7 @@ SketchyBufferImpl::Alloc SketchyBufferImpl::Allocate(size_t size, size_t alignme
   // We only expect to have one SketchyBuffer, so this should be fine.
   if constexpr (profileVoxelPool)
   {
-    TracyAllocN(allocation, size, name.c_str());
+    TracyAllocN(allocation, size, name_.c_str());
   }
 
   // Push offset forward to multiple of the true alignment, then subtract that amount from the remaining size
@@ -194,7 +196,7 @@ void SketchyBufferImpl::Free(Alloc alloc)
   ZoneScoped;
   if constexpr (profileVoxelPool)
   {
-    TracyFreeN(alloc.allocation, name.c_str());
+    TracyFreeN(alloc.allocation, name_.c_str());
   }
   vmaVirtualFree(allocator_, alloc.allocation);
 }

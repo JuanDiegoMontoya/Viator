@@ -61,24 +61,26 @@ public:
 
   void InitEmptyGrid(voxel_t voxel) override
   {
+    ZoneScoped;
     auto& grid = GetGrid();
     for (int z = 0; z < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; z++)
     for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
     for (int x = 0; x < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; x++)
     {
-      grid.SetVoxelAt({x, y, z}, voxel);
+      grid.SetVoxelAtUncheckedNoDirty({x, y, z}, voxel);
     }
   }
 
   void InitFlatGrid(voxel_t voxel) override
   {
+    ZoneScoped;
     InitEmptyGrid(voxel_t::Air);
 
     auto& grid = GetGrid();
     for (int z = 0; z < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; z++)
     for (int x = 0; x < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; x++)
     {
-      grid.SetVoxelAt({x, 0, z}, voxel);
+      grid.SetVoxelAtUncheckedNoDirty({x, 0, z}, voxel);
     }
   }
 

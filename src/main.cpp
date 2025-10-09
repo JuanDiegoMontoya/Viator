@@ -48,16 +48,19 @@ int main(int argc, const char* const* argv)
       {
         spdlog::info("Executing tests.");
         doctest::Context context;
+        context.setOption("dt-exit", true);
         context.applyCommandLine(argc, argv);
-        int res = context.run();
-        spdlog::info("Tests complete. Exiting.");
 
+        const auto lastLevel = spdlog::get_level();
+        spdlog::set_level(spdlog::level::warn);
+        int res = context.run();
+        spdlog::set_level(lastLevel);
+
+        spdlog::info("Tests complete.{}", context.shouldExit() ? " Exiting. (Continue with --dt-exit=false)" : "");
         if (context.shouldExit())
         {
           std::exit(res);
         }
-
-        std::exit(res);
       }
       else if (!arg.starts_with("-"))
       {
