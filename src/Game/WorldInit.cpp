@@ -1151,6 +1151,7 @@ void World::CreateGrid(glm::ivec3 numChunks)
 
 void World::CreateRenderingMaterials()
 {
+  ZoneScoped;
   auto voxelMats = std::vector<Voxel::Grid::Material>();
   const auto& blocks = registry_.ctx().get<Block::Registry>();
   const auto& blockMap = blocks.GetIdToTagMap();

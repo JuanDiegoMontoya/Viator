@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <bit>
+#include <optional>
 
 namespace
 {
@@ -21,7 +22,7 @@ namespace
 class SketchyBufferImpl final : public SketchyBuffer
 {
 public:
-  explicit SketchyBufferImpl(size_t bufferSize, std::string name = {});
+  explicit SketchyBufferImpl(size_t bufferSize, bool createGpuBuffer, std::string name = {});
   ~SketchyBufferImpl() override;
 
   NO_COPY(SketchyBufferImpl);
@@ -77,7 +78,8 @@ public:
 
   Fvog::Buffer& GetGpuBuffer() override
   {
-    return gpuBuffer_;
+    DEBUG_ASSERT(gpuBuffer_.has_value());
+    return *gpuBuffer_;
   }
 
   void MarkRange(size_t offset, size_t size) override
@@ -91,27 +93,36 @@ public:
   }
 
 private:
-  Fvog::Buffer gpuBuffer_;
+  std::optional<Fvog::Buffer> gpuBuffer_;
   std::unordered_set<uint32_t> dirtyPages_;
 #endif
 };
 
-std::unique_ptr<SketchyBuffer> SketchyBuffer::Create(size_t bufferSize, std::string name)
+std::unique_ptr<SketchyBuffer> SketchyBuffer::Create(size_t bufferSize, bool createGpuBuffer, std::string name)
 {
-  return std::make_unique<SketchyBufferImpl>(bufferSize, name);
+  return std::make_unique<SketchyBufferImpl>(bufferSize, createGpuBuffer, name);
 }
 
-
-SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] std::string name)
+SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, bool createGpuBuffer, [[maybe_unused]] std::string name)
   : bufferSize_(bufferSize)
-#ifndef GAME_HEADLESS
-    , gpuBuffer_({.size = bufferSize, .flag = Fvog::BufferFlagThingy::NONE}, std::move(name))
-#endif
 {
   ZoneScoped;
+#ifndef GAME_HEADLESS
+  if (createGpuBuffer)
+  {
+    gpuBuffer_.emplace(Fvog::BufferCreateInfo{.size = bufferSize, .flag = Fvog::BufferFlagThingy::NONE}, std::move(name));
+  }
+#endif
   cpuBuffer_ = std::make_unique_for_overwrite<std::byte[]>(bufferSize);
-  std::memset(cpuBuffer_.get(), 0xCD, bufferSize);
-  Fvog::detail::CheckVkResult(vmaCreateVirtualBlock(Fvog::detail::Address(VmaVirtualBlockCreateInfo{.size = bufferSize}), &allocator_));
+  {
+    ZoneScopedN("memset");
+    ZoneValue(bufferSize);
+    std::memset(cpuBuffer_.get(), 0xCD, bufferSize);
+  }
+  {
+    ZoneScopedN("vmaCreateVirtualBlock");
+    Fvog::detail::CheckVkResult(vmaCreateVirtualBlock(Fvog::detail::Address(VmaVirtualBlockCreateInfo{.size = bufferSize}), &allocator_));
+  }
 }
 
 SketchyBufferImpl::~SketchyBufferImpl()
@@ -192,11 +203,12 @@ void SketchyBufferImpl::Free(Alloc alloc)
 void SketchyBufferImpl::FlushWritesToGPU(VkCommandBuffer cmd)
 {
   ZoneScoped;
+  DEBUG_ASSERT(gpuBuffer_.has_value());
   // All pages need to be flushed or the underlying data may have invalid references/indices
   for (uint32_t page : dirtyPages_)
   {
     auto offset = page * PAGE_SIZE;
-    vkCmdUpdateBuffer(cmd, gpuBuffer_.Handle(), offset, PAGE_SIZE, cpuBuffer_.get() + offset);
+    vkCmdUpdateBuffer(cmd, gpuBuffer_->Handle(), offset, PAGE_SIZE, cpuBuffer_.get() + offset);
   }
 
   dirtyPages_.clear();

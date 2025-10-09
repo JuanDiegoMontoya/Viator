@@ -156,6 +156,8 @@ add_executable(frogRender
     src/Game/Scripting.h
     src/Game/Scripting.cpp
     src/Game/Networking/RpcInfo.h
+    src/Game/TestGame.h
+    src/Game/TestGame.cpp
 )
 
 # Precompiled headers for standard library
@@ -305,9 +307,9 @@ if (NOT GAME_HEADLESS)
         ${FSR2_LIBS}
         volk::volk
         vk-bootstrap::vk-bootstrap
-        glslang
-        glslang-default-resource-limits
-        SPIRV
+        glslang::glslang
+        glslang::glslang-default-resource-limits
+        glslang::SPIRV
         stbi
     )
 endif()

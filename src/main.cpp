@@ -32,17 +32,6 @@ int main(int argc, const char* const* argv)
   Physics::Initialize();
   auto head = std::unique_ptr<Head>();
 
-#ifdef GAME_HEADLESS
-  head = std::make_unique<NullHead>();
-#else
-  head = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
-    .name        = "Gabagool",
-    .maximize    = false,
-    .decorate    = true,
-    .presentMode = VK_PRESENT_MODE_FIFO_KHR,
-  });
-#endif
-
   auto worldToLoad = std::optional<std::filesystem::path>();
   auto port        = std::optional<uint16_t>();
 
@@ -57,9 +46,12 @@ int main(int argc, const char* const* argv)
     {
       if (arg == "--test")
       {
+        spdlog::info("Executing tests.");
         doctest::Context context;
         context.applyCommandLine(argc, argv);
         int res = context.run();
+        spdlog::info("Tests complete. Exiting.");
+
         if (context.shouldExit())
         {
           std::exit(res);
@@ -90,6 +82,17 @@ int main(int argc, const char* const* argv)
     args.emplace_back(argv[i]);
   }
   ParseOptions(args);
+
+#ifdef GAME_HEADLESS
+  head = std::make_unique<NullHead>();
+#else
+  head = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
+    .name        = "Gabagool",
+    .maximize    = false,
+    .decorate    = true,
+    .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+  });
+#endif
 
   auto params = GameParams{
     .scripting    = &scripting,

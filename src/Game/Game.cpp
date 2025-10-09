@@ -458,6 +458,7 @@ static std::unique_ptr<Networking::Interface>* gNetworking_HORRIBLE_HACK{};
 static Scripting* gScripting_HORRIBLE_HACK{};
 Game::Game(const GameParams& params)
 {
+  ZoneScoped;
   spdlog::info("Initializing game");
   world_                    = std::make_unique<World>();
   head_                     = params.head;
@@ -635,6 +636,7 @@ void Game::Run()
 
 void Game::Tick(float dt)
 {
+  ZoneScoped;
   if (networking_)
   {
     SPDLOG_TRACE("networking_->ProcessMessages()");

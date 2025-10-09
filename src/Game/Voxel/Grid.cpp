@@ -204,10 +204,10 @@ namespace Voxel
       [&](voxel_t voxel) { return voxel != voxel_t::Air && (!skipNonSolid || materials_[(uint32_t)voxel].isSolid); });
   }
 
-  Grid::Grid() : buffer(SketchyBuffer::Create(16)) {}
+  Grid::Grid() : buffer(SketchyBuffer::Create(16, false)) {}
 
-  Grid::Grid(glm::ivec3 topLevelBrickDims)
-    : buffer(SketchyBuffer::Create(1'500'000'000, "World")),
+  Grid::Grid(glm::ivec3 topLevelBrickDims, size_t bufferSize, bool createGpuBuffer)
+    : buffer(SketchyBuffer::Create(bufferSize, createGpuBuffer, "World")),
       topLevelBricksDims_(topLevelBrickDims),
       dimensions_(topLevelBricksDims_.x * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.y * TL_BRICK_VOXELS_PER_SIDE, topLevelBricksDims_.z * TL_BRICK_VOXELS_PER_SIDE)
   {

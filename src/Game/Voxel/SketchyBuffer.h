@@ -20,7 +20,7 @@ namespace Fvog
 class SketchyBuffer
 {
 public:
-  static std::unique_ptr<SketchyBuffer> Create(size_t bufferSize, std::string name = {});
+  static std::unique_ptr<SketchyBuffer> Create(size_t bufferSize, bool createGpuBuffer, std::string name = {});
 
   SketchyBuffer()          = default;
   virtual ~SketchyBuffer() = default;

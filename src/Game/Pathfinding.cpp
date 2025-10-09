@@ -229,3 +229,134 @@ std::size_t std::hash<Pathfinding::FindPathParams>::operator()(const Pathfinding
   auto tup = std::make_tuple(p.start, p.goal, p.height, p.w, p.maxNodesToSearch);
   return ::hash<decltype(tup)>{}(tup);
 }
+
+#include "Game/TestGame.h"
+#include "Game/EntityPrefab.h"
+
+#include "doctest.h"
+#include "spdlog/spdlog.h"
+
+TEST_CASE("Pathfinding")
+{
+  auto game = TestGame::Create();
+  game->InitFlatGrid();
+
+  auto params = Pathfinding::FindPathParams{
+    .start            = {0, 1, 0},
+    .goal             = {10, 1, 0},
+    .height           = 2,
+    .w                = 1,
+    .canFly           = false,
+    .maxNodesToSearch = 1000,
+  };
+  
+  SUBCASE("Find a straight path on flat ground")
+  {
+    const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+
+    REQUIRE(!path.empty());
+    CHECK(path.size() == 10);
+    CHECK(path.front() == glm::vec3{1, 1, 0} + 0.5f);
+    CHECK(path.back() == glm::vec3(params.goal) + 0.5f);
+  }
+
+  SUBCASE("Find a diagonal path on flat ground and make sure it's not too long")
+  {
+    params.goal     = {10, 1, 10};
+    const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+
+    REQUIRE(!path.empty());
+    CHECK(path.front() == glm::vec3{1, 1, 0} + 0.5f);
+    CHECK(path.back() == glm::vec3(params.goal) + 0.5f);
+    float dist = 1;
+    for (size_t i = 1; i < path.size(); i++)
+    {
+      dist += glm::distance(path[i - 1], path[i]);
+    }
+    // Manhattan distance.
+    CHECK(dist == doctest::Approx(glm::compAdd(glm::abs(params.goal - params.start))));
+  }
+
+  SUBCASE("Pathfinding on a line")
+  {
+    game->InitEmptyGrid();
+    auto& grid = game->GetGrid();
+
+    for (int x = 0; x <= 10; x++)
+    {
+      grid.SetVoxelAt({x, 0, 0}, voxel_t(1));
+    }
+
+    SUBCASE("Find a path over a one-block-wide gap")
+    {
+      grid.SetVoxelAt({5, 0, 0}, voxel_t::Air);
+      const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+      REQUIRE(!path.empty());
+      CHECK(path.front() == glm::vec3{1, 1, 0} + 0.5f);
+      CHECK(path.back() == glm::vec3(params.goal) + 0.5f);
+    }
+
+    SUBCASE("Two-block-wide gaps are impassible")
+    {
+      grid.SetVoxelAt({5, 0, 0}, voxel_t::Air);
+      grid.SetVoxelAt({6, 0, 0}, voxel_t::Air);
+      const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+      CHECK(path.empty());
+    }
+
+    SUBCASE("Two-block-wide gaps can be traversed by flying creatures")
+    {
+      grid.SetVoxelAt({5, 0, 0}, voxel_t::Air);
+      grid.SetVoxelAt({6, 0, 0}, voxel_t::Air);
+      params.canFly   = true;
+      const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+      REQUIRE(!path.empty());
+      CHECK(path.front() == glm::vec3{1, 1, 0} + 0.5f);
+      CHECK(path.back() == glm::vec3(params.goal) + 0.5f);
+    }
+
+    SUBCASE("Find a path over a one-high wall")
+    {
+      grid.SetVoxelAt({5, 1, 0}, voxel_t(1));
+      const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+      REQUIRE(!path.empty());
+      CHECK(path.front() == glm::vec3{1, 1, 0} + 0.5f);
+      CHECK(path.back() == glm::vec3(params.goal) + 0.5f);
+    }
+
+    SUBCASE("Two-high walls are impassible")
+    {
+      grid.SetVoxelAt({5, 1, 0}, voxel_t(1));
+      grid.SetVoxelAt({5, 2, 0}, voxel_t(1));
+      const auto path = Pathfinding::FindPath(game->GetWorld(), params);
+      CHECK(path.empty());
+    }
+  }
+}
+
+TEST_CASE("Pathfinding integration")
+{
+  auto game = TestGame::Create();
+  game->InitFlatGrid();
+
+  auto& registry           = game->GetWorld().GetRegistry();
+  constexpr auto targetPos = glm::vec3(10, 1.5f, 0);
+  const auto target        = game->GetWorld().CreateRenderableEntity(targetPos);
+  const auto frog          = registry.ctx().get<EntityPrefabRegistry>().Get("Melee Frog").Spawn(game->GetWorld(), {1, 3, 1});
+
+  registry.emplace_or_replace<AiTarget>(frog, target);
+
+  // Simulate up to 10 seconds of gameplay.
+  bool reachedTarget = false;
+  for (int i = 0; i < 300; i++)
+  {
+    game->Tick(1.0f / 30);
+    if (glm::distance(registry.get<GlobalTransform>(frog).position, targetPos) < 1.25f)
+    {
+      reachedTarget = true;
+      break;
+    }
+  }
+
+  CHECK_MESSAGE(reachedTarget, "Frog failed to reach its target after 10 seconds of game time.");
+}

@@ -692,6 +692,8 @@ public:
   void Tick(float dt);
 
 private:
+  friend class TestGameImpl;
+
   bool isRunning_ = false;
   Head* head_;
   std::unique_ptr<Networking::Interface> networking_;

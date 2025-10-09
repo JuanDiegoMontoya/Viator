@@ -130,7 +130,7 @@ namespace Voxel
     };
 
     explicit Grid();
-    explicit Grid(glm::ivec3 topLevelBrickDims);
+    explicit Grid(glm::ivec3 topLevelBrickDims, size_t bufferSize = 1'500'000'000, bool createGpuBuffer = true);
 
     struct GridHierarchyCoords
     {
