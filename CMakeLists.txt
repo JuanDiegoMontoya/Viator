@@ -158,6 +158,7 @@ add_executable(frogRender
     src/Game/Networking/RpcInfo.h
     src/Game/TestGame.h
     src/Game/TestGame.cpp
+    src/Game/Networking/TestNetworking.cpp
 )
 
 # Precompiled headers for standard library

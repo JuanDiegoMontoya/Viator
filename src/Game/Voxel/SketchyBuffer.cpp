@@ -2,6 +2,7 @@
 
 #ifndef GAME_HEADLESS
   #include "Client/Fvog/Buffer2.h"
+  #include "Client/Fvog/Device.h"
   #include "volk.h"
   #include <unordered_set>
 #endif
@@ -9,6 +10,7 @@
 #include "Client/Fvog/detail/Common.h"
 #include "tracy/Tracy.hpp"
 #include "vk_mem_alloc.h"
+#include "spdlog/spdlog.h"
 
 #include <memory>
 #include <bit>
@@ -101,6 +103,13 @@ SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, bool createGpuBuffer, [[
   : bufferSize_(bufferSize)
 {
   ZoneScoped;
+#ifndef GAME_HEADLESS
+  if (createGpuBuffer && !Fvog::IsDeviceInitialized())
+  {
+    spdlog::trace("Fvog::Device is not initialized, overriding createGpuBuffer to false.");
+    createGpuBuffer = false;
+  }
+#endif
   name_ = std::format("Voxel Storage {} ({})",
     nextNameId_++,
 #ifndef GAME_HEADLESS

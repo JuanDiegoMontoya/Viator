@@ -31,7 +31,7 @@ namespace Networking
     ~ClientImpl() override;
     NO_COPY_NO_MOVE(ClientImpl);
 
-    void ProcessMessages(World& world) override;
+    void ProcessMessages(World& world, std::uint32_t timeoutMs) override;
     void SendMessages(World& world) override;
     void EnqueueRPC(RpcInfo rpc) override;
     bool IsEntityOwnedByRemote(entt::entity entity) override;
@@ -105,20 +105,20 @@ Networking::ClientImpl::~ClientImpl()
   enet_deinitialize();
 }
 
-void Networking::ClientImpl::ProcessMessages([[maybe_unused]] World& world)
+void Networking::ClientImpl::ProcessMessages([[maybe_unused]] World& world, std::uint32_t timeoutMs)
 {
   ZoneScoped;
   auto event = ENetEvent{};
   while (true)
   {
-    if (int ret = enet_host_service(localHost_, &event, 0) > 0)
+    if (int ret = enet_host_service(localHost_, &event, timeoutMs) > 0)
     {
       switch (event.type)
       {
       case ENET_EVENT_TYPE_CONNECT:
       {
         ZoneScopedN("ENET_EVENT_TYPE_CONNECT");
-        spdlog::info("Connected to {}", event.peer->address);
+        spdlog::info("Client connected to {}", event.peer->address);
         status_     = ClientStatus::Joining;
         remotePeer_ = event.peer;
         break;

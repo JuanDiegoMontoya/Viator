@@ -35,7 +35,7 @@ namespace Networking
     NO_COPY_NO_MOVE(Interface);
     virtual ~Interface() = default;
 
-    virtual void ProcessMessages(World&) = 0;
+    virtual void ProcessMessages(World&, std::uint32_t timeoutMs = 0) = 0;
     virtual void SendMessages(World&)    = 0;
     virtual void EnqueueRPC(struct RpcInfo rpc) = 0;
     virtual bool IsEntityOwnedByRemote(entt::entity entity) = 0;
