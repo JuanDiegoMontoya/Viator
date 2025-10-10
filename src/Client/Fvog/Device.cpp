@@ -1,7 +1,7 @@
 #include "Device.h"
 #include "detail/Common.h"
 #include "detail/SamplerCache2.h"
-
+#include "Core/Assert2.h"
 #include "MathUtilities.h"
 
 #include <vk_mem_alloc.h>
@@ -439,8 +439,8 @@ namespace Fvog
       bindingsFlags.push_back(VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT);
     }
     
-    assert(bindings.size() == bindingsFlags.size());
-    assert(poolSizes.size() == bindingsFlags.size());
+    ASSERT(bindings.size() == bindingsFlags.size());
+    ASSERT(poolSizes.size() == bindingsFlags.size());
 
     CheckVkResult(vkCreateDescriptorSetLayout(device_, Address(VkDescriptorSetLayoutCreateInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -718,7 +718,7 @@ namespace Fvog
             }
             case ResourceType::ACCELERATION_STRUCTURE: accelerationStructureDescriptorAllocator.Free(descriptorAlloc.handle.index); return true;
             case ResourceType::INVALID:
-            default: assert(0); return true;
+            default: ASSERT(0); return true;
             }
           }
           return false;
@@ -920,8 +920,13 @@ namespace Fvog
 
   Device& GetDevice()
   {
-    assert(gDevice);
+    ASSERT(gDevice);
     return *gDevice;
+  }
+
+  bool IsDeviceInitialized()
+  {
+    return gDevice != nullptr;
   }
 
   void DestroyDevice()

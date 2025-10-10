@@ -174,5 +174,6 @@ namespace Fvog
   // I love mutable global state
   void CreateDevice(vkb::Instance& instance, VkSurfaceKHR surface);
   [[nodiscard]] Device& GetDevice();
+  [[nodiscard]] bool IsDeviceInitialized();
   void DestroyDevice();
 }
