@@ -581,10 +581,16 @@ PlayerHead::~PlayerHead()
 {
   ZoneScoped;
 
-  voxelRenderer_.reset();
+  {
+    ZoneScopedN("voxelRenderer_.reset()");
+    voxelRenderer_.reset();
+  }
 
   // Must happen before device is destroyed, thus cannot go in the destroy list
-  ImGui_ImplFvog_Shutdown();
+  {
+    ZoneScopedN("ImGui_ImplFvog_Shutdown()");
+    ImGui_ImplFvog_Shutdown();
+  }
 
   vkDestroyDescriptorPool(Fvog::GetDevice().device_, imguiDescriptorPool_, nullptr);
 
@@ -592,16 +598,25 @@ PlayerHead::~PlayerHead()
   DestroyVkContext(tracyVkContext_);
 #endif
 
-  vkb::destroy_swapchain(swapchain_);
+  {
+    ZoneScopedN("vkb::destroy_swapchain()");
+    vkb::destroy_swapchain(swapchain_);
+  }
 
   for (auto view : swapchainImageViews_)
   {
     vkDestroyImageView(Fvog::GetDevice().device_, view, nullptr);
   }
 
-  CleanupPerSwapchainImageData(perSwapchainImageData);
+  {
+    ZoneScopedN("CleanupPerSwapchainImageData()");
+    CleanupPerSwapchainImageData(perSwapchainImageData);
+  }
 
-  DestroyGlobalPipelineManager();
+  {
+    ZoneScopedN("DestroyGlobalPipelineManager()");
+    DestroyGlobalPipelineManager();
+  }
 
   Fvog::DestroyDevice();
 }

@@ -8,11 +8,9 @@
 #include <vector>
 #include <optional>
 #include <atomic>
-
-namespace choc::file
-{
-  struct Watcher;
-}
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 // The purpose of this class is to serve as a central place to manage shader and pipeline compilation.
 // The interface should be such that multithreaded compilation and shader deduplication could be transparently performed,
@@ -22,7 +20,8 @@ namespace choc::file
 class PipelineManager
 {
 public:
-  PipelineManager() = default;
+  PipelineManager();
+  ~PipelineManager();
 
   // Moving would invalidate references from child objects, so forbid it (this is probably very smelly)
   PipelineManager(PipelineManager&&) noexcept = delete;
@@ -124,9 +123,8 @@ public:
     Status status = Status::PENDING;
     // Duplicate of map key, but I'm too dumb to figure out a cleaner solution (set won't work due to immutability constraint)
     ShaderModuleCreateInfo info;
-    // TODO: file watcher?
+    std::filesystem::file_time_type lastWriteTime;
     std::unique_ptr<Fvog::Shader> shader;
-    std::unique_ptr<choc::file::Watcher> fileWatcher;
     std::unique_ptr<std::atomic_bool> isOutOfDate = std::make_unique<std::atomic_bool>(false); // If true, current shader is older than file contents
   };
 
@@ -164,6 +162,10 @@ private:
   };
 
   // Caches the compilation of shader modules
+  std::jthread fileWatcher_;
+  std::mutex mutex_;
+  std::mutex exitMutex_;
+  std::condition_variable exitCondVar_;
   std::unordered_map<ShaderModuleCreateInfo, std::unique_ptr<ShaderModuleValue>, HashShaderModuleCreateInfo> shaderModules_;
   std::unordered_map<uint64_t, GraphicsPipelineValue> graphicsPipelines_;
   std::unordered_map<uint64_t, ComputePipelineValue> computePipelines_;

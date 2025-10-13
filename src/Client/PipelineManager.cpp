@@ -11,26 +11,67 @@ namespace
   PipelineManager* globalPipelineManagerInstance = nullptr;
 }
 
-PipelineManager::GraphicsPipelineKey::operator bool() const noexcept {
+PipelineManager::GraphicsPipelineKey::operator bool() const noexcept
+{
   return id_ != 0;
 }
 
-Fvog::GraphicsPipeline& PipelineManager::GraphicsPipelineKey::GetPipeline() const {
+Fvog::GraphicsPipeline& PipelineManager::GraphicsPipelineKey::GetPipeline() const
+{
   ASSERT(pipelineManager_);
   auto& pipeline = pipelineManager_->graphicsPipelines_.at(id_).pipeline;
   ASSERT(pipeline);
   return *pipeline;
 }
 
-PipelineManager::ComputePipelineKey::operator bool() const noexcept {
+PipelineManager::ComputePipelineKey::operator bool() const noexcept
+{
   return id_ != 0;
 }
 
-Fvog::ComputePipeline& PipelineManager::ComputePipelineKey::GetPipeline() const {
+Fvog::ComputePipeline& PipelineManager::ComputePipelineKey::GetPipeline() const
+{
   ASSERT(pipelineManager_);
   auto& pipeline = pipelineManager_->computePipelines_.at(id_).pipeline;
   ASSERT(pipeline);
   return *pipeline;
+}
+
+PipelineManager::PipelineManager()
+{
+  fileWatcher_ = std::jthread(
+    [this](std::stop_token stopToken)
+    {
+      while (!stopToken.stop_requested())
+      {
+        using namespace std::chrono_literals;
+        
+        {
+          ZoneScopedN("Lock and iterate shaders");
+          auto lock = std::lock_guard(mutex_);
+          for (auto& [_, shaderModule] : shaderModules_)
+          {
+            const auto lastWrite = std::filesystem::last_write_time(shaderModule->info.path);
+            if (lastWrite > shaderModule->lastWriteTime)
+            {
+              shaderModule->isOutOfDate->store(true);
+            }
+          }
+        }
+
+        ZoneScopedN("Wait up to 200ms");
+        auto fakeLock = std::unique_lock(exitMutex_);
+        exitCondVar_.wait_for(fakeLock, 200ms);
+      }
+  });
+}
+
+PipelineManager::~PipelineManager()
+{
+  ZoneScoped;
+  fileWatcher_.request_stop();
+  exitCondVar_.notify_one();
+  fileWatcher_.join();
 }
 
 PipelineManager::ComputePipelineKey PipelineManager::EnqueueCompileComputePipeline(const ComputePipelineCreateInfo& createInfo)
@@ -259,23 +300,15 @@ PipelineManager::ShaderModuleValue& PipelineManager::EmplaceOrGetShaderModuleVal
   }
 
   auto shaderModule = std::make_unique<ShaderModuleValue>();
-  auto ptr          = shaderModule.get();
   *shaderModule = ShaderModuleValue{
     .info = createInfo,
     // TODO: defer shader creation
     // TODO: pass name to shader (derive from path?)
-        .fileWatcher = std::make_unique<choc::file::Watcher>(createInfo.path,
-      [ptr](const choc::file::Watcher::Event& event) -> void
-      {
-        if (event.eventType == choc::file::Watcher::EventType::modified)
-        {
-          *ptr->isOutOfDate = true;
-        }
-      }),
   };
   try
   {
     shaderModule->shader = std::make_unique<Fvog::Shader>(createInfo.stage, createInfo.path);
+    shaderModule->lastWriteTime = std::filesystem::last_write_time(createInfo.path);
     shaderModule->status = Status::SUCCESS;
   }
   catch (std::exception& e)
@@ -284,6 +317,7 @@ PipelineManager::ShaderModuleValue& PipelineManager::EmplaceOrGetShaderModuleVal
     shaderModule->status = Status::FAILED;
   }
 
+  auto lock = std::lock_guard(mutex_);
   return *shaderModules_.emplace(createInfo, std::move(shaderModule)).first->second;
 }
 
