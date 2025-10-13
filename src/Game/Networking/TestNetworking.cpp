@@ -8,8 +8,8 @@
 
 TEST_CASE("Simple client and server")
 {
-  auto sGame   = TestGame::Create();
-  auto cGame   = TestGame::Create();
+  auto sGame = TestGame::Create();
+  auto cGame = TestGame::Create();
 
   auto server = Networking::Server::Create(sGame->GetWorld());
   auto client = Networking::Client::Create(cGame->GetWorld(), "localhost");
