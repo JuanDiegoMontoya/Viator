@@ -258,7 +258,10 @@ void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
   ZoneScopedN("PlayerHead::VariableUpdatePre");
   worldThisFrame_   = &world;
 
-  audio_->FreeUnusedResources();
+  if (audio_)
+  {
+    audio_->FreeUnusedResources();
+  }
   inputSystem_->VariableUpdatePre(dt, world, swapchainOk);
 }
 
@@ -360,6 +363,11 @@ void PlayerHead::CreateRenderingMaterials(const World& world)
 
 Audio* PlayerHead::GetAudio()
 {
+  static auto poop = new NullAudio();
+  if (!audio_)
+  {
+    return poop;
+  }
   return audio_.get();
 }
 
@@ -375,7 +383,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
     }
   }
 
-  destroyList_.Push([] { glfwTerminate(); });
+  destroyList_.Push(
+    []
+    {
+      ZoneScopedN("glfwTerminate");
+      glfwTerminate();
+    });
 
   glfwSetErrorCallback([](int, const char* desc) { std::cout << "GLFW error: " << desc << '\n'; });
 
@@ -456,7 +469,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
                   .build()
                   .value();
 
-    destroyList_.Push([this] { vkb::destroy_instance(instance_); });
+    destroyList_.Push(
+      [this]
+      {
+        ZoneScopedN("vkDestroyInstance");
+        vkb::destroy_instance(instance_);
+      });
   }
 
   {
@@ -466,7 +484,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
       throw std::runtime_error("rip");
     }
 
-    destroyList_.Push([] { volkFinalize(); });
+    destroyList_.Push(
+      []
+      {
+        ZoneScopedN("volkFinalize()");
+        volkFinalize();
+      });
 
     volkLoadInstance(instance_);
   }
@@ -489,7 +512,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
     }
   }
 
-  destroyList_.Push([this] { vkDestroySurfaceKHR(instance_, surface_, nullptr); });
+  destroyList_.Push(
+    [this]
+    {
+      ZoneScopedN("vkDestroySurfaceKHR()");
+      vkDestroySurfaceKHR(instance_, surface_, nullptr);
+    });
 
   // device
   {
@@ -522,7 +550,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   }
 
   glslang::InitializeProcess();
-  destroyList_.Push([] { glslang::FinalizeProcess(); });
+  destroyList_.Push(
+    []
+    {
+      ZoneScopedN("glslang::FinalizeProcess()");
+      glslang::FinalizeProcess();
+    });
 
   // Initialize Tracy
   tracyVkContext_ = TracyVkContextHostCalibrated(Fvog::GetDevice().physicalDevice_,
@@ -534,11 +567,26 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   // Initialize ImGui and a backend for it.
   // Because we allow the GLFW backend to install callbacks, it will automatically call our own that we provided.
   ImGui::CreateContext();
-  destroyList_.Push([] { ImGui::DestroyContext(); });
+  destroyList_.Push(
+    []
+    {
+      ZoneScopedN("ImGui::DestroyContext()");
+      ImGui::DestroyContext();
+    });
   ImPlot::CreateContext();
-  destroyList_.Push([] { ImPlot::DestroyContext(); });
+  destroyList_.Push(
+    []
+    {
+      ZoneScopedN("ImPlot::DestroyContext()");
+      ImPlot::DestroyContext();
+    });
   ImGui_ImplGlfw_InitForVulkan(window, false);
-  destroyList_.Push([] { ImGui_ImplGlfw_Shutdown(); });
+  destroyList_.Push(
+    []
+    {
+      ZoneScopedN("ImGui_ImplGlfw_Shutdown()");
+      ImGui_ImplGlfw_Shutdown();
+    });
 
   // ImGui may create many sets, but each will only have one combined image sampler
   vkCreateDescriptorPool(Fvog::GetDevice().device_,
@@ -569,7 +617,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   ImGui_ImplFvog_Init(&imguiVulkanInitInfo);
   ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-  audio_         = std::make_unique<PlayerAudio>();
+  //audio_         = std::make_unique<PlayerAudio>();
   voxelRenderer_ = std::make_unique<VoxelRenderer>(this);
   inputSystem_   = std::make_unique<InputSystem>(window);
 
@@ -618,7 +666,13 @@ PlayerHead::~PlayerHead()
     DestroyGlobalPipelineManager();
   }
 
-  Fvog::DestroyDevice();
+  {
+    ZoneScopedN("Fvog::DestroyDevice()");
+    Fvog::DestroyDevice();
+  }
+
+  //audio_.reset();
+  //destroyList_.Terminate();
 }
 
 void PlayerHead::Draw(DeltaTime dt)
@@ -882,10 +936,18 @@ void DestroyList2::Push(std::function<void()> fn)
   destructorList.emplace_back(std::move(fn));
 }
 
-DestroyList2::~DestroyList2()
+void DestroyList2::Terminate()
 {
-  for (auto it = destructorList.rbegin(); it != destructorList.rend(); it++)
+  ZoneScoped;
+  for (auto it = destructorList.rbegin(); it != destructorList.rend(); ++it)
   {
     (*it)();
   }
+
+  destructorList.clear();
+}
+
+DestroyList2::~DestroyList2()
+{
+  Terminate();
 }

@@ -721,7 +721,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneSpecial     = Fvog::CreateTexture2D(extent, Frame::sceneSpecialFormat, Fvog::TextureUsage::GENERAL, "Scene special");
 
   frame.sceneTransmission      = Fvog::CreateTexture2D(extent, Fvog::Format::B10G11R11_UFLOAT, Fvog::TextureUsage::GENERAL, "Scene transmission");
-  frame.sceneAlbedoTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneAlbedoFormat, Fvog::TextureUsage::GENERAL, "Scene albedo (translucent)");
+  frame.sceneAlbedoTranslucent = Fvog::CreateTexture2D(extent, Fvog::Format::B10G11R11_UFLOAT, Fvog::TextureUsage::GENERAL, "Scene albedo (translucent)");
   frame.sceneNormalTranslucent = Fvog::CreateTexture2D(extent, Frame::sceneNormalFormat, Fvog::TextureUsage::GENERAL, "Scene normal (translucent)");
   frame.sceneDepthTranslucent  = Fvog::CreateTexture2D(extent, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "Scene depth (translucent)");
 

@@ -532,7 +532,10 @@ void VoxelRenderer::LoadGameSettings()
   enableBloom             = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
   enableAo_               = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
 
-  ma_engine_set_volume(head_->audio_->engine_, sGameSettings["audio"]["volume"].value_or(0.5f));
+  if (head_->audio_)
+  {
+    ma_engine_set_volume(head_->audio_->engine_, sGameSettings["audio"]["volume"].value_or(0.5f));
+  }
 }
 
 void VoxelRenderer::InitGui()
@@ -1533,7 +1536,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
   if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
   {
-    dynamic_cast<PlayerAudio*>(head_->GetAudio())->DrawDebugUI();
+    if (head_->GetAudio())
+    {
+      if (auto* pAudio = dynamic_cast<PlayerAudio*>(head_->GetAudio()))
+      {
+        pAudio->DrawDebugUI();
+      }
+    }
     world.GetRegistry().ctx().get<Scripting*>()->DrawDebugUI(world);
     Physics::DrawDebugUI(world);
 

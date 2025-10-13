@@ -26,6 +26,7 @@ class DestroyList2
 public:
   DestroyList2() = default;
   void Push(std::function<void()> fn);
+  void Terminate();
   ~DestroyList2();
 
   NO_COPY_NO_MOVE(DestroyList2);

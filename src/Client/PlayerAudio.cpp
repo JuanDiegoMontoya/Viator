@@ -173,14 +173,20 @@ PlayerAudio::~PlayerAudio()
 
   activeSounds_.clear();
 
-  for (auto& [_, sound] : soundPrototypes_)
   {
-    ma_sound_uninit(sound);
-    delete sound;
+    ZoneScopedN("Uninit sounds");
+    for (auto& [_, sound] : soundPrototypes_)
+    {
+      ma_sound_uninit(sound);
+      delete sound;
+    }
   }
 
-  ma_engine_uninit(engine_);
-  delete engine_;
+  {
+    ZoneScopedN("ma_engine_uninit()");
+    ma_engine_uninit(engine_);
+    delete engine_;
+  }
 }
 
 void PlayerAudio::UpdateListener(glm::vec3 position, glm::vec3 direction, glm::vec3 velocity)

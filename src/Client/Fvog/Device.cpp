@@ -478,6 +478,15 @@ namespace Fvog
         }),
         nullptr,
         &defaultPipelineLayout));
+
+    // TODO: gate behind compile-time switch
+    vkSetDebugUtilsObjectNameEXT(device_,
+      detail::Address(VkDebugUtilsObjectNameInfoEXT{
+        .sType        = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType   = VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+        .objectHandle = reinterpret_cast<uint64_t>(defaultPipelineLayout),
+        .pObjectName  = "Default Pipeline Layout",
+      }));
   }
   
   Device::~Device()
