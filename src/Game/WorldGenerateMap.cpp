@@ -234,7 +234,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
   {
     ZoneScopedN("Surface");
-    auto terrainHeight2Da = FastNoise::NewFromEncodedNodeTree("HAUNBQY@ACWQv//Aw8FFwUI/wI@ADA////");
+    auto terrainHeight2Da = FastNoise::NewFromEncodedNodeTree("FQUXBRgDFgMdBRYDDQUlAEM@BFBg@AG9CBM3MTD////8HHwMiBQsAAIDfQgQ@CC@AwD8YB@CcI@BsEEEj8J1Pv//AgBAGMMGAADsQv8GXI/CP///AwAAw/VoP///B/8IAP8HFgIAAIA/B/8IAP//Ag@AED/AxwFDQAE@BBQY@BWQ///Aw8AB@CUXBQg@ABIQ/8C@BwP////8=");
     auto terrainHeight2D  = FastNoise::New<FastNoise::DomainScale>();
     terrainHeight2D->SetSource(terrainHeight2Da);
     terrainHeight2D->SetScaling(1.0f / sampleScale);
