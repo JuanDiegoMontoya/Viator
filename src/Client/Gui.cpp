@@ -672,7 +672,11 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       graphics.insert_or_assign("gi", gi);
       
       auto audio = toml::table();
-      audio.insert_or_assign("volume", ma_engine_get_volume(head_->audio_->engine_));
+
+      if (head_->audio_)
+      {
+        audio.insert_or_assign("volume", ma_engine_get_volume(head_->audio_->engine_));
+      }
       
       sGameSettings.insert_or_assign("graphics", graphics);
       sGameSettings.insert_or_assign("audio", audio);
