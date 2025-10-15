@@ -23,6 +23,62 @@
 #include <string_view>
 #include <vector>
 
+#ifdef TRACY_ENABLE
+#include "tracy/Tracy.hpp"
+#include <cstdlib>
+void* operator new(std::size_t count)
+{
+  auto ptr = std::malloc(count);
+  TracyAlloc(ptr, count);
+  return ptr;
+}
+
+void operator delete(void* ptr) noexcept
+{
+  TracyFree(ptr);
+  std::free(ptr);
+}
+
+void* operator new[](std::size_t count)
+{
+  auto ptr = std::malloc(count);
+  TracyAlloc(ptr, count);
+  return ptr;
+}
+
+void operator delete[](void* ptr) noexcept
+{
+  TracyFree(ptr);
+  std::free(ptr);
+}
+
+void* operator new(std::size_t count, const std::nothrow_t&) noexcept
+{
+  auto ptr = std::malloc(count);
+  TracyAlloc(ptr, count);
+  return ptr;
+}
+
+void operator delete(void* ptr, const std::nothrow_t&) noexcept
+{
+  TracyFree(ptr);
+  std::free(ptr);
+}
+
+void* operator new[](std::size_t count, const std::nothrow_t&) noexcept
+{
+  auto ptr = std::malloc(count);
+  TracyAlloc(ptr, count);
+  return ptr;
+}
+
+void operator delete[](void* ptr, const std::nothrow_t&) noexcept
+{
+  TracyFree(ptr);
+  std::free(ptr);
+}
+#endif
+
 int main(int argc, const char* const* argv)
 {
   Core::Logging::Initialize();
