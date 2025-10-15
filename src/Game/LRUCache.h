@@ -30,7 +30,7 @@ public:
 
   // Returned pointer is not stable.
   // TODO: return shared_ptr?
-  V* get(const K& key)
+  const V* get(const K& key)
   {
     auto it = cache_.find(key);
     if (it == cache_.end())
