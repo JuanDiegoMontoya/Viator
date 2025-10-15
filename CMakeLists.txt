@@ -164,6 +164,7 @@ add_executable(frogRender
     src/Game/Systems/CharacterAI.h
     src/Game/Systems/CharacterAI.cpp
     src/Game/WorldFixedUpdate.cpp
+    src/Game/WorldGenerateMap.cpp
 )
 
 # Precompiled headers for standard library
