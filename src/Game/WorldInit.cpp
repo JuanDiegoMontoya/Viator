@@ -582,6 +582,38 @@ void World::InitializeGameDefinitions()
         Block::Component::RenderAsTexturedCube2{dirtMat, dirtMat, dirtMat, dirtMat, grassMat, dirtMat},
       }));
 
+  [[maybe_unused]] const auto sandBlockId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "sand",
+        "Sand",
+        Block::Component::Breakable{
+          .initialHealth = 50,
+          .damageTier    = 1,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube{{
+          .randomizeTexcoordRotation = true,
+          .baseColorTexture          = "sand_albedo",
+        }},
+      }));
+
+  [[maybe_unused]] const auto snowBlockId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "snow",
+        "Snow",
+        Block::Component::Breakable{
+          .initialHealth = 50,
+          .damageTier    = 1,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube{{
+          .randomizeTexcoordRotation = true,
+          .baseColorTexture          = "snow_albedo",
+        }},
+      }));
+
   const auto malachiteBlockId = Block::CreateStandardBlock(*this,
     {"malachite",
       "Malachite",
@@ -777,6 +809,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("table", "Table", true);
   RegisterFoliageBlock("cloud", "Cloud", true);
   RegisterFoliageBlock("anvil_lead", "Lead Anvil", true, true);
+  RegisterFoliageBlock("cactus_small", "Small Cactus", true);
   const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
   Block::CreateStandardRotatedVariants(*this, arrow);
 

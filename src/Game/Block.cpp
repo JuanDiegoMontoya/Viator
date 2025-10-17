@@ -190,7 +190,7 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
     for (int x = -cr; x <= cr; x++)
     {
       const auto newPos = voxelPosition + glm::ivec3(x, y, z);
-      if (Math::Distance2(voxelPosition, newPos) <= radius2 && newPos != voxelPosition)
+      if (Math::Distance2(glm::vec3(voxelPosition), newPos) <= radius2 && newPos != voxelPosition)
       {
         world.DamageBlock(newPos, explode->damage, explode->damageTier, explode->damageFlags);
       }

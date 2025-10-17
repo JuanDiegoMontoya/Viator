@@ -164,6 +164,11 @@ namespace Math
     return glm::dot(a - b, a - b);
   }
 
+  inline float Distance2(glm::vec2 a, glm::vec2 b)
+  {
+    return glm::dot(a - b, a - b);
+  }
+
   // Vector projection of a onto b
   inline glm::vec3 Project(glm::vec3 a, glm::vec3 b)
   {
@@ -212,5 +217,19 @@ namespace Math
     DEBUG_ASSERT(start2 != end2);
     const auto norm = (x - start1) / (end1 - start1);
     return norm * (end2 - start2) + start2;
+  }
+
+  namespace SDF
+  {
+    inline float Box(glm::vec3 p, glm::vec3 b)
+    {
+      glm::vec3 q = glm::abs(p) - b;
+      return glm::length(glm::max(q, 0.0f)) + glm::min(glm::max(q.x, glm::max(q.y, q.z)), 0.0f);
+    }
+
+    inline float Box(glm::vec2 p, glm::vec2 b)
+    {
+      return Box(glm::vec3(p, 0.0f), glm::vec3(b, 0.0f));
+    }
   }
 } // namespace Math
