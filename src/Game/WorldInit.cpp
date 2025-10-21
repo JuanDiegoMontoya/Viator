@@ -565,6 +565,10 @@ void World::InitializeGameDefinitions()
     .randomizeTexcoordRotation = true,
     .baseColorTexture          = "grass_albedo",
   };
+  const auto grassSideMat = Block::CubeFaceMaterial{
+    .randomizeTexcoordRotation = false,
+    .baseColorTexture          = "grass_side_albedo",
+  };
   const auto dirtMat = Block::CubeFaceMaterial{
     .randomizeTexcoordRotation = true,
     .baseColorTexture          = "dirt_albedo",
@@ -579,7 +583,7 @@ void World::InitializeGameDefinitions()
           .damageTier    = 1,
           .damageFlags   = BlockDamageFlagBit::PICKAXE,
         },
-        Block::Component::RenderAsTexturedCube2{dirtMat, dirtMat, dirtMat, dirtMat, grassMat, dirtMat},
+        Block::Component::RenderAsTexturedCube2{grassSideMat, grassSideMat, grassSideMat, grassSideMat, grassMat, dirtMat},
       }));
 
   [[maybe_unused]] const auto sandBlockId = Block::GetItemId(*this,
