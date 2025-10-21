@@ -128,6 +128,35 @@ namespace Core::Serialization
       return;
     }
 
+    if (value.type().is_associative_container())
+    {
+      auto assoc = value.as_associative_container();
+
+      auto size = uint32_t(assoc.size());
+      Serialize<Save>(ar, entt::forward_as_meta(size), context);
+
+      if constexpr (Save)
+      {
+        for (auto [key, val] : assoc)
+        {
+          // TODO: should assert that the keys and values are serializable.
+          Serialize<Save>(ar, key.as_ref());
+          Serialize<Save>(ar, val.as_ref());
+        }
+      }
+      else
+      {
+        for (uint32_t i = 0; i < size; i++)
+        {
+          auto key = assoc.key_type().construct();
+          auto val = assoc.mapped_type().construct();
+          Serialize<Save>(ar, key.as_ref());
+          Serialize<Save>(ar, val.as_ref());
+          ASSERT(assoc.insert(key, val));
+        }
+      }
+    }
+
     if (value.type().traits<Traits>() & Traits::VARIANT)
     {
       if constexpr (Save)

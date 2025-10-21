@@ -13,6 +13,7 @@
 #include "Game/Scripting.h"
 #include "Game/Game.h"
 #include "Game/World.h"
+#include "Game/Prefab.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -1970,18 +1971,10 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::BeginDisabled(selectedPrefab == std::filesystem::path());
       if (ImGui::Button("Spawn selected at cursor"))
       {
-        auto file = std::ifstream(selectedPrefab, std::fstream::in | std::fstream::binary);
-        ASSERT(file);
-        auto any = Core::Serialization::DeserializeObject(std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()},
-          entt::resolve<std::vector<std::pair<glm::ivec3, voxel_t>>>());
-        const auto* prefab = static_cast<const std::vector<std::pair<glm::ivec3, voxel_t>>*>(any.as_ref().base().data());
+        auto prefab = SimplePrefab(world, {"placeholder"}, selectedPrefab.string());
 
         const auto offsetWS = pTransform->position + GetForward(pTransform->rotation) * pickLength;
-        for (const auto& [posLocal, voxel] : *prefab)
-        {
-          const auto posWS = glm::ivec3(glm::round(glm::vec3(posLocal) + offsetWS));
-          grid.SetVoxelAt(posWS, voxel);
-        }
+        prefab.Instantiate(world, offsetWS);
       }
       ImGui::EndDisabled();
 
@@ -2038,7 +2031,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           prefab.emplace_back(posWS - glm::ivec3(min), voxel);
         }
 
-        const auto serialized = Core::Serialization::SerializeObject(prefab);
+        const auto serialized = Core::Serialization::SerializeObject(SerializableSimplePrefab(world, prefab));
         auto file             = std::ofstream(GetAssetDirectory() / "prefabs" / (sName + std::string(".pfb")), std::fstream::out | std::fstream::trunc | std::fstream::binary);
         ASSERT(file);
         file.write(serialized.data(), serialized.size());

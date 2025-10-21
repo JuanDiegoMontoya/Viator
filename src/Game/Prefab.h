@@ -32,7 +32,8 @@ public:
     return createInfo_.name;
   }
 
-  NO_COPY_NO_MOVE(PrefabDefinition);
+  NO_COPY(PrefabDefinition);
+  DEFAULT_MOVE(PrefabDefinition);
 
   // Instantiates the prefab at the given position.
   virtual void Instantiate(World& world, glm::ivec3 worldPos) const = 0;
@@ -41,23 +42,26 @@ private:
   CreateInfo createInfo_;
 };
 
+struct SerializableSimplePrefab
+{
+  SerializableSimplePrefab() = default;
+  explicit SerializableSimplePrefab(const World& world, std::span<const std::pair<glm::ivec3, voxel_t>> prefab);
+
+  // For version stability
+  std::unordered_map<uint32_t, std::string> voxelToName;
+  std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
+};
+
 class SimplePrefab : public PrefabDefinition
 {
 public:
   using PrefabDefinition::PrefabDefinition;
+  SimplePrefab(const World& world, const CreateInfo& info, const SerializableSimplePrefab& prefab);
+  SimplePrefab(const World& world, const CreateInfo& info, std::string_view path);
+  DEFAULT_MOVE(SimplePrefab);
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override;
 
-  std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
-};
-
-struct SerializableSimplePrefab
-{
-  SerializableSimplePrefab() = default;
-  explicit SerializableSimplePrefab(std::span<const std::pair<glm::ivec3, voxel_t>> prefab);
-
-  // For version stability
-  std::unordered_map<uint32_t, std::string> voxelToName;
   std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
 };
 
