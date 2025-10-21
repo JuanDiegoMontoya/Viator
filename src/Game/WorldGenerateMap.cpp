@@ -435,9 +435,9 @@ namespace
       whiteNoise->SetOutputMin(0);
       auto whiteNoise2 = FastNoise::New<FastNoise::White>();
 
-      const auto x             = posWS.x;
-      const auto y             = posWS.y;
-      const auto z             = posWS.z;
+      const auto x = posWS.x;
+      const auto y = posWS.y;
+      const auto z = posWS.z;
 
       const bool hasSolidFloor = grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
 
@@ -445,6 +445,12 @@ namespace
           shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) * 0.2f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) * 0.8f > 0.96f)
       {
         grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("cactus_small"));
+      }
+
+      if (hasSolidFloor &&
+          shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) * 0.2f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.8f > 0.94f)
+      {
+        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_03"));
       }
     }
 

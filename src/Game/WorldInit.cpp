@@ -810,6 +810,10 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock("cloud", "Cloud", true);
   RegisterFoliageBlock("anvil_lead", "Lead Anvil", true, true);
   RegisterFoliageBlock("cactus_small", "Small Cactus", true);
+  RegisterFoliageBlock("bush_03", "Bush 3", false);
+  RegisterFoliageBlock("leaves_burnwillow_01", "BW Leaves", false);
+  RegisterFoliageBlock("vines_end_burnwillow", "Vines End BW", false);
+  RegisterFoliageBlock("vines_main_burnwillow", "Vines Main BW", false);
   const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
   Block::CreateStandardRotatedVariants(*this, arrow);
 

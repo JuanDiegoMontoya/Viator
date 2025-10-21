@@ -12,6 +12,7 @@
 #include "shaders/Light.h.glsl" // "TEMP"
 #include "Game/Pathfinding.h"
 #include "Game/Scripting.h"
+#include "Game/Prefab.h"
 
 #ifndef GAME_HEADLESS
   #include "imgui.h"
@@ -1706,4 +1707,13 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_COMPONENT(DespawnWhenFarFromEntity, REPLICATED)
     DATA(DespawnWhenFarFromEntity, entity)
     DATA(DespawnWhenFarFromEntity, maxDistance);
+
+  using IvecVoxelPair = std::pair<glm::ivec3, voxel_t>;
+  REFLECT_TYPE(IvecVoxelPair)
+    DATA_BASE(IvecVoxelPair, first)
+    DATA_BASE(IvecVoxelPair, second);
+
+  REFLECT_TYPE(SerializableSimplePrefab)
+    DATA_BASE(SerializableSimplePrefab, voxelToName)
+    DATA_BASE(SerializableSimplePrefab, voxels);
 }

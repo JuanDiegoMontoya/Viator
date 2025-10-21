@@ -51,6 +51,16 @@ public:
   std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
 };
 
+struct SerializableSimplePrefab
+{
+  SerializableSimplePrefab() = default;
+  explicit SerializableSimplePrefab(std::span<const std::pair<glm::ivec3, voxel_t>> prefab);
+
+  // For version stability
+  std::unordered_map<uint32_t, std::string> voxelToName;
+  std::vector<std::pair<glm::ivec3, voxel_t>> voxels;
+};
+
 class PrefabRegistry
 {
 public:

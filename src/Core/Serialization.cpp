@@ -825,9 +825,6 @@ namespace Core::Serialization
     ZoneScoped;
     auto stream       = std::stringstream(std::string(objectBytes.data(), objectBytes.size()));
     auto inputArchive = cereal::BinaryInputArchive(stream);
-    auto typeHash     = uint32_t{};
-    Serialize<false>(inputArchive, entt::forward_as_meta(typeHash));
-    ASSERT(type);
     auto object = type.construct();
     Serialize<false>(inputArchive, object.as_ref());
     return object;

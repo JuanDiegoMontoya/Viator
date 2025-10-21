@@ -717,7 +717,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
   }
 
-  switch (auto& gameState = world.GetRegistry().ctx().get<GameState>())
+  auto& gameState = world.GetRegistry().ctx().get<GameState>();
+  switch (gameState)
   {
   case GameState::MENU:
     if (ImGui::Begin("Menu"))
@@ -1878,6 +1879,207 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       else
       {
         ImGui::TextWrapped("%s", "Host or connect to a server to see networking info.");
+      }
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Prefab Editor", nullptr, ImGuiWindowFlags_NoFocusOnAppearing) && gameState == GameState::GAME)
+    {
+      static float pickLength        = 5;
+      static int selectedPositions   = 0;
+      static glm::vec3 wpositions[3] = {};
+      static glm::vec3 hposition     = {};
+      static char sName[256]         = {};
+      static bool skipAir            = false;
+      static auto selectedPrefab     = std::filesystem::path();
+
+      auto prefabSaveNames = std::unordered_set<std::string>();
+
+      auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+
+      const auto pTransform = world.TryGetLocalPlayerTransform();
+      ASSERT(pTransform);
+
+      auto hit = Voxel::Grid::HitSurfaceParameters{};
+      if (grid.TraceRaySimple(pTransform->position, GetForward(pTransform->rotation), pickLength, hit))
+      {
+        const auto pos = glm::round(hit.positionWorld);
+
+        if (selectedPositions == 0)
+        {
+          hposition = pos;
+        }
+        else if (selectedPositions == 1)
+        {
+          // find axis that has smallest difference, and lock that one
+          glm::vec3 diff = pos - wpositions[0];
+          diff           = glm::abs(diff);
+          float smol     = std::min(diff.x, std::min(diff.y, diff.z));
+          if (smol == diff.x)
+            hposition = glm::vec3(wpositions[0].x, pos.y, pos.z);
+          else if (smol == diff.y)
+            hposition = glm::vec3(pos.x, wpositions[0].y, pos.z);
+          else if (smol == diff.z)
+            hposition = glm::vec3(pos.x, pos.y, wpositions[0].z);
+        }
+        else if (selectedPositions == 2)
+        {
+          // only move the axis that is shared between first two positions
+          glm::vec3 diff = wpositions[1] - wpositions[0];
+          hposition      = wpositions[0];
+          if (!diff.x)
+            hposition.x = pos.x;
+          if (!diff.y)
+            hposition.y = pos.y;
+          if (!diff.z)
+            hposition.z = pos.z;
+        }
+      }
+
+
+      ImGui::BeginDisabled(selectedPositions == 3);
+      if (ImGui::Button("Select position"))
+      {
+        wpositions[selectedPositions++] = hposition;
+      }
+      ImGui::EndDisabled();
+
+      ImGui::BeginDisabled(selectedPositions == 0);
+      if (ImGui::Button("Cancel selection"))
+      {
+        selectedPositions = 0;
+      }
+      ImGui::EndDisabled();
+
+      ImGui::Checkbox("Skip air when saving", &skipAir);
+
+      if (std::filesystem::is_directory(GetAssetDirectory() / "prefabs"))
+      {
+        for (int i = 0; const auto& entry : std::filesystem::directory_iterator(GetAssetDirectory() / "prefabs"))
+        {
+          ImGui::PushID(i++);
+          prefabSaveNames.emplace(entry.path().stem().string().c_str());
+          if (entry.is_regular_file() && ImGui::Selectable(entry.path().stem().string().c_str(), entry.path() == selectedPrefab))
+          {
+            selectedPrefab = entry.path();
+          }
+          ImGui::PopID();
+        }
+      }
+
+      ImGui::BeginDisabled(selectedPrefab == std::filesystem::path());
+      if (ImGui::Button("Spawn selected at cursor"))
+      {
+        auto file = std::ifstream(selectedPrefab, std::fstream::in | std::fstream::binary);
+        ASSERT(file);
+        auto any = Core::Serialization::DeserializeObject(std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()},
+          entt::resolve<std::vector<std::pair<glm::ivec3, voxel_t>>>());
+        const auto* prefab = static_cast<const std::vector<std::pair<glm::ivec3, voxel_t>>*>(any.as_ref().base().data());
+
+        const auto offsetWS = pTransform->position + GetForward(pTransform->rotation) * pickLength;
+        for (const auto& [posLocal, voxel] : *prefab)
+        {
+          const auto posWS = glm::ivec3(glm::round(glm::vec3(posLocal) + offsetWS));
+          grid.SetVoxelAt(posWS, voxel);
+        }
+      }
+      ImGui::EndDisabled();
+
+      // Draw
+      // actually draw the bounding box
+      auto min = glm::vec3();
+      auto max = glm::vec3();
+
+      if (selectedPositions == 0)
+      {
+        min = hposition - 0.125f;
+        max = hposition + 0.125f;
+      }
+      else if (selectedPositions == 1)
+      {
+        min = {glm::min(wpositions[0].x, hposition.x), glm::min(wpositions[0].y, hposition.y), glm::min(wpositions[0].z, hposition.z)};
+        max = {glm::max(wpositions[0].x, hposition.x), glm::max(wpositions[0].y, hposition.y), glm::max(wpositions[0].z, hposition.z)};
+      }
+      else if (selectedPositions == 2)
+      {
+        min = {glm::min(wpositions[0].x, glm::min(wpositions[1].x, hposition.x)),
+          glm::min(wpositions[0].y, glm::min(wpositions[1].y, hposition.y)),
+          glm::min(wpositions[0].z, glm::min(wpositions[1].z, hposition.z))};
+        max = {glm::max(wpositions[0].x, glm::max(wpositions[1].x, hposition.x)),
+          glm::max(wpositions[0].y, glm::max(wpositions[1].y, hposition.y)),
+          glm::max(wpositions[0].z, glm::max(wpositions[1].z, hposition.z))};
+      }
+      else // if (selectedPositions == 3)
+      {
+        min = {glm::min(wpositions[0].x, glm::min(wpositions[1].x, wpositions[2].x)),
+          glm::min(wpositions[0].y, glm::min(wpositions[1].y, wpositions[2].y)),
+          glm::min(wpositions[0].z, glm::min(wpositions[1].z, wpositions[2].z))};
+        max = {glm::max(wpositions[0].x, glm::max(wpositions[1].x, wpositions[2].x)),
+          glm::max(wpositions[0].y, glm::max(wpositions[1].y, wpositions[2].y)),
+          glm::max(wpositions[0].z, glm::max(wpositions[1].z, wpositions[2].z))};
+      }
+
+      JPH::DebugRenderer::sInstance->DrawWireBox(JPH::AABox(Physics::ToJolt(min), Physics::ToJolt(max)), JPH::Color::sCyan);
+
+      const auto savePrefab = [&]
+      {
+        auto prefab = std::vector<std::pair<glm::ivec3, voxel_t>>();
+
+        for (int z = (int)min.z; z < max.z; z++)
+        for (int y = (int)min.y; y < max.y; y++)
+        for (int x = (int)min.x; x < max.x; x++)
+        {
+          const auto posWS = glm::ivec3(x, y, z);
+          const auto voxel = grid.GetVoxelAt(posWS);
+          if (skipAir && voxel == voxel_t::Air)
+          {
+            continue;
+          }
+          prefab.emplace_back(posWS - glm::ivec3(min), voxel);
+        }
+
+        const auto serialized = Core::Serialization::SerializeObject(prefab);
+        auto file             = std::ofstream(GetAssetDirectory() / "prefabs" / (sName + std::string(".pfb")), std::fstream::out | std::fstream::trunc | std::fstream::binary);
+        ASSERT(file);
+        file.write(serialized.data(), serialized.size());
+      };
+
+      ImGui::BeginDisabled(selectedPositions != 3 || std::strlen(sName) == 0);
+      if (ImGui::Button("Save"))
+      {
+        if (prefabSaveNames.contains(sName))
+        {
+          ImGui::OpenPopup("Overwrite Prefab");
+        }
+        else
+        {
+          savePrefab();
+        }
+      }
+      ImGui::EndDisabled();
+
+      ImGui::SameLine();
+      ImGui::InputText("##save", sName, 256);
+
+      const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+      ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+      if (ImGui::BeginPopupModal("Overwrite Prefab", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings))
+      {
+        ImGui::Text("A prefab with the name %s already exists.\nDo you want to overwrite it?", sName);
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Yes"))
+        {
+          savePrefab();
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel"))
+        {
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
       }
     }
     ImGui::End();
