@@ -532,6 +532,20 @@ void World::InitializeGameDefinitions()
       }},
     });
 
+  [[maybe_unused]] const auto placeholderBlock = Block::CreateStandardBlock(*this,
+    {
+      "placeholder",
+      "Placeholder",
+      Block::Component::Breakable{
+        .initialHealth = 1,
+        .damageTier    = 0,
+        .damageFlags   = BlockDamageFlagBit::ALL_TOOLS,
+      },
+      Block::Component::RenderAsTexturedCube{{
+        .baseColorTexture = "error_8",
+      }},
+    });
+
   Block::CreateStandardBlock(*this,
     {
       "cloud_b",

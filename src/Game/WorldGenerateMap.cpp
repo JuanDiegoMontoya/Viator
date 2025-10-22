@@ -374,6 +374,11 @@ namespace
       }
     }
 
+    int GetSurfaceThickness() const override
+    {
+      return 1;
+    }
+    
   private:
     FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree(
       "FQUXBRgDFgMdBRYDDQUlAEM@BFBg@AG9CBM3MTD////8HHwMiBQsAAIDfQgQ@CC@AwD8YB@CcI@BsEEEj8J1Pv//AgBAGMMGAADsQv8GXI/CP///AwAAw/VoP///B/8IAP8HFgIAAIA/B/8IAP//Ag@AED/AxwFDQAE@BBQY@BWQ///Aw8AB@CUXBQg@ABIQ/8C@BwP////8=");
@@ -403,7 +408,7 @@ namespace
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
-        glm::ivec2(glm::vec2(posTL.x, posTL.y) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE),
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         mapGenInfo.seed - 21,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
@@ -499,7 +504,153 @@ namespace
   private:
     FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("DQUlAEM@BFBg@AG9CBM3MTD////8=");
   };
+
+  class CorruptionBiome final : public SurfaceBiomeNoise
+  {
+  public:
+
+  private:
+  };
 } // namespace
+
+namespace
+{
+  enum class UndergroundBiome
+  {
+    DesertCaves,
+    FunkyCaves,
+    // NOTE: the last biome in this enum is the default!
+    SurfaceCaves,
+    COUNT,
+  };
+
+  class UndergroundBiomeNoise
+  {
+  public:
+    NO_COPY_NO_MOVE(UndergroundBiomeNoise);
+
+    UndergroundBiomeNoise(BlockId substrateBlockType) : substrateBlockType_(substrateBlockType) {}
+    virtual ~UndergroundBiomeNoise() = default;
+
+    virtual [[nodiscard]] float GetWeight([[maybe_unused]] glm::ivec3 posWS) = 0;
+
+    virtual [[nodiscard]] bool BroadPhase([[maybe_unused]] glm::ivec3 posTL)
+    {
+      return true;
+    }
+
+    virtual [[nodiscard]] BlockId GetSubstrateBlockType() const
+    {
+      return substrateBlockType_;
+    }
+
+    virtual [[nodiscard]] std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
+
+  private:
+    BlockId substrateBlockType_;
+  };
+
+  class SurfaceCaves final : public UndergroundBiomeNoise
+  {
+  public:
+    SurfaceCaves(BlockId substrateBlockType) : UndergroundBiomeNoise(substrateBlockType)
+    {
+      surfaceCaves->SetSource(surfaceCavesA);
+      surfaceCaves->SetScaling(1.5f);
+    }
+
+    float GetWeight([[maybe_unused]] glm::ivec3 posWS) override
+    {
+      PANIC;
+    }
+
+    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    {
+      return GenerateAndUpscale3D(surfaceCaves,
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        mapGenInfo.seed,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Filter::Linear);
+    }
+
+  private:
+    FastNoise::SmartNode<> surfaceCavesA                      = FastNoise::NewFromEncodedNodeTree("HAUNBQY@ABSQgg@B///8DDwUXBQgAAIDIQv8C@BwP///w==");
+    FastNoise::SmartNode<FastNoise::DomainScale> surfaceCaves = FastNoise::New<FastNoise::DomainScale>();
+  };
+
+  class DesertCaves final : public UndergroundBiomeNoise
+  {
+  public:
+    using UndergroundBiomeNoise::UndergroundBiomeNoise;
+
+    float GetWeight(glm::ivec3 posWS) override
+    {
+      const auto biomePos = glm::ivec3(50, 300, 20);
+      return 1 - glm::smoothstep(0.0f, 20.0f, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), glm::vec3{30, 50, 40})));
+    }
+
+    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      return GenerateAndUpscale3D(noise,
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        mapGenInfo.seed,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Filter::Linear);
+    }
+
+  private:
+    FastNoise::SmartNode<> noise = FastNoise::NewFromEncodedNodeTree("Bg@AEhC/w==");
+  };
+
+  class FunkyCaves final : public UndergroundBiomeNoise
+  {
+  public:
+    using UndergroundBiomeNoise::UndergroundBiomeNoise;
+
+    float GetWeight(glm::ivec3 posWS) override
+    {
+      const auto biomePos = glm::ivec3(150, 200, 50);
+      return 1 - glm::smoothstep(0.0f, 20.0f, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), glm::vec3{50, 50, 50})));
+    }
+
+    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      const auto count = Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
+      auto density = std::make_unique_for_overwrite<float[]>(count);
+
+      for (int z = 0; z < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; z++)
+      for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
+      for (int x = 0; x < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; x++)
+      {
+        using namespace glm;
+        auto p      = vec3(x, y, z) + vec3(posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+        p           = {p.x, p.z, p.y};
+        vec3 cSize  = vec3(1., 1., 1.3);
+        float scale = 1.;
+        for (int i = 0; i < 12; i++)
+        {
+          p        = 2.0f * clamp(p, -cSize, cSize) - p;
+          float r2 = dot(p, p);
+          float k  = max((2.f) / (r2), .027f);
+          p *= k;
+          scale *= k;
+        }
+        float l   = length(vec2(p.x, p.y));
+        float rxy = l - 4.0f;
+        float n   = l * p.z;
+        rxy       = max(rxy, -(n) / 4.f);
+        ImageStore3D(density, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {x, y, z}, (rxy) / abs(scale));
+      }
+
+      return density;
+    }
+
+  private:
+
+  };
+}
 
 void World::GenerateMap(const MapGenInfo& mapGenInfo)
 {
@@ -509,10 +660,11 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto& progress     = registry_.ctx().get<std::atomic_int32_t>("progress"_hs);
   auto& total        = registry_.ctx().get<std::atomic_int32_t>("total"_hs);
 #endif
-  auto& blocks          = registry_.ctx().get<Block::Registry>();
-  const auto& dirt      = blocks.Get("dirt");
-  const auto& malachite = blocks.Get("malachite");
-  const auto& galena    = blocks.Get("galena");
+  auto& blocks            = registry_.ctx().get<Block::Registry>();
+  const auto& placeholder = blocks.Get("placeholder");
+  const auto& dirt        = blocks.Get("dirt");
+  [[maybe_unused]] const auto& malachite   = blocks.Get("malachite");
+  [[maybe_unused]] const auto& galena    = blocks.Get("galena");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
@@ -593,8 +745,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           auto maxBiomeWeight = 0.0125f;
           auto sumWeights     = 0.0f;
           auto sumHeights     = 0.0f;
-
-          // Non-forest biomes
+          
           for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
           {
             float weight;
@@ -608,7 +759,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               weight = surfaceBiomes[j]->GetWeight(positionWS);
             }
 
-            biomeWeights[j]   = weight;
+            biomeWeights[j] = weight;
             sumWeights += weight;
             sumHeights += weight * TexelFetch2D(biomeHeights[j], Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
 
@@ -686,46 +837,50 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               if (positionWS.y < height)
               {
                 // 0 at sea level. 1 at cavern level.
-                const auto alphaCaverns = glm::clamp((mapGenInfo.seaLevel - positionWS.y) / float(mapGenInfo.surfaceThickness), 0.0f, 1.0f);
+                //const auto alphaCaverns = glm::clamp((mapGenInfo.seaLevel - positionWS.y) / float(mapGenInfo.surfaceThickness), 0.0f, 1.0f);
 
                 if (positionWS.y <= height && positionWS.y >= height - biomeInfo->GetSurfaceThickness())
                 {
                   blockTypeToSet = biomeInfo->GetSurfaceBlockType();
                 }
-                // Surface and underground biomes' substrate is dirt
-                else if (positionWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
-                {
-                  blockTypeToSet = dirt;
-
-                  // Add stone blobs with increasing size as they get closer to caverns.
-                  if (TexelFetch3D(stoneInDirtImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, alphaCaverns))
-                  {
-                    blockTypeToSet = voxel_t(1);
-                  }
-                  // Dithered fade from dirt to stone, beginning 1/3 from the underground-cavern transition point.
-                  else if (TexelFetch3D(fadeImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < alphaCaverns * 3 - 2)
-                  {
-                    blockTypeToSet = voxel_t(1);
-                  }
-                }
-                // Cavern biome substrate is stone
                 else
                 {
-                  blockTypeToSet = voxel_t(1);
+                  blockTypeToSet = placeholder;
                 }
+              //  // Surface and underground biomes' substrate is dirt
+              //  else if (positionWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
+              //  {
+              //    blockTypeToSet = dirt;
+
+              //    // Add stone blobs with increasing size as they get closer to caverns.
+              //    if (TexelFetch3D(stoneInDirtImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, alphaCaverns))
+              //    {
+              //      blockTypeToSet = voxel_t(1);
+              //    }
+              //    // Dithered fade from dirt to stone, beginning 1/3 from the underground-cavern transition point.
+              //    else if (TexelFetch3D(fadeImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < alphaCaverns * 3 - 2)
+              //    {
+              //      blockTypeToSet = voxel_t(1);
+              //    }
+              //  }
+              //  // Cavern biome substrate is stone
+              //  else
+              //  {
+              //    blockTypeToSet = voxel_t(1);
+              //  }
               }
 
-              if (blockTypeToSet != voxel_t::Air && positionWS.y < height - biomeInfo->GetSurfaceThickness())
-              {
-                if (TexelFetch3D(copperImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
-                {
-                  blockTypeToSet = malachite;
-                }
-                else if (TexelFetch3D(leadImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
-                {
-                  blockTypeToSet = galena;
-                }
-              }
+              //if (blockTypeToSet != voxel_t::Air && positionWS.y < height - biomeInfo->GetSurfaceThickness())
+              //{
+              //  if (TexelFetch3D(copperImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
+              //  {
+              //    blockTypeToSet = malachite;
+              //  }
+              //  else if (TexelFetch3D(leadImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
+              //  {
+              //    blockTypeToSet = galena;
+              //  }
+              //}
 
               if (blockTypeToSet != voxel_t::Air)
               {
@@ -749,10 +904,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     progress.store(0);
 #endif
 
-    auto surfaceCavesA = FastNoise::NewFromEncodedNodeTree("HAUNBQY@ABSQgg@B///8DDwUXBQgAAIDIQv8C@BwP///w==");
-    auto surfaceCaves = FastNoise::New<FastNoise::DomainScale>();
-    surfaceCaves->SetSource(surfaceCavesA);
-    surfaceCaves->SetScaling(1.5f / sampleScale);
+    auto undergroundBiomes = std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>();
+    undergroundBiomes[int(UndergroundBiome::DesertCaves)] = std::make_unique<DesertCaves>(blocks.Get("sand"));
+    undergroundBiomes[int(UndergroundBiome::FunkyCaves)] = std::make_unique<FunkyCaves>(blocks.Get("dirt"));
+    undergroundBiomes[int(UndergroundBiome::SurfaceCaves)] = std::make_unique<SurfaceCaves>(blocks.Get("stone"));
 
     std::for_each(std::execution::par,
       tlBrickColCoords.begin(),
@@ -764,28 +919,91 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int i = tlBrickColCoord[1];
 
         // Top level bricks
-        for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
+        for (int j = 0; j < grid.topLevelBricksDims_.y; j++)
         {
           ZoneScopedN("Top level brick");
-          auto densities = GenerateAndUpscale3D(surfaceCaves,
-            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE)),
-            mapGenInfo.seed,
-            samplesPerAxis,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Filter::Linear);
+
+          auto biomeDensities = std::array<std::unique_ptr<float[]>, int(UndergroundBiome::COUNT)>();
+
+          for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
+          {
+            if (undergroundBiomes[m]->BroadPhase({i, j, k}))
+            {
+              biomeDensities[m] = undergroundBiomes[m]->GenImageForChunk({i, j, k}, grid.topLevelBricksDims_, mapGenInfo);
+            }
+          }
+
+          //auto densities = std::make_unique_for_overwrite<float[]>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
+          //auto biomes = std::make_unique_for_overwrite<UndergroundBiome[]>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
 
           const auto tl = glm::ivec3{i, j, k};
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
-              if (grid.GetVoxelAtUnchecked(positionWS) != voxel_t::Air)
+              auto biomeWeights   = std::array<float, int(UndergroundBiome::COUNT)>();
+              auto biome          = UndergroundBiome::SurfaceCaves;
+              auto maxBiomeWeight = 0.0125f;
+              auto sumWeights     = 0.0f;
+              auto sumDensities   = 0.0f;
+
+              for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
               {
-                const auto pModTl = positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
-                
-                const auto density = TexelFetch3D(densities, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+                // Skip biomes that failed broadphase check.
+                if (biomeDensities[m] == nullptr)
+                {
+                  continue;
+                }
+
+                float weight;
+                // Last biome is the default (if weight of other biomes is low).
+                if (m == int(UndergroundBiome::COUNT) - 1)
+                {
+                  weight = 1 - glm::min(1.0f, sumWeights);
+                }
+                else
+                {
+                  weight = undergroundBiomes[m]->GetWeight(positionWS);
+                }
+
+                biomeWeights[m] = weight;
+                sumWeights += weight;
+                sumDensities +=
+                  weight * TexelFetch3D(biomeDensities[m], Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+
+                if (weight > maxBiomeWeight)
+                {
+                  biome          = UndergroundBiome(m);
+                  maxBiomeWeight = weight;
+                }
+              }
+
+              // Dither biome edges
+              const auto target = sumWeights * shrimplex2->GenSingle3D((float)positionWS.x, (float)positionWS.y, (float)positionWS.z, 68);
+              auto accumRng     = 0.0f;
+              for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
+              {
+                accumRng += biomeWeights[m];
+                if (accumRng >= target)
+                {
+                  biome = UndergroundBiome(m);
+                  break;
+                }
+              }
+
+              const auto density = sumDensities / sumWeights;
+              // ImageStore2D(globalSurfaceHeightImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
+              // ImageStore2D(globalSurfaceBiomeImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, biome);
+
+
+              if (grid.GetVoxelAtUnchecked(positionWS) == placeholder)
+              {
                 if (density >= 0.0f)
                 {
-                  grid.SetVoxelAtNoDirty(positionWS, voxel_t::Air);
+                  grid.SetVoxelAtUncheckedNoDirty(positionWS, voxel_t::Air);
+                }
+                else
+                {
+                  grid.SetVoxelAtUncheckedNoDirty(positionWS, undergroundBiomes[int(biome)]->GetSubstrateBlockType());
                 }
               }
             });
