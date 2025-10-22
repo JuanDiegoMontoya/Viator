@@ -878,6 +878,21 @@ void World::InitializeGameDefinitions()
   Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top_open"));
 
   {
+    RegisterFoliageBlock("cargo_side", "Cargo Side", true, true);
+    RegisterFoliageBlock("cargo_top", "Cargo Top", true, true);
+    RegisterFoliageBlock("cargo_bottom", "Cargo Bottom", true, true);
+    RegisterFoliageBlock("cargo_runner_top", "Cargo Runner Top", true, true);
+    RegisterFoliageBlock("cargo_runner_bottom", "Cargo Runner Bottom", true, true);
+    RegisterFoliageBlock("cargo_runner_vertical", "Cargo Runner Vertical", true, true);
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_side"));
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_top"));
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_bottom"));
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_top"));
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_bottom"));
+    Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_vertical"));
+  }
+
+  {
     auto waters = std::vector<BlockId>();
 
     for (int i = 1; i <= 8; i++)
