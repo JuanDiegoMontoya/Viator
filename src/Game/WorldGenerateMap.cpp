@@ -5,89 +5,135 @@
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/component_wise.hpp"
 
 #include <execution>
 #include <ranges>
+#include <concepts>
 
 namespace
 {
-  auto TexelFetch3D(const auto& image, int imageSize, glm::ivec3 p) -> decltype(image[0])
-  {
-    p = glm::clamp(p, glm::ivec3(0), glm::ivec3(imageSize - 1));
-    return image[p.x + p.y * imageSize + p.z * imageSize * imageSize];
-  }
-
-  template<typename T>
-  void ImageStore3D(T& image, int imageSize, glm::ivec3 p, std::remove_cvref_t<decltype(image[0])> value)
-  {
-    DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, glm::ivec3(0))) && glm::all(glm::lessThan(p, glm::ivec3(imageSize))));
-    image[p.x + p.y * imageSize + p.z * imageSize * imageSize] = value;
-  }
-
-  auto TexelFetch2D(const auto& image, int imageSize, glm::ivec2 p) -> decltype(image[0])
-  {
-    p = glm::clamp(p, glm::ivec2(0), glm::ivec2(imageSize - 1));
-    return image[p.x + p.y * imageSize];
-  }
-
-  template<typename T>
-  void ImageStore2D(T& image, int imageSize, glm::ivec2 p, std::remove_cvref_t<decltype(image[0])> value)
-  {
-    DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, glm::ivec2(0))) && glm::all(glm::lessThan(p, glm::ivec2(imageSize))));
-    image[p.x + p.y * imageSize] = value;
-  }
-
   enum class Filter
   {
     Nearest,
     Linear,
   };
 
-  auto SampleImage3D(const auto& image, int imageSize, glm::vec3 uv, Filter filter = Filter::Linear)
+  struct Sampler
   {
-    const auto unnormalized = uv * (float)imageSize;
-
-    if (filter == Filter::Nearest)
-    {
-      return TexelFetch3D(image, imageSize, glm::ivec3(unnormalized));
-    }
-
-    const auto intCoord = glm::ivec3(unnormalized);
-
-    const auto bln = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(0, 0, 0));
-    const auto brn = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(1, 0, 0));
-    const auto tln = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(0, 1, 0));
-    const auto trn = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(1, 1, 0));
-    const auto blf = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(0, 0, 1));
-    const auto brf = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(1, 0, 1));
-    const auto tlf = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(0, 1, 1));
-    const auto trf = TexelFetch3D(image, imageSize, intCoord + glm::ivec3(1, 1, 1));
-
-    const auto weight = unnormalized - glm::vec3(intCoord);
-    const auto n = glm::mix(glm::mix(bln, brn, weight.x), glm::mix(tln, trn, weight.x), weight.y);
-    const auto f = glm::mix(glm::mix(blf, brf, weight.x), glm::mix(tlf, trf, weight.x), weight.y);
-    return glm::mix(n, f, weight.z);
+    Filter filter;
   };
 
-  auto SampleImage2D(const auto& image, int imageSize, glm::vec2 uv, Filter filter = Filter::Linear)
+  template<typename T>
+  concept Filterable = requires(T x)
   {
-    const auto unnormalized = uv * (float)imageSize;
+    { x + x * x } -> std::same_as<T>;
+  };
 
-    if (filter == Filter::Nearest)
+  template<size_t Dim, typename T>
+    requires (Dim >= 1 && Dim <= 3)
+  class Image
+  {
+  public:
+    using value_type      = T;
+    using dimensions_type = std::conditional_t<Dim == 1, int, std::conditional_t<Dim == 2, glm::ivec2, glm::ivec3>>;
+    using uv_type         = std::conditional_t<Dim == 1, float, std::conditional_t<Dim == 2, glm::vec2, glm::vec3>>;
+
+    Image() = default;
+
+    explicit Image(dimensions_type imageSize) : imageSize_(imageSize)
     {
-      return TexelFetch2D(image, imageSize, glm::ivec2(unnormalized));
+      image_ = std::make_unique<T[]>(glm::compMul(imageSize_));
     }
 
-    const auto intCoord = glm::ivec2(unnormalized);
+    [[nodiscard]] T TexelFetch(dimensions_type p) const noexcept
+    {
+      p = glm::clamp(p, dimensions_type(0), dimensions_type(imageSize_ - 1));
+      return image_[TexCoordToIndex(p)];
+    }
+    
+    void ImageStore(dimensions_type p, T value) noexcept
+    {
+      DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, dimensions_type(0))) && glm::all(glm::lessThan(p, dimensions_type(imageSize_))));
+      image_[TexCoordToIndex(p)] = value;
+    }
 
-    const auto bl = TexelFetch2D(image, imageSize, intCoord + glm::ivec2(0, 0));
-    const auto br = TexelFetch2D(image, imageSize, intCoord + glm::ivec2(1, 0));
-    const auto tl = TexelFetch2D(image, imageSize, intCoord + glm::ivec2(0, 1));
-    const auto tr = TexelFetch2D(image, imageSize, intCoord + glm::ivec2(1, 1));
+    [[nodiscard]] T Sample(Sampler sampler, uv_type uv) const noexcept
+      requires Filterable<T>
+    {
+      const auto unnormalized = uv * uv_type(imageSize_);
 
-    const auto weight = unnormalized - glm::vec2(intCoord);
-    return glm::mix(glm::mix(bl, br, weight.x), glm::mix(tl, tr, weight.x), weight.y);
-  }
+      if (sampler.filter == Filter::Nearest)
+      {
+        return TexelFetch(dimensions_type(unnormalized));
+      }
+
+      const auto intCoord = dimensions_type(unnormalized);
+
+      if constexpr (Dim == 1)
+      {
+        const auto l = TexelFetch(intCoord + dimensions_type(0));
+        const auto r = TexelFetch(intCoord + dimensions_type(1));
+
+        const auto weight = unnormalized - uv_type(intCoord);
+        return glm::mix(l, r, weight);
+      }
+
+      if constexpr (Dim == 2)
+      {
+        const auto bl = TexelFetch(intCoord + dimensions_type(0, 0));
+        const auto br = TexelFetch(intCoord + dimensions_type(1, 0));
+        const auto tl = TexelFetch(intCoord + dimensions_type(0, 1));
+        const auto tr = TexelFetch(intCoord + dimensions_type(1, 1));
+
+        const auto weight = unnormalized - uv_type(intCoord);
+        return glm::mix(glm::mix(bl, br, weight.x), glm::mix(tl, tr, weight.x), weight.y);
+      }
+
+      if constexpr (Dim == 3)
+      {
+        const auto bln = TexelFetch(intCoord + dimensions_type(0, 0, 0));
+        const auto brn = TexelFetch(intCoord + dimensions_type(1, 0, 0));
+        const auto tln = TexelFetch(intCoord + dimensions_type(0, 1, 0));
+        const auto trn = TexelFetch(intCoord + dimensions_type(1, 1, 0));
+        const auto blf = TexelFetch(intCoord + dimensions_type(0, 0, 1));
+        const auto brf = TexelFetch(intCoord + dimensions_type(1, 0, 1));
+        const auto tlf = TexelFetch(intCoord + dimensions_type(0, 1, 1));
+        const auto trf = TexelFetch(intCoord + dimensions_type(1, 1, 1));
+
+        const auto weight = unnormalized - uv_type(intCoord);
+        const auto n      = glm::mix(glm::mix(bln, brn, weight.x), glm::mix(tln, trn, weight.x), weight.y);
+        const auto f      = glm::mix(glm::mix(blf, brf, weight.x), glm::mix(tlf, trf, weight.x), weight.y);
+        return glm::mix(n, f, weight.z);
+      }
+    }
+
+    T* data() noexcept
+    {
+      return image_.get();
+    }
+
+  private:
+    [[nodiscard]] int TexCoordToIndex(dimensions_type p) const
+    {
+      if constexpr (Dim == 1)
+      {
+        return p;
+      }
+      if constexpr (Dim == 2)
+      {
+        return p.x + p.y * imageSize_.x;
+      }
+      if constexpr (Dim == 3)
+      {
+        return p.x + p.y * imageSize_.x + p.z * imageSize_.y * imageSize_.x;
+      }
+    }
+
+    dimensions_type imageSize_{};
+    std::unique_ptr<T[]> image_;
+  };
 
   void ForEachPositionInTLBrick(glm::ivec3 topLevelBrickPos, const auto& function)
   {
@@ -120,68 +166,70 @@ namespace
   // Generate inSideLength^3 chunk of noise, then upscale it to outSideLength^3 with Filter.
   // Note: this upscaling is actually considerably less efficient than simply generating the equivalent volume of noise,
   // except in the case of very complex noise graphs.
-  std::unique_ptr<float[]> GenerateAndUpscale3D(const FastNoise::SmartNode<>& node, glm::ivec3 start, int seed, int inSideLength, int outSideLength, Filter filter)
+  Image<3, float> GenerateAndUpscale3D(const FastNoise::SmartNode<>& node, glm::ivec3 start, int seed, int inSideLength, int outSideLength, Filter filter)
   {
     ZoneScoped;
-    const int genCount = (inSideLength == outSideLength) ? inSideLength * inSideLength * inSideLength : (inSideLength + 1) * (inSideLength + 1) * (inSideLength + 1);
-    auto raw = std::make_unique_for_overwrite<float[]>(genCount);
+    const int sideLength = (inSideLength == outSideLength) ? inSideLength : (inSideLength + 1);
+    auto rawImage        = Image<3, float>({sideLength, sideLength, sideLength});
 
     {
       ZoneScopedN("GenUniformGrid3D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid3D(raw.get(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
+      node->GenUniformGrid3D(rawImage.data(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
     }
 
     if (inSideLength == outSideLength)
     {
-      return raw;
+      return rawImage;
     }
 
     {
       ZoneScopedN("Upscale 3D");
-      auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength * outSideLength);
+      auto outImage = Image<3, float>({outSideLength, outSideLength, outSideLength});
+      auto* out = outImage.data();
       int i    = 0;
       for (int z = 0; z < outSideLength; z++)
       for (int y = 0; y < outSideLength; y++)
       for (int x = 0; x < outSideLength; x++)
       {
         const auto uv = (glm::vec3(x, y, z) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
-        out[i++]      = SampleImage3D(raw, inSideLength + 1, uv, filter);
+        out[i++]      = rawImage.Sample({.filter = filter}, uv);
       }
 
-      return out;
+      return outImage;
     }
   }
 
-  std::unique_ptr<float[]> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Filter filter)
+  Image<2, float> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Filter filter)
   {
     ZoneScoped;
-    const int genCount = (inSideLength == outSideLength) ? inSideLength * inSideLength : (inSideLength + 1) * (inSideLength + 1);
-    auto raw = std::make_unique_for_overwrite<float[]>(genCount);
+    const int sideLength = (inSideLength == outSideLength) ? inSideLength : (inSideLength + 1);
+    auto rawImage        = Image<2, float>({sideLength, sideLength});
 
     {
       ZoneScopedN("GenUniformGrid2D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid2D(raw.get(), start.x, start.y, sideCount, sideCount, seed);
+      node->GenUniformGrid2D(rawImage.data(), start.x, start.y, sideCount, sideCount, seed);
     }
 
     if (inSideLength == outSideLength)
     {
-      return raw;
+      return rawImage;
     }
 
     {
       ZoneScopedN("Upscale 2D");
-      auto out = std::make_unique_for_overwrite<float[]>(outSideLength * outSideLength);
+      auto outImage = Image<2, float>({outSideLength, outSideLength});
+      auto* out     = outImage.data();
       int i    = 0;
       for (int y = 0; y < outSideLength; y++)
       for (int x = 0; x < outSideLength; x++)
       {
         const auto uv = (glm::vec2(x, y) + 0.5f) / (outSideLength + (float(outSideLength) / inSideLength));
-        out[i++]      = SampleImage2D(raw, inSideLength + 1, uv, filter);
+        out[i++]      = rawImage.Sample({.filter = filter}, uv);
       }
 
-      return out;
+      return outImage;
     }
   }
 
@@ -202,7 +250,7 @@ namespace
     SurfaceBiomeNoise(BlockId surfaceBlockType) : surfaceBlockType_(surfaceBlockType) {}
     virtual ~SurfaceBiomeNoise() = default;
 
-    virtual [[nodiscard]] std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) = 0;
+    virtual [[nodiscard]] Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
 
     virtual [[nodiscard]] bool BroadPhase([[maybe_unused]] glm::ivec2 posTL)
     {
@@ -232,7 +280,7 @@ namespace
   public:
     ForestBiomeNoise(BlockId surfaceBlockType, glm::ivec2 worldDimsTL) : SurfaceBiomeNoise(surfaceBlockType)
     {
-      globalMeadowImage.resize(worldDimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * worldDimsTL.y * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+      globalMeadowImage = Image<2, float>({worldDimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, worldDimsTL.y * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
     }
 
     float GetWeight([[maybe_unused]] glm::ivec2 posWS) override
@@ -240,7 +288,7 @@ namespace
       PANIC;
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -263,12 +311,12 @@ namespace
         const auto pModTl = glm::ivec2(x, y);
         const auto positionWS = pModTl + glm::ivec2(posTL.x, posTL.y) * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
         
-        const auto meadowness = TexelFetch2D(meadowImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+        const auto meadowness = meadowImage.TexelFetch(pModTl);
 
         const auto heightScale = glm::mix(15, 4,  meadowness);
-        const auto height = glm::floor(heightScale * TexelFetch2D(terrainHeightImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl));
-        ImageStore2D(terrainHeightImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl, height);
-        ImageStore2D(globalMeadowImage, dimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, meadowness);
+        const auto height = glm::floor(heightScale * terrainHeightImage.TexelFetch(pModTl));
+        terrainHeightImage.ImageStore(pModTl, height);
+        globalMeadowImage.ImageStore({positionWS.x, positionWS.y}, meadowness);
       }
 
       return terrainHeightImage;
@@ -297,7 +345,7 @@ namespace
       whiteNoise->SetOutputMin(0);
       auto whiteNoise2 = FastNoise::New<FastNoise::White>();
 
-      const auto meadowness = TexelFetch2D(globalMeadowImage, grid.dimensions_.x, {x, z});
+      const auto meadowness = globalMeadowImage.TexelFetch({x, z});
 
       const bool hasSolidFloor = grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
       const auto tree          = whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4);
@@ -388,7 +436,7 @@ namespace
       "GgUbBRwFHQUXBRgDFgMdBRYCAACAPwcfAwsAAIDHQgQ@CGAQ@BHC@BKJBBB+F6z7//wbsUTg///8DAACamVk///8H/wQA/wcWAgAAgD8H/wQA//8CrkchQP//AgAAgD8GXI/CPv//AgAAgD//");
 
     // Used to determine where meadows are. These are flatter areas with fewer trees.
-    std::vector<float> globalMeadowImage;
+    Image<2, float> globalMeadowImage;
   };
 
   class DesertBiomeNoise final : public SurfaceBiomeNoise
@@ -407,7 +455,7 @@ namespace
       return 4;
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -419,7 +467,7 @@ namespace
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
-        terrainHeightImage[i] = terrainHeightImage[i] * 20.0f - 10;
+        terrainHeightImage.data()[i] = terrainHeightImage.data()[i] * 20.0f - 10;
       }
 
       return terrainHeightImage;
@@ -483,7 +531,7 @@ namespace
       return 1 - glm::smoothstep(0.0f, 40.0f, glm::max(0.0f, Math::SDF::Box(glm::vec2(posWS - biomePos), glm::vec2{30, 50})));
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -495,7 +543,7 @@ namespace
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
-        terrainHeightImage[i] = terrainHeightImage[i] * 20.0f - 15;
+        terrainHeightImage.data()[i] = terrainHeightImage.data()[i] * 20.0f - 15;
       }
 
       return terrainHeightImage;
@@ -549,7 +597,7 @@ namespace
       return substrateBlockType_;
     }
 
-    virtual [[nodiscard]] std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
+    virtual [[nodiscard]] Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
 
   private:
     BlockId substrateBlockType_;
@@ -569,7 +617,7 @@ namespace
       PANIC;
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       return GenerateAndUpscale3D(surfaceCaves,
@@ -596,7 +644,7 @@ namespace
       return 1 - glm::smoothstep(0.0f, 20.0f, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), glm::vec3{30, 50, 40})));
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       return GenerateAndUpscale3D(noise,
@@ -628,11 +676,11 @@ namespace
       return Math::Intersect::BoxVsBox(chunkMin, chunkMax, biomeAabbMin, biomeAabbMax);
     }
 
-    std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
-      const auto count = Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
-      auto density = std::make_unique_for_overwrite<float[]>(count);
+      const auto dims = glm::ivec3{Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE};
+      auto density = Image<3, float>(dims);
 
       for (int z = 0; z < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; z++)
       for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
@@ -655,7 +703,8 @@ namespace
         float rxy = l - 4.0f;
         float n   = l * p.z;
         rxy       = max(rxy, -(n) / 4.f);
-        ImageStore3D(density, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {x, y, z}, (rxy) / abs(scale));
+
+        density.ImageStore({x, y, z}, rxy / abs(scale));
       }
 
       return density;
@@ -698,8 +747,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
-  auto globalSurfaceHeightImage = std::vector<float>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
-  auto globalSurfaceBiomeImage = std::vector<SurfaceBiome>(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.z * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+  auto globalSurfaceHeightImage = Image<2, float>({grid.Dimensions().x, grid.Dimensions().z});
+  auto globalSurfaceBiomeImage  = Image<2, SurfaceBiome>({grid.Dimensions().x, grid.Dimensions().z});
 
   auto whiteNoise = FastNoise::New<FastNoise::White>();
   whiteNoise->SetOutputMin(0);
@@ -744,13 +793,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int k = tlBrickColCoord[0];
         const int i = tlBrickColCoord[1];
 
-        auto biomeHeights = std::array<std::unique_ptr<float[]>, int(SurfaceBiome::COUNT)>();
+        auto biomeHeights = std::array<Image<2, float>, int(SurfaceBiome::COUNT)>();
 
         for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
         {
           if (surfaceBiomes[j]->BroadPhase({i, k}))
           {
-            biomeHeights[j] = surfaceBiomes[j]->GenImageForChunk({i, k}, {grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z}, mapGenInfo);
+            biomeHeights[j] = surfaceBiomes[j]->GenImageForChunk({i, k}, mapGenInfo);
           }
         }
 
@@ -769,7 +818,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
           {
             // Skip biomes that failed broadphase check.
-            if (biomeHeights[j] == nullptr)
+            if (biomeHeights[j].data() == nullptr)
             {
               continue;
             }
@@ -787,7 +836,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
             biomeWeights[j] = weight;
             sumWeights += weight;
-            sumHeights += weight * TexelFetch2D(biomeHeights[j], Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+            sumHeights += weight * biomeHeights[j].TexelFetch(pModTl);
 
             if (weight > maxBiomeWeight)
             {
@@ -810,8 +859,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           }
 
           const auto height = glm::floor(mapGenInfo.seaLevel + sumHeights / sumWeights);
-          ImageStore2D(globalSurfaceHeightImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
-          ImageStore2D(globalSurfaceBiomeImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, biome);
+          globalSurfaceHeightImage.ImageStore({positionWS.x, positionWS.y}, height);
+          globalSurfaceBiomeImage.ImageStore({positionWS.x, positionWS.y}, biome);
         }
 
         // Top level bricks
@@ -855,8 +904,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               const auto pModTl = positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
               
               //const auto height = TexelFetch2D(terrainHeightImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {pModTl.x, pModTl.z});
-              const auto height = TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {positionWS.x, positionWS.z});
-              const auto biome  = TexelFetch2D(globalSurfaceBiomeImage, grid.dimensions_.x, {positionWS.x, positionWS.z});
+              const auto height = globalSurfaceHeightImage.TexelFetch({positionWS.x, positionWS.z});
+              const auto biome  = globalSurfaceBiomeImage.TexelFetch({positionWS.x, positionWS.z});
               const auto& biomeInfo = surfaceBiomes[int(biome)];
 
               auto blockTypeToSet = voxel_t::Air;
@@ -950,7 +999,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         {
           ZoneScopedN("Top level brick");
 
-          auto biomeDensities = std::array<std::unique_ptr<float[]>, int(UndergroundBiome::COUNT)>();
+          auto biomeDensities = std::array<Image<3, float>, int(UndergroundBiome::COUNT)>();
 
           for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
           {
@@ -976,7 +1025,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
               {
                 // Skip biomes that failed broadphase check.
-                if (biomeDensities[m] == nullptr)
+                if (biomeDensities[m].data() == nullptr)
                 {
                   continue;
                 }
@@ -995,7 +1044,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 biomeWeights[m] = weight;
                 sumWeights += weight;
                 sumDensities +=
-                  weight * TexelFetch3D(biomeDensities[m], Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+                  weight * biomeDensities[m].TexelFetch(positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
 
                 if (weight > maxBiomeWeight)
                 {
@@ -1055,8 +1104,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     for (int z = 0; z < grid.dimensions_.z; z++)
     for (int x = 0; x < grid.dimensions_.x; x++)
     {
-      const auto biome = TexelFetch2D(globalSurfaceBiomeImage, grid.dimensions_.x, {x, z});
-      const auto y = (int)TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {x, z});
+      const auto biome = globalSurfaceBiomeImage.TexelFetch({x, z});
+      const auto y = (int)globalSurfaceHeightImage.TexelFetch({x, z});
       surfaceBiomes[int(biome)]->PlaceSurfaceFeatures(*this, mapGenInfo, {x, y, z});
 
 #ifndef GAME_HEADLESS
@@ -1125,9 +1174,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                   const auto aboveBlock = grid.GetVoxelAtUnchecked(aboveWS);
                   if (aboveBlock != voxel_t::Air)
                   {
-                    if (TexelFetch3D(simplexImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) +
-                          TexelFetch3D(whiteImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) * 0.3f <
-                        0.05f)
+                    if (simplexImage.TexelFetch(tlLocal) + whiteImage.TexelFetch(tlLocal) * 0.3f < 0.05f)
                     {
                       auto lk = std::unique_lock(mutex);
                       if (aboveBlock == dirt)
@@ -1145,7 +1192,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 if (belowWS.y > 0)
                 {
                   const auto belowBlock = grid.GetVoxelAtUnchecked(belowWS);
-                  if (belowBlock == dirt && TexelFetch3D(whiteImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, tlLocal) > 0.98f)
+                  if (belowBlock == dirt && whiteImage.TexelFetch(tlLocal) > 0.98f)
                   {
                     grid.SetVoxelAtNoDirty(positionWS, blocks.Get("pot"));
                   }
@@ -1188,7 +1235,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto& rng          = registry_.ctx().get<PCG::Rng>();
     const auto fractXZ = glm::vec2(rng.RandFloat(0.4f, 0.6f), rng.RandFloat(0.4f, 0.6f));
     const auto posXZ   = glm::ivec2(fractXZ * glm::vec2(grid.dimensions_.x, grid.dimensions_.z) + 0.5f);
-    const auto posY    = TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, posXZ);
+    const auto posY    = globalSurfaceHeightImage.TexelFetch(posXZ);
     const auto pos     = glm::ivec3(posXZ[0], posY, posXZ[1]);
     const auto bot     = glm::ivec3(glm::vec3(pos / Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE) + 0.5f);
     const auto top     = bot + 1 + glm::ivec3(0, 1, 0);
@@ -1216,7 +1263,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         [&](glm::ivec3 positionWS)
         {
           const auto pModTl = positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
-          const auto density = TexelFetch3D(image, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl);
+          const auto density = image.TexelFetch(pModTl);
           // Low-altitude behavior
           if (positionWS.y < mapGenInfo.seaLevel + 80)
           {
@@ -1271,7 +1318,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           const auto posSub = glm::ivec3(rng.RandU32() % DUNGEON_CELL_SIZE, rng.RandU32() % DUNGEON_CELL_SIZE, rng.RandU32() % DUNGEON_CELL_SIZE);
           const auto posWS  = posCell * DUNGEON_CELL_SIZE + posSub;
 
-          const auto surfaceHeight = int(TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {posWS.x, posWS.z}));
+          const auto surfaceHeight = int(globalSurfaceHeightImage.TexelFetch({posWS.x, posWS.z}));
           if (posWS.y <= surfaceHeight - 8 && posWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
           {
             registry_.ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(*this, posWS);
@@ -1310,7 +1357,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           const auto posWS  = posCell * ISLAND_CELL_SIZE + posSub;
           const auto posFraction = glm::vec3(posWS) / glm::vec3(grid.dimensions_);
 
-          const auto surfaceHeight = int(TexelFetch2D(globalSurfaceHeightImage, grid.dimensions_.x, {posWS.x, posWS.z}));
+          const auto surfaceHeight = int(globalSurfaceHeightImage.TexelFetch({posWS.x, posWS.z}));
           if (posWS.y >= surfaceHeight + 125 && posFraction.x < 0.9f && posFraction.y < 0.9f && posFraction.z < 0.9f)
           {
             registry_.ctx().get<PrefabRegistry>().Get("FloatingIsland").Instantiate(*this, posWS);
