@@ -232,4 +232,14 @@ namespace Math
       return Box(glm::vec3(p, 0.0f), glm::vec3(b, 0.0f));
     }
   }
+
+  namespace Intersect
+  {
+    inline bool BoxVsBox(glm::vec3 b1min, glm::vec3 b1max, glm::vec3 b2min, glm::vec3 b2max)
+    {
+      DEBUG_ASSERT(glm::all(glm::greaterThan(b1max, b1min)));
+      DEBUG_ASSERT(glm::all(glm::greaterThan(b2max, b2min)));
+      return !(glm::any(glm::lessThan(b2max, b1min)) || glm::any(glm::greaterThan(b2min, b1max)));
+    }
+  }
 } // namespace Math

@@ -242,6 +242,7 @@ namespace
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
         glm::ivec2(glm::vec2(posTL.x, posTL.y) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE),
         mapGenInfo.seed,
@@ -275,6 +276,7 @@ namespace
 
     void PlaceSurfaceFeatures(World& world, const World::MapGenInfo& mapGenInfo, glm::ivec3 posWS) override
     {
+      ZoneScoped;
       auto& registry_ = world.GetRegistry();
       auto& grid      = registry_.ctx().get<Voxel::Grid>();
       auto& blocks    = registry_.ctx().get<Block::Registry>();
@@ -407,6 +409,7 @@ namespace
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         mapGenInfo.seed - 21,
@@ -424,6 +427,7 @@ namespace
 
     void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
     {
+      ZoneScoped;
       auto& registry_ = world.GetRegistry();
       auto& grid      = registry_.ctx().get<Voxel::Grid>();
       auto& blocks    = registry_.ctx().get<Block::Registry>();
@@ -481,6 +485,7 @@ namespace
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] glm::ivec2 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
         glm::ivec2(glm::vec2(posTL.x, posTL.y) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE),
         mapGenInfo.seed - 22,
@@ -566,6 +571,7 @@ namespace
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       return GenerateAndUpscale3D(surfaceCaves,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         mapGenInfo.seed,
@@ -592,6 +598,7 @@ namespace
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       return GenerateAndUpscale3D(noise,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         mapGenInfo.seed,
@@ -611,12 +618,19 @@ namespace
 
     float GetWeight(glm::ivec3 posWS) override
     {
-      const auto biomePos = glm::ivec3(150, 200, 50);
-      return 1 - glm::smoothstep(0.0f, 20.0f, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), glm::vec3{50, 50, 50})));
+      return 1 - glm::smoothstep(0.0f, biomeEdge, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), biomeHalfDims)));
+    }
+
+    bool BroadPhase([[maybe_unused]] glm::ivec3 posTL) override
+    {
+      const auto chunkMin = posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
+      const auto chunkMax = chunkMin + Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
+      return Math::Intersect::BoxVsBox(chunkMin, chunkMax, biomeAabbMin, biomeAabbMax);
     }
 
     std::unique_ptr<float[]> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
+      ZoneScoped;
       const auto count = Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
       auto density = std::make_unique_for_overwrite<float[]>(count);
 
@@ -648,7 +662,11 @@ namespace
     }
 
   private:
-
+    glm::ivec3 biomePos          = {0, 200, 0};
+    glm::vec3 biomeHalfDims      = {25, 25, 25};
+    float biomeEdge              = 15;
+    const glm::vec3 biomeAabbMin = glm::vec3(biomePos) - biomeHalfDims - biomeEdge;
+    const glm::vec3 biomeAabbMax = glm::vec3(biomePos) + biomeHalfDims + biomeEdge;
   };
 }
 
@@ -730,8 +748,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
         for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
         {
-          // TODO: broadphase check
-          biomeHeights[j] = surfaceBiomes[j]->GenImageForChunk({i, k}, {grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z}, mapGenInfo);
+          if (surfaceBiomes[j]->BroadPhase({i, k}))
+          {
+            biomeHeights[j] = surfaceBiomes[j]->GenImageForChunk({i, k}, {grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z}, mapGenInfo);
+          }
         }
 
         for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
@@ -748,6 +768,12 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           
           for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
           {
+            // Skip biomes that failed broadphase check.
+            if (biomeHeights[j] == nullptr)
+            {
+              continue;
+            }
+
             float weight;
             // Last biome is the default (if weight of other biomes is low).
             if (j == int(SurfaceBiome::COUNT) - 1)
@@ -884,7 +910,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
               if (blockTypeToSet != voxel_t::Air)
               {
-                grid.SetVoxelAtNoDirty(positionWS, blockTypeToSet);
+                grid.SetVoxelAtUncheckedNoDirty(positionWS, blockTypeToSet);
               }
             });
 
@@ -899,6 +925,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
   if (true)
   {
+    ZoneScopedN("Underground Biomes");
 #ifndef GAME_HEADLESS
     progressText.store("Caves");
     progress.store(0);
