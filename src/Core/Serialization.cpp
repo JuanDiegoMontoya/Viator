@@ -246,29 +246,15 @@ namespace Core::Serialization
     template<typename Archive>
     void Serialize2(Archive& ar, Voxel::Grid::BottomLevelBrick& blBrick)
     {
-      for (auto& bits : blBrick.occupancy.bitmask)
-      {
-        Serialize2(ar, bits);
-      }
-
-      for (auto& voxel : blBrick.voxels)
-      {
-        Serialize2(ar, voxel);
-      }
+      auto data = cereal::BinaryData(&blBrick, sizeof(blBrick));
+      ar(data);
     }
 
     template<typename Archive>
     void Serialize2(Archive& ar, const Voxel::Grid::BottomLevelBrick& blBrick)
     {
-      for (auto& bits : blBrick.occupancy.bitmask)
-      {
-        Serialize2(ar, bits);
-      }
-
-      for (auto& voxel : blBrick.voxels)
-      {
-        Serialize2(ar, voxel);
-      }
+      auto data = cereal::BinaryData(&blBrick, sizeof(blBrick));
+      ar(data);
     }
 
     template<typename Archive>
