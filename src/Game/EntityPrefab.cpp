@@ -245,8 +245,15 @@ entt::entity TorchDefinition::Spawn(World& world, glm::vec3 position, glm::quat 
 
 entt::entity ChestDefinition::Spawn(World& world, glm::vec3 position, glm::quat rotation) const
 {
-  auto& registry    = world.GetRegistry();
-  const auto entity = world.CreateRenderableEntity(position, rotation);
+  auto& registry = world.GetRegistry();
+  auto entity    = registry.create();
+  auto& t        = registry.emplace<LocalTransform>(entity);
+  t.position     = position;
+  t.rotation     = rotation;
+  t.scale        = 1;
+
+  registry.emplace<GlobalTransform>(entity) = {t.position, t.rotation, t.scale};
+  registry.emplace<Hierarchy>(entity);
   registry.emplace<Name>(entity, "Chest");
   registry.emplace<Inventory>(entity).canHaveActiveItem = false;
   return entity;

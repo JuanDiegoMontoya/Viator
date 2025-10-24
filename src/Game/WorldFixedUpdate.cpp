@@ -35,14 +35,17 @@ void World::FixedUpdate(float dt)
     ASSERT(registry_.view<const LocalPlayer>().size() <= 1);
 
     // Update previous transforms before updating it (this should be done after updating the game state from networking)
-    for (auto&& [entity, transform, previousTransform] : registry_.view<const GlobalTransform, const PreviousGlobalTransform>().each())
     {
-      if (transform.position != previousTransform.position || transform.rotation != previousTransform.rotation || transform.scale != previousTransform.scale)
+      ZoneScopedN("Update PreviousGlobalTransform");
+      for (auto&& [entity, transform, previousTransform] : registry_.view<const GlobalTransform, const PreviousGlobalTransform>().each())
       {
-        auto& previousTransformMut    = registry_.get<PreviousGlobalTransform>(entity);
-        previousTransformMut.position = transform.position;
-        previousTransformMut.rotation = transform.rotation;
-        previousTransformMut.scale    = transform.scale;
+        if (transform.position != previousTransform.position || transform.rotation != previousTransform.rotation || transform.scale != previousTransform.scale)
+        {
+          auto& previousTransformMut    = registry_.get<PreviousGlobalTransform>(entity);
+          previousTransformMut.position = transform.position;
+          previousTransformMut.rotation = transform.rotation;
+          previousTransformMut.scale    = transform.scale;
+        }
       }
     }
 
@@ -79,6 +82,7 @@ void World::FixedUpdate(float dt)
     // Apply status effects
     if (IsServer())
     {
+      ZoneScopedN("Apply status effects");
       for (auto&& [entity, health] : registry_.view<Health>().each())
       {
         if (Item::GetTotalEffectOnEntity(*this, entity, Item::EffectType::HealthRegeneration, 0) >= 1)
@@ -107,6 +111,7 @@ void World::FixedUpdate(float dt)
     // Process linear transform paths
     // if (IsServer())
     {
+      ZoneScopedN("Process linear paths");
       for (auto&& [entity, linearPath, transform] : registry_.view<LinearPath, LocalTransform>().each())
       {
         if (!IsServer() && !AncestorHasComponent<LocalAuthoritative>(entity))
@@ -172,6 +177,7 @@ void World::FixedUpdate(float dt)
     // Reset AI targets if target is invalid or dead.
     if (IsServer())
     {
+      ZoneScopedN("Reset AI targets");
       for (auto&& [entity, target] : registry_.view<AiTarget>().each())
       {
         if (!registry_.valid(target.currentTarget) || registry_.all_of<GhostPlayer>(target.currentTarget))
@@ -188,6 +194,7 @@ void World::FixedUpdate(float dt)
     // Close open containers if too far away.
     if (IsServer())
     {
+      ZoneScopedN("Close distant open containers");
       for (auto&& [entity, player, transform] : registry_.view<Player, const GlobalTransform>().each())
       {
         auto& reg   = registry_;
@@ -239,6 +246,7 @@ void World::FixedUpdate(float dt)
     }
 
     {
+      ZoneScopedN("Destroy entities that depend on constraints");
       for (auto&& [entity, rigidBody] : registry_.view<const Physics::RigidBody, const DestroyWhenConstraintsBroken>().each())
       {
         if (GetPhysicsEngine().GetConstraintsForBody(rigidBody.body).empty())
@@ -251,6 +259,7 @@ void World::FixedUpdate(float dt)
     // Player interaction
     // if (IsServer())
     {
+      ZoneScopedN("Player interaction");
       for (auto&& [entity, player, transform, input, inventory] :
         registry_.view<Player, const GlobalTransform, const InputState, Inventory>(entt::exclude<GhostPlayer>).each())
       {
@@ -401,6 +410,7 @@ void World::FixedUpdate(float dt)
 
     // Shorten distance constraints attached to entities with ShortenConstraintsOverTime.
     {
+      ZoneScopedN("Process ShortenConstraintsOverTime");
       for (auto&& [entity, shortenConstraint, rigidBody] : registry_.view<ShortenConstraintsOverTime, const Physics::RigidBody>().each())
       {
         const auto constraints = GetPhysicsEngine().GetConstraintsForBody(rigidBody.body);
@@ -433,6 +443,7 @@ void World::FixedUpdate(float dt)
 
     if (IsServer())
     {
+      ZoneScopedN("Process DespawnWhenFarFromEntity");
       for (auto&& [entity, far, myTransform] : registry_.view<const DespawnWhenFarFromEntity, const GlobalTransform>().each())
       {
         if (!registry_.valid(far.entity))
@@ -454,6 +465,7 @@ void World::FixedUpdate(float dt)
     // Handle block tick queue.
     if (IsServer())
     {
+      ZoneScopedN("Process block tick queue");
       auto queue = std::move(registry_.ctx().get<WaterQueue>());
       auto set = std::move(registry_.ctx().get<WaterSet>());
 
@@ -479,6 +491,7 @@ void World::FixedUpdate(float dt)
     // Update items in inventories (important to ensure cooldowns, etc. reset even when items are put away).
     if (IsServer())
     {
+      ZoneScopedN("Update items in inventories");
       for (auto&& [entity, player, inventory] : registry_.view<const Player, Inventory>(entt::exclude<GhostPlayer>).each())
       {
         for (size_t row = 0; row < inventory.height; row++)
@@ -502,6 +515,7 @@ void World::FixedUpdate(float dt)
 
     if (IsServer())
     {
+      ZoneScopedN("Update CannotBePickedUp");
       for (auto&& [entity, cannotPickUp] : registry_.view<CannotBePickedUp>().each())
       {
         cannotPickUp.remainingSeconds -= dt;
@@ -515,6 +529,7 @@ void World::FixedUpdate(float dt)
     // Dropped items get sucked towards the player as if by magnetic attraction.
     if (IsServer())
     {
+      ZoneScopedN("Dropped item magnetism");
       for (auto&& [entity, player, transform] : registry_.view<const Player, const GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
         // for (auto nearEntity : this->GetEntitiesInSphere(transform.position, 2))
@@ -574,6 +589,7 @@ void World::FixedUpdate(float dt)
     // Update status effects
     if (IsServer())
     {
+      ZoneScopedN("Update status effects");
       for (auto&& [entity, effects] : registry_.view<TemporaryEffects>().each())
       {
         std::erase_if(effects.effects,
@@ -591,6 +607,7 @@ void World::FixedUpdate(float dt)
     // Tick down ghost players
     if (IsServer())
     {
+      ZoneScopedN("Update ghost players");
       for (auto&& [entity, ghost, player] : registry_.view<GhostPlayer, const Player>().each())
       {
         ghost.remainingSeconds -= dt;
@@ -605,6 +622,7 @@ void World::FixedUpdate(float dt)
     // Tick down invulnerability
     if (IsServer())
     {
+      ZoneScopedN("Update Invulnerability");
       for (auto&& [entity, invulnerability] : registry_.view<Invulnerability>().each())
       {
         invulnerability.remainingSeconds -= dt;
@@ -618,6 +636,7 @@ void World::FixedUpdate(float dt)
     // Tick down per-entity immunity.
     if (IsServer())
     {
+      ZoneScopedN("Update CannotDamageEntities");
       for (auto&& [entity, cannotDamage] : registry_.view<CannotDamageEntities>().each())
       {
         for (auto it = cannotDamage.entities.begin(); it != cannotDamage.entities.end();)
@@ -639,6 +658,7 @@ void World::FixedUpdate(float dt)
     // Reset despawn timer for entities
     if (IsServer())
     {
+      ZoneScopedN("Update DespawnWhenFarFromPlayer");
       for (auto&& [entity, transform, despawnInfo] : registry_.view<const GlobalTransform, const DespawnWhenFarFromPlayer>().each())
       {
         const auto maxDist2      = despawnInfo.maxDistance * despawnInfo.maxDistance;
@@ -660,6 +680,7 @@ void World::FixedUpdate(float dt)
     // Tick down lifetimes
     if (IsServer())
     {
+      ZoneScopedN("Update Lifetime");
       for (auto&& [entity, lifetime] : registry_.view<Lifetime>().each())
       {
         lifetime.remainingSeconds -= dt;
@@ -672,6 +693,7 @@ void World::FixedUpdate(float dt)
 
     // Delete expired sound emitters
     {
+      ZoneScopedN("Delete expired sound emitters");
       for (auto&& [entity, emitter] : registry_.view<const SoundEmitter>().each())
       {
         if (emitter.handle.expired())
@@ -684,6 +706,7 @@ void World::FixedUpdate(float dt)
     // Process entities with Health
     if (IsServer())
     {
+      ZoneScopedN("Update entities with Health");
       for (auto&& [entity, health, transform] : registry_.view<Health, const GlobalTransform>(entt::exclude<GhostPlayer>).each())
       {
         if (health.hp <= 0)
@@ -760,6 +783,7 @@ void World::FixedUpdate(float dt)
     // Non-player entities dump their inventory when they are destroyed.
     if (IsServer())
     {
+      ZoneScopedN("Dump inventories from dying entities");
       for (auto&& [entity, transform, inventory] : registry_.view<const GlobalTransform, Inventory, const DeferredDelete>(entt::exclude<Player>).each())
       {
         for (size_t row = 0; row < inventory.height; row++)
@@ -785,10 +809,13 @@ void World::FixedUpdate(float dt)
     }
 
     // Actually destroy entities that were marked for deletion.
-    for (auto entity : registry_.view<const DeferredDelete>())
     {
-      spdlog::debug("Destroyed entity {}", entt::to_integral(entity));
-      registry_.destroy(entity);
+      ZoneScopedN("Update DeferredDelete");
+      for (auto entity : registry_.view<const DeferredDelete>())
+      {
+        spdlog::debug("Destroyed entity {}", entt::to_integral(entity));
+        registry_.destroy(entity);
+      }
     }
 
     ticks_++;

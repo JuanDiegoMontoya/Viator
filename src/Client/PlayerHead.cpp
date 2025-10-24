@@ -255,7 +255,7 @@ static auto MakeVkbSwapchain(const vkb::Device& device,
 
 void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
 {
-  ZoneScopedN("PlayerHead::VariableUpdatePre");
+  ZoneScoped;
   worldThisFrame_   = &world;
 
   if (audio_)
@@ -267,10 +267,10 @@ void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
 
 void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
 {
-  ZoneScopedN("PlayerHead::VariableUpdatePost");
-
+  ZoneScoped;
   if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME || world.IsClient())
   {
+    ZoneScopedN("Interpolate transforms");
     for (auto&& [entity, transform, rtransform] : world.GetRegistry().view<const GlobalTransform, const RenderTransform>().each())
     {
       if (!world.GetRegistry().all_of<RenderTransform>(entity))

@@ -2012,7 +2012,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           glm::max(wpositions[0].z, glm::max(wpositions[1].z, wpositions[2].z))};
       }
 
+#ifdef JPH_DEBUG_RENDERER
       JPH::DebugRenderer::sInstance->DrawWireBox(JPH::AABox(Physics::ToJolt(min), Physics::ToJolt(max)), JPH::Color::sCyan);
+#endif
 
       const auto savePrefab = [&]
       {

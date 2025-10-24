@@ -16,6 +16,7 @@ void Systems::UpdateInputForBirds(World& world, float dt)
   // Avians
   if (world.IsServer())
   {
+    ZoneScoped;
     auto& registry_ = world.GetRegistry();
     for (auto&& [entity, input, transform, behavior] : registry_.view<InputState, LocalTransform, PredatoryBirdBehavior>().each())
     {
