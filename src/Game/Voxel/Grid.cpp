@@ -227,7 +227,7 @@ namespace Voxel
     }
     topLevelBrickPtrsBaseIndex = uint32_t(topLevelBrickPtrs.offset / sizeof(TopLevelBrickPtr));
 
-    mutex_ = std::make_unique<std::mutex>();
+    mutex_ = std::make_unique<LockNessMonster>();
   }
 
   Grid::GridHierarchyCoords Grid::GetCoordsOfVoxelAt(glm::ivec3 voxelCoord) const

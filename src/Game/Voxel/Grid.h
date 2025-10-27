@@ -6,6 +6,7 @@
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "ankerl/unordered_dense.h"
+#include "tracy/Tracy.hpp"
 
 #include <cstdint>
 #include <unordered_map>
@@ -281,7 +282,28 @@ namespace Voxel
 
 
     std::vector<SketchyBuffer::Alloc> subGridAllocations;
-    std::unique_ptr<std::mutex> mutex_;
-    // TracyLockable(std::mutex, STINKY_MUTEX); // Crashes Tracy client, possibly because I have too many threads.
+
+    // Movable interface that's compatible with TracyLockable.
+    struct LockNessMonster
+    {
+      void lock()
+      {
+        mutex.lock();
+      }
+
+      void unlock()
+      {
+        mutex.unlock();
+      }
+
+      bool try_lock()
+      {
+        return mutex.try_lock();
+      }
+
+      TracyLockable(std::mutex, mutex);
+    };
+
+    std::unique_ptr<LockNessMonster> mutex_;
   };
 } // namespace Voxel
