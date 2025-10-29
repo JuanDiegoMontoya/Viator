@@ -18,8 +18,8 @@ public:
   TestGame()                                    = default;
   virtual ~TestGame()                           = default;
   virtual void Tick(float dt)                   = 0;
-  virtual [[nodiscard]] class World& GetWorld() = 0;
-  virtual [[nodiscard]] Voxel::Grid& GetGrid()  = 0;
+  [[nodiscard]] virtual class World& GetWorld() = 0;
+  [[nodiscard]] virtual Voxel::Grid& GetGrid()  = 0;
 
   // Common grid configurations.
   virtual void InitEmptyGrid(voxel_t voxel = voxel_t::Air) = 0;

@@ -250,23 +250,23 @@ namespace
     SurfaceBiomeNoise(BlockId surfaceBlockType) : surfaceBlockType_(surfaceBlockType) {}
     virtual ~SurfaceBiomeNoise() = default;
 
-    virtual [[nodiscard]] Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
+    [[nodiscard]] virtual Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
 
-    virtual [[nodiscard]] bool BroadPhase([[maybe_unused]] glm::ivec2 posTL)
+    [[nodiscard]] virtual bool BroadPhase([[maybe_unused]] glm::ivec2 posTL)
     {
       return true;
     }
 
-    virtual [[nodiscard]] float GetWeight(glm::ivec2 posWS) = 0;
+    [[nodiscard]] virtual float GetWeight(glm::ivec2 posWS) = 0;
 
     virtual void PlaceSurfaceFeatures(World& world, const World::MapGenInfo& mapGenInfo, glm::ivec3 posWS) = 0;
 
-    virtual [[nodiscard]] int GetSurfaceThickness() const
+    [[nodiscard]] virtual int GetSurfaceThickness() const
     {
       return 1;
     }
 
-    virtual [[nodiscard]] BlockId GetSurfaceBlockType() const
+    [[nodiscard]] virtual BlockId GetSurfaceBlockType() const
     {
       return surfaceBlockType_;
     }
@@ -585,19 +585,19 @@ namespace
     UndergroundBiomeNoise(BlockId substrateBlockType) : substrateBlockType_(substrateBlockType) {}
     virtual ~UndergroundBiomeNoise() = default;
 
-    virtual [[nodiscard]] float GetWeight([[maybe_unused]] glm::ivec3 posWS) = 0;
+    [[nodiscard]] virtual float GetWeight([[maybe_unused]] glm::ivec3 posWS) = 0;
 
-    virtual [[nodiscard]] bool BroadPhase([[maybe_unused]] glm::ivec3 posTL)
+    [[nodiscard]] virtual bool BroadPhase([[maybe_unused]] glm::ivec3 posTL)
     {
       return true;
     }
 
-    virtual [[nodiscard]] BlockId GetSubstrateBlockType() const
+    [[nodiscard]] virtual BlockId GetSubstrateBlockType() const
     {
       return substrateBlockType_;
     }
 
-    virtual [[nodiscard]] Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
+    [[nodiscard]] virtual Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
 
   private:
     BlockId substrateBlockType_;

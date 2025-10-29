@@ -117,17 +117,17 @@ namespace Physics
     virtual ~Engine() = default;
 
     virtual void RegisterConstraint(JPH::Ref<JPH::TwoBodyConstraint> constraint) = 0;
-    virtual [[nodiscard]] std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body) = 0;
+    [[nodiscard]] virtual std::vector<JPH::TwoBodyConstraint*> GetConstraintsForBody(JPH::BodyID body) = 0;
     virtual void RemoveConstraintsFromBody(JPH::BodyID body) = 0;
     virtual void DestroyConstraint(JPH::TwoBodyConstraint* constraint) = 0;
 
-    virtual [[nodiscard]] const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery() const = 0;
-    virtual [[nodiscard]] JPH::BodyInterface& GetBodyInterface() = 0;
-    virtual [[nodiscard]] JPH::PhysicsSystem& GetPhysicsSystem() = 0;
+    [[nodiscard]] virtual const JPH::NarrowPhaseQuery& GetNarrowPhaseQuery() const = 0;
+    [[nodiscard]] virtual JPH::BodyInterface& GetBodyInterface()                   = 0;
+    [[nodiscard]] virtual JPH::PhysicsSystem& GetPhysicsSystem()                   = 0;
 
     virtual void FixedUpdate(float dt) = 0;
 
-    virtual [[nodiscard]] entt::dispatcher& GetDispatcher() = 0;
+    [[nodiscard]] virtual entt::dispatcher& GetDispatcher() = 0;
 
     virtual void CreateObservers(entt::registry& registry) = 0;
   };

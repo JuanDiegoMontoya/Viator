@@ -10,8 +10,8 @@ namespace Networking
   class Server : public Interface
   {
   public:
-    static [[nodiscard]] std::unique_ptr<Server> Create(World& world);
+    [[nodiscard]] static std::unique_ptr<Server> Create(World& world);
 
-    virtual [[nodiscard]] size_t GetNumberOfConnections() const = 0;
+    [[nodiscard]] virtual size_t GetNumberOfConnections() const = 0;
   };
 } // namespace Networking
