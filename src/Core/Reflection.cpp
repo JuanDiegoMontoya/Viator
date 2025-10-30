@@ -604,6 +604,11 @@ namespace Core::Reflection
 #endif
 } // namespace Core::Reflection
 
+size_t HsHasher::operator()(const entt::hashed_string& hs) const noexcept
+{
+  return hs.value();
+}
+
 const char* Core::Reflection::EnumToString(entt::meta_any value)
 {
   ASSERT(value.type());

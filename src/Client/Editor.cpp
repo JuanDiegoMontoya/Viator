@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <execution>
 
+using namespace entt::literals;
+
 namespace
 {
   std::string FixupTypeString(std::string_view str)
@@ -31,8 +33,11 @@ namespace
 
     return std::string(str);
   }
+} // namespace
 
-  bool DrawComponentHelper(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId)
+namespace GuiHelper
+{
+  bool DrawComponent(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId)
   {
     using namespace Core::Reflection;
     auto meta = instance.type();
@@ -72,7 +77,7 @@ namespace
         {
           auto eType = element.type();
           ImGui::PushID(guiId++);
-          changed |= DrawComponentHelper(world, entity, element.as_ref(), eType.custom(), readonly, guiId);
+          changed |= DrawComponent(world, entity, element.as_ref(), eType.custom(), readonly, guiId);
           ImGui::PopID();
         }
         ImGui::TreePop();
@@ -141,7 +146,14 @@ namespace
     }
     else if (meta.is_pointer_like())
     {
-      ImGui::Text("TODO: pointer-likes");
+      if (meta.info() == entt::type_id<const char*>())
+      {
+        ImGui::Text("%s", instance.cast<const char*>());
+      }
+      else
+      {
+        ImGui::Text("TODO: pointer-likes");
+      }
     }
     else if (meta.traits<Traits>() & Traits::VARIANT)
     {
@@ -190,7 +202,7 @@ namespace
 
       ImGui::PushID(guiId++);
       ImGui::Indent();
-      changed |= DrawComponentHelper(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
+      changed |= GuiHelper::DrawComponent(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
       ImGui::Unindent();
       ImGui::PopID();
 
@@ -248,7 +260,7 @@ namespace
         auto value = valueFn.invoke({}, instance);
         ASSERT(value);
         ImGui::PushID(guiId++);
-        changed |= DrawComponentHelper(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
+        changed |= GuiHelper::DrawComponent(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);
         ImGui::PopID();
         if (changed)
         {
@@ -269,7 +281,7 @@ namespace
         {
           ImGui::PushID(guiId++);
           ImGui::Indent();
-          changed |= DrawComponentHelper(world, entity, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
+          changed |= GuiHelper::DrawComponent(world, entity, data.get(instance), data.custom(), readonly || traits & Traits::EDITOR_READ_ONLY, guiId);
           ImGui::Unindent();
           ImGui::PopID();
         }
@@ -283,7 +295,7 @@ namespace
 
     return changed;
   }
-} // namespace
+}
 
 // Recursive
 void VoxelRenderer::DrawEntityHelper(entt::registry& registry, entt::entity e, const Hierarchy* h)
@@ -596,7 +608,7 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, Edit
             if (storage->contains(e) && meta)
             {
               int i2 = 0;
-              DrawComponentHelper(world,
+              GuiHelper::DrawComponent(world,
                 e,
                 meta.from_void(storage->value(e)),
                 meta.custom(),

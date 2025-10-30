@@ -84,6 +84,16 @@ namespace
 
     return str;
   }
+
+  std::string ToLower(std::string str)
+  {
+    for (auto& c : str)
+    {
+      c = static_cast<char>(std::tolower(c));
+    }
+
+    return str;
+  }
 }
 
 namespace
@@ -515,6 +525,327 @@ namespace
     window->DrawList->AddRectFilled(bb.Min, ImVec2(pos.x + size.x * value, bb.Max.y), fg_col);
 
     return true;
+  }
+
+  const char* NameFromProperties(const entt::meta_custom& custom)
+  {
+    const auto* props = static_cast<const Core::Reflection::PropertiesMap*>(custom);
+    if (!props)
+    {
+      return nullptr;
+    }
+
+    if (auto it = props->find("name"_hs); it != props->end())
+    {
+      if (auto* pName = it->second.try_cast<const char*>())
+      {
+        return *pName;
+      }
+    }
+
+    return nullptr;
+  }
+
+  void DisplayTraits(Core::Reflection::Traits traits)
+  {
+    using namespace Core::Reflection;
+#define SHOW_TRAIT(trait)        \
+  do                             \
+  {                              \
+    if (traits & trait)          \
+    {                            \
+      ImGui::Text("%s", #trait); \
+    }                            \
+  } while (false)
+
+    SHOW_TRAIT(TRANSIENT);
+    SHOW_TRAIT(NO_EDITOR);
+    SHOW_TRAIT(EDITOR_READ_ONLY);
+    SHOW_TRAIT(VARIANT);
+    SHOW_TRAIT(COMPONENT);
+    SHOW_TRAIT(REPLICATED);
+    SHOW_TRAIT(TRIVIAL);
+    SHOW_TRAIT(POLYMORPHIC);
+    SHOW_TRAIT(EMPTY);
+    SHOW_TRAIT(ITEM_COMPONENT);
+    SHOW_TRAIT(BLOCK_COMPONENT);
+    SHOW_TRAIT(OPTIONAL);
+
+#undef SHOW_TRAIT
+  }
+
+  void DisplayRpcTraits(Core::Reflection::RpcTraits traits)
+  {
+    using Core::Reflection::RpcTraits;
+#define SHOW_TRAIT(trait)        \
+  do                             \
+  {                              \
+    if (uint32_t(traits & trait))\
+    {                            \
+      ImGui::Text("%s", #trait); \
+    }                            \
+  } while (false)
+
+    SHOW_TRAIT(RpcTraits::Client);
+    SHOW_TRAIT(RpcTraits::Server);
+    SHOW_TRAIT(RpcTraits::Remote);
+    SHOW_TRAIT(RpcTraits::Broadcast);
+    SHOW_TRAIT(RpcTraits::Unreliable);
+    SHOW_TRAIT(RpcTraits::UseVoxelChannel);
+
+#undef SHOW_TRAIT
+  }
+
+  void DrawMetaData(World& world, const entt::meta_data& data)
+  {
+    ImGui::Indent();
+
+    if (const char* name = NameFromProperties(data.custom()))
+    {
+      ImGui::Text("%s: %s", name, std::string(data.type().info().name()).c_str());
+    }
+    else
+    {
+      ImGui::Text("%s", std::string(data.type().info().name()).c_str());
+    }
+
+    const auto traits = data.traits<Core::Reflection::Traits>();
+
+    if (traits != 0)
+    {
+      if (ImGui::TreeNode("Member traits"))
+      {
+        DisplayTraits(traits);
+        ImGui::TreePop();
+      }
+      ImGui::Separator();
+    }
+
+    if (ImGui::TreeNode("Member properties"))
+    {
+      if (const auto* props = static_cast<const Core::Reflection::PropertiesMap*>(data.custom()))
+      {
+        for (int i = 0; const auto& [propId, prop] : *props)
+        {
+          i++;
+          ImGui::Text("%s: %s =", propId.data(), std::string(prop.type().info().name()).c_str());
+          ImGui::SameLine();
+          GuiHelper::DrawComponent(world, entt::null, prop, prop.type().custom(), true, i);
+        }
+      }
+      ImGui::TreePop();
+    }
+
+    ImGui::Unindent();
+  }
+
+  void DrawReflectionWindow(World& world)
+  {
+    if (ImGui::Begin("Reflection", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    {
+      static char buffer[256]{};
+      ImGui::Text("Filter");
+      ImGui::SameLine();
+      ImGui::InputText("##Filter", buffer, 256);
+      const auto len = std::strlen(buffer);
+
+      static bool showEnums             = true;
+      static bool showRegularComponents = true;
+      static bool showItemComponents    = true;
+      static bool showBlockComponents   = true;
+      static bool showNonComponentTypes = true;
+      static bool showPrimitiveTypes    = true;
+      static bool showClassTypes        = true;
+      static bool showArrayTypes        = true;
+
+      ImGui::Columns(2);
+      ImGui::Checkbox("Components", &showRegularComponents);
+      ImGui::NextColumn();
+      ImGui::Checkbox("Classes", &showClassTypes);
+      ImGui::NextColumn();
+
+      ImGui::Checkbox("Item Components", &showItemComponents);
+      ImGui::NextColumn();
+      ImGui::Checkbox("Primitives", &showPrimitiveTypes);
+      ImGui::NextColumn();
+
+      ImGui::Checkbox("Block Components", &showBlockComponents);
+      ImGui::NextColumn();
+      ImGui::Checkbox("Enums", &showEnums);
+      ImGui::NextColumn();
+
+      ImGui::Checkbox("Non-Component Types", &showNonComponentTypes);
+      ImGui::NextColumn();
+      ImGui::Checkbox("Arrays", &showArrayTypes);
+
+      ImGui::EndColumns();
+
+      ImGui::Separator();
+
+      auto types = std::ranges::to<std::vector>(entt::resolve());
+
+      auto scores = std::multimap<double, int, std::greater<double>>();
+      for (int index = 0; const auto& [id, type] : types)
+      {
+        auto name = std::string(type.info().name());
+        scores.emplace(rapidfuzz::fuzz::partial_ratio(ToLower(buffer), ToLower(name)), index);
+        index++;
+      }
+
+      for (int i = 0; const auto& [score, index] : scores)
+      {
+        i++;
+        if (len > 0 && score < 100)
+        {
+          continue;
+        }
+
+        const auto& [typeId, type] = types[index];
+        const auto traits = type.traits<Core::Reflection::Traits>();
+
+        if (!showEnums && type.is_enum())
+        {
+          continue;
+        }
+
+        if (!showRegularComponents && traits & Core::Reflection::COMPONENT && !(traits & Core::Reflection::BLOCK_COMPONENT) &&
+            !(traits & Core::Reflection::ITEM_COMPONENT))
+        {
+          continue;
+        }
+
+        if (!showItemComponents && traits & Core::Reflection::ITEM_COMPONENT)
+        {
+          continue;
+        }
+
+        if (!showBlockComponents && traits & Core::Reflection::BLOCK_COMPONENT)
+        {
+          continue;
+        }
+
+        if (!showNonComponentTypes && !(traits & Core::Reflection::COMPONENT))
+        {
+          continue;
+        }
+
+        if (!showPrimitiveTypes && (type.is_arithmetic() || type.is_pointer()))
+        {
+          continue;
+        }
+
+        if (!showClassTypes && type.is_class())
+        {
+          continue;
+        }
+
+        if (!showArrayTypes && type.is_array())
+        {
+          continue;
+        }
+
+        if (ImGui::CollapsingHeader(std::string(type.info().name()).c_str()))
+        {
+          ImGui::PushID(i);
+
+          if (traits != 0)
+          {
+            if (ImGui::TreeNode("Type traits"))
+            {
+              DisplayTraits(traits);
+              ImGui::TreePop();
+            }
+            ImGui::Separator();
+          }
+
+          if (const auto* props = static_cast<const Core::Reflection::PropertiesMap*>(type.custom()))
+          {
+            if (!props->empty())
+            {
+              if (ImGui::TreeNode("Type properties"))
+              {
+                for (int j = 0; const auto& [propId, prop] : *props)
+                {
+                  j++;
+                  ImGui::Text("%s: %s =", propId.data(), std::string(prop.type().info().name()).c_str());
+                  ImGui::SameLine();
+                  GuiHelper::DrawComponent(world, entt::null, prop, prop.type().custom(), true, j);
+                }
+                ImGui::TreePop();
+              }
+              ImGui::Separator();
+            }
+          }
+
+          for (int j = 0; const auto&& [id, func] : type.func())
+          {
+            j++;
+            ImGui::PushID(j);
+
+            if (auto* name = NameFromProperties(func.custom()))
+            {
+              ImGui::Text("%s", name);
+              const auto rpcTraits = func.traits<Core::Reflection::RpcTraits>();
+              DisplayRpcTraits(rpcTraits);
+
+              if (func.arity() > 0)
+              {
+                if (ImGui::TreeNode("Args"))
+                {
+                  for (size_t argIdx = 0; argIdx < func.arity(); argIdx++)
+                  {
+                    const auto arg = func.arg(argIdx);
+
+                    if (auto* argName = NameFromProperties(arg.custom()))
+                    {
+                      ImGui::Text("%s", argName);
+                    }
+                    else
+                    {
+                      ImGui::Text("%s", std::string(arg.info().name()).c_str());
+                    }
+                  }
+                  ImGui::TreePop();
+                }
+
+                ImGui::Separator();
+              }
+            }
+
+            ImGui::PopID();
+            ImGui::Separator();
+          }
+
+          for (int j = 0; const auto&& [dataId, data] : type.data())
+          {
+            j++;
+            ImGui::PushID(j);
+
+            if (type.is_enum())
+            {
+              if (auto* name = NameFromProperties(data.custom()))
+              {
+                auto value = data.get({});
+                if (value.allow_cast<int>())
+                {
+                  ImGui::Text("%s: %d", name, value.cast<int>());
+                } 
+              }
+            }
+            else
+            {
+              DrawMetaData(world, data);
+              ImGui::Separator();
+            }
+
+            ImGui::PopID();
+          }
+
+          ImGui::PopID();
+        }
+      }
+    }
+    ImGui::End();
   }
 } // namespace
 
@@ -1555,6 +1886,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     ShowEditor(dt, world, EditorMode::Entities);
     ShowEditor(dt, world, EditorMode::Items);
     ShowEditor(dt, world, EditorMode::Blocks);
+
+    DrawReflectionWindow(world);
 
     if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {

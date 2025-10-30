@@ -25,6 +25,7 @@
 #include "entt/entity/entity.hpp"
 #include "entt/entity/handle.hpp"
 #include "entt/entity/registry.hpp"
+#include "entt/meta/fwd.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -259,3 +260,8 @@ private:
   glm::vec3 sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
   float sunBrightness = 100'000;
 };
+
+namespace GuiHelper
+{
+  bool DrawComponent(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId);
+}

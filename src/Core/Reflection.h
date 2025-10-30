@@ -1,5 +1,4 @@
 #pragma once
-
 #include "entt/fwd.hpp"
 
 #include <cstdint>
@@ -96,7 +95,11 @@ namespace Core::Reflection
     return static_cast<RpcTraits>((uint32_t)a & (uint32_t)b);
   }
 
-  using PropertiesMap = std::unordered_map<entt::id_type, entt::meta_any>;
+  struct HsHasher
+  {
+    size_t operator()(const entt::hashed_string& hs) const noexcept;
+  };
+  using PropertiesMap = std::unordered_map<entt::hashed_string, entt::meta_any, HsHasher>;
   
   const char* EnumToString(entt::meta_any value);
 
