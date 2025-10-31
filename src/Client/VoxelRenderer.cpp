@@ -1,6 +1,7 @@
 #include "VoxelRenderer.h"
 
 #include "Game/World.h"
+#include "Game/Game.h"
 #include "Game/Assets.h"
 #include "Game/Item.h"
 #include "Game/Block.h"

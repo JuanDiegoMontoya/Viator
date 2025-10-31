@@ -1,4 +1,5 @@
 #include "Game/World.h"
+#include "Game/Game.h"
 #include "Game/Voxel/Grid.h"
 #include "Core/Assert2.h"
 #include "Prefab.h"

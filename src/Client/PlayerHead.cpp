@@ -3,6 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 
 #include "Game/World.h"
+#include "Game/Game.h"
 #include "Game/Assets.h"
 #include "stb_image.h"
 #include <GLFW/glfw3.h>

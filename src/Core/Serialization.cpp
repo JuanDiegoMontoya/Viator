@@ -3,7 +3,7 @@
 #include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
-//#include "Client/Fvog/Device.h" // TODO: bad bad
+#include "Game/CoreComponents.h"
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"

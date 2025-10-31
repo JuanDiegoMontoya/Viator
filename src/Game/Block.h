@@ -3,6 +3,7 @@
 #include "BlockFwd.h"
 #include "EntityPrefabFwd.h"
 #include "ItemFwd.h"
+#include "Core/ReflectionMacros.h"
 
 #include "glm/vec3.hpp"
 
@@ -37,25 +38,27 @@ namespace Block
     Down,  // -Y
   };
 
-  struct CubeFaceMaterial
-  {
-    bool randomizeTexcoordRotation = false;
-    uint32_t texcoordsQuarterTurns = 0; // Number of quarter turn rotations to apply to texture coordinates.
-    std::optional<std::string> baseColorTexture;
-    glm::vec3 baseColorFactor = {1, 1, 1};
-    std::optional<std::string> emissionTexture;
-    glm::vec3 emissionFactor = {0, 0, 0};
-  };
+  R_STRUCT(CubeFaceMaterial)
+    R_MEMBER(randomizeTexcoordRotation, bool, false);
+    R_MEMBER(texcoordsQuarterTurns, uint32_t, 0);
+    R_MEMBER(baseColorTexture, std::optional<std::string>, {});
+    R_MEMBER(baseColorFactor, glm::vec3, (glm::vec3{1, 1, 1}));
+    R_MEMBER(emissionTexture, std::optional<std::string>, {});
+    R_MEMBER(emissionFactor, glm::vec3, (glm::vec3{0, 0, 0}));
+  R_END();
 
   namespace Component
   {
-    struct Breakable
-    {
-      float initialHealth = 100;
-      int damageTier{};
-      BlockDamageFlags damageFlags = BlockDamageFlagBit::ALL_TOOLS;
-      std::variant<std::monostate, DropSelf, ItemState, std::string> dropWhenBroken = DropSelf{};
-    };
+    using LootType = std::variant<std::monostate, DropSelf, ItemState, std::string>;
+
+    R_STRUCT(Breakable)
+      R_MEMBER(initialHealth, float, 100, PROP_MIN(0.0f), PROP_MAX(100.0f));
+      R_MEMBER(damageTier, int, {});
+      R_MEMBER(damageFlags, BlockDamageFlags, BlockDamageFlagBit::ALL_TOOLS);
+      R_MEMBER(dropWhenBroken, LootType, DropSelf{});
+    R_END();
+
+    R_DECLARE_COMPONENT(Breakable, BLOCK_COMPONENT | REPLICATED);
 
     // Blocks with this component are highlighted when using the spelunker potion.
     struct Valuable{};

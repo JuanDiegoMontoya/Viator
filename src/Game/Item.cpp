@@ -1,4 +1,5 @@
 #include "Item.h"
+#include "Game.h"
 
 #include "Block.h"
 #include "EntityPrefab.h"

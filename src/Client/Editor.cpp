@@ -2,7 +2,9 @@
 #include "Game/World.h"
 #include "Core/Assert2.h"
 #include "Game/Item.h"
+#include "Game/Block.h"
 #include "Core/Reflection.h"
+#include "Game/CoreComponents.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"

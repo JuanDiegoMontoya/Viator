@@ -7,6 +7,7 @@
 #endif
 
 #include "World.h"
+#include "Game.h"
 #include "HashUtilities.h"
 
 #define GLM_ENABLE_EXPERIMENTAL

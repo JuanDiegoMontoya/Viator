@@ -1,9 +1,145 @@
 #include "Reflection.h"
-
+#define R_IMPLEMENTATION
+#include "ReflectionMacrosInternal.h"
+#include "Game/World.h"
 #include "Assert2.h"
+
+#include <vector>
+#include <functional>
+
+#include <type_traits>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <iterator>
+#include <unordered_map>
+#include <string>
+
+#include "angelscript.h"
+#include "entt/meta/container.hpp"
+#include "entt/meta/meta.hpp"
+#include "entt/meta/factory.hpp"
+#include "entt/meta/template.hpp"
+#include "entt/meta/pointer.hpp"
+#include "entt/core/hashed_string.hpp"
+
+namespace // type traits 2
+{
+  template<typename T>
+  struct is_optional : std::false_type
+  {
+  };
+
+  template<typename T>
+  struct is_optional<std::optional<T>> : std::true_type
+  {
+  };
+
+  template<typename T>
+  constexpr bool is_optional_v = is_optional<T>::value;
+
+  template<typename T>
+  struct is_variant : std::false_type
+  {
+  };
+
+  template<typename... Ts>
+  struct is_variant<std::variant<Ts...>> : std::true_type
+  {
+  };
+
+  template<typename T>
+  constexpr bool is_variant_v = is_variant<T>::value;
+} // namespace
+
+namespace
+{
+  template<typename Variant, std::size_t I = 0>
+  void ForEachVariantAlternative(auto&& func)
+  {
+    if constexpr (I < std::variant_size_v<Variant>)
+    {
+      using T = std::variant_alternative_t<I, Variant>;
+      func.template operator()<T>();
+      ForEachVariantAlternative<Variant, I + 1>(std::forward<decltype(func)>(func));
+    }
+  }
+
+  template<typename T, typename U>
+  decltype(auto) AppendToPropertiesMap(entt::hashed_string id, U any)
+  {
+    auto meta = entt::resolve<T>();
+    auto* map = static_cast<Core::Reflection::PropertiesMap*>(meta.custom());
+    if (!map)
+    {
+      entt::meta_factory<T>{}.template custom<Core::Reflection::PropertiesMap>();
+      map = static_cast<Core::Reflection::PropertiesMap*>(entt::resolve<T>().custom());
+      DEBUG_ASSERT(map);
+    }
+    return map->emplace(id, std::move(any)).first->second.template cast<U&>();
+  }
+
+  std::string RemoveNamespaces(std::string name)
+  {
+    if (auto pos = name.find_last_of(':'); pos != std::string::npos)
+    {
+      name.erase(name.begin(), name.begin() + pos + 1);
+    }
+
+    if (auto pos = name.find_last_of(' '); pos != std::string_view::npos)
+    {
+      name.erase(name.begin(), name.begin() + pos + 1);
+    }
+
+    return name;
+  }
+
+  template<typename T>
+  T WorldGet(World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    if (const auto* ptr = world.GetRegistry().try_get<const T>(entity))
+    {
+      return *ptr;
+    }
+    throw std::runtime_error("Component did not exist on entity");
+  }
+
+  template<typename T>
+  void WorldSet(World& world, entt::entity entity, T val)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    world.GetRegistry().emplace_or_replace<T>(entity, val);
+  }
+
+  template<typename T>
+  bool WorldHas(World& world, entt::entity entity)
+  {
+    if (!world.GetRegistry().valid(entity))
+    {
+      throw std::runtime_error("Invalid entity");
+    }
+    return world.GetRegistry().all_of<T>(entity);
+  }
+} // namespace
+
+static std::vector<void (*)()> s_reflectionRegistrationFuncs;
+static asIScriptEngine* asEngine;
+
+using namespace entt::literals;
+using namespace Core::Reflection;
+
+#include "ReflectionMacros.h"
+
+/////////////// Place headers that contain R_ macros here.
 #include "Serialization.h"
 #include "Game/Voxel/Grid.h"
-#include "Game/World.h"
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"
 #include "Game/Networking/Client.h"
@@ -13,18 +149,12 @@
 #include "Game/Pathfinding.h"
 #include "Game/Scripting.h"
 #include "Game/Prefab.h"
+/////////////// End headers that contain R_ macros.
 
 #ifndef GAME_HEADLESS
   #include "imgui.h"
 #endif
 
-#include "angelscript.h"
-#include "entt/meta/container.hpp"
-#include "entt/meta/meta.hpp"
-#include "entt/meta/factory.hpp"
-#include "entt/meta/template.hpp"
-#include "entt/meta/pointer.hpp"
-#include "entt/core/hashed_string.hpp"
 #include "spdlog/spdlog.h"
 #include "IconsFontAwesome6.h"
 
@@ -33,14 +163,6 @@
 #include "Jolt/Physics/Body/MotionType.h"
 
 #include "tracy/Tracy.hpp"
-
-#include <type_traits>
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <iterator>
-#include <unordered_map>
-#include <string>
 
 // ADL and specializations
 namespace entt
@@ -173,112 +295,6 @@ namespace entt
 #endif
 } // namespace entt
 
-namespace // type traits 2
-{
-  template<typename T>
-  struct is_optional : std::false_type
-  {
-  };
-
-  template<typename T>
-  struct is_optional<std::optional<T>> : std::true_type
-  {
-  };
-
-  template<typename T>
-  constexpr bool is_optional_v = is_optional<T>::value;
-
-  template<typename T>
-  struct is_variant : std::false_type
-  {
-  };
-
-  template<typename... Ts>
-  struct is_variant<std::variant<Ts...>> : std::true_type
-  {
-  };
-
-  template<typename T>
-  constexpr bool is_variant_v = is_variant<T>::value;
-}
-
-namespace
-{
-  template<typename Variant, std::size_t I = 0>
-  void ForEachVariantAlternative(auto&& func)
-  {
-    if constexpr (I < std::variant_size_v<Variant>)
-    {
-      using T = std::variant_alternative_t<I, Variant>;
-      func.template operator()<T>();
-      ForEachVariantAlternative<Variant, I + 1>(std::forward<decltype(func)>(func));
-    }
-  }
-
-  template<typename T, typename U>
-  decltype(auto) AppendToPropertiesMap(entt::id_type id, U any)
-  {
-    auto meta = entt::resolve<T>();
-    auto* map = static_cast<Core::Reflection::PropertiesMap*>(meta.custom());
-    if (!map)
-    {
-      entt::meta_factory<T>{}.template custom<Core::Reflection::PropertiesMap>();
-      map = static_cast<Core::Reflection::PropertiesMap*>(entt::resolve<T>().custom());
-      DEBUG_ASSERT(map);
-    }
-    return map->emplace(id, std::move(any)).first->second.template cast<U&>();
-  }
-
-  std::string RemoveNamespaces(std::string name)
-  {
-    if (auto pos = name.find_last_of(':'); pos != std::string::npos)
-    {
-      name.erase(name.begin(), name.begin() + pos + 1);
-    }
-
-    if (auto pos = name.find_last_of(' '); pos != std::string_view::npos)
-    {
-      name.erase(name.begin(), name.begin() + pos + 1);
-    }
-
-    return name;
-  }
-
-  template<typename T>
-  T WorldGet(World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    if (const auto* ptr = world.GetRegistry().try_get<const T>(entity))
-    {
-      return *ptr;
-    }
-    throw std::runtime_error("Component did not exist on entity");
-  }
-
-  template<typename T>
-  void WorldSet(World& world, entt::entity entity, T val)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    world.GetRegistry().emplace_or_replace<T>(entity, val);
-  }
-
-  template<typename T>
-  bool WorldHas(World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    return world.GetRegistry().all_of<T>(entity);
-  }
-}
-
 namespace
 {
   void UpdatePlayerInput(World& world, entt::entity entity, InputState is, InputLookState ils)
@@ -311,8 +327,6 @@ namespace
 
 namespace Core::Reflection
 {
-  using namespace entt::literals;
-
 #ifndef GAME_HEADLESS
   template<typename Scalar>
   consteval ImGuiDataType ScalarToImGuiDataType()
@@ -719,200 +733,22 @@ void Core::Reflection::Initialize(Scripting& scripting)
   spdlog::info("Initializing type reflection.");
   entt::meta_reset();
   
-  auto& asEngine  = scripting.GetEngine();
+  asEngine = &scripting.GetEngine();
 
-  ASSERT(asEngine.RegisterObjectType("World", 0, asOBJ_REF | asOBJ_NOCOUNT) >= 0);
+  ASSERT(asEngine->RegisterObjectType("World", 0, asOBJ_REF | asOBJ_NOCOUNT) >= 0);
   entt::meta_factory<World>{}.func<[](void* ctx, int argIdx, World& v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   entt::meta_factory<World*>{}.func<[](void* ctx, int argIdx, World* v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterObjectType("entity", sizeof(entt::entity), asOBJ_VALUE | asOBJ_POD | asOBJ_APP_PRIMITIVE) >= 0);
+  ASSERT(asEngine->RegisterObjectType("entity", sizeof(entt::entity), asOBJ_VALUE | asOBJ_POD | asOBJ_APP_PRIMITIVE) >= 0);
   entt::meta_factory<entt::entity>{}.func<[](void* ctx, int argIdx, entt::entity v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterObjectType("vec3", sizeof(glm::vec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine->RegisterObjectType("vec3", sizeof(glm::vec3), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::vec3>{}.func<[](void* ctx, int argIdx, glm::vec3 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterObjectType("ivec3", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine->RegisterObjectType("ivec3", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::ivec3>{}.func<[](void* ctx, int argIdx, glm::ivec3 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterObjectType("ivec2", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine->RegisterObjectType("ivec2", sizeof(glm::ivec3), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::ivec2>{}.func<[](void* ctx, int argIdx, glm::ivec2 v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
+  ASSERT(asEngine->RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::quat>{}.func<[](void* ctx, int argIdx, glm::quat v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
-  ASSERT(asEngine.RegisterTypedef("short", "uint16") >= 0);
-
-#define MAKE_IDENTIFIER() CONCAT(factory_, __LINE__)
-#define MAKE_IDENTIFIER2(name) CONCAT(name, __LINE__)
-#define CONCAT(x, y) CONCAT_INDIRECT(x, y)
-#define CONCAT_INDIRECT(x, y) x ## y
-
-#define REFLECT_TYPE(T)    \
-  REGISTER_OBJECT_TYPE(T); \
-  auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
-
-#define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
-  REGISTER_OBJECT_TYPE(T);                                                                          \
-  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
-  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
-
-#define REFLECT_COMPONENT(T, ...)       \
-  REGISTER_OBJECT_TYPE(T);              \
-  REGISTER_COMPONENT_REGISTRY_FUNCS(T); \
-  REFLECT_COMPONENT_BASE(T __VA_OPT__(, __VA_ARGS__))
-
-#define REFLECT_COMPONENT_BASE(T, ...)                                                                                                                     \
-  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                        \
-  [[maybe_unused]] auto MAKE_IDENTIFIER() =                                                                                                                \
-    entt::meta_factory<T>{}                                                                                                                                \
-      .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) | (is_optional_v<T> ? OPTIONAL : Traits(0)) |                                           \
-              (is_variant_v<T> ? VARIANT : Traits(0))__VA_OPT__(| __VA_ARGS__))                                                                            \
-      .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs)                                      \
-      .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs); \
-  MAKE_IDENTIFIER()
-
-#define TRAITS(TraitsV) .traits(TraitsV)
-
-#define REGISTER_ENUM(Enum) ASSERT(asEngine.RegisterEnum(RemoveNamespaces(#Enum).c_str()) >= 0)
-#define REGISTER_ENUM_VALUE(Enum, Value) ASSERT(asEngine.RegisterEnumValue(RemoveNamespaces(#Enum).c_str(), RemoveNamespaces(#Value).c_str(), static_cast<int>(Enum::Value)) >= 0)
-
-#define REGISTER_OBJECT_TYPE(Type)                                                                                                                                   \
-  /*if constexpr (!is_variant_v<Type>)*/                                                                                                                             \
-  {                                                                                                                                                                  \
-    entt::meta_factory<Type>{}.func<[](void* ctx, int argIdx, Type v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);                                \
-    const auto MAKE_IDENTIFIER2(name) = RemoveNamespaces(#Type);                                                                                                     \
-    ASSERT(asEngine.RegisterObjectType(MAKE_IDENTIFIER2(name).c_str(),                                                                                               \
-             sizeof(Type),                                                                                                                                           \
-             asOBJ_VALUE | asGetTypeTraits<Type>() | (alignof(Type) == 8 ? asOBJ_APP_CLASS_ALIGN8 : 0)) >= 0);                                                         \
-    ASSERT(                                                                                                                                                          \
-      asEngine.RegisterObjectBehaviour(MAKE_IDENTIFIER2(name).c_str(), asBEHAVE_CONSTRUCT, "void f()", asFUNCTION(std::construct_at<Type>), asCALL_CDECL_OBJLAST) >= \
-      0);                                                                                                                                                            \
-    ASSERT(                                                                                                                                                          \
-      asEngine.RegisterObjectBehaviour(MAKE_IDENTIFIER2(name).c_str(), asBEHAVE_DESTRUCT, "void f()", asFUNCTION(std::destroy_at<Type>), asCALL_CDECL_OBJLAST) >=    \
-      0);                                                                                                                                                            \
-    ASSERT(asEngine.RegisterObjectMethod(MAKE_IDENTIFIER2(name).c_str(),                                                                                             \
-             (MAKE_IDENTIFIER2(name) + "& opAssign(" + MAKE_IDENTIFIER2(name) + "& in)").c_str(),                                                                    \
-             asMETHODPR(Type, operator=, (const Type&), Type&),                                                                                                      \
-             asCALL_THISCALL) >= 0);                                                                                                                                 \
-  }
-
-#define REGISTER_OBJECT_PROPERTIES(Type, Member)                                        \
-  ASSERT(asEngine.RegisterObjectProperty(RemoveNamespaces(#Type).c_str(),               \
-           (RemoveNamespaces(GetName<decltype(Type::Member)>()) + " " #Member).c_str(), \
-           asOFFSET(Type, Member)) >= 0)
-
-  // Registers the following functions:
-  // registry::has (alias for single-component registry::all)
-  // registry::get (wrapper for get() that throws if not exists)
-  // registry::set (wrapper for emplace_or_replace())
-#define REGISTER_COMPONENT_REGISTRY_FUNCS(Type)                                                                                                                   \
-  {                                                                                                                                                               \
-    [&asEngine]<typename T>                                                                                                                                       \
-    {                                                                                                                                                             \
-      const auto MAKE_IDENTIFIER2(name2) = RemoveNamespaces(#Type);                                                                                               \
-      /* e.g. Velocity GetVelocity(World& in, entity)*/                                                                                                           \
-      if constexpr (!std::is_empty_v<Type>)                                                                                                                       \
-      {                                                                                                                                                           \
-        ASSERT(asEngine.RegisterObjectMethod("World",                                                                                                             \
-                 (MAKE_IDENTIFIER2(name2) + " Get" + MAKE_IDENTIFIER2(name2) + "(entity)").c_str(),                                                               \
-                 asFUNCTION(WorldGet<Type>),                                                                                                                      \
-                 asCALL_CDECL_OBJFIRST) >= 0);                                                                                                                    \
-        ASSERT(asEngine.RegisterObjectMethod("World",                                                                                                             \
-                 ("void Set" + MAKE_IDENTIFIER2(name2) + "(entity, " + MAKE_IDENTIFIER2(name2) + ")").c_str(),                                                    \
-                 asFUNCTION(WorldSet<Type>),                                                                                                                      \
-                 asCALL_CDECL_OBJFIRST) >= 0);                                                                                                                    \
-      }                                                                                                                                                           \
-      ASSERT(                                                                                                                                                     \
-        asEngine.RegisterObjectMethod("World", ("bool Has" + MAKE_IDENTIFIER2(name2) + "(entity)").c_str(), asFUNCTION(WorldHas<Type>), asCALL_CDECL_OBJFIRST) >= \
-        0);                                                                                                                                                       \
-    }.operator()<Type>();                                                                                                                                         \
-  }
-
-#define DATA(Type, Member, ...)                                                                                                                              \
-  ;                                                                                                                                                          \
-  REGISTER_OBJECT_PROPERTIES(Type, Member); \
-  DATA_BASE(Type, Member __VA_OPT__(, __VA_ARGS__))
-
-#define DATA_BASE(Type, Member, ...);                                                                                                                          \
-  auto MAKE_IDENTIFIER() = entt::meta_factory<Type> {};                                                                                                      \
-  MAKE_IDENTIFIER() \
-  .data<&Type ::Member, entt::as_ref_t>(#Member##_hs) \
-  .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)}); \
-  entt::meta_factory<decltype(Type::Member)>{}.traits(                                                                                                       \
-    (is_optional_v<decltype(Type::Member)> ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0)));                          \
-  []<typename U>()                                                                                                                                           \
-  {                                                                                                                                                          \
-    if constexpr (is_variant_v<U>)                                                                                                                           \
-    {                                                                                                                                                        \
-      /*entt::meta_factory<U>{} VARIANT_FUNCS(U);*/                                                                                                          \
-    }                                                                                                                                                        \
-  }.operator()<decltype(Type::Member)>();                                                                                                                    \
-  []<typename U>()                                                                                                                                           \
-  {                                                                                                                                                          \
-    if constexpr (is_optional_v<U>)                                                                                                                          \
-    {                                                                                                                                                        \
-      entt::meta_factory<U>{}.template ctor<typename U::value_type>() OPTIONAL_FUNCS(U);                                                                     \
-    }                                                                                                                                                        \
-  }.operator()<decltype(Type::Member)>();                                                                                                                    \
-  MAKE_IDENTIFIER()
-
-#define PROP_SPEED(Scalar) {"speed"_hs, Scalar}
-#define PROP_MIN(Scalar) {"min"_hs, Scalar}
-#define PROP_MAX(Scalar) {"max"_hs, Scalar}
-#define PROP_DISPLAY_NAME(Name) {"display_name"_hs, Name}
-#define PROP_ICON(Icon) {"icon"_hs, Icon}
-#define REFLECT_ENUM(T) REGISTER_ENUM(T);\
-  entt::meta_factory<T>{}\
-  .func<[](T value) { return static_cast<std::underlying_type_t<T>>(value); }>("to_underlying"_hs)
-
-#define ENUMERATOR(E, Member, ...) \
-  ;                                \
-  REGISTER_ENUM_VALUE(E, Member); \
-  entt::meta_factory<E>{}.data<E :: Member>(#Member##_hs) \
-  .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)})
-
-#define VARIANT_FUNCS(T)                                                               \
-  ;                                                                                    \
-  ForEachVariantAlternative<T>(                                                        \
-    []<typename V>                                                                     \
-    {                                                                                  \
-      entt::meta_factory<T>{}.ctor<V>();                                               \
-      auto& vec = AppendToPropertiesMap<T>("alternatives"_hs, std::vector<entt::id_type>());  \
-      vec.push_back(entt::type_hash<V>::value());                                      \
-    });                                                                                \
-  entt::meta_factory<T>{}                                                              \
-    .traits<Traits>(VARIANT)                                                           \
-    .template func<[](const T& ps)                                                     \
-      {                                                                                \
-        auto info = entt::id_type();                                                   \
-        std::visit([&](auto&& x) { info = entt::type_id<decltype(x)>().hash(); }, ps); \
-        return info;                                                                   \
-      }>("type_hash"_hs)                                                               \
-    .template func<[](const T& ps)                                                     \
-      {                                                                                \
-        auto value = entt::meta_any();                                                 \
-        std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);           \
-        return value;                                                                  \
-      }>("const_value"_hs)                                                             \
-    .template func<[](T& ps)                                                           \
-      {                                                                                \
-        auto value = entt::meta_any();                                                 \
-        std::visit([&](auto&& x) { value = entt::forward_as_meta(x); }, ps);           \
-        return value;                                                                  \
-      }>("value"_hs)
-
-#define PTR_FUNCS(T)                                                            \
-  .template func<[]() { return new T(); }>("make_raw_ptr"_hs)                            \
-  .template func<[]() { return std::make_unique<T>(); }>("make_unique_ptr"_hs)           \
-  .template func<[]() { return std::make_shared<T>(); }>("make_shared_ptr"_hs)           \
-  .template func<[](T*& p, T* v) { p = v; }>("reset_raw_ptr"_hs)                         \
-  .template func<[](std::unique_ptr<T>& p, T* v) { p.reset(v); }>("reset_unique_ptr"_hs) \
-  .template func<[](std::shared_ptr<T>& p, T* v) { p.reset(v); }>("reset_shared_ptr"_hs) \
-
-#define OPTIONAL_FUNCS(T)                                                   \
-  .template func<[](const T& option) { return option.has_value(); }>("has_value"_hs) \
-  .template func<[](T& option) { return option.emplace(); }>("emplace"_hs)           \
-  .template func<[](T& option) { option.reset(); }>("reset"_hs)                      \
-  .template func<[](T& option) -> decltype(auto) { return option.value(); }>("value"_hs)
-
-  #define REGISTER_RPC(Function, Traits) \
-    entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
-    .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Function}}) \
-    .traits<RpcTraits>(Traits)
+  ASSERT(asEngine->RegisterTypedef("short", "uint16") >= 0);
 
   entt::meta_factory<int>()
 #ifndef GAME_HEADLESS
@@ -1595,29 +1431,15 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_TYPE(BlockDamageFlags)
     DATA_BASE(BlockDamageFlags, flags);
 
-  using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
-  REFLECT_TYPE(LootType)
-    VARIANT_FUNCS(LootType);
-
-  REFLECT_COMPONENT(Block::Component::Breakable, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::Breakable, initialHealth)
-    DATA(Block::Component::Breakable, damageTier)
-    DATA_BASE(Block::Component::Breakable, damageFlags)
-    DATA_BASE(Block::Component::Breakable, dropWhenBroken);
+  REFLECT_TYPE(Block::Component::LootType)
+    VARIANT_FUNCS(Block::Component::LootType);
 
   REFLECT_COMPONENT(Block::Component::Valuable, BLOCK_COMPONENT | REPLICATED);
 
   REFLECT_COMPONENT(Block::Component::RenderAsSubGrid, BLOCK_COMPONENT | REPLICATED);
 
-  REFLECT_TYPE(Block::CubeFaceMaterial);
-    DATA(Block::CubeFaceMaterial, randomizeTexcoordRotation)
-    DATA_BASE(Block::CubeFaceMaterial, baseColorTexture)
-    DATA(Block::CubeFaceMaterial, baseColorFactor)
-    DATA_BASE(Block::CubeFaceMaterial, emissionTexture)
-    DATA(Block::CubeFaceMaterial, emissionFactor);
-
   REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::RenderAsTexturedCube, material);
+    DATA_BASE(Block::Component::RenderAsTexturedCube, material);
 
   REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube2, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::RenderAsTexturedCube2, faces);
@@ -1691,17 +1513,18 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REFLECT_COMPONENT(Grapple, REPLICATED)
     DATA_BASE(Grapple, shooter)
     DATA_BASE(Grapple, shortenConstraints);
-  
-  REFLECT_COMPONENT(Item::Component::GrapplingHookLauncher, ITEM_COMPONENT | REPLICATED)
-    DATA_BASE(Item::Component::GrapplingHookLauncher, maxDistance, PROP_MAX(100.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, launchVelocity, PROP_MAX(100.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, pullAcceleration, PROP_MAX(100.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, pullMaxVelocity, PROP_MAX(100.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, pullInitialVelocity, PROP_MAX(100.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, initialSpringFrequency, PROP_MAX(20.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, maxSpringFrequency, PROP_MAX(20.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, springFrequencyVelocity, PROP_MAX(50.0f))
-    DATA_BASE(Item::Component::GrapplingHookLauncher, springDamping);
+
+  BEGIN_REFLECT_COMPONENT(Item::Component::GrapplingHookLauncher, ITEM_COMPONENT | REPLICATED)
+    MEMBER(maxDistance, PROP_MAX(100.0f));
+    MEMBER(launchVelocity, PROP_MAX(100.0f));
+    MEMBER(pullAcceleration, PROP_MAX(100.0f));
+    MEMBER(pullMaxVelocity, PROP_MAX(100.0f));
+    MEMBER(pullInitialVelocity, PROP_MAX(100.0f));
+    MEMBER(initialSpringFrequency, PROP_MAX(20.0f));
+    MEMBER(maxSpringFrequency, PROP_MAX(20.0f));
+    MEMBER(springFrequencyVelocity, PROP_MAX(50.0f));
+    MEMBER(springDamping);
+  END_REFLECT
 
   REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
   REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
@@ -1718,7 +1541,14 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA_BASE(IvecVoxelPair, first)
     DATA_BASE(IvecVoxelPair, second);
 
-  REFLECT_TYPE(SerializableSimplePrefab)
-    DATA_BASE(SerializableSimplePrefab, voxelToName)
-    DATA_BASE(SerializableSimplePrefab, voxels);
+  BEGIN_REFLECT_TYPE(SerializableSimplePrefab)
+    MEMBER(voxelToName);
+    MEMBER(voxels);
+  END_REFLECT
+
+  for (auto& cb : s_reflectionRegistrationFuncs)
+  {
+    cb();
+  }
+  s_reflectionRegistrationFuncs.clear();
 }

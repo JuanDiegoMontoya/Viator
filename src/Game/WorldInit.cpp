@@ -5,6 +5,7 @@
 #include "Prefab.h"
 #include "VoxLoader.h"
 #include "World.h"
+#include "Game.h"
 #include "Voxel/Grid.h"
 
 #include "FastNoise/FastNoise.h"

@@ -1,6 +1,7 @@
 #include "Block.h"
 #include "Voxel/Grid.h"
 #include "Game/World.h"
+#include "Game/Game.h"
 
 #include "Item.h"
 #include "Core/Assert2.h"

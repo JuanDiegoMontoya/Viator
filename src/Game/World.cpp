@@ -1,4 +1,5 @@
 #include "World.h"
+#include "Game.h"
 
 #include "HashGrid.h"
 #include "Item.h"

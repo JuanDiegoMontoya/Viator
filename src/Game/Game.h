@@ -10,6 +10,7 @@
 #include "MathUtilities.h"
 #include "Networking/Interface.h"
 #include "Head.h"
+#include "CoreComponents.h"
 
 #include "entt/entity/registry.hpp"
 #include "entt/entity/entity.hpp"
@@ -38,20 +39,6 @@ struct ItemState;
 class World;
 using namespace entt::literals;
 
-struct Name
-{
-  // TODO: Should be variant<const char*, std::string> and have helper to extract C string.
-  // We don't want to force an allocation for a name that's probably going to be a literal.
-  std::string name;
-};
-
-struct DeltaTime
-{
-  float game; // Affected by game effects that scale the passage of time.
-  float real; // Real time, unaffected by gameplay, inexorably marching on.
-  float fraction; // For variable rate updates, fraction 
-};
-
 struct Debugging
 {
   bool showDebugGui        = false;
@@ -66,20 +53,6 @@ struct Debugging
   bool infiniteItems       = false;
 };
 
-struct LocalTransform
-{
-  glm::vec3 position;
-  glm::quat rotation;
-  float scale;
-};
-
-struct GlobalTransform
-{
-  glm::vec3 position;
-  glm::quat rotation;
-  float scale;
-};
-
 struct BlockEntity {};
 
 // Similar to noclip character controller, but has inertia.
@@ -87,18 +60,6 @@ struct FlyingCharacterController
 {
   float maxSpeed;
   float acceleration;
-};
-
-struct Hierarchy
-{
-  void AddChild(entt::entity child);
-  void RemoveChild(entt::entity child);
-
-  entt::entity parent = entt::null;
-  std::vector<entt::entity> children;
-
-  bool useLocalPositionAsGlobal = false;
-  bool useLocalRotationAsGlobal = false;
 };
 
 enum class TeamFlagBits
@@ -360,8 +321,6 @@ struct CannotDamageEntities
 {
   std::unordered_map<entt::entity, float> entities;
 };
-
-struct DeferredDelete {};
 
 struct Lifetime
 {
@@ -660,8 +619,6 @@ struct Enemy {};
 
 // This component exists solely to check if a physics ray hit the voxel world.
 struct VoxelsComponent {};
-
-struct LocalAuthoritative {};
 
 struct NetworkNeedUpdateLocalTransform {};
 

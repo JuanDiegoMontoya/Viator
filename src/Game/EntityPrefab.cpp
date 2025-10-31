@@ -2,6 +2,7 @@
 
 #include "Pathfinding.h"
 #include "Game/World.h"
+#include "Game/Game.h"
 #include "Physics/Physics.h"
 #include "shaders/Light.h.glsl" // "TEMP"
 

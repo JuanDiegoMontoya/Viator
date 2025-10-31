@@ -1,7 +1,8 @@
 #pragma once
 #include "RegistryProxy.h"
 #include "Core/ClassImplMacros.h"
-#include "Game.h"
+#include "BlockFwd.h"
+#include "CoreComponents.h"
 #include "ItemFwd.h"
 #include "entt/entity/entity.hpp"
 #include "entt/entity/registry.hpp"
@@ -10,6 +11,9 @@
 #include <unordered_set>
 #include <queue>
 
+struct TeamFlags;
+struct FlyingCharacterController;
+
 namespace PCG
 {
   struct Rng;
@@ -17,6 +21,8 @@ namespace PCG
 
 namespace Physics
 {
+  struct CharacterController;
+  struct CharacterControllerShrimple;
   class Engine;
 }
 
@@ -201,9 +207,6 @@ public:
 
   // Returns the amount of damage successfully inflicted.
   float DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, BlockDamageFlags damageType);
-
-  const BlockDefinition& GetBlockDefinitionFromItem(ItemId item);
-  ItemId GetItemIdFromBlock(BlockId block);
 
   [[nodiscard]] entt::entity GetBlockEntity(glm::ivec3 voxelPosition);
 

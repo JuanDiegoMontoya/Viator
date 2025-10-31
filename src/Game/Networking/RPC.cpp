@@ -15,6 +15,8 @@
 #include <ranges>
 #include <sstream>
 
+using namespace entt::literals;
+
 void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& stream)
 {
   ZoneScoped;
