@@ -4,6 +4,7 @@
 #include "Game/Game.h"
 #include "Game/Pathfinding.h"
 #include "Game/World.h"
+#include "Game/Voxel/Grid.h"
 
 #include "Game/Physics/Physics.h"
 #include "Game/Physics/PhysicsUtils.h"

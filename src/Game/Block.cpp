@@ -684,7 +684,7 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
 
   if (params.valuable.has_value())
   {
-    bReg.emplace<Block::Component::Valuable>(entt::entity(block), *params.valuable);
+    bReg.emplace<Block::Component::Valuable>(entt::entity(block));
   }
 
   if (params.explode.has_value())

@@ -58,10 +58,7 @@ public:
   Physics::Engine& GetPhysicsEngine();
   const Physics::Engine& GetPhysicsEngine() const;
 
-  PCG::Rng& Rng()
-  {
-    return registry_.ctx().get<PCG::Rng>();
-  }
+  PCG::Rng& Rng();
 
   void InitializeGameState();
 

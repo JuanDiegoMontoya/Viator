@@ -19,14 +19,19 @@
   REGISTER_COMPONENT_REGISTRY_FUNCS(T); \
   REFLECT_COMPONENT_BASE(T __VA_OPT__(, __VA_ARGS__))
 
-#define REFLECT_COMPONENT_BASE(T, ...)                                                                                                                     \
-  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                        \
-  [[maybe_unused]] auto MAKE_IDENTIFIER() =                                                                                                                \
-    entt::meta_factory<T>{}                                                                                                                                \
-      .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) | (is_optional_v<T> ? OPTIONAL : Traits(0)) |                                           \
-              (is_variant_v<T> ? VARIANT : Traits(0))__VA_OPT__(| __VA_ARGS__))                                                                            \
-      .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs)                                      \
-      .func<[](entt::registry* registry, entt::entity entity, T& value) { registry->emplace_or_replace<T>(entity, std::move(value)); }>("EmplaceMove"_hs); \
+#define REFLECT_COMPONENT_BASE(T, ...)                                                                                                                        \
+  __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                           \
+  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}                                                                                           \
+                                              .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) | (is_optional_v<T> ? OPTIONAL : Traits(0)) |      \
+                                                      (is_variant_v<T> ? VARIANT : Traits(0))__VA_OPT__(| __VA_ARGS__))                                       \
+                                              .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \
+                                              .func<[](entt::registry* registry, entt::entity entity, T& value)                                               \
+                                                {                                                                                                             \
+                                                  if constexpr (!std::is_empty_v<T>)                                                                          \
+                                                    registry->emplace_or_replace<T>(entity, std::move(value));                                                \
+                                                  else                                                                                                        \
+                                                    registry->emplace_or_replace<T>(entity);                                                                  \
+                                                }>("EmplaceMove"_hs); \
   MAKE_IDENTIFIER()
 
 #define TRAITS(TraitsV) .traits(TraitsV)

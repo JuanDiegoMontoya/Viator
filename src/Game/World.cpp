@@ -860,3 +860,8 @@ void World::SpawnHitParticles(const SpawnHitParticlesParams& p)
     reg.emplace_or_replace<LinearVelocity>(e).v = velocity;
   }
 }
+
+PCG::Rng& World::Rng()
+{
+  return registry_.ctx().get<PCG::Rng>();
+}

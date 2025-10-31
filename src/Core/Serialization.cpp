@@ -227,7 +227,8 @@ namespace Core::Serialization
       {
         if (data.traits<Traits>() & Traits::TRIVIAL)
         {
-          auto* vp    = const_cast<void*>(data.get(value.as_ref()).base().data());
+          auto valueAsRef = value.as_ref();
+          auto* vp    = const_cast<void*>(data.get(valueAsRef).base().data());
           auto binary = cereal::binary_data(vp, data.type().size_of());
           ar(binary);
         }

@@ -605,7 +605,7 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, Edit
             ImGui::SetNextItemOpen(openAction == 1);
           }
           ImGui::PushItemFlag(ImGuiItemFlags_Disabled, isEmptyType);
-          if (ImGui::CollapsingHeader(FixupTypeString(storage->type().name()).c_str(), isEmptyType ? flags : 0))
+          if (ImGui::CollapsingHeader(FixupTypeString(storage->info().name()).c_str(), isEmptyType ? flags : 0))
           {
             if (storage->contains(e) && meta)
             {
