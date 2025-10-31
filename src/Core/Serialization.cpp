@@ -15,7 +15,6 @@
 
 #include "cereal/cereal.hpp"
 #include "cereal/archives/binary.hpp"
-//#include "cereal/archives/xml.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
 
@@ -74,15 +73,12 @@ namespace Core::Serialization
     ZoneScoped;
 
     // First, check if the type already has a bespoke serialization function.
-    const auto archiveHash = entt::type_id<Archive>();
-    for (auto [id, func] : value.type().func())
+    constexpr auto serializationId = Save ? "SerializeSave"_hs : "SerializeLoad"_hs;
+    if (auto func = value.type().func(serializationId))
     {
-      if (func.arg(0).info() == archiveHash)
-      {
-        auto ret = func.invoke({}, entt::forward_as_meta(ar), value.as_ref(), entt::forward_as_meta(context));
-        ASSERT(ret);
-        return;
-      }
+      auto ret = func.invoke({}, entt::forward_as_meta(ar), value.as_ref(), entt::forward_as_meta(context));
+      ASSERT(ret);
+      return;
     }
 
     if (value.type().traits<Traits>() & Traits::TRIVIAL)
@@ -354,12 +350,8 @@ namespace Core::Serialization
     spdlog::info("Initializing serialization.");
 #define MAKE_SERIALIZERS(T)                                                     \
   entt::meta_factory<T>()                                                       \
-    .func<Serialize2<cereal::BinaryInputArchive, T>>("BinaryInputArchive"_hs)   \
-    .func<Serialize2<cereal::BinaryOutputArchive, const T>>("BinaryOutputArchive"_hs) 
-    //.func<Serialize2<cereal::XMLInputArchive, T>>("XMLInputArchive"_hs)         \
-    //.func<Serialize2<cereal::XMLOutputArchive, const T>>("XMLOutputArchive"_hs)
-    //.func<Serialize2<cereal::JSONInputArchive, float>>("JSONInputArchive"_hs)
-    //.func<Serialize2<cereal::JSONOutputArchive, float>>("JSONOutputArchive"_hs)
+    .func<Serialize2<cereal::BinaryInputArchive, T>>("SerializeLoad"_hs)   \
+    .func<Serialize2<cereal::BinaryOutputArchive, const T>>("SerializeSave"_hs) 
 
     MAKE_SERIALIZERS(bool);
     MAKE_SERIALIZERS(char);
@@ -378,12 +370,12 @@ namespace Core::Serialization
     MAKE_SERIALIZERS(entt::id_type);
     MAKE_SERIALIZERS(std::string);
     entt::meta_factory<entt::entity>()
-      .func<Serialize3<cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
-      .func<Serialize2<cereal::BinaryOutputArchive, const entt::entity>>("BinaryOutputArchive"_hs);
+      .func<Serialize3<cereal::BinaryInputArchive>>("SerializeLoad"_hs)
+      .func<Serialize2<cereal::BinaryOutputArchive, const entt::entity>>("SerializeSave"_hs);
 
     entt::meta_factory<Voxel::Grid>()
-      .func<SerializeGrid<false, cereal::BinaryInputArchive>>("BinaryInputArchive"_hs)
-      .func<SerializeGrid<true, cereal::BinaryOutputArchive>>("BinaryOutputArchive"_hs);
+      .func<SerializeGrid<false, cereal::BinaryInputArchive>>("SerializeLoad"_hs)
+      .func<SerializeGrid<true, cereal::BinaryOutputArchive>>("SerializeSave"_hs);
       //.func<SerializeGrid<false, cereal::XMLInputArchive>>("XMLInputArchive"_hs)
       //.func<SerializeGrid<true, cereal::XMLOutputArchive>>("XMLOutputArchive"_hs);
     //entt::meta_factory<char*>().func<[](cereal::BinaryOutputArchive& ar, char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
