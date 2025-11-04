@@ -517,6 +517,21 @@ void World::InitializeGameDefinitions()
         .baseColorTexture          = "stone_albedo",
       }},
     });
+  
+  [[maybe_unused]] const auto cstoneBlock = Block::CreateStandardBlock(*this,
+    {
+      "stone_corrupt",
+      "Corrupt Stone",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 4,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{{
+        .randomizeTexcoordRotation = true,
+        .baseColorTexture          = "stone_corrupt_albedo",
+      }},
+    });
 
   [[maybe_unused]] const auto dirtBlock = Block::CreateStandardBlock(*this,
     {
@@ -599,6 +614,27 @@ void World::InitializeGameDefinitions()
           .damageFlags   = BlockDamageFlagBit::PICKAXE,
         },
         Block::Component::RenderAsTexturedCube2{grassSideMat, grassSideMat, grassSideMat, grassSideMat, grassMat, dirtMat},
+      }));
+
+  const auto cgrassMat = Block::CubeFaceMaterial{
+    .randomizeTexcoordRotation = true,
+    .baseColorTexture          = "grass_corrupt_albedo",
+  };
+  const auto cgrassSideMat = Block::CubeFaceMaterial{
+    .randomizeTexcoordRotation = false,
+    .baseColorTexture          = "grass_corrupt_side_albedo",
+  };
+  [[maybe_unused]] const auto cgrassBlockId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        "grass_corrupt",
+        "Corrupt Grass",
+        Block::Component::Breakable{
+          .initialHealth = 50,
+          .damageTier    = 1,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube2{cgrassSideMat, cgrassSideMat, cgrassSideMat, cgrassSideMat, cgrassMat, dirtMat},
       }));
 
   [[maybe_unused]] const auto sandBlockId = Block::GetItemId(*this,

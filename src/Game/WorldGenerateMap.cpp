@@ -237,6 +237,7 @@ namespace
   enum class SurfaceBiome : uint32_t
   {
     Desert,
+    Corruption,
     Snow,
     // NOTE: the last biome in this list is the default!
     Forest,
@@ -248,7 +249,13 @@ namespace
   public:
     NO_COPY_NO_MOVE(SurfaceBiomeNoise);
 
-    SurfaceBiomeNoise(BlockId surfaceBlockType) : surfaceBlockType_(surfaceBlockType) {}
+    struct CreateInfo
+    {
+      BlockId surfaceBlockType = voxel_t::Null;
+      BlockId subsurfaceBlockType = voxel_t::Null;
+    };
+
+    explicit SurfaceBiomeNoise(const CreateInfo& createInfo) : createInfo_(createInfo) {}
     virtual ~SurfaceBiomeNoise() = default;
 
     [[nodiscard]] virtual Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
@@ -267,19 +274,29 @@ namespace
       return 1;
     }
 
+    [[nodiscard]] virtual int GetSubsurfaceThickness() const
+    {
+      return 0;
+    }
+
     [[nodiscard]] virtual BlockId GetSurfaceBlockType() const
     {
-      return surfaceBlockType_;
+      return createInfo_.surfaceBlockType;
+    }
+
+    [[nodiscard]] virtual BlockId GetSubsurfaceBlockType() const
+    {
+      return createInfo_.subsurfaceBlockType;
     }
 
   private:
-    BlockId surfaceBlockType_;
+    CreateInfo createInfo_;
   };
 
   class ForestBiomeNoise final : public SurfaceBiomeNoise
   {
   public:
-    ForestBiomeNoise(BlockId surfaceBlockType, glm::ivec2 worldDimsTL) : SurfaceBiomeNoise(surfaceBlockType)
+    ForestBiomeNoise(const CreateInfo& createInfo, glm::ivec2 worldDimsTL) : SurfaceBiomeNoise(createInfo)
     {
       globalMeadowImage = Image<2, float>({worldDimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, worldDimsTL.y * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
     }
@@ -287,6 +304,11 @@ namespace
     float GetWeight([[maybe_unused]] glm::ivec2 posWS) override
     {
       PANIC;
+    }
+
+    int GetSubsurfaceThickness() const override
+    {
+      return 20;
     }
 
     Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
@@ -559,11 +581,45 @@ namespace
     FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("DQUlAEM@BFBg@AG9CBM3MTD////8=");
   };
 
-  class CorruptionBiome final : public SurfaceBiomeNoise
+  class SurfaceCorruptionNoise final : public SurfaceBiomeNoise
   {
   public:
+    explicit SurfaceCorruptionNoise(const CreateInfo& createInfo) : SurfaceBiomeNoise(createInfo)
+    {
+      scale = FastNoise::New<FastNoise::Constant>();
+      multiply = FastNoise::New<FastNoise::Multiply>();
+      scale->SetValue(40);
+      multiply->SetLHS(terrainHeight2D);
+      multiply->SetRHS(scale);
+    }
+
+    float GetWeight(glm::ivec2 posWS) override
+    {
+      return 1 - glm::smoothstep(40.0f * 40.0f, 50.0f * 50.0f, glm::max(0.0f, Math::Distance2(posWS, glm::vec2(100, 20))));
+    }
+
+    int GetSubsurfaceThickness() const override
+    {
+      return 20;
+    }
+
+    Image<2, float> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      return GenerateAndUpscale2D(multiply,
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        123456,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Filter::Nearest);
+    }
+
+    void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
+    {
+    }
 
   private:
+    FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("DQUQBQY@BWQwQ@AC/C@BD//AykFJQCO////BQYAAIB6Q///DgAAyEL///8=");
+    FastNoise::SmartNode<FastNoise::Multiply> multiply;
+    FastNoise::SmartNode<FastNoise::Constant> scale;
   };
 } // namespace
 
@@ -573,6 +629,7 @@ namespace
   {
     DesertCaves,
     FunkyCaves,
+    Corruption,
     // NOTE: the last biome in this enum is the default!
     SurfaceCaves,
     COUNT,
@@ -718,6 +775,45 @@ namespace
     const glm::vec3 biomeAabbMin = glm::vec3(biomePos) - biomeHalfDims - biomeEdge;
     const glm::vec3 biomeAabbMax = glm::vec3(biomePos) + biomeHalfDims + biomeEdge;
   };
+
+  class UndergroundCorruption final : public UndergroundBiomeNoise
+  {
+  public:
+    explicit UndergroundCorruption(BlockId substrateBlockType) : UndergroundBiomeNoise(substrateBlockType)
+    {
+      shaftOffset->SetSource(shaftGenerator);
+      shaftOffset->SetOffset<FastNoise::Dim::Y>(80 - 400); // Magic number = shaft depth - sea level
+
+      combiner->SetLHS(densityGenerator);
+      combiner->SetRHS(shaftOffset);
+    }
+
+    Image<3, float> GenImageForChunk([[maybe_unused]] glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      ZoneScoped;
+
+      return GenerateAndUpscale3D(combiner,
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        -100,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Filter::Nearest);
+    }
+
+    float GetWeight(glm::ivec3 posWS) override
+    {
+      const auto pos2d = glm::vec2{posWS.x, posWS.z};
+      return 1 - glm::smoothstep(160 * 160.0f, 200 * 200.0f, glm::max(0.0f, Math::Distance2(pos2d, glm::vec2(100, 20))));
+    }
+
+  private:
+    FastNoise::SmartNode<> densityGenerator = FastNoise::NewFromEncodedNodeTree(
+      "FAAC@BB@A4EAFEg@BRCBRwFIwUlBQs@ADIQwTNzMw9C@AIMAMAw@ABAC@BFAM@BYAg@BcJ@BI0IEH4XrPgiF61E//////wP/AQAG7FE4Pv8C@AgQf8CmpmZPgbNzEw//w==");
+    FastNoise::SmartNode<> shaftGenerator = FastNoise::NewFromEncodedNodeTree(
+      "GgUdBRUFDQUG@Bv0IEj8J1vQiPwnU9//8DFQUdBRcFGQUEBArXIzz//wIAAIC//wIAAIC//wIK16M9//8DHAUEBG8Sgzr/AycFHAUdBR@BCWQgUsBRQAAg@BQAAOBABRI@BFQgUcBSMFJQUL@BR0MEzczMPQgAACDADAM@BQAg@ABQD@BGAI@BHCQ@ADBCBFK4Hj8Ij8J1P/////8D/woABuxROD7/AgAAIEH/ApqZmT4GzcxMP///ApqZiUD/AgAAgL//AgAAgD//////AyQFE@AgMBCBSUABQ@BUXBQ@BCAv/8D/xQA//8CMzNLQv///w==");
+    FastNoise::SmartNode<FastNoise::DomainOffset> shaftOffset = FastNoise::New<FastNoise::DomainOffset>();
+    FastNoise::SmartNode<FastNoise::Max> combiner             = FastNoise::New<FastNoise::Max>();
+  };
 }
 
 void World::GenerateMap(const MapGenInfo& mapGenInfo)
@@ -764,9 +860,12 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   shrimplex2->SetOutputMin(0);
 
   auto surfaceBiomes                       = std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>();
-  surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(blocks.Get("sand"));
-  surfaceBiomes[int(SurfaceBiome::Snow)]   = std::make_unique<SnowBiomeNoise>(blocks.Get("snow"));
-  surfaceBiomes[int(SurfaceBiome::Forest)] = std::make_unique<ForestBiomeNoise>(blocks.Get("grass"), glm::ivec2{grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z});
+  surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
+  surfaceBiomes[int(SurfaceBiome::Snow)]   = std::make_unique<SnowBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("snow"), blocks.Get("dirt")});
+  surfaceBiomes[int(SurfaceBiome::Corruption)] =
+    std::make_unique<SurfaceCorruptionNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass_corrupt"), blocks.Get("dirt")});
+  surfaceBiomes[int(SurfaceBiome::Forest)] = std::make_unique<ForestBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass"), blocks.Get("dirt")},
+    glm::ivec2{grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z});
 
   {
     ZoneScopedN("Surface");
@@ -919,6 +1018,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 {
                   blockTypeToSet = biomeInfo->GetSurfaceBlockType();
                 }
+                else if (positionWS.y < height && positionWS.y >= height - biomeInfo->GetSubsurfaceThickness())
+                {
+                  blockTypeToSet = biomeInfo->GetSubsurfaceBlockType();
+                }
                 else
                 {
                   blockTypeToSet = placeholder;
@@ -982,8 +1085,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 #endif
 
     auto undergroundBiomes = std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>();
-    undergroundBiomes[int(UndergroundBiome::DesertCaves)] = std::make_unique<DesertCaves>(blocks.Get("sand"));
+    //undergroundBiomes[int(UndergroundBiome::DesertCaves)] = std::make_unique<DesertCaves>(blocks.Get("sand"));
     undergroundBiomes[int(UndergroundBiome::FunkyCaves)] = std::make_unique<FunkyCaves>(blocks.Get("dirt"));
+    undergroundBiomes[int(UndergroundBiome::Corruption)] = std::make_unique<UndergroundCorruption>(blocks.Get("stone_corrupt"));
     undergroundBiomes[int(UndergroundBiome::SurfaceCaves)] = std::make_unique<SurfaceCaves>(blocks.Get("stone"));
 
     std::for_each(std::execution::par,
@@ -1004,7 +1108,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
           for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
           {
-            if (undergroundBiomes[m]->BroadPhase({i, j, k}))
+            if (undergroundBiomes[m] != nullptr && undergroundBiomes[m]->BroadPhase({i, j, k}))
             {
               biomeDensities[m] = undergroundBiomes[m]->GenImageForChunk({i, j, k}, grid.topLevelBricksDims_, mapGenInfo);
             }
@@ -1072,13 +1176,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               // ImageStore2D(globalSurfaceBiomeImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, biome);
 
 
-              if (grid.GetVoxelAtUnchecked(positionWS) == placeholder)
+              
               {
                 if (density >= 0.0f)
                 {
                   grid.SetVoxelAtUncheckedNoDirty(positionWS, voxel_t::Air);
                 }
-                else
+                else if (grid.GetVoxelAtUnchecked(positionWS) == placeholder)
                 {
                   grid.SetVoxelAtUncheckedNoDirty(positionWS, undergroundBiomes[int(biome)]->GetSubstrateBlockType());
                 }
