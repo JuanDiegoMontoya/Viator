@@ -129,6 +129,39 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "name": "x64-Release-Profiling",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "FROGRENDER_FSR2_ENABLE",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "TRACY_ENABLE",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "TRACY_STATIC",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "GAME_FORCE_DEBUG_INFO",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

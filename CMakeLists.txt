@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 23)
 option(FROGRENDER_FSR2_ENABLE "Enable FidelityFX Super Resolution 2. Windows only!" FALSE)
 option(GAME_HEADLESS "Build the game without graphics or input." FALSE)
 option(GAME_COMPILE_TESTS "Compile the game's tests." TRUE)
+option(GAME_FORCE_DEBUG_INFO "Compile the game with debug info." FALSE)
 
 #TODO: Use an allocator that doesn't require Vulkan.
 find_package(Vulkan REQUIRED)
@@ -250,9 +251,18 @@ endif()
 option(FROGRENDER_FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
 if (${FORCE_COLORED_OUTPUT})
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-       add_compile_options(-fdiagnostics-color=always)
+        add_compile_options(-fdiagnostics-color=always)
     elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-       add_compile_options(-fcolor-diagnostics)
+        add_compile_options(-fcolor-diagnostics)
+    endif()
+endif()
+
+if (GAME_FORCE_DEBUG_INFO)
+    if (MSVC)
+        target_compile_options(frogRender PRIVATE /Zi)
+        target_link_options(frogRender PRIVATE /DEBUG)
+    else()
+        target_compile_options(frogRender PRIVATE -g)
     endif()
 endif()
 
@@ -320,7 +330,7 @@ if (NOT GAME_HEADLESS)
         volk::volk
         vk-bootstrap::vk-bootstrap
         glslang::glslang
-        glslang::glslang-default-resource-limits
+        glslang-default-resource-limits
         glslang::SPIRV
         stbi
     )
