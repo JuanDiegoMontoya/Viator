@@ -77,6 +77,7 @@ TEST_CASE("RingBuffer")
     auto ring3 = std::move(ring2);
     CompareRingBuffersDestructive(ring, ring3);
     CHECK(ring2.empty());
+    CHECK_NOTHROW(ring2.push(0));
   }
 
   SUBCASE("Pop some, then push some")
