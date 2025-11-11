@@ -319,6 +319,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
   {
     ZoneScopedN("Component::Flows");
 
+    // TODO: Cache result of this function to improve performance.
     const auto GetFlowIndex = [&reg](BlockId block) -> int
     {
       if (block == voxel_t::Air)
