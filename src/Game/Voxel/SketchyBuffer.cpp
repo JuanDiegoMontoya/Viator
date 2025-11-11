@@ -99,7 +99,7 @@ std::unique_ptr<SketchyBuffer> SketchyBuffer::Create(size_t bufferSize, bool cre
   return std::make_unique<SketchyBufferImpl>(bufferSize, createGpuBuffer, name);
 }
 
-SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, bool createGpuBuffer, [[maybe_unused]] std::string name)
+SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] bool createGpuBuffer, [[maybe_unused]] std::string name)
   : bufferSize_(bufferSize)
 {
   ZoneScoped;
