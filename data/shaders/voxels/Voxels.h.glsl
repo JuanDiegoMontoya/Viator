@@ -1324,7 +1324,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
       throughput *= throughput_t(cos_theta * brdf_over_pdf);
 
       HitSurfaceParameters hit = HitSurfaceParameters_init();
-      if (vx_TraceRayMultiLevel(curRayPos, curRayDir, 256, hit))
+      if (vx_TraceRayMultiLevel(curRayPos, curRayDir, 512, hit))
       //if (vx_TraceRayUnified(curRayPos, curRayDir, 256, hit))
       //if (vx_TraceRaySimple(curRayPos, curRayDir, 256, hit))
       {
