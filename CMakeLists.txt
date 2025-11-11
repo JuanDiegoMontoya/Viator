@@ -168,6 +168,8 @@ add_executable(frogRender
     src/Core/ReflectionMacros.h
     src/Core/ReflectionMacrosInternal.h
     src/Game/CoreComponents.h
+    src/Core/Container/RingBuffer.h
+    src/Core/Container/RingBuffer.cpp
 )
 
 # Precompiled headers for standard library
