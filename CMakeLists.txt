@@ -1,6 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
-
-set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "")
+cmake_minimum_required(VERSION 3.5)
 
 project(Frogfood)
 
@@ -330,7 +328,7 @@ if (NOT GAME_HEADLESS)
         volk::volk
         vk-bootstrap::vk-bootstrap
         glslang::glslang
-        glslang-default-resource-limits
+        glslang::glslang-default-resource-limits
         glslang::SPIRV
         stbi
     )
@@ -355,6 +353,7 @@ target_link_libraries(frogRender
     angelscript
     as_addons
     miniaudio
+    Jolt
 )
 
 if (MSVC)

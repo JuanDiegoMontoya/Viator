@@ -137,6 +137,10 @@ FetchContent_Declare(
     SYSTEM
 )
 
+option(TRACY_ON_DEMAND "" ON)
+option(TRACY_ENABLE "Enable profiling" ON)
+option(TRACY_ONLY_IPV4 "IPv4 only" ON)
+set(TRACY_STATIC ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     tracy
     GIT_REPOSITORY  https://github.com/wolfpld/tracy.git
@@ -186,7 +190,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     enet
     GIT_REPOSITORY https://github.com/JuanDiegoMontoya/enet.git
-    GIT_TAG        0bddff3717d0df95810779821d5bc0b9fea775b2
+    GIT_TAG        08ebc7fed8e19e5fb23297b03b4896871c6f4e8f
 )
 
 FetchContent_Declare(
@@ -230,11 +234,6 @@ if(NOT JoltPhysics_POPULATED)
 endif()
 
 target_include_directories(frogRender PUBLIC ${joltphysics_SOURCE_DIR}/..)
-target_link_libraries(frogRender PRIVATE Jolt)
-
-option(TRACY_ON_DEMAND "" ON)
-option(TRACY_ENABLE "Enable profiling" ON)
-option(TRACY_ONLY_IPV4 "IPv4 only" ON)
 
 FetchContent_Declare(
     rapidfuzz
