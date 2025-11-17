@@ -466,27 +466,7 @@ void World::FixedUpdate(float dt)
     // Handle block tick queue.
     if (IsServer())
     {
-      ZoneScopedN("Process block tick queue");
-      auto queue = std::move(registry_.ctx().get<WaterQueue>());
-      auto set = std::move(registry_.ctx().get<WaterSet>());
-
-      int processed = 0;
-      while (!queue.empty())
-      {
-        const auto pos = queue.front();
-        queue.pop();
-        if (!set.contains(pos))
-        {
-          Block::OnUpdateBlock(*this, pos);
-          set.emplace(pos);
-          processed++;
-        }
-      }
-
-      if (processed > 0)
-      {
-        spdlog::info("Processed {} scheduled block updates", processed);
-      }
+      ProcessBlockTickQueue();
     }
 
     // Update items in inventories (important to ensure cooldowns, etc. reset even when items are put away).
@@ -820,5 +800,30 @@ void World::FixedUpdate(float dt)
     }
 
     ticks_++;
+  }
+}
+
+void World::ProcessBlockTickQueue()
+{
+  ZoneScopedN("Process block tick queue");
+  auto queue = std::move(registry_.ctx().get<WaterQueue>());
+  auto set   = std::move(registry_.ctx().get<WaterSet>());
+
+  int processed = 0;
+  while (!queue.empty())
+  {
+    const auto pos = queue.front();
+    queue.pop();
+    if (!set.contains(pos))
+    {
+      Block::OnUpdateBlock(*this, pos);
+      set.emplace(pos);
+      processed++;
+    }
+  }
+
+  if (processed > 0)
+  {
+    spdlog::info("Processed {} scheduled block updates", processed);
   }
 }

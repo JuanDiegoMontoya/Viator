@@ -362,21 +362,15 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
       PANIC;
     };
 
-    const auto QueueUpdateNeighbors = [&](glm::ivec3 position)
-    {
-      auto& queue = world.GetRegistry().ctx().get<World::WaterQueue>();
-      queue.push(position + DirectionToNeighbor(Direction::Up));
-      queue.push(position + DirectionToNeighbor(Direction::North));
-      queue.push(position + DirectionToNeighbor(Direction::East));
-      queue.push(position + DirectionToNeighbor(Direction::South));
-      queue.push(position + DirectionToNeighbor(Direction::West));
-    };
-
     const auto TransferFlowTo = [&](Direction direction)
     {
       ZoneScopedN("TransferFlowTo");
       const auto neighborDir   = DirectionToNeighbor(direction);
       const auto neighborPos   = voxelPosition + neighborDir;
+      if (!grid.IsPositionInGrid(neighborPos))
+      {
+        return;
+      }
       const auto neighborBlock = grid.GetVoxelAt(neighborPos);
       const auto neighborFlow  = GetFlowIndex(neighborBlock);
       const auto myFlow        = GetFlowIndex(block);
@@ -397,14 +391,14 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, glm::min(myFlow + neighborFlow, 8)));
         world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
         world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
-        QueueUpdateNeighbors(voxelPosition);
-        QueueUpdateNeighbors(neighborPos);
+        QueueUpdateNeighbors(world, voxelPosition);
+        QueueUpdateNeighbors(world, neighborPos);
         block = newBlock;
       }
       else if (myFlow > neighborFlow)
       {
         // Stochastically stop updates when gradient is small (prevents some endless update patterns).
-        if (myFlow == neighborFlow + 1 && world.Rng().RandFloat() < 0.50f)
+        if (myFlow == neighborFlow + 1 && world.Rng().RandFloat() < 0.75f)
         {
           world.GetRegistry().ctx().get<World::WaterSet>().emplace(voxelPosition);
           return;
@@ -414,7 +408,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         if (myFlow == 1 && world.Rng().RandFloat() < 0.01f)
         {
           OnTryPlaceBlock(world, voxelPosition, voxel_t::Air);
-          QueueUpdateNeighbors(voxelPosition);
+          QueueUpdateNeighbors(world, voxelPosition);
           return;
         }
         const auto newBlock = GetBlockFromFlowIndex(block, myFlow - 1);
@@ -422,8 +416,8 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, neighborFlow + 1));
         world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
         world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
-        QueueUpdateNeighbors(voxelPosition);
-        QueueUpdateNeighbors(neighborPos);
+        QueueUpdateNeighbors(world, voxelPosition);
+        QueueUpdateNeighbors(world, neighborPos);
         block = newBlock;
       }
     };
@@ -445,6 +439,16 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
     TransferFlowTo(Direction::East);
 #endif
   }
+}
+
+void Block::QueueUpdateNeighbors(World& world, glm::ivec3 position)
+{
+  auto& queue = world.GetRegistry().ctx().get<World::WaterQueue>();
+  queue.push(position + DirectionToNeighbor(Direction::Up));
+  queue.push(position + DirectionToNeighbor(Direction::North));
+  queue.push(position + DirectionToNeighbor(Direction::East));
+  queue.push(position + DirectionToNeighbor(Direction::South));
+  queue.push(position + DirectionToNeighbor(Direction::West));
 }
 
 void OnUseBlockHelper(World& world, glm::ivec3 voxelPosition, BlockId block, int remainingDepth)

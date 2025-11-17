@@ -32,6 +32,28 @@ namespace
     { x + x * x } -> std::same_as<T>;
   };
 
+  template<typename T>
+  concept Iterable = requires(T x)
+  {
+    { std::begin(x) };
+    { std::end(x) };
+  };
+
+  struct BindsToAll
+  {
+    template<typename T>
+    operator T()
+    {
+      return T{};
+    }
+  };
+
+  template<typename Fn>
+  concept HasTwoArguments = requires(Fn f)
+  {
+    { f(BindsToAll{}, BindsToAll{}) };
+  };
+
   template<size_t Dim, typename T>
     requires (Dim >= 1 && Dim <= 3)
   class Image
@@ -40,12 +62,21 @@ namespace
     using value_type      = T;
     using dimensions_type = std::conditional_t<Dim == 1, int, std::conditional_t<Dim == 2, glm::ivec2, glm::ivec3>>;
     using uv_type         = std::conditional_t<Dim == 1, float, std::conditional_t<Dim == 2, glm::vec2, glm::vec3>>;
+    static constexpr size_t Rank() noexcept
+    {
+      return Dim;
+    }
 
     Image() = default;
 
     explicit Image(dimensions_type imageSize) : imageSize_(imageSize)
     {
       image_ = std::make_unique<T[]>(glm::compMul(imageSize_));
+    }
+
+    void Fill(T value)
+    {
+      std::fill_n(data(), glm::compMul(imageSize_), value);
     }
 
     [[nodiscard]] T TexelFetch(dimensions_type p) const noexcept
@@ -115,6 +146,16 @@ namespace
       return image_.get();
     }
 
+    const T* data() const noexcept
+    {
+      return image_.get();
+    }
+
+    dimensions_type ImageSize() const noexcept
+    {
+      return imageSize_;
+    }
+
   private:
     [[nodiscard]] int TexCoordToIndex(dimensions_type p) const
     {
@@ -135,6 +176,86 @@ namespace
     dimensions_type imageSize_{};
     std::unique_ptr<T[]> image_;
   };
+
+  template<size_t Dim, typename T>
+    requires Filterable<T>
+  [[nodiscard]] Image<Dim, T> Convolve(const Image<Dim, T>& in, const Iterable auto& kernel1D)
+  {
+    auto out = Image<Dim, T>(in.ImageSize());
+
+    if constexpr (Dim == 2)
+    {
+      for (int y = 0; y < in.ImageSize().y; y++)
+      {
+        for (int x = 0; x < in.ImageSize().x; x++)
+        {
+          using dimensions_type = std::remove_cvref_t<decltype(in)>::dimensions_type;
+          auto sumValue         = T{};
+          auto sumWeight        = T{};
+          const auto centerPos  = dimensions_type{x, y};
+
+          for (const auto& [offset, weight] : kernel1D)
+          {
+            const auto samplePos = centerPos + offset;
+            if (glm::any(glm::lessThan(samplePos, dimensions_type(0))) || glm::any(glm::greaterThanEqual(samplePos, in.ImageSize())))
+            {
+              continue;
+            }
+
+            sumValue += weight * in.TexelFetch(samplePos);
+            sumWeight += weight;
+          }
+
+          out.ImageStore(centerPos, sumValue / sumWeight);
+        }
+      }
+    }
+    else
+    {
+      static_assert(false, "Convolve is only implemented for 2D images.");
+    }
+
+    return out;
+  }
+
+  template<typename T>
+  [[nodiscard]] auto Map(const auto& in, auto&& fn)
+  {
+    constexpr auto Dim = std::remove_cvref_t<decltype(in)>::Rank();
+    auto out = Image<Dim, T>(in.ImageSize());
+
+    if constexpr (Dim == 2)
+    {
+      for (int y = 0; y < in.ImageSize().y; y++)
+      {
+        for (int x = 0; x < in.ImageSize().x; x++)
+        {
+          if constexpr (HasTwoArguments<std::remove_cvref_t<decltype(fn)>>)
+          {
+            out.ImageStore({x, y}, static_cast<T>(fn(glm::ivec2{x, y}, in.TexelFetch({x, y}))));
+          }
+          else
+          {
+            out.ImageStore({x, y}, static_cast<T>(fn(in.TexelFetch({x, y}))));
+          }
+        }
+      }
+    }
+    else
+    {
+      static_assert(false, "Map is only implemented for 2D images.");
+    }
+
+    return out;
+  }
+
+  float GaussianNorm(float x, float mean, float stddev)
+  {
+    const float factor = 1.0f / (stddev * glm::root_two_pi<float>());
+    const float num    = (x - mean) * (x - mean);
+    const float den    = stddev * stddev;
+    return factor * std::exp(-0.5f * (num / den));
+  }
 
   void ForEachPositionInTLBrick(glm::ivec3 topLevelBrickPos, const auto& function)
   {
@@ -239,6 +360,8 @@ namespace
     Desert,
     Corruption,
     Snow,
+    Ocean,
+    Rivers,
     // NOTE: the last biome in this list is the default!
     Forest,
     COUNT,
@@ -621,6 +744,84 @@ namespace
     FastNoise::SmartNode<FastNoise::Multiply> multiply;
     FastNoise::SmartNode<FastNoise::Constant> scale;
   };
+
+  class Ocean final : public SurfaceBiomeNoise
+  {
+  public:
+    using SurfaceBiomeNoise::SurfaceBiomeNoise;
+
+    float GetWeight(glm::ivec2 posWS) override
+    {
+      return 1 - glm::smoothstep(20.0f, 45.0f, glm::distance(glm::vec2(posWS), glm::vec2(50, 50)));
+    }
+
+    int GetSurfaceThickness() const override
+    {
+      return 10;
+    }
+
+    Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      auto image = Image<2, float>({Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
+      image.Fill(-20);
+      return image;
+    }
+
+    void PlaceSurfaceFeatures(World& world, const World::MapGenInfo& mapGenInfo, glm::ivec3 posWS) override
+    {
+      auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+      const auto water = world.GetRegistry().ctx().get<Block::Registry>().Get("water_8");
+
+      for (; posWS.y < mapGenInfo.seaLevel - 10; posWS.y++)
+      {
+        grid.SetVoxelAt(posWS, water);
+      }
+    }
+
+  private:
+  };
+
+  class Rivers final : public SurfaceBiomeNoise
+  {
+  public:
+    using SurfaceBiomeNoise::SurfaceBiomeNoise;
+
+    float GetWeight([[maybe_unused]] glm::ivec2 posWS) override
+    {
+      return 0;
+      //return glm::min(100.0f, glm::smoothstep(0.6f, 1.2f, 1 - biomeWeight->GenSingle2D((float)posWS.x, (float)posWS.y, 99) * 1.0f) * 2.0f);
+    }
+
+    int GetSurfaceThickness() const override
+    {
+      return 2;
+    }
+
+    Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    {
+      return GenerateAndUpscale2D(terrainHeight,
+        posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        1212,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
+        Filter::Nearest);
+    }
+
+    void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
+    {
+      //auto& grid       = world.GetRegistry().ctx().get<Voxel::Grid>();
+      //const auto water = world.GetRegistry().ctx().get<Block::Registry>().Get("water_8");
+
+      //for (; posWS.y < mapGenInfo.seaLevel - 15; posWS.y++)
+      //{
+      //  grid.SetVoxelAt(posWS, water);
+      //}
+    }
+
+  private:
+    FastNoise::SmartNode<> terrainHeight = FastNoise::NewFromEncodedNodeTree("FgMXBRkFBgAAwBVD//8CAACgQP8GAACgQf8="); // Note: should be same shape as biomeWeight, but scaled and translated.
+    FastNoise::SmartNode<> biomeWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
+  };
 } // namespace
 
 namespace
@@ -803,7 +1004,7 @@ namespace
     float GetWeight(glm::ivec3 posWS) override
     {
       const auto pos2d = glm::vec2{posWS.x, posWS.z};
-      return 1 - glm::smoothstep(160 * 160.0f, 200 * 200.0f, glm::max(0.0f, Math::Distance2(pos2d, glm::vec2(100, 20))));
+      return 1 - glm::smoothstep(160 * 160.0f, 200 * 200.0f, glm::max(0.0f, Math::Distance2(pos2d, glm::vec2(200, 220))));
     }
 
   private:
@@ -827,8 +1028,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   auto& blocks            = registry_.ctx().get<Block::Registry>();
   const auto& placeholder = blocks.Get("placeholder");
   const auto& dirt        = blocks.Get("dirt");
-  [[maybe_unused]] const auto& malachite   = blocks.Get("malachite");
+  [[maybe_unused]] const auto& malachite = blocks.Get("malachite");
   [[maybe_unused]] const auto& galena    = blocks.Get("galena");
+  [[maybe_unused]] const auto& water8    = blocks.Get("water_8");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
@@ -860,10 +1062,11 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   shrimplex2->SetOutputMin(0);
 
   auto surfaceBiomes                       = std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>();
-  surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
+  //surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
   surfaceBiomes[int(SurfaceBiome::Snow)]   = std::make_unique<SnowBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("snow"), blocks.Get("dirt")});
-  surfaceBiomes[int(SurfaceBiome::Corruption)] =
-    std::make_unique<SurfaceCorruptionNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass_corrupt"), blocks.Get("dirt")});
+  //surfaceBiomes[int(SurfaceBiome::Corruption)] = std::make_unique<SurfaceCorruptionNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass_corrupt"), blocks.Get("dirt")});
+  //surfaceBiomes[int(SurfaceBiome::Ocean)]  = std::make_unique<Ocean>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
+  surfaceBiomes[int(SurfaceBiome::Rivers)]  = std::make_unique<Rivers>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
   surfaceBiomes[int(SurfaceBiome::Forest)] = std::make_unique<ForestBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass"), blocks.Get("dirt")},
     glm::ivec2{grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z});
 
@@ -897,7 +1100,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
         for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
         {
-          if (surfaceBiomes[j]->BroadPhase({i, k}))
+          if (surfaceBiomes[j] && surfaceBiomes[j]->BroadPhase({i, k}))
           {
             biomeHeights[j] = surfaceBiomes[j]->GenImageForChunk({i, k}, mapGenInfo);
           }
@@ -962,57 +1165,102 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           globalSurfaceHeightImage.ImageStore({positionWS.x, positionWS.y}, height);
           globalSurfaceBiomeImage.ImageStore({positionWS.x, positionWS.y}, biome);
         }
+      });
+  }
+
+  if (true)
+        {
+    ZoneScopedN("Generate rivers");
+#ifndef GAME_HEADLESS
+    progressText.store("Generate rivers");
+    progress.store(0);
+#endif
+
+    auto kernelXGauss = std::vector<std::pair<glm::ivec2, float>>();
+    auto kernelYGauss = std::vector<std::pair<glm::ivec2, float>>();
+
+    constexpr int kernelWidth = 20;
+    for (int i = -kernelWidth / 2; i <= kernelWidth / 2; i++)
+    {
+      kernelXGauss.emplace_back(glm::ivec2(i, 0), GaussianNorm(float(i), 0, 5));
+      kernelYGauss.emplace_back(glm::ivec2(0, i), GaussianNorm(float(i), 0, 5));
+    }
+
+    auto kernelXBox = std::vector<std::pair<glm::ivec2, float>>();
+    auto kernelYBox = std::vector<std::pair<glm::ivec2, float>>();
+
+    constexpr int kernelBoxWidth = 40;
+    for (int i = -kernelBoxWidth / 2; i <= kernelBoxWidth / 2; i++)
+    {
+      //kernelXBox.emplace_back(glm::ivec2(i, 0), 1.0f / (kernelWidth + 1));
+      //kernelYBox.emplace_back(glm::ivec2(0, i), 1.0f / (kernelWidth + 1));
+      kernelXBox.emplace_back(glm::ivec2(i, 0), GaussianNorm(float(i), 0, 7));
+      kernelYBox.emplace_back(glm::ivec2(0, i), GaussianNorm(float(i), 0, 7));
+    }
+
+    const auto blur1 = Convolve(globalSurfaceHeightImage, kernelXBox);
+    const auto blur2 = Convolve(blur1, kernelYBox);
+
+    FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
+
+    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), 123456, grid.Dimensions().x, grid.Dimensions().z, Filter::Nearest);
+
+    const auto riverMask1 = Map<float>(riverMask0, [](float v) { return glm::smoothstep(0.8f, 1.0f, 1 - v); });
+    const auto riverMask2 = Convolve(riverMask1, kernelXGauss);
+    const auto riverMask3 = Convolve(riverMask2, kernelYGauss);
+
+    const auto erodedTerrain = Map<float>(globalSurfaceHeightImage,
+      [&](glm::ivec2 pos, float originalHeight)
+      {
+        const auto blurredHeight = blur2.TexelFetch(pos);
+        const auto riverness     = riverMask3.TexelFetch(pos);
+        if (riverness > 0.2f)
+        {
+          globalSurfaceBiomeImage.ImageStore(pos, SurfaceBiome::Rivers);
+        }
+        return glm::mix(originalHeight, blurredHeight - 15, riverness);
+      });
+
+    //const auto map  = [](float v) { return glm::min(255.0f, v * 256); };
+    //const auto out1 = Map<uint8_t>(riverMask1, map);
+    //const auto out2 = Map<uint8_t>(riverMask3, map);
+    //const auto out3 = Map<uint8_t>(blur2, map);
+
+    //const auto width = out1.ImageSize().x;
+    //const auto height = out1.ImageSize().y;
+    //stbi_write_png("out1.png", width, height, 1, out1.data(), width);
+    //stbi_write_png("out2.png", width, height, 1, out2.data(), width);
+    //stbi_write_png("out3.png", width, height, 1, out3.data(), width);
+
+    auto waterMutex = std::mutex();
+
+    std::for_each(std::execution::par,
+      tlBrickColCoords.begin(),
+      tlBrickColCoords.end(),
+      [&](glm::ivec2 tlBrickColCoord)
+      {
+        ZoneScopedN("Top level brick column");
+        const int k = tlBrickColCoord[0];
+        const int i = tlBrickColCoord[1];
 
         // Top level bricks
         for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
         {
           ZoneScopedN("Top level brick");
-
-          auto stoneInDirtImage = GenerateAndUpscale3D(stoneInDirt,
-            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE)),
-            mapGenInfo.seed + 1,
-            samplesPerAxis,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Filter::Linear);
-
-          auto fadeImage = GenerateAndUpscale3D(whiteNoise,
-            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE)),
-            mapGenInfo.seed + 2,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Filter::Nearest);
-
-          auto copperImage = GenerateAndUpscale3D(copperOre,
-            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE)),
-            mapGenInfo.seed + 55,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Filter::Nearest);
-
-          auto leadImage = GenerateAndUpscale3D(leadOre,
-            glm::ivec3(sampleScale * (glm::vec3(i, j, k) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE)),
-            mapGenInfo.seed + 56,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Filter::Nearest);
-
           const auto tl = glm::ivec3{i, j, k};
 
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
-              const auto pModTl = positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
-              
-              //const auto height = TexelFetch2D(terrainHeightImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {pModTl.x, pModTl.z});
-              const auto height = globalSurfaceHeightImage.TexelFetch({positionWS.x, positionWS.z});
-              const auto biome  = globalSurfaceBiomeImage.TexelFetch({positionWS.x, positionWS.z});
+              const auto height     = erodedTerrain.TexelFetch({positionWS.x, positionWS.z});
+              const auto biome      = globalSurfaceBiomeImage.TexelFetch({positionWS.x, positionWS.z});
               const auto& biomeInfo = surfaceBiomes[int(biome)];
 
               auto blockTypeToSet = voxel_t::Air;
               if (positionWS.y < height)
               {
                 // 0 at sea level. 1 at cavern level.
-                //const auto alphaCaverns = glm::clamp((mapGenInfo.seaLevel - positionWS.y) / float(mapGenInfo.surfaceThickness), 0.0f, 1.0f);
+                // const auto alphaCaverns = glm::clamp((mapGenInfo.seaLevel - positionWS.y) / float(mapGenInfo.surfaceThickness), 0.0f, 1.0f);
 
                 if (positionWS.y <= height && positionWS.y >= height - biomeInfo->GetSurfaceThickness())
                 {
@@ -1026,40 +1274,20 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                 {
                   blockTypeToSet = placeholder;
                 }
-              //  // Surface and underground biomes' substrate is dirt
-              //  else if (positionWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
-              //  {
-              //    blockTypeToSet = dirt;
-
-              //    // Add stone blobs with increasing size as they get closer to caverns.
-              //    if (TexelFetch3D(stoneInDirtImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < glm::mix(0.0f, 0.1f, alphaCaverns))
-              //    {
-              //      blockTypeToSet = voxel_t(1);
-              //    }
-              //    // Dithered fade from dirt to stone, beginning 1/3 from the underground-cavern transition point.
-              //    else if (TexelFetch3D(fadeImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < alphaCaverns * 3 - 2)
-              //    {
-              //      blockTypeToSet = voxel_t(1);
-              //    }
-              //  }
-              //  // Cavern biome substrate is stone
-              //  else
-              //  {
-              //    blockTypeToSet = voxel_t(1);
-              //  }
               }
-
-              //if (blockTypeToSet != voxel_t::Air && positionWS.y < height - biomeInfo->GetSurfaceThickness())
-              //{
-              //  if (TexelFetch3D(copperImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
-              //  {
-              //    blockTypeToSet = malachite;
-              //  }
-              //  else if (TexelFetch3D(leadImage, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, pModTl) < 0.0f)
-              //  {
-              //    blockTypeToSet = galena;
-              //  }
-              //}
+              else if (biome == SurfaceBiome::Rivers && positionWS.y < blur2.TexelFetch({positionWS.x, positionWS.z}) - 4)
+              {
+                blockTypeToSet = water8;
+                if (positionWS.y == (int)blur2.TexelFetch({positionWS.x, positionWS.z}) - 4)
+                {
+                  // Chance to excite block.
+                  auto lk = std::lock_guard(waterMutex);
+                  if (Rng().RandFloat() > 0.75f)
+                  {
+                    Block::QueueUpdateNeighbors(*this, positionWS);
+                  }
+                }
+              }
 
               if (blockTypeToSet != voxel_t::Air)
               {
@@ -1074,6 +1302,22 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 #endif
         }
       });
+
+    constexpr int numIterations = 150;
+#ifndef GAME_HEADLESS
+    progressText.store("Settle water");
+    progress.store(0);
+    total.store(numIterations);
+#endif
+    for (int i = 0; i < numIterations; i++)
+    {
+      this->ProcessBlockTickQueue();
+#ifndef GAME_HEADLESS
+      progress.fetch_add(1);
+#endif
+    }
+
+    registry_.ctx().get<World::WaterQueue>().clear();
   }
 
   if (true)
@@ -1172,17 +1416,18 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               }
 
               const auto density = sumDensities / sumWeights;
-              // ImageStore2D(globalSurfaceHeightImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, height);
-              // ImageStore2D(globalSurfaceBiomeImage, grid.topLevelBricksDims_.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, {positionWS.x, positionWS.y}, biome);
 
-
-              
               {
-                if (density >= 0.0f)
+                const auto blockAtPos = grid.GetVoxelAtUnchecked(positionWS);
+                const auto biomeAtPos = globalSurfaceBiomeImage.TexelFetch({positionWS.x, positionWS.z});
+                if (density >= 0.0f && 
+                  //grid.GetVoxelAt(positionWS + Block::DirectionToNeighbor(Block::Direction::Up)) != water8
+                    !(blockAtPos == water8 || (biomeAtPos == SurfaceBiome::Rivers && blockAtPos == surfaceBiomes[int(biomeAtPos)]->GetSurfaceBlockType()))
+                  )
                 {
                   grid.SetVoxelAtUncheckedNoDirty(positionWS, voxel_t::Air);
                 }
-                else if (grid.GetVoxelAtUnchecked(positionWS) == placeholder)
+                else if (blockAtPos == placeholder)
                 {
                   grid.SetVoxelAtUncheckedNoDirty(positionWS, undergroundBiomes[int(biome)]->GetSubstrateBlockType());
                 }

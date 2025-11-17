@@ -240,6 +240,8 @@ public:
 
   void CreateRenderingMaterials();
 
+  void ProcessBlockTickQueue();
+
   struct SpawnHitParticlesParams
   {
     uint32_t numParticles;

@@ -245,4 +245,5 @@ namespace Block
   [[nodiscard]] glm::ivec3 DirectionToNeighbor(Direction direction);
   [[nodiscard]] Direction NormalToDirection(glm::vec3 normal);
   [[nodiscard]] Direction WhichRotatedVariantAmI(const World& world, BlockId block);
+  void QueueUpdateNeighbors(World& world, glm::ivec3 position);
 }
