@@ -13,16 +13,16 @@ public:
     data_.resize(4);
   }
 
-  RingBuffer(const RingBuffer&) = default;
+  constexpr RingBuffer(const RingBuffer&) = default;
 
-  RingBuffer& operator=(const RingBuffer&) = default;
+  constexpr RingBuffer& operator=(const RingBuffer&) = default;
 
-  RingBuffer(RingBuffer&& old) noexcept
+  constexpr RingBuffer(RingBuffer&& old) noexcept
   {
     *this = std::move(old);
   }
 
-  RingBuffer& operator=(RingBuffer&& old) noexcept
+  constexpr RingBuffer& operator=(RingBuffer&& old) noexcept
   {
     size_  = std::exchange(old.size_, 0);
     read_  = std::exchange(old.read_, 0);
@@ -68,14 +68,14 @@ public:
     return std::forward<Self>(self).data_[read];
   }
 
-  void clear()
+  constexpr void clear()
   {
     size_  = 0;
     read_  = 0;
     write_ = 0;
   }
 
-  void resize(size_t newSize)
+  constexpr void resize(size_t newSize)
   {
     auto newData = std::vector<T>(newSize);
 
