@@ -9,6 +9,10 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/component_wise.hpp"
 
+#ifndef GAME_HEADLESS
+#include "stb_image_write.h"
+#endif
+
 #include <execution>
 #include <ranges>
 #include <concepts>
@@ -1169,7 +1173,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   }
 
   if (true)
-        {
+  {
     ZoneScopedN("Generate rivers");
 #ifndef GAME_HEADLESS
     progressText.store("Generate rivers");
