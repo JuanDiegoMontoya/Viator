@@ -10,17 +10,19 @@
 #include <memory>
 #include <type_traits>
 
-namespace Core
+namespace Core::DSP
 {
   namespace ImageHelper
   {
     template<typename T>
-    concept Filterable = requires(T x) {
+    concept Filterable = requires(T x)
+    {
       { x + x * x } -> std::same_as<T>;
     };
 
     template<typename T>
-    concept Iterable = requires(T x) {
+    concept Iterable = requires(T x)
+    {
       { std::begin(x) };
       { std::end(x) };
     };
@@ -35,7 +37,8 @@ namespace Core
     };
 
     template<typename Fn>
-    concept HasTwoArguments = requires(Fn f) {
+    concept HasTwoArguments = requires(Fn f)
+    {
       { f(BindsToAll{}, BindsToAll{}) };
     };
   } // namespace ImageHelper
@@ -46,9 +49,17 @@ namespace Core
     Linear,
   };
 
+  enum class WrapMode
+  {
+    Clamp,
+    Repeat,
+    MirrorRepeat,
+  };
+
   struct Sampler
   {
-    Filter filter;
+    Filter filter = Filter::Nearest;
+    WrapMode wrapMode = WrapMode::Clamp;
   };
 
   template<size_t Dim, typename T>
@@ -74,8 +85,13 @@ namespace Core
 
     [[nodiscard]] constexpr T Load(dimensions_type p) const noexcept
     {
-      p = glm::clamp(p, dimensions_type(0), dimensions_type(imageSize_ - 1));
+      DEBUG_ASSERT(glm::all(glm::greaterThanEqual(p, dimensions_type(0))) && glm::all(glm::lessThan(p, dimensions_type(imageSize_))));
       return image_[TexCoordToIndex(p)];
+    }
+
+    [[nodiscard]] constexpr T LoadWrapped(dimensions_type p, WrapMode wrapMode) const noexcept
+    {
+      return image_[TexCoordToIndex(GetWrappedCoord(p, wrapMode))];
     }
 
     constexpr void Store(dimensions_type p, T value) noexcept
@@ -231,10 +247,12 @@ namespace Core
       {
         return p;
       }
+
       if constexpr (Dim == 2)
       {
         return p.x + p.y * imageSize_.x;
       }
+
       if constexpr (Dim == 3)
       {
         return p.x + p.y * imageSize_.x + p.z * imageSize_.y * imageSize_.x;
@@ -257,6 +275,34 @@ namespace Core
       {
         return imageSize_.x * imageSize_.y * imageSize_.z;
       }
+    }
+
+    [[nodiscard]] static constexpr dimensions_type Mirror(dimensions_type p) noexcept
+    {
+      // glspec46.core.pdf, 8.14.2: Coordinate Wrapping and Texel Selection
+      const auto lessThanZero = glm::lessThan(p, dimensions_type(0));
+      const auto alt          = -(1 + p);
+      return glm::mix(p, alt, lessThanZero);
+    }
+
+    [[nodiscard]] constexpr dimensions_type GetWrappedCoord(dimensions_type p, WrapMode wrapMode) const
+    {
+      if (wrapMode == WrapMode::Clamp)
+      {
+        return glm::clamp(p, dimensions_type(0), dimensions_type(imageSize_ - 1));
+      }
+
+      if (wrapMode == WrapMode::Repeat)
+      {
+        return p % imageSize_;
+      }
+
+      if (wrapMode == WrapMode::MirrorRepeat)
+      {
+        return (imageSize_ - 1) - Mirror(p % (2 * imageSize_)) - imageSize_;
+      }
+
+      PANIC;
     }
 
     dimensions_type imageSize_{};

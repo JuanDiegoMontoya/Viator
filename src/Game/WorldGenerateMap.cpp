@@ -49,11 +49,11 @@ namespace
   // Generate inSideLength^3 chunk of noise, then upscale it to outSideLength^3 with Filter.
   // Note: this upscaling is actually considerably less efficient than simply generating the equivalent volume of noise,
   // except in the case of very complex noise graphs.
-  Core::Image<3, float> GenerateAndUpscale3D(const FastNoise::SmartNode<>& node, glm::ivec3 start, int seed, int inSideLength, int outSideLength, Core::Filter filter)
+  Core::DSP::Image<3, float> GenerateAndUpscale3D(const FastNoise::SmartNode<>& node, glm::ivec3 start, int seed, int inSideLength, int outSideLength, Core::DSP::Filter filter)
   {
     ZoneScoped;
     const int sideLength = (inSideLength == outSideLength) ? inSideLength : (inSideLength + 1);
-    auto rawImage        = Core::Image<3, float>({sideLength, sideLength, sideLength});
+    auto rawImage        = Core::DSP::Image<3, float>({sideLength, sideLength, sideLength});
 
     {
       ZoneScopedN("GenUniformGrid3D");
@@ -68,7 +68,7 @@ namespace
 
     {
       ZoneScopedN("Upscale 3D");
-      auto outImage = Core::Image<3, float>({outSideLength, outSideLength, outSideLength});
+      auto outImage = Core::DSP::Image<3, float>({outSideLength, outSideLength, outSideLength});
       auto* out = outImage.data();
       int i    = 0;
       for (int z = 0; z < outSideLength; z++)
@@ -83,11 +83,11 @@ namespace
     }
   }
 
-  Core::Image<2, float> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Core::Filter filter)
+  Core::DSP::Image<2, float> GenerateAndUpscale2D(const FastNoise::SmartNode<>& node, glm::ivec2 start, int seed, int inSideLength, int outSideLength, Core::DSP::Filter filter)
   {
     ZoneScoped;
     const int sideLength = (inSideLength == outSideLength) ? inSideLength : (inSideLength + 1);
-    auto rawImage        = Core::Image<2, float>({sideLength, sideLength});
+    auto rawImage        = Core::DSP::Image<2, float>({sideLength, sideLength});
 
     {
       ZoneScopedN("GenUniformGrid2D");
@@ -102,7 +102,7 @@ namespace
 
     {
       ZoneScopedN("Upscale 2D");
-      auto outImage = Core::Image<2, float>({outSideLength, outSideLength});
+      auto outImage = Core::DSP::Image<2, float>({outSideLength, outSideLength});
       auto* out     = outImage.data();
       int i    = 0;
       for (int y = 0; y < outSideLength; y++)
@@ -142,7 +142,7 @@ namespace
     explicit SurfaceBiomeNoise(const CreateInfo& createInfo) : createInfo_(createInfo) {}
     virtual ~SurfaceBiomeNoise() = default;
 
-    [[nodiscard]] virtual Core::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
+    [[nodiscard]] virtual Core::DSP::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) = 0;
 
     [[nodiscard]] virtual bool BroadPhase([[maybe_unused]] glm::ivec2 posTL)
     {
@@ -182,7 +182,7 @@ namespace
   public:
     ForestBiomeNoise(const CreateInfo& createInfo, glm::ivec2 worldDimsTL) : SurfaceBiomeNoise(createInfo)
     {
-      globalMeadowImage = Core::Image<2, float>({worldDimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, worldDimsTL.y * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
+      globalMeadowImage = Core::DSP::Image<2, float>({worldDimsTL.x * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, worldDimsTL.y * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
     }
 
     float GetWeight([[maybe_unused]] glm::ivec2 posWS) override
@@ -195,7 +195,7 @@ namespace
       return 20;
     }
 
-    Core::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -203,14 +203,14 @@ namespace
         mapGenInfo.seed,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Linear);
+        Core::DSP::Filter::Linear);
 
       auto meadowImage = GenerateAndUpscale2D(meadowNoise,
         glm::ivec2(glm::vec2(posTL.x, posTL.y) * (float)Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE),
         mapGenInfo.seed * 21,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Nearest);
+        Core::DSP::Filter::Nearest);
 
       for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
       for (int x = 0; x < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; x++)
@@ -343,7 +343,7 @@ namespace
       "GgUbBRwFHQUXBRgDFgMdBRYCAACAPwcfAwsAAIDHQgQ@CGAQ@BHC@BKJBBB+F6z7//wbsUTg///8DAACamVk///8H/wQA/wcWAgAAgD8H/wQA//8CrkchQP//AgAAgD8GXI/CPv//AgAAgD//");
 
     // Used to determine where meadows are. These are flatter areas with fewer trees.
-    Core::Image<2, float> globalMeadowImage;
+    Core::DSP::Image<2, float> globalMeadowImage;
   };
 
   class DesertBiomeNoise final : public SurfaceBiomeNoise
@@ -362,7 +362,7 @@ namespace
       return 4;
     }
 
-    Core::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -370,7 +370,7 @@ namespace
         mapGenInfo.seed - 21,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Linear);
+        Core::DSP::Filter::Linear);
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
@@ -438,7 +438,7 @@ namespace
       return 1 - glm::smoothstep(0.0f, 40.0f, glm::max(0.0f, Math::SDF::Box(glm::vec2(posWS - biomePos), glm::vec2{30, 50})));
     }
 
-    Core::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk(glm::ivec2 posTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       auto terrainHeightImage = GenerateAndUpscale2D(terrainHeight2D,
@@ -446,7 +446,7 @@ namespace
         mapGenInfo.seed - 22,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Linear);
+        Core::DSP::Filter::Linear);
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
@@ -487,14 +487,14 @@ namespace
       return 20;
     }
 
-    Core::Image<2, float> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk(glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       return GenerateAndUpscale2D(multiply,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         123456,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Nearest);
+        Core::DSP::Filter::Nearest);
     }
 
     void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
@@ -522,9 +522,9 @@ namespace
       return 10;
     }
 
-    Core::Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
-      auto image = Core::Image<2, float>({Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
+      auto image = Core::DSP::Image<2, float>({Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE});
       image.Fill(-20);
       return image;
     }
@@ -559,14 +559,14 @@ namespace
       return 2;
     }
 
-    Core::Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<2, float> GenImageForChunk([[maybe_unused]] glm::ivec2 posTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       return GenerateAndUpscale2D(terrainHeight,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         1212,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Nearest);
+        Core::DSP::Filter::Nearest);
     }
 
     void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
@@ -618,7 +618,7 @@ namespace
       return substrateBlockType_;
     }
 
-    [[nodiscard]] virtual Core::Image<3, float> GenImageForChunk(glm::ivec3 posTL,
+    [[nodiscard]] virtual Core::DSP::Image<3, float> GenImageForChunk(glm::ivec3 posTL,
       [[maybe_unused]] glm::ivec3 dimsTL,
       [[maybe_unused]] const World::MapGenInfo& mapGenInfo) = 0;
 
@@ -640,7 +640,7 @@ namespace
       PANIC;
     }
 
-    Core::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       return GenerateAndUpscale3D(surfaceCaves,
@@ -648,7 +648,7 @@ namespace
         mapGenInfo.seed,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Linear);
+        Core::DSP::Filter::Linear);
     }
 
   private:
@@ -667,7 +667,7 @@ namespace
       return 1 - glm::smoothstep(0.0f, 20.0f, glm::max(0.0f, Math::SDF::Box(glm::vec3(posWS - biomePos), glm::vec3{30, 50, 40})));
     }
 
-    Core::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       return GenerateAndUpscale3D(noise,
@@ -675,7 +675,7 @@ namespace
         mapGenInfo.seed,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Linear);
+        Core::DSP::Filter::Linear);
     }
 
   private:
@@ -699,11 +699,11 @@ namespace
       return Math::Intersect::BoxVsBox(chunkMin, chunkMax, biomeAabbMin, biomeAabbMax);
     }
 
-    Core::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
+    Core::DSP::Image<3, float> GenImageForChunk(glm::ivec3 posTL, [[maybe_unused]] glm::ivec3 dimsTL, [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
       ZoneScoped;
       const auto dims = glm::ivec3{Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE, Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE};
-      auto density    = Core::Image<3, float>(dims);
+      auto density    = Core::DSP::Image<3, float>(dims);
 
       for (int z = 0; z < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; z++)
       for (int y = 0; y < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; y++)
@@ -753,7 +753,7 @@ namespace
       combiner->SetRHS(shaftOffset);
     }
 
-    Core::Image<3, float> GenImageForChunk([[maybe_unused]] glm::ivec3 posTL,
+    Core::DSP::Image<3, float> GenImageForChunk([[maybe_unused]] glm::ivec3 posTL,
       [[maybe_unused]] glm::ivec3 dimsTL,
       [[maybe_unused]] const World::MapGenInfo& mapGenInfo) override
     {
@@ -764,7 +764,7 @@ namespace
         -100,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Nearest);
+        Core::DSP::Filter::Nearest);
     }
 
     float GetWeight(glm::ivec3 posWS) override
@@ -812,8 +812,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
-  auto globalSurfaceHeightImage = Core::Image<2, float>({grid.Dimensions().x, grid.Dimensions().z});
-  auto globalSurfaceBiomeImage  = Core::Image<2, SurfaceBiome>({grid.Dimensions().x, grid.Dimensions().z});
+  auto globalSurfaceHeightImage = Core::DSP::Image<2, float>({grid.Dimensions().x, grid.Dimensions().z});
+  auto globalSurfaceBiomeImage  = Core::DSP::Image<2, SurfaceBiome>({grid.Dimensions().x, grid.Dimensions().z});
 
   auto whiteNoise = FastNoise::New<FastNoise::White>();
   whiteNoise->SetOutputMin(0);
@@ -862,7 +862,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int k = tlBrickColCoord[0];
         const int i = tlBrickColCoord[1];
 
-        auto biomeHeights = std::array<Core::Image<2, float>, int(SurfaceBiome::COUNT)>();
+        auto biomeHeights = std::array<Core::DSP::Image<2, float>, int(SurfaceBiome::COUNT)>();
 
         for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
         {
@@ -969,7 +969,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
     FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
 
-    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), 123456, grid.Dimensions().x, grid.Dimensions().z, Core::Filter::Nearest);
+    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), 123456, grid.Dimensions().x, grid.Dimensions().z, Core::DSP::Filter::Nearest);
 
     const auto riverMask1 = riverMask0.Map([](float v) { return glm::smoothstep(0.8f, 1.0f, 1 - v); });
     const auto riverMask2 = riverMask1.Convolve(kernelXGauss);
@@ -1114,7 +1114,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         {
           ZoneScopedN("Top level brick");
 
-          auto biomeDensities = std::array<Core::Image<3, float>, int(UndergroundBiome::COUNT)>();
+          auto biomeDensities = std::array<Core::DSP::Image<3, float>, int(UndergroundBiome::COUNT)>();
 
           for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
           {
@@ -1268,14 +1268,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             mapGenInfo.seed + 15,
             Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
             Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Core::Filter::Nearest);
+            Core::DSP::Filter::Nearest);
 
           auto whiteImage = GenerateAndUpscale3D(whiteNoise2,
             tl * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
             mapGenInfo.seed + 16,
             Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
             Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-            Core::Filter::Nearest);
+            Core::DSP::Filter::Nearest);
 
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
@@ -1373,7 +1373,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         mapGenInfo.seed,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        Core::Filter::Nearest);
+        Core::DSP::Filter::Nearest);
 
       ForEachPositionInTLBrick(tl,
         [&](glm::ivec3 positionWS)
