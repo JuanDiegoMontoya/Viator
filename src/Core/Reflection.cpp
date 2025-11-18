@@ -127,6 +127,12 @@ namespace
     }
     return world.GetRegistry().all_of<T>(entity);
   }
+
+  template<typename T>
+  void EmplaceOrReplaceWrapper_HACK(entt::registry* registry, entt::entity entity, T& value)
+  {
+    registry->emplace_or_replace<T>(entity, std::move(value));
+  }
 } // namespace
 
 static std::vector<void (*)()> s_reflectionRegistrationFuncs;

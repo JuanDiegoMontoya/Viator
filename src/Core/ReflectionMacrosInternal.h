@@ -28,7 +28,7 @@
                                               .func<[](entt::registry* registry, entt::entity entity, T& value)                                               \
                                                 {                                                                                                             \
                                                   if constexpr (!std::is_empty_v<T>)                                                                          \
-                                                    registry->emplace_or_replace<T>(entity, std::move(value));                                                \
+                                                    EmplaceOrReplaceWrapper_HACK(registry, entity, value);                                                    \
                                                   else                                                                                                        \
                                                     registry->emplace_or_replace<T>(entity);                                                                  \
                                                 }>("EmplaceMove"_hs); \
@@ -42,7 +42,7 @@
 #define REGISTER_OBJECT_TYPE(Type)                                                                                                                                   \
   /*if constexpr (!is_variant_v<Type>)*/                                                                                                                             \
   {                                                                                                                                                                  \
-    entt::meta_factory<Type>{}.func<[](void* ctx, int argIdx, Type v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);                                \
+    entt::meta_factory<Type>{}.func<[](void* ctx, int argIdx, Type v) { ((asIScriptContext*)ctx)->SetArgObject((asUINT)argIdx, &v); }>("ASSetArg"_hs);                                \
     const auto MAKE_IDENTIFIER2(name) = RemoveNamespaces(#Type);                                                                                                     \
     ASSERT(asEngine->RegisterObjectType(MAKE_IDENTIFIER2(name).c_str(),                                                                                               \
              sizeof(Type),                                                                                                                                           \
