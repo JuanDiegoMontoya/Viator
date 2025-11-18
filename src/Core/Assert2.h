@@ -37,31 +37,55 @@ namespace Assert::detail
 
 // Aborts in debug, does nothing in release.
 #ifdef FROG_DEBUG
-  #define DEBUG_ASSERT(x, ...)                                                       \
-    do                                                                               \
-    {                                                                                \
-      if (!(x)) [[unlikely]]                                                         \
-      {                                                                              \
-        Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
-        Assert::detail::Abort();                                                     \
-      }                                                                              \
+  #define DEBUG_ASSERT(x, ...)                                                         \
+    do                                                                                 \
+    {                                                                                  \
+      if (!(x)) [[unlikely]]                                                           \
+      {                                                                                \
+        if consteval                                                                   \
+        {                                                                              \
+          throw #x " did not evaluate to true.";                                       \
+        }                                                                              \
+        else                                                                           \
+        {                                                                              \
+          Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
+          Assert::detail::Abort();                                                     \
+        }                                                                              \
+      }                                                                                \
     } while (0)
 #else
-  #define DEBUG_ASSERT(x, ...)               \
-    do                                       \
-    {                                        \
-      (void)sizeof(x);                       \
-      __VA_OPT__((void)sizeof(__VA_ARGS__)); \
+  #define DEBUG_ASSERT(x, ...)                   \
+    do                                           \
+    {                                            \
+      if consteval                               \
+      {                                          \
+        if (!(x))                                \
+        {                                        \
+          throw #x " did not evaluate to true."; \
+        }                                        \
+      }                                          \
+      else                                       \
+      {                                          \
+        (void)sizeof(x);                         \
+      }                                          \
+      __VA_OPT__((void)sizeof(__VA_ARGS__));     \
     } while (0)
 #endif
 
 // Aborts in debug, throws PanicException in release.
-#define ASSERT(x, ...)                                                             \
-  do                                                                               \
-  {                                                                                \
-    if (!(x)) [[unlikely]]                                                         \
-    {                                                                              \
-      Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
-      Assert::detail::Panic(__FILE__, __LINE__);                                   \
-    }                                                                              \
+#define ASSERT(x, ...)                                                               \
+  do                                                                                 \
+  {                                                                                  \
+    if (!(x)) [[unlikely]]                                                           \
+    {                                                                                \
+      if consteval                                                                   \
+      {                                                                              \
+        throw #x " did not evaluate to true.";                                       \
+      }                                                                              \
+      else                                                                           \
+      {                                                                              \
+        Assert::detail::LogAssert(#x, __FILE__, __LINE__ __VA_OPT__(, __VA_ARGS__)); \
+        Assert::detail::Panic(__FILE__, __LINE__);                                   \
+      }                                                                              \
+    }                                                                                \
   } while (0)
