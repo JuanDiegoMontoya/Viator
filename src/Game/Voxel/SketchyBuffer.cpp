@@ -3,8 +3,9 @@
 #ifndef GAME_HEADLESS
   #include "Client/Fvog/Buffer2.h"
   #include "Client/Fvog/Device.h"
+  #include "Core/Container/BitArray.h"
   #include "volk.h"
-  #include <unordered_set>
+  #include <bit>
 #endif
 
 #include "Client/Fvog/detail/Common.h"
@@ -62,6 +63,7 @@ public:
 
 private:
   static constexpr size_t PAGE_SIZE = 1024;
+  static constexpr size_t L2_PAGE_SIZE = 512;
   static inline uint32_t nextNameId_{};
   std::string name_;
   size_t bufferSize_{};
@@ -81,16 +83,29 @@ public:
   void MarkRange(size_t offset, size_t size) override
   {
     const auto minPage = offset / PAGE_SIZE;
-    const auto maxPage = (offset + size) / PAGE_SIZE;
+    const auto maxPage = (offset + size - 1) / PAGE_SIZE;
     for (auto i = minPage; i <= maxPage; i++)
     {
-      dirtyPages_.insert(uint32_t(i));
+      dirtyPages_.Set(i, true);
+    }
+
+    const auto minL2Page = minPage / L2_PAGE_SIZE;
+    const auto maxL2Page = maxPage / L2_PAGE_SIZE;
+    for (auto i = minL2Page; i <= maxL2Page; i++)
+    {
+      dirtyPagesL2_.Set(i, true);
     }
   }
 
 private:
   std::optional<Fvog::Buffer> gpuBuffer_;
-  std::unordered_set<uint32_t> dirtyPages_;
+
+  // Two levels of dirty pages.
+  // The first stores the status of individual dirty pages.
+  // The second stores whether there is at least one dirty page per each L2_PAGE_SIZE pages.
+  // This hierarchy can be updated in a fast, wait-free fashion, unlike the std::unordered_set that was previously used here.
+  Core::BitArray dirtyPages_;
+  Core::BitArray dirtyPagesL2_;
 #endif
 };
 
@@ -104,6 +119,8 @@ SketchyBufferImpl::SketchyBufferImpl(size_t bufferSize, [[maybe_unused]] bool cr
 {
   ZoneScoped;
 #ifndef GAME_HEADLESS
+  dirtyPages_.Resize(bufferSize / PAGE_SIZE);
+  dirtyPagesL2_.Resize(dirtyPages_.Size() / L2_PAGE_SIZE + 1);
   if (createGpuBuffer && !Fvog::IsDeviceInitialized())
   {
     spdlog::trace("Fvog::Device is not initialized, overriding createGpuBuffer to false.");
@@ -155,7 +172,8 @@ SketchyBufferImpl::SketchyBufferImpl(SketchyBufferImpl&& old) noexcept
     allocator_(std::exchange(old.allocator_, nullptr))
 #ifndef GAME_HEADLESS
     , gpuBuffer_(std::move(old.gpuBuffer_)),
-    dirtyPages_(std::move(old.dirtyPages_))
+    dirtyPages_(std::move(old.dirtyPages_)),
+    dirtyPagesL2_(std::move(old.dirtyPagesL2_))
 #endif
 {}
 
@@ -215,13 +233,36 @@ void SketchyBufferImpl::FlushWritesToGPU(VkCommandBuffer cmd)
 {
   ZoneScoped;
   DEBUG_ASSERT(gpuBuffer_.has_value());
-  // All pages need to be flushed or the underlying data may have invalid references/indices
-  for (uint32_t page : dirtyPages_)
+  // All pages need to be flushed or the underlying data may have invalid references/indices.
+  // If the GPU representation of voxels is not being properly synced with the CPU representation, this code is probably the culprit.
+  for (int j = 0; j < (int)dirtyPagesL2_.NumChunks(); j++)
   {
-    auto offset = page * PAGE_SIZE;
-    vkCmdUpdateBuffer(cmd, gpuBuffer_->Handle(), offset, PAGE_SIZE, cpuBuffer_.get() + offset);
-  }
+    const auto chunkL2 = dirtyPagesL2_.GetChunk(j);
+    for (int bitL2 = std::countr_zero(chunkL2); bitL2 < Core::BitArray::bits_per_chunk; bitL2++)
+    {
+      if (chunkL2 & (1 << bitL2))
+      {
+        const int chunkOffset = j * L2_PAGE_SIZE + bitL2;
+        for (int i = chunkOffset; i < int(chunkOffset + L2_PAGE_SIZE); i++)
+        //for (int i = 0; i < int(dirtyPages_.NumChunks()); i++) // Comment out the preceding control flow 
+        {
+          const auto chunk = dirtyPages_.GetChunk(i);
+          for (int bit = std::countr_zero(chunk); bit < (int)Core::BitArray::bits_per_chunk; bit++)
+          {
+            if (chunk & (1 << bit))
+            {
+              const auto page   = i * Core::BitArray::bits_per_chunk + bit;
+              const auto offset = page * PAGE_SIZE;
+              vkCmdUpdateBuffer(cmd, gpuBuffer_->Handle(), offset, PAGE_SIZE, cpuBuffer_.get() + offset);
+            }
+          }
 
-  dirtyPages_.clear();
+          dirtyPages_.SetChunk(i, 0);
+        }
+      }
+    }
+
+    dirtyPagesL2_.SetChunk(j, 0);
+  }
 }
 #endif
