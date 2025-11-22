@@ -170,6 +170,7 @@ add_executable(frogRender
     src/Core/Container/RingBuffer.h
     src/Core/Container/RingBuffer.cpp
     src/Core/Image.h
+    src/Core/Image.cpp
     src/Core/Container/BitArray.h
     src/Core/Container/BitArray.cpp
 )

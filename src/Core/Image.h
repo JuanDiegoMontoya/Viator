@@ -9,6 +9,8 @@
 #include <concepts>
 #include <memory>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace Core::DSP
 {
@@ -54,6 +56,7 @@ namespace Core::DSP
     Clamp,
     Repeat,
     MirrorRepeat,
+    Skip, // For Image::Convolve only. Skips out-of-bounds image elements.
   };
 
   struct Sampler
@@ -61,6 +64,29 @@ namespace Core::DSP
     Filter filter = Filter::Nearest;
     WrapMode wrapMode = WrapMode::Clamp;
   };
+
+  enum class WeightNormMode
+  {
+    // For Image::Convolve, normalize kernel weights such that their sum equals 1.
+    // Also normalizes weights when image elements are skipped by WrapMode::Skip.
+    Normalize,
+    DoNotNormalize,
+  };
+
+  enum class SeparableKernelDirection
+  {
+    X,
+    Y,
+    Z,
+  };
+
+  std::vector<std::pair<int, float>> CreateGaussianKernel1D(int width, float stddev, bool normalized = true);
+  std::vector<std::pair<glm::ivec2, float>> CreateSeparableGaussianKernel2D(SeparableKernelDirection direction, int width, float stddev, bool normalized = true);
+  std::vector<std::pair<glm::ivec3, float>> CreateSeparableGaussianKernel3D(SeparableKernelDirection direction, int width, float stddev, bool normalized = true);
+
+  std::vector<std::pair<int, float>> CreateBoxKernel1D(int width);
+  std::vector<std::pair<glm::ivec2, float>> CreateSeparableBoxKernel2D(SeparableKernelDirection direction, int width);
+  std::vector<std::pair<glm::ivec3, float>> CreateSeparableBoxKernel3D(SeparableKernelDirection direction, int width);
 
   template<size_t Dim, typename T>
     requires(Dim >= 1 && Dim <= 3)
@@ -80,7 +106,7 @@ namespace Core::DSP
 
     void constexpr Fill(T value)
     {
-      std::fill_n(data(), NumTexels(), value);
+      std::fill_n(Data(), NumTexels(), value);
     }
 
     [[nodiscard]] constexpr T Load(dimensions_type p) const noexcept
@@ -103,19 +129,19 @@ namespace Core::DSP
     [[nodiscard]] constexpr T Sample(Sampler sampler, uv_type uv) const noexcept
       requires ImageHelper::Filterable<T>
     {
-      const auto unnormalized = uv * uv_type(imageSize_);
+      const auto unnormalized = uv * uv_type(imageSize_) - 0.5f;
 
       if (sampler.filter == Filter::Nearest)
       {
-        return Load(dimensions_type(unnormalized));
+        return LoadWrapped(dimensions_type(unnormalized + 0.5f), sampler.wrapMode);
       }
 
       const auto intCoord = dimensions_type(unnormalized);
 
       if constexpr (Dim == 1)
       {
-        const auto l = Load(intCoord + dimensions_type(0));
-        const auto r = Load(intCoord + dimensions_type(1));
+        const auto l = LoadWrapped(intCoord + dimensions_type(0), sampler.wrapMode);
+        const auto r = LoadWrapped(intCoord + dimensions_type(1), sampler.wrapMode);
 
         const auto weight = unnormalized - uv_type(intCoord);
         return glm::mix(l, r, weight);
@@ -123,10 +149,10 @@ namespace Core::DSP
 
       if constexpr (Dim == 2)
       {
-        const auto bl = Load(intCoord + dimensions_type(0, 0));
-        const auto br = Load(intCoord + dimensions_type(1, 0));
-        const auto tl = Load(intCoord + dimensions_type(0, 1));
-        const auto tr = Load(intCoord + dimensions_type(1, 1));
+        const auto bl = LoadWrapped(intCoord + dimensions_type(0, 0), sampler.wrapMode);
+        const auto br = LoadWrapped(intCoord + dimensions_type(1, 0), sampler.wrapMode);
+        const auto tl = LoadWrapped(intCoord + dimensions_type(0, 1), sampler.wrapMode);
+        const auto tr = LoadWrapped(intCoord + dimensions_type(1, 1), sampler.wrapMode);
 
         const auto weight = unnormalized - uv_type(intCoord);
         return glm::mix(glm::mix(bl, br, weight.x), glm::mix(tl, tr, weight.x), weight.y);
@@ -134,14 +160,14 @@ namespace Core::DSP
 
       if constexpr (Dim == 3)
       {
-        const auto bln = Load(intCoord + dimensions_type(0, 0, 0));
-        const auto brn = Load(intCoord + dimensions_type(1, 0, 0));
-        const auto tln = Load(intCoord + dimensions_type(0, 1, 0));
-        const auto trn = Load(intCoord + dimensions_type(1, 1, 0));
-        const auto blf = Load(intCoord + dimensions_type(0, 0, 1));
-        const auto brf = Load(intCoord + dimensions_type(1, 0, 1));
-        const auto tlf = Load(intCoord + dimensions_type(0, 1, 1));
-        const auto trf = Load(intCoord + dimensions_type(1, 1, 1));
+        const auto bln = LoadWrapped(intCoord + dimensions_type(0, 0, 0), sampler.wrapMode);
+        const auto brn = LoadWrapped(intCoord + dimensions_type(1, 0, 0), sampler.wrapMode);
+        const auto tln = LoadWrapped(intCoord + dimensions_type(0, 1, 0), sampler.wrapMode);
+        const auto trn = LoadWrapped(intCoord + dimensions_type(1, 1, 0), sampler.wrapMode);
+        const auto blf = LoadWrapped(intCoord + dimensions_type(0, 0, 1), sampler.wrapMode);
+        const auto brf = LoadWrapped(intCoord + dimensions_type(1, 0, 1), sampler.wrapMode);
+        const auto tlf = LoadWrapped(intCoord + dimensions_type(0, 1, 1), sampler.wrapMode);
+        const auto trf = LoadWrapped(intCoord + dimensions_type(1, 1, 1), sampler.wrapMode);
 
         const auto weight = unnormalized - uv_type(intCoord);
         const auto n      = glm::mix(glm::mix(bln, brn, weight.x), glm::mix(tln, trn, weight.x), weight.y);
@@ -150,17 +176,17 @@ namespace Core::DSP
       }
     }
 
-    constexpr T* data() noexcept
+    constexpr T* Data() noexcept
     {
       return image_.get();
     }
 
-    constexpr const T* data() const noexcept
+    constexpr const T* Data() const noexcept
     {
       return image_.get();
     }
 
-    constexpr dimensions_type ImageSize() const noexcept
+    constexpr dimensions_type Size() const noexcept
     {
       return imageSize_;
     }
@@ -170,35 +196,45 @@ namespace Core::DSP
       return Dim;
     }
 
-    // Special operations
-    [[nodiscard]] constexpr Image Convolve(const ImageHelper::Iterable auto& kernel1D) const
+    // Convolves the image with the given kernel and returns the convolved image.
+    // The kernel is an iterable sequence of <offset, weight>, where `offset` is of the type dimensions_type
+    // and `weight` is a scalar.
+    [[nodiscard]] constexpr Image Convolve(const ImageHelper::Iterable auto& kernel, WrapMode wrapMode = WrapMode::Skip, WeightNormMode normMode = WeightNormMode::Normalize) const
       requires ImageHelper::Filterable<T>
     {
-      auto out = Image(ImageSize());
+      auto out = Image(Size());
 
       if constexpr (Dim == 2)
       {
-        for (int y = 0; y < ImageSize().y; y++)
+        for (int y = 0; y < Size().y; y++)
         {
-          for (int x = 0; x < ImageSize().x; x++)
+          for (int x = 0; x < Size().x; x++)
           {
             auto sumValue        = T{};
             auto sumWeight       = T{};
             const auto centerPos = dimensions_type{x, y};
 
-            for (const auto& [offset, weight] : kernel1D)
+            for (const auto& [offset, weight] : kernel)
             {
-              const auto samplePos = centerPos + offset;
-              if (glm::any(glm::lessThan(samplePos, dimensions_type(0))) || glm::any(glm::greaterThanEqual(samplePos, ImageSize())))
+              auto samplePos = centerPos + offset;
+
+              if (wrapMode == WrapMode::Skip)
               {
-                continue;
+                if (glm::any(glm::lessThan(samplePos, dimensions_type(0))) || glm::any(glm::greaterThanEqual(samplePos, Size())))
+                {
+                  continue;
+                }
+              }
+              else
+              {
+                samplePos = GetWrappedCoord(samplePos, wrapMode);
               }
 
               sumValue += weight * Load(samplePos);
               sumWeight += weight;
             }
 
-            out.Store(centerPos, sumValue / sumWeight);
+            out.Store(centerPos, normMode == WeightNormMode::Normalize ? sumValue / sumWeight : sumValue);
           }
         }
       }
@@ -213,13 +249,13 @@ namespace Core::DSP
     template<typename T2 = T>
     [[nodiscard]] constexpr auto Map(auto&& fn) const
     {
-      auto out = Image<Dim, T2>(ImageSize());
+      auto out = Image<Dim, T2>(Size());
 
       if constexpr (Dim == 2)
       {
-        for (int y = 0; y < ImageSize().y; y++)
+        for (int y = 0; y < Size().y; y++)
         {
-          for (int x = 0; x < ImageSize().x; x++)
+          for (int x = 0; x < Size().x; x++)
           {
             if constexpr (ImageHelper::HasTwoArguments<std::remove_cvref_t<decltype(fn)>>)
             {

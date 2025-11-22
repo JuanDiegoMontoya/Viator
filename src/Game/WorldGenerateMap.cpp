@@ -58,7 +58,7 @@ namespace
     {
       ZoneScopedN("GenUniformGrid3D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid3D(rawImage.data(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
+      node->GenUniformGrid3D(rawImage.Data(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
     }
 
     if (inSideLength == outSideLength)
@@ -69,7 +69,7 @@ namespace
     {
       ZoneScopedN("Upscale 3D");
       auto outImage = Core::DSP::Image<3, float>({outSideLength, outSideLength, outSideLength});
-      auto* out = outImage.data();
+      auto* out = outImage.Data();
       int i    = 0;
       for (int z = 0; z < outSideLength; z++)
       for (int y = 0; y < outSideLength; y++)
@@ -92,7 +92,7 @@ namespace
     {
       ZoneScopedN("GenUniformGrid2D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid2D(rawImage.data(), start.x, start.y, sideCount, sideCount, seed);
+      node->GenUniformGrid2D(rawImage.Data(), start.x, start.y, sideCount, sideCount, seed);
     }
 
     if (inSideLength == outSideLength)
@@ -103,7 +103,7 @@ namespace
     {
       ZoneScopedN("Upscale 2D");
       auto outImage = Core::DSP::Image<2, float>({outSideLength, outSideLength});
-      auto* out     = outImage.data();
+      auto* out     = outImage.Data();
       int i    = 0;
       for (int y = 0; y < outSideLength; y++)
       for (int x = 0; x < outSideLength; x++)
@@ -374,7 +374,7 @@ namespace
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
-        terrainHeightImage.data()[i] = terrainHeightImage.data()[i] * 20.0f - 10;
+        terrainHeightImage.Data()[i] = terrainHeightImage.Data()[i] * 20.0f - 10;
       }
 
       return terrainHeightImage;
@@ -450,7 +450,7 @@ namespace
 
       for (int i = 0; i < Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE; i++)
       {
-        terrainHeightImage.data()[i] = terrainHeightImage.data()[i] * 20.0f - 15;
+        terrainHeightImage.Data()[i] = terrainHeightImage.Data()[i] * 20.0f - 15;
       }
 
       return terrainHeightImage;
@@ -887,7 +887,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
           {
             // Skip biomes that failed broadphase check.
-            if (biomeHeights[j].data() == nullptr)
+            if (biomeHeights[j].Data() == nullptr)
             {
               continue;
             }
@@ -942,30 +942,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     progress.store(0);
 #endif
 
-    auto kernelXGauss = std::vector<std::pair<glm::ivec2, float>>();
-    auto kernelYGauss = std::vector<std::pair<glm::ivec2, float>>();
+    const auto kernelXGauss = Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 21, 5);
+    const auto kernelYGauss = Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::Y, 21, 5);
 
-    constexpr int kernelWidth = 20;
-    for (int i = -kernelWidth / 2; i <= kernelWidth / 2; i++)
-    {
-      kernelXGauss.emplace_back(glm::ivec2(i, 0), Math::GaussianNorm(float(i), 0, 5));
-      kernelYGauss.emplace_back(glm::ivec2(0, i), Math::GaussianNorm(float(i), 0, 5));
-    }
+    const auto kernelXGauss2 = Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 41, 7);
+    const auto kernelYGauss2 = Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 41, 7);
 
-    auto kernelXBox = std::vector<std::pair<glm::ivec2, float>>();
-    auto kernelYBox = std::vector<std::pair<glm::ivec2, float>>();
-
-    constexpr int kernelBoxWidth = 40;
-    for (int i = -kernelBoxWidth / 2; i <= kernelBoxWidth / 2; i++)
-    {
-      //kernelXBox.emplace_back(glm::ivec2(i, 0), 1.0f / (kernelWidth + 1));
-      //kernelYBox.emplace_back(glm::ivec2(0, i), 1.0f / (kernelWidth + 1));
-      kernelXBox.emplace_back(glm::ivec2(i, 0), Math::GaussianNorm(float(i), 0, 7));
-      kernelYBox.emplace_back(glm::ivec2(0, i), Math::GaussianNorm(float(i), 0, 7));
-    }
-
-    const auto blur1 = globalSurfaceHeightImage.Convolve(kernelXBox);
-    const auto blur2 = blur1.Convolve(kernelYBox);
+    const auto blur1 = globalSurfaceHeightImage.Convolve(kernelXGauss2);
+    const auto blur2 = blur1.Convolve(kernelYGauss2);
 
     FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
 
@@ -992,8 +976,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     //const auto out2 = Map<uint8_t>(riverMask3, map);
     //const auto out3 = Map<uint8_t>(blur2, map);
 
-    //const auto width = out1.ImageSize().x;
-    //const auto height = out1.ImageSize().y;
+    //const auto width = out1.Size().x;
+    //const auto height = out1.Size().y;
     //stbi_write_png("out1.png", width, height, 1, out1.data(), width);
     //stbi_write_png("out2.png", width, height, 1, out2.data(), width);
     //stbi_write_png("out3.png", width, height, 1, out3.data(), width);
@@ -1140,7 +1124,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
               {
                 // Skip biomes that failed broadphase check.
-                if (biomeDensities[m].data() == nullptr)
+                if (biomeDensities[m].Data() == nullptr)
                 {
                   continue;
                 }
