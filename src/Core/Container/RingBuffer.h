@@ -24,10 +24,13 @@ public:
 
   constexpr RingBuffer& operator=(RingBuffer&& old) noexcept
   {
-    size_  = std::exchange(old.size_, 0);
-    read_  = std::exchange(old.read_, 0);
-    write_ = std::exchange(old.write_, 0);
-    data_  = std::exchange(old.data_, std::vector<T>(4));
+    if (this != &old)
+    {
+      size_  = std::exchange(old.size_, 0);
+      read_  = std::exchange(old.read_, 0);
+      write_ = std::exchange(old.write_, 0);
+      data_  = std::exchange(old.data_, std::vector<T>(4));
+    }
     return *this;
   }
 

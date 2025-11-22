@@ -890,7 +890,7 @@ void PlayerHead::RemakeSwapchain([[maybe_unused]] uint32_t newWidth, [[maybe_unu
 {
   ZoneScoped;
 
-  assert(newWidth > 0 && newHeight > 0);
+  ASSERT(newWidth > 0 && newHeight > 0);
 
   {
     ZoneScopedN("Device Wait Idle");
