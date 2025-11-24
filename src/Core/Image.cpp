@@ -27,7 +27,7 @@ namespace
     ASSERT(width > 0);
     auto kernel = std::vector<std::pair<OffsetType, float>>();
 
-    for (int i = -width / 2; i <= width / 2; i++)
+    for (int i = -width / 2; i < (width + 1) / 2; i++)
     {
       auto offset = OffsetType(0);
       if constexpr (!std::is_same_v<OffsetType, int>)
@@ -51,7 +51,7 @@ namespace
     ASSERT(width > 0);
     auto kernel = std::vector<std::pair<OffsetType, float>>();
 
-    for (int i = -width / 2 + 1; i < width / 2; i++)
+    for (int i = -width / 2; i < (width + 1) / 2; i++)
     {
       auto offset = OffsetType(0);
       if constexpr (!std::is_same_v<OffsetType, int>)

@@ -259,11 +259,11 @@ namespace Core::DSP
           {
             if constexpr (ImageHelper::HasTwoArguments<std::remove_cvref_t<decltype(fn)>>)
             {
-              out.Store({x, y}, static_cast<T>(fn(glm::ivec2{x, y}, Load({x, y}))));
+              out.Store({x, y}, static_cast<T2>(fn(glm::ivec2{x, y}, Load({x, y}))));
             }
             else
             {
-              out.Store({x, y}, static_cast<T>(fn(Load({x, y}))));
+              out.Store({x, y}, static_cast<T2>(fn(Load({x, y}))));
             }
           }
         }
