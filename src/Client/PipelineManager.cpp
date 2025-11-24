@@ -55,6 +55,7 @@ PipelineManager::PipelineManager()
             if (lastWrite > shaderModule->lastWriteTime)
             {
               shaderModule->isOutOfDate->store(true);
+              shaderModule->lastWriteTime = lastWrite;
             }
           }
         }
