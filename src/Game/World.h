@@ -68,10 +68,11 @@ public:
 
   struct MapGenInfo
   {
-    int seed        = 1234;
-    int worldHeight = 600;
-    int seaLevel    = 400;
+    int seed             = 1234;
+    int worldHeight      = 600;
+    int seaLevel         = 400;
     int surfaceThickness = 80;
+    bool settleLiquids   = true;
     bool spawnYggdrasil  = false;
   };
 
