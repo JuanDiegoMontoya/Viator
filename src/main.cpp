@@ -81,7 +81,9 @@ void operator delete[](void* ptr, const std::nothrow_t&) noexcept
 
 int main(int argc, const char* const* argv)
 {
+#ifdef TRACY_ENABLE
   TracySetProgramName("Viator");
+#endif
   Core::Logging::Initialize();
   auto scripting = Scripting();
   Core::Reflection::Initialize(scripting);
