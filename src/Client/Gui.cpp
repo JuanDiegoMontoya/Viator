@@ -1576,6 +1576,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       
       ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
+      static auto mapGenInfo       = World::MapGenInfo{};
       static int selectedWorldSize = 0;
       auto MakeWorld = [&]
       {
@@ -1597,7 +1598,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           std::async(std::launch::async,
             [&world]
             {
-              world.GenerateMap({});
+              world.GenerateMap(mapGenInfo);
               world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Saving";
               // Save world right after creating it.
               if (!std::filesystem::is_directory(sWorldSavesDirectory))
@@ -1616,9 +1617,18 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         if (ImGui::IsWindowAppearing())
         {
           selectedWorldSize = 0;
+          mapGenInfo        = {};
         }
 
         ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium");
+
+        if (ImGui::TreeNodeEx("Advanced"))
+        {
+          ImGui::InputInt("Seed", &mapGenInfo.seed);
+          ImGui::Checkbox("Settle liquids", &mapGenInfo.settleLiquids);
+          ImGui::Checkbox("Spawn Yggdrasil", &mapGenInfo.spawnYggdrasil);
+          ImGui::TreePop();
+        }
 
         ImGui::Separator();
 

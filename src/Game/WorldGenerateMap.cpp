@@ -491,7 +491,7 @@ namespace
     {
       return GenerateAndUpscale2D(multiply,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        123456,
+        mapGenInfo.seed + 123455,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Core::DSP::Filter::Nearest);
@@ -563,7 +563,7 @@ namespace
     {
       return GenerateAndUpscale2D(terrainHeight,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        1212,
+        mapGenInfo.seed + 1212,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Core::DSP::Filter::Nearest);
@@ -761,7 +761,7 @@ namespace
 
       return GenerateAndUpscale3D(combiner,
         posTL * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
-        -100,
+        mapGenInfo.seed - 100,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE,
         Core::DSP::Filter::Nearest);
@@ -953,7 +953,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
     FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
 
-    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), 123456, grid.Dimensions().x, grid.Dimensions().z, Core::DSP::Filter::Nearest);
+    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), mapGenInfo.seed + 123456, grid.Dimensions().x, grid.Dimensions().z, Core::DSP::Filter::Nearest);
 
     const auto riverMask1 = riverMask0.Map([](float v) { return glm::smoothstep(0.8f, 1.0f, 1 - v); });
     const auto riverMask2 = riverMask1.Convolve(kernelXGauss);
@@ -1053,6 +1053,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         }
       });
 
+    if (mapGenInfo.settleLiquids)
+    {
+      ZoneScopedN("Settle liquids");
     constexpr int numIterations = 150;
 #ifndef GAME_HEADLESS
     progressText.store("Settle water");
@@ -1469,4 +1472,5 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   }
 
   grid.CoalesceDirtyBricks();
+  registry_.ctx().get<World::WaterQueue>().clear();
 }
