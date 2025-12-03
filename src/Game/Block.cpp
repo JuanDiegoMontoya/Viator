@@ -2,6 +2,7 @@
 #include "Voxel/Grid.h"
 #include "Game/World.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 
 #include "Item.h"
 #include "Core/Assert2.h"
@@ -61,8 +62,8 @@ const std::map<BlockId, std::string>& Block::Registry::GetIdToTagMap() const
 
 static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId block, bool isBeingTransformed = false)
 {
-  const auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
-  auto& grid                = world.GetRegistry().ctx().get<Voxel::Grid>();
+  const auto& blockRegistry = world.globals->blockRegistry->GetRegistry();
+  auto& grid                = *world.globals->grid;
   if (grid.IsPositionInGrid(voxelPosition))
   {
     // Ensure the block is supported, if necessary.
@@ -126,7 +127,7 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
     {
       const auto worldPosition = glm::vec3(voxelPosition) + glm::vec3(0.5f);
 
-      auto& entityPrefabs = world.GetRegistry().ctx().get<EntityPrefabRegistry>();
+      auto& entityPrefabs = *world.globals->entityPrefabRegistry;
       auto spawnedEntity  = entityPrefabs.Get(p->id).Spawn(world, glm::vec3(0), glm::identity<glm::quat>());
       auto& registry      = world.GetRegistry();
 
@@ -142,7 +143,7 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
 
     if (blockRegistry.any_of<Block::Component::Flows, Block::Component::BaseFlow>(entt::entity(block)))
     {
-      world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
+      world.globals->waterQueue->push(voxelPosition);
     }
 
     return true;
@@ -160,14 +161,14 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
 {
   ZoneScoped;
 
-  auto& registry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+  auto& registry = world.globals->blockRegistry->GetRegistry();
 
   Networking::CallRPC("SetVoxelAtRPC"_hs, world, voxelPosition, voxel_t::Air);
 
   if (const auto* p = registry.try_get<const Component::InterlinkedBlock>(entt::entity(block)))
   {
     const auto neighborPos = voxelPosition + DirectionToNeighbor(p->direction);
-    const auto neighbor    = world.GetRegistry().ctx().get<Voxel::Grid>().GetVoxelAt(neighborPos);
+    const auto neighbor    = world.globals->grid->GetVoxelAt(neighborPos);
     SpawnLootDropFromBlock(world, neighborPos, neighbor);
     OnDestroyBlock(world, neighborPos, neighbor);
   }
@@ -220,7 +221,7 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
 
   if (const auto* p = registry.try_get<Component::Script>(entt::entity(block)))
   {
-    world.GetRegistry().ctx().get<Scripting*>()->ExecuteScript(p->path, "OnDestroyBlock", {&world, voxelPosition, block});
+    world.globals->scripting->ExecuteScript(p->path, "OnDestroyBlock", {&world, voxelPosition, block});
   }
 
   for (int i = 0; i < 6; i++)
@@ -232,7 +233,7 @@ void Block::OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block
 
 std::variant<std::monostate, ItemState, std::string> Block::GetLootDropType(const World& world, BlockId block)
 {
-  const auto& registry = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+  const auto& registry = world.globals->blockRegistry->GetRegistry();
   if (const auto* b = registry.try_get<const Component::Breakable>(entt::entity(block)))
   {
     if (std::get_if<DropSelf>(&b->dropWhenBroken))
@@ -262,9 +263,9 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
 {
   ZoneScoped;
 
-  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+  auto& grid = *world.globals->grid;
   auto block = grid.GetVoxelAt(voxelPosition);
-  auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+  auto& reg  = world.globals->blockRegistry->GetRegistry();
 
   // Check whether block requires support from a specific side.
   bool isSupported = true;
@@ -389,8 +390,8 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         }
         OnTryPlaceBlock(world, voxelPosition, newBlock);
         OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, glm::min(myFlow + neighborFlow, 8)));
-        world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
-        world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
+        world.globals->waterQueue->push(voxelPosition);
+        world.globals->waterQueue->push(neighborPos);
         QueueUpdateNeighbors(world, voxelPosition);
         QueueUpdateNeighbors(world, neighborPos);
         block = newBlock;
@@ -400,7 +401,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         // Stochastically stop updates when gradient is small (prevents some endless update patterns).
         if (myFlow == neighborFlow + 1 && world.Rng().RandFloat() < 0.75f)
         {
-          world.GetRegistry().ctx().get<World::WaterSet>().emplace(voxelPosition);
+          world.globals->waterSet->emplace(voxelPosition);
           return;
         }
 
@@ -414,8 +415,8 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
         const auto newBlock = GetBlockFromFlowIndex(block, myFlow - 1);
         OnTryPlaceBlock(world, voxelPosition, newBlock);
         OnTryPlaceBlock(world, neighborPos, GetBlockFromFlowIndex(block, neighborFlow + 1));
-        world.GetRegistry().ctx().get<World::WaterQueue>().push(voxelPosition);
-        world.GetRegistry().ctx().get<World::WaterQueue>().push(neighborPos);
+        world.globals->waterQueue->push(voxelPosition);
+        world.globals->waterQueue->push(neighborPos);
         QueueUpdateNeighbors(world, voxelPosition);
         QueueUpdateNeighbors(world, neighborPos);
         block = newBlock;
@@ -443,7 +444,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
 
 void Block::QueueUpdateNeighbors(World& world, glm::ivec3 position)
 {
-  auto& queue = world.GetRegistry().ctx().get<World::WaterQueue>();
+  auto& queue = *world.globals->waterQueue;
   queue.push(position + DirectionToNeighbor(Direction::Up));
   queue.push(position + DirectionToNeighbor(Direction::North));
   queue.push(position + DirectionToNeighbor(Direction::East));
@@ -455,8 +456,8 @@ void OnUseBlockHelper(World& world, glm::ivec3 voxelPosition, BlockId block, int
 {
   ZoneScoped;
 
-  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
-  auto& reg  = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+  auto& grid = *world.globals->grid;
+  auto& reg  = world.globals->blockRegistry->GetRegistry();
 
   if (const auto* p = reg.try_get<const Block::Component::TransformWhenUsed>(entt::entity(block)))
   {
@@ -496,7 +497,7 @@ void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId bl
   }
   else if (auto* lp = std::get_if<std::string>(&dropType))
   {
-    auto* table = registry.ctx().get<LootRegistry>().Get(*lp);
+    auto* table = world.globals->game->lootRegistry.Get(*lp);
     ASSERT(table);
     for (auto drop : table->Collect(world.Rng()))
     {
@@ -516,13 +517,13 @@ void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId bl
 
 bool Block::IsVisible(const World& world, BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   return bReg.any_of<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>(entt::entity(block));
 }
 
 bool Block::IsSolid(const World& world, BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::PhysicalProperties>(entt::entity(block)))
   {
     return p->isSolid;
@@ -532,7 +533,7 @@ bool Block::IsSolid(const World& world, BlockId block)
 
 const Voxel::SubGrid* Block::GetSubGrid(const World& world, BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(block)))
   {
     return p->subGrid.get();
@@ -542,7 +543,7 @@ const Voxel::SubGrid* Block::GetSubGrid(const World& world, BlockId block)
 
 ItemId Block::GetItemId(const World& world, BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::CorrespondingItem>(entt::entity(block)))
   {
     return p->item;
@@ -552,7 +553,7 @@ ItemId Block::GetItemId(const World& world, BlockId block)
 
 float Block::GetInitialHealth(const World& world,  BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::Breakable>(entt::entity(block)))
   {
     return p->initialHealth;
@@ -562,7 +563,7 @@ float Block::GetInitialHealth(const World& world,  BlockId block)
 
 BlockDamageFlags Block::GetDamageFlags(const World& world,  BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::Breakable>(entt::entity(block)))
   {
     return p->damageFlags;
@@ -572,7 +573,7 @@ BlockDamageFlags Block::GetDamageFlags(const World& world,  BlockId block)
 
 int Block::GetDamageTier(const World& world,  BlockId block)
 {
-  const auto& bReg = world.GetRegistry().ctx().get<Registry>().GetRegistry();
+  const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::Breakable>(entt::entity(block)))
   {
     return p->damageTier;
@@ -582,7 +583,7 @@ int Block::GetDamageTier(const World& world,  BlockId block)
 
 std::string Block::GetName(const World& world,  BlockId block)
 {
-  const auto& blocks = world.GetRegistry().ctx().get<Registry>();
+  const auto& blocks = *world.globals->blockRegistry;
   const auto& bReg = blocks.GetRegistry();
   if (const auto* p = bReg.try_get<const Name>(entt::entity(block)))
   {
@@ -593,7 +594,7 @@ std::string Block::GetName(const World& world,  BlockId block)
 
 BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, glm::vec3 viewDir, [[maybe_unused]] glm::vec3 normal)
 {
-  const auto& blocks = world.GetRegistry().ctx().get<Registry>();
+  const auto& blocks = *world.globals->blockRegistry;
   const auto& bReg   = blocks.GetRegistry();
 
   if (const auto* p = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(block)))
@@ -625,7 +626,7 @@ BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, glm::ve
 
 BlockId Block::GetRotatedBlockVariant(const World& world, BlockId block, Direction direction)
 {
-  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blocks = *world.globals->blockRegistry;
   auto& bReg   = blocks.GetRegistry();
 
   const auto dir = WhichRotatedVariantAmI(world, block);
@@ -668,7 +669,7 @@ BlockId Block::CreateStandardBlock(World& world, const CreateBlockParams& params
 {
   ZoneScoped;
 
-  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blocks = *world.globals->blockRegistry;
   auto& bReg   = blocks.GetRegistry();
 
   auto block = blocks.Create(std::move(params.tag));
@@ -807,7 +808,7 @@ static void CopyEntity(entt::registry& registry, entt::entity srcEntity, entt::e
 
 Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(World& world, BlockId base)
 {
-  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blocks = *world.globals->blockRegistry;
   auto& bReg   = blocks.GetRegistry();
 
   auto rotatedVariants = Component::StandardRotatedVariants{};
@@ -867,7 +868,7 @@ Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(
 
 void Block::UpdateTransformedForRotatedVariants(World& world, BlockId base)
 {
-  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blocks = *world.globals->blockRegistry;
   auto& bReg   = blocks.GetRegistry();
 
   const auto* rotated = bReg.try_get<const Component::StandardRotatedVariants>(entt::entity(base));
@@ -929,7 +930,7 @@ Block::Direction Block::NormalToDirection(glm::vec3 normal)
 
 Block::Direction Block::WhichRotatedVariantAmI(const World& world, BlockId block)
 {
-  auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blocks = *world.globals->blockRegistry;
   auto& bReg   = blocks.GetRegistry();
 
   if (const auto* base = bReg.try_get<const Component::BaseVariant>(entt::entity(block)))

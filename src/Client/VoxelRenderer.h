@@ -87,6 +87,7 @@ public:
   void CreateRenderingMaterials(const World& world);
 
 private:
+  bool needsHeightmapInit = false; // TODO: TEMP
 
   void InitGui();
   void LoadGameSettings();
@@ -259,6 +260,9 @@ private:
   float sunAzimuth   = 0.3f;
   glm::vec3 sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
   float sunBrightness = 100'000;
+
+  std::optional<Fvog::Texture> globalSurfaceHeightImage;
+  std::optional<Fvog::Texture> globalSurfaceFogImage;
 };
 
 namespace GuiHelper

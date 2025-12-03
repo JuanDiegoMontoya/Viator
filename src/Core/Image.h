@@ -276,6 +276,24 @@ namespace Core::DSP
       return out;
     }
 
+    [[nodiscard]] constexpr int NumTexels() const noexcept
+    {
+      if constexpr (Dim == 1)
+      {
+        return imageSize_;
+      }
+
+      if constexpr (Dim == 2)
+      {
+        return imageSize_.x * imageSize_.y;
+      }
+
+      if constexpr (Dim == 3)
+      {
+        return imageSize_.x * imageSize_.y * imageSize_.z;
+      }
+    }
+
   private:
     [[nodiscard]] constexpr int TexCoordToIndex(dimensions_type p) const noexcept
     {
@@ -292,24 +310,6 @@ namespace Core::DSP
       if constexpr (Dim == 3)
       {
         return p.x + p.y * imageSize_.x + p.z * imageSize_.y * imageSize_.x;
-      }
-    }
-
-    [[nodiscard]] constexpr int NumTexels() const noexcept
-    {
-      if constexpr (Dim == 1)
-      {
-        return imageSize_;
-      }
-
-      if constexpr (Dim == 2)
-      {
-        return imageSize_.x * imageSize_.y;
-      }
-
-      if constexpr (Dim == 3)
-      {
-        return imageSize_.x * imageSize_.y * imageSize_.z;
       }
     }
 

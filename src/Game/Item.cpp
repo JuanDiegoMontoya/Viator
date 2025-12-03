@@ -1,5 +1,6 @@
 #include "Item.h"
 #include "Game.h"
+#include "Game/Globals.h"
 
 #include "Block.h"
 #include "EntityPrefab.h"
@@ -38,7 +39,7 @@ ItemId Item::Registry::Create(std::string tag)
 
 entt::entity Item::Materialize(World& world, ItemId item)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
 
   entt::entity self = entt::null;
   if (const auto* p = iReg.try_get<const Component::MaterializeAsMeshEntity>(item))
@@ -58,11 +59,11 @@ entt::entity Item::Materialize(World& world, ItemId item)
 
   if (const auto* p = iReg.try_get<const Component::Block>(item))
   {
-    auto& bReg = world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+    auto& bReg = world.globals->blockRegistry->GetRegistry();
     if (const auto* p2 = bReg.try_get<const Block::Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(p->voxel)))
     {
-      auto& entityPrefabs      = world.GetRegistry().ctx().get<EntityPrefabRegistry>();
-      const auto& entityPrefab = entityPrefabs.Get(p2->id);
+      auto& entityPrefabs      = world.globals->entityPrefabRegistry;
+      const auto& entityPrefab = entityPrefabs->Get(p2->id);
       if (entityPrefab.GetCreateInfo().isVisible)
       {
         return entityPrefab.Spawn(world, {0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>());
@@ -108,7 +109,7 @@ void Item::Dematerialize(World& world, [[maybe_unused]] ItemId item, entt::entit
     return;
   }
 
-  [[maybe_unused]] const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  [[maybe_unused]] const auto& iReg = world.globals->itemRegistry->GetRegistry();
 
   world.GetRegistry().emplace_or_replace<DeferredDelete>(self);
 }
@@ -121,7 +122,7 @@ void Item::GiveCollider(World& world, ItemId item, entt::entity self)
     return;
   }
 
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   if (const auto* p = iReg.try_get<const Component::ColliderWhenDropped>(item))
   {
     world.GetRegistry().emplace<Friction>(self).axes = p->friction;
@@ -143,7 +144,7 @@ void Item::Update(World& world, float dt, entt::entity self, ItemState& state)
     return;
   }
 
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
 
   if (iReg.any_of<const Component::Rainbow>(state.id))
   {
@@ -155,13 +156,13 @@ void Item::Update(World& world, float dt, entt::entity self, ItemState& state)
     };
 
     auto& tint = world.GetRegistry().get<Tint>(self);
-    tint.color = hsv_to_rgb({0.33f * world.GetRegistry().ctx().get<float>("time"_hs), 0.875f, 0.85f});
+    tint.color = hsv_to_rgb({0.33f * world.globals->game->time, 0.875f, 0.85f});
   }
 }
 
 void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& state)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   auto& reg        = world.GetRegistry();
   if (const auto* usable = iReg.try_get<const Component::Usable>(state.id))
   {
@@ -176,9 +177,9 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 
     if (const auto* p = iReg.try_get<const Component::SpawnEntityPrefabOnUse>(state.id))
     {
-      auto& prefabs         = world.GetRegistry().ctx().get<EntityPrefabRegistry>();
+      auto& prefabs         = world.globals->entityPrefabRegistry;
       const auto& transform = world.GetRegistry().get<GlobalTransform>(self);
-      prefabs.Get(p->tag).Spawn(world, transform.position + 20.0f * GetForward(transform.rotation));
+      prefabs->Get(p->tag).Spawn(world, transform.position + 20.0f * GetForward(transform.rotation));
       subtractCountFromState = true;
       state.useAccum = 0;
     }
@@ -316,7 +317,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       const auto dir = GetForward(pt.rotation);
 
       // TODO: do not hit block if an entity is in the way.
-      auto& grid = reg.ctx().get<Voxel::Grid>();
+      auto& grid = *world.globals->grid;
       auto hit   = Voxel::Grid::HitSurfaceParameters();
       if (grid.TraceRaySimple(pos, dir, 5, hit))
       {
@@ -342,7 +343,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       const auto pos = pt.position;
       const auto dir = GetForward(pt.rotation);
 
-      auto& grid = reg.ctx().get<Voxel::Grid>();
+      auto& grid = *world.globals->grid;
       auto hit   = Voxel::Grid::HitSurfaceParameters();
       if (GetMaxStackSize(world, state.id) > 0)
       {
@@ -586,7 +587,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       subtractCountFromState = true;
     }
 
-    if (subtractCountFromState && !reg.ctx().get<Debugging>().infiniteItems)
+    if (subtractCountFromState && !world.globals->game->debugging.infiniteItems)
     {
       state.count -= 1;
     }
@@ -595,7 +596,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 
 bool Item::ItemIsCompatibleWithSlot(World& world, ItemId item, Component::AllowedSlots slot)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   if (const auto* p = iReg.try_get<const Component::AllowedSlots>(item))
   {
     return slot == *p;
@@ -606,7 +607,7 @@ bool Item::ItemIsCompatibleWithSlot(World& world, ItemId item, Component::Allowe
 
 int Item::GetMaxStackSize(World& world, ItemId item)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   if (const auto* p = iReg.try_get<const Component::Stackable>(item))
   {
     return p->maxStackSize;
@@ -617,7 +618,7 @@ int Item::GetMaxStackSize(World& world, ItemId item)
 
 std::string Item::GetName(World& world, ItemId item)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   if (const auto* p = iReg.try_get<const Name>(item))
   {
     return p->name;
@@ -628,7 +629,7 @@ std::string Item::GetName(World& world, ItemId item)
 
 float Item::GetEffect(World& world, ItemId item, [[maybe_unused]] entt::entity parent, EffectCondition condition, EffectQuantityType quantityType, EffectType type)
 {
-  const auto& iReg = world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+  const auto& iReg = world.globals->itemRegistry->GetRegistry();
   if (const auto* p = iReg.try_get<const Component::StaticEffects>(item))
   {
     for (const auto& effect : p->effects)
@@ -817,10 +818,10 @@ ItemId Item::CreateArmor(Registry& registry,
 
 ItemId Item::RegisterItemForBlock(World& world, BlockId block)
 {
-  auto& itemRegistry = world.GetRegistry().ctx().get<Item::Registry>();
+  auto& itemRegistry = *world.globals->itemRegistry;
   auto& reg          = itemRegistry.GetRegistry();
 
-  auto& blockRegistry = world.GetRegistry().ctx().get<Block::Registry>();
+  auto& blockRegistry = *world.globals->blockRegistry;
   auto name           = blockRegistry.GetIdToTagMap().at(block);
 
   const auto e = itemRegistry.Create(name);

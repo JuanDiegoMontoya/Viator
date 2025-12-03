@@ -9,6 +9,9 @@
   REGISTER_OBJECT_TYPE(T); \
   auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
 
+#define REFLECT_NON_OBJECT_TYPE(T)    \
+  auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
+
 #define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
   REGISTER_OBJECT_TYPE(T);                                                                          \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
@@ -99,10 +102,10 @@
 #define DATA_BASE(Type, Member, ...);                                                                                                                          \
   auto MAKE_IDENTIFIER() = entt::meta_factory<Type> {};                                                                                                      \
   MAKE_IDENTIFIER() \
-  .data<&Type ::Member, entt::as_ref_t>(#Member##_hs) \
+  .data<nullptr, &Type ::Member, entt::as_ref_t>(#Member##_hs) \
   .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #Member} __VA_OPT__(, __VA_ARGS__)}); \
   entt::meta_factory<decltype(Type::Member)>{}.traits(                                                                                                       \
-    (is_optional_v<decltype(Type::Member)> ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0)));                          \
+    ((is_optional_v<decltype(Type::Member)> || is_unique_ptr_v<decltype(Type::Member)>) ? OPTIONAL : Traits(0)) | (is_variant_v<decltype(Type::Member)> ? VARIANT : Traits(0)));                          \
   []<typename U>()                                                                                                                                           \
   {                                                                                                                                                          \
     if constexpr (is_variant_v<U>)                                                                                                                           \
@@ -115,6 +118,11 @@
     if constexpr (is_optional_v<U>)                                                                                                                          \
     {                                                                                                                                                        \
       entt::meta_factory<U>{}.template ctor<typename U::value_type>() OPTIONAL_FUNCS(U);                                                                     \
+    }                                                                                                                                                        \
+    else if constexpr (is_unique_ptr_v<U>)                                                                                                                   \
+    {                                                                                                                                                        \
+      entt::meta_factory<U> {}                                                                                                                               \
+      UNIQUE_PTR_FUNCS(U);                                                                                                                                   \
     }                                                                                                                                                        \
   }.operator()<decltype(Type::Member)>();                                                                                                                    \
   MAKE_IDENTIFIER()
@@ -172,11 +180,17 @@
   .template func<[](std::unique_ptr<T>& p, T* v) { p.reset(v); }>("reset_unique_ptr"_hs) \
   .template func<[](std::shared_ptr<T>& p, T* v) { p.reset(v); }>("reset_shared_ptr"_hs) \
 
-#define OPTIONAL_FUNCS(T)                                                   \
+#define OPTIONAL_FUNCS(T)                                                            \
   .template func<[](const T& option) { return option.has_value(); }>("has_value"_hs) \
-  .template func<[](T& option) { return option.emplace(); }>("emplace"_hs)           \
+  .template func<[](T& option) -> decltype(auto) { return option.emplace(); }, entt::as_ref_t>("emplace"_hs)           \
   .template func<[](T& option) { option.reset(); }>("reset"_hs)                      \
-  .template func<[](T& option) -> decltype(auto) { return option.value(); }>("value"_hs)
+  .template func<[](T& option) -> decltype(auto) { return option.value(); }, entt::as_ref_t>("value"_hs)
+
+#define UNIQUE_PTR_FUNCS(T)                                                                                                     \
+  .template func<[](const T& ptr) { return ptr != nullptr; }>("has_value"_hs)                                                   \
+  .template func<[](T& ptr) -> decltype(auto) { ptr.reset(new typename std::remove_cvref_t<T>::element_type()); return *ptr.get(); }, entt::as_ref_t>("emplace"_hs) \
+  .template func<[](T& ptr) { ptr.reset(); }>("reset"_hs)                                                                       \
+  .template func<[](T& ptr) -> decltype(auto) { return *ptr.get(); }, entt::as_ref_t>("value"_hs)
 
   #define REGISTER_RPC(Function, Traits) \
     entt::meta_factory<RpcTraits>().func<Function>(#Function##_hs) \
@@ -187,6 +201,11 @@
   {                            \
     using T2 = T;              \
     REFLECT_TYPE(T)
+
+#define BEGIN_REFLECT_NON_OBJECT_TYPE(T) \
+  {                           \
+    using T2 = T;             \
+    REFLECT_NON_OBJECT_TYPE(T)
 
 #define BEGIN_REFLECT_COMPONENT(T, ...) \
   {                            \

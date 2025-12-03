@@ -1,5 +1,7 @@
 #include "VoxelRenderer.h"
 
+#include "volk.h"
+
 #include "Game/World.h"
 #include "Game/Game.h"
 #include "Game/Assets.h"
@@ -11,7 +13,9 @@
 #include "Fvog/Rendering2.h"
 #include "Fvog/detail/Common.h"
 #include "Core/Assert2.h"
+#include "Core/Image.h"
 #include "Game/VoxLoader.h"
+#include "Game/Globals.h"
 
 #include "shaders/Config.shared.h"
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
@@ -23,7 +27,6 @@
 #include "Game/Physics/DebugRenderer.h"
 #endif
 
-#include "volk.h"
 #include "Fvog/detail/ApiToEnum2.h"
 
 #include "tiny_obj_loader.h"
@@ -576,7 +579,7 @@ VoxelRenderer::~VoxelRenderer()
 
 void VoxelRenderer::CreateRenderingMaterials(const World& world)
 {
-  const auto& blocks = world.GetRegistry().ctx().get<const Block::Registry>();
+  const auto& blocks = *world.globals->blockRegistry;
   const auto& bReg   = blocks.GetRegistry();
 
   auto voxelMaterials = std::vector<GpuVoxelMaterial>();
@@ -705,6 +708,8 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
     voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials));
     voxelMaterialBufferSpelunker->UpdateDataExpensive(cmd, std::span(voxelMaterialsSpelunker));
   });
+
+  needsHeightmapInit = true;
 }
 
 void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
@@ -761,7 +766,7 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
   }
 
   bool sceneWasRendered = false;
-  if (auto gameState = world.GetRegistry().ctx().get<GameState>();
+  if (auto gameState = world.globals->game->gameState;
     gameState == GameState::GAME || gameState == GameState::PAUSED || gameState == GameState::PAUSED_SETTINGS)
   {
     ctx.Barrier();
@@ -822,10 +827,21 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 {
   auto ctx = Fvog::Context(commandBuffer);
 
-  if (world.GetRegistry().ctx().contains<Voxel::Grid>())
+  if (world.globals->grid->numTopLevelBricks_ > 0)
   {
-    auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+    auto& grid = *world.globals->grid;
     grid.Buffer().FlushWritesToGPU(commandBuffer);
+
+    if (needsHeightmapInit)
+    {
+      needsHeightmapInit = false;
+
+      const auto extent        = Fvog::Extent3D{(uint32_t)grid.Dimensions().x, (uint32_t)grid.Dimensions().z};
+      globalSurfaceHeightImage = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY);
+      globalSurfaceFogImage    = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY);
+      globalSurfaceHeightImage->UpdateImageSLOW({.extent = extent, .data = world.globals->globalSurfaceHeight->Data()});
+      globalSurfaceFogImage->UpdateImageSLOW({.extent = extent, .data = world.globals->globalSurfaceFog->Data()});
+    }
   }
 
   ctx.TeenyBufferUpdate(gBufferBuffer.value(),
@@ -906,7 +922,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   ctx.ImageBarrierDiscard(frame.sceneRadiance.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
   ctx.ImageBarrierDiscard(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
 
-  const auto& sunInfo = world.GetRegistry().ctx().get<SunInfo>();
+  const auto& sunInfo = world.globals->game->sunInfo;
   sunElevation        = sunInfo.timeOfDay * glm::pi<float>() - glm::pi<float>();
   sunAzimuth          = sunInfo.azimuth;
 
@@ -1035,10 +1051,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     lights.emplace_back(light);
   }
 
-  if (world.GetRegistry().ctx().contains<Voxel::Grid>())
+  if (world.globals->grid->numTopLevelBricks_ > 0)
   {
     auto lines           = std::vector<Debug::Line>();
-    const auto& ecsLines = world.GetRegistry().ctx().get<std::vector<Debug::Line>>();
+    const auto& ecsLines = world.globals->debugLines;
     lines.insert(lines.end(), ecsLines.begin(), ecsLines.end());
 #ifdef JPH_DEBUG_RENDERER
     const auto* debugRenderer = dynamic_cast<const Physics::DebugRenderer*>(JPH::DebugRenderer::sInstance);
@@ -1091,7 +1107,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
     }
 
-    auto& grid        = world.GetRegistry().ctx().get<Voxel::Grid>();
+    auto& grid        = *world.globals->grid;
     const auto voxels = Voxels{
       .topLevelBricksDims         = grid.TopLevelBricksDims(),
       .topLevelBrickPtrsBaseIndex = grid.TopLevelBrickPtrsBaseIndex(),
@@ -1422,6 +1438,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .outSceneLuminance                    = frame.sceneColor->ImageView().GetImage2D(),
           .linearSampler                        = linearClampSampler,
           //.mieScattering                        = ,
+          .globalSurfaceHeight = globalSurfaceHeightImage->ImageView().GetTexture2D(),
+          .globalSurfaceFog = globalSurfaceFogImage->ImageView().GetTexture2D(),
           .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
           .voxels = voxels,
           .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,

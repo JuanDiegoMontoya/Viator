@@ -2,6 +2,7 @@
 #include "Game/Game.h"
 #include "Game/World.h"
 #include "Game/Voxel/Grid.h"
+#include "Game/Globals.h"
 
 // TODO: TEMP
 #include "Physics/Physics.h"
@@ -19,11 +20,12 @@ public:
   {
     ZoneScoped;
     // Initialize the grid with one chunk and two materials (air = 0, solid = 1).
-    auto& grid = game_.world_->GetRegistry().ctx().emplace<Voxel::Grid>(glm::ivec3(1, 1, 1), 5'000'000, false);
+    auto& grid = *game_.world_->globals->grid = Voxel::Grid(glm::ivec3(1, 1, 1), 5'000'000, false);
     grid.SetMaterialArray({Voxel::Grid::Material{.isVisible = false, .isSolid = false}, {.isVisible = true, .isSolid = true}});
 
-    auto& registry                  = game_.world_->GetRegistry();
-    registry.ctx().get<GameState>() = GameState::GAME;
+    game_.world_->globals->game->gameState = GameState::GAME;
+
+    auto& registry = game_.world_->GetRegistry();
 
     // TODO: remove
     auto ve                          = registry.create();
@@ -54,9 +56,7 @@ public:
   Voxel::Grid& GetGrid() override
   {
     ASSERT(game_.world_);
-    auto* grid = game_.world_->GetRegistry().ctx().find<Voxel::Grid>();
-    ASSERT(grid);
-    return *grid;
+    return *game_.world_->globals->grid;
   }
 
   void InitEmptyGrid(voxel_t voxel) override

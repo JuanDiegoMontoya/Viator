@@ -1,5 +1,6 @@
 #include "World.h"
 #include "Game.h"
+#include "Game/Globals.h"
 
 #include "HashGrid.h"
 #include "Item.h"
@@ -23,6 +24,10 @@
 
 #include <execution>
 #include <stack>
+
+World::World() : registry_(registryOld_)
+{
+}
 
 std::optional<glm::vec3> SampleWalkablePosition(const Voxel::Grid& grid, PCG::Rng& rng, glm::vec3 origin, float minDistance, float maxDistance, bool isAirWalkable)
 {
@@ -208,7 +213,7 @@ entt::entity World::CreateRenderableEntity(glm::vec3 position, glm::quat rotatio
 {
   auto e = CreateRenderableEntityNoHashGrid(position, rotation, scale);
   registry_.remove<NoHashGrid>(e);
-  registry_.ctx().get<HashGrid>().set(position, e);
+  globals->game->hashGrid->set(position, e);
   return e;
 }
 
@@ -329,7 +334,7 @@ entt::entity World::CreatePlayer()
   registry_.emplace_or_replace<LinearVelocity>(p);
   // cc.character->SetMaxStrength(10000000);
 
-  auto& items     = registry_.ctx().get<Item::Registry>();
+  auto& items     = *globals->itemRegistry;
   auto& inventory = registry_.emplace<Inventory>(p);
   inventory.OverwriteSlot(*this, {0, 0}, {items.Get("weapon_stone_spear")}, p);
   inventory.OverwriteSlot(*this, {0, 1}, {items.Get("tool_stone_pickaxe")}, p);
@@ -514,12 +519,12 @@ std::vector<entt::entity> World::GetEntitiesInSphere(glm::vec3 center, float rad
 {
   ZoneScoped;
   const float radius2 = radius * radius;
-  const auto& grid    = registry_.ctx().get<HashGrid>();
+  const auto& grid    = globals->game->hashGrid;
 
   auto entities = std::vector<entt::entity>();
 
-  const auto lower = grid.QuantizeKey(center - radius);
-  const auto upper = grid.QuantizeKey(center + radius);
+  const auto lower = grid->QuantizeKey(center - radius);
+  const auto upper = grid->QuantizeKey(center + radius);
 
   // Broadphase: iterate over all chunks touched by sphere.
   for (int z = lower.z; z <= upper.z; z++)
@@ -528,7 +533,7 @@ std::vector<entt::entity> World::GetEntitiesInSphere(glm::vec3 center, float rad
     {
       for (int x = lower.x; x <= upper.x; x++)
       {
-        const auto [begin, end] = grid.equal_range_chunk({x, y, z});
+        const auto [begin, end] = grid->equal_range_chunk({x, y, z});
         for (auto it = begin; it != end; ++it)
         {
           // Narrowphase: distance check.
@@ -552,12 +557,12 @@ std::vector<entt::entity> World::GetEntitiesInSphere(glm::vec3 center, float rad
 std::vector<entt::entity> World::GetEntitiesInCapsule(glm::vec3 start, glm::vec3 end, float radius)
 {
   ZoneScoped;
-  const auto& grid = registry_.ctx().get<HashGrid>();
+  const auto& grid = globals->game->hashGrid;
 
   auto entities = std::vector<entt::entity>();
 
-  const auto lower = grid.QuantizeKey(glm::min(start - radius, end - radius));
-  const auto upper = grid.QuantizeKey(glm::max(start + radius, end + radius));
+  const auto lower = grid->QuantizeKey(glm::min(start - radius, end - radius));
+  const auto upper = grid->QuantizeKey(glm::max(start + radius, end + radius));
 
   for (int z = lower.z; z <= upper.z; z++)
   {
@@ -565,7 +570,7 @@ std::vector<entt::entity> World::GetEntitiesInCapsule(glm::vec3 start, glm::vec3
     {
       for (int x = lower.x; x <= upper.x; x++)
       {
-        const auto [beginIt, endIt] = grid.equal_range_chunk({x, y, z});
+        const auto [beginIt, endIt] = grid->equal_range_chunk({x, y, z});
         for (auto it = beginIt; it != endIt; ++it)
         {
           // Narrowphase: distance check.
@@ -604,7 +609,7 @@ entt::entity World::GetNearestPlayer(glm::vec3 position)
 float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, BlockDamageFlags damageType)
 {
   ZoneScoped;
-  auto& grid = registry_.ctx().get<Voxel::Grid>();
+  auto& grid = *globals->grid;
   const auto prevVoxel = grid.GetVoxelAt(voxelPos);
   if (prevVoxel == voxel_t::Air)
   {
@@ -683,7 +688,7 @@ entt::entity World::GetRootEntityOfHierarchy(entt::entity entity) const
 
 bool World::IsClient() const
 {
-  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
+  const auto* networking = globals->networking;
   return networking->get() && dynamic_cast<Networking::Client*>(networking->get());
 }
 
@@ -694,14 +699,14 @@ bool World::IsServer() const
 
 bool World::IsHosting() const
 {
-  const auto* networking = registry_.ctx().get<std::unique_ptr<Networking::Interface>*>();
+  const auto* networking = globals->networking;
   const auto* server     = dynamic_cast<const Networking::Server*>(networking->get());
   return networking->get() && server && server->GetNumberOfConnections();
 }
 
 Audio* World::GetAudio()
 {
-  return registry_.ctx().get<Head*>()->GetAudio();
+  return globals->head->GetAudio();
 }
 
 glm::vec3 World::GetFootPosition(entt::entity entity)
@@ -780,7 +785,7 @@ void World::UpdateLocalTransform(entt::entity entity, int depth)
 
   if (!registry_.any_of<NoHashGrid>(entity))
   {
-    registry_.ctx().get<HashGrid>().set(gt.position, entity);
+    globals->game->hashGrid->set(gt.position, entity);
   }
 
   if (!h)
@@ -863,5 +868,5 @@ void World::SpawnHitParticles(const SpawnHitParticlesParams& p)
 
 PCG::Rng& World::Rng()
 {
-  return registry_.ctx().get<PCG::Rng>();
+  return globals->game->rng;
 }

@@ -11,6 +11,7 @@
 #include "Networking/Interface.h"
 #include "Head.h"
 #include "CoreComponents.h"
+#include "Game/IncompleteTypeDeleter.h"
 
 #include "entt/entity/registry.hpp"
 #include "entt/entity/entity.hpp"
@@ -605,12 +606,9 @@ struct DestroyWhenConstraintsBroken {};
 class NpcSpawnDirector
 {
 public:
-  explicit NpcSpawnDirector(World& world) : world_(&world) {}
-
-  void Update(float dt);
+  void Update(World& world, float dt);
 
 private:
-  World* world_;
   float accumulator = 0;
   float timeBetweenSpawns = 1;
 };
@@ -667,3 +665,33 @@ namespace Vox
   struct Chunk;
 }
 std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root);
+
+class HashGrid;
+namespace Pathfinding
+{
+  class PathCache;
+}
+struct GameGlobals
+{
+private:
+  template<typename T>
+  using unique_ptr = std::unique_ptr<T, IncompleteTypeDeleter<T>>;
+
+public:
+  GameGlobals();
+  DEFAULT_MOVE(GameGlobals);
+  // Gameplay stuff, probably needs serialization
+  GameState gameState = GameState::MENU;
+  PCG::Rng rng;
+  Debugging debugging;
+  TimeScale timeScale;
+  TickRate tickRate{.hz = 30};
+  float time = 0;
+  unique_ptr<HashGrid> hashGrid;
+  NpcSpawnDirector npcSpawnDirector;
+  bool updateNpcSpawnDirector = true;
+  SunInfo sunInfo;
+  unique_ptr<Pathfinding::PathCache> pathCache;
+  LootRegistry lootRegistry;
+  Crafting crafting;
+};

@@ -5,6 +5,7 @@
 #include "Game/World.h"
 #include "Game/Game.h"
 #include "Game/Assets.h"
+#include "Game/Globals.h"
 #include "stb_image.h"
 #include <GLFW/glfw3.h>
 #include <VkBootstrap.h>
@@ -269,7 +270,7 @@ void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
 void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
 {
   ZoneScoped;
-  if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME || world.IsClient())
+  if (world.globals->game->gameState == GameState::GAME || world.IsClient())
   {
     ZoneScopedN("Interpolate transforms");
     for (auto&& [entity, transform, rtransform] : world.GetRegistry().view<const GlobalTransform, const RenderTransform>().each())
@@ -364,10 +365,10 @@ void PlayerHead::CreateRenderingMaterials(const World& world)
 
 Audio* PlayerHead::GetAudio()
 {
-  static auto poop = new NullAudio();
+  static auto nullAudio = std::make_unique<NullAudio>();
   if (!audio_)
   {
-    return poop;
+    return nullAudio.get();
   }
   return audio_.get();
 }

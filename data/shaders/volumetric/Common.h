@@ -33,6 +33,8 @@ struct VolumetricUniforms
   FVOG_SHARED Image2D outSceneLuminance;
   FVOG_SHARED Sampler linearSampler;
   FVOG_SHARED Texture1D mieScattering;
+  FVOG_SHARED Texture2D globalSurfaceHeight;
+  FVOG_SHARED Texture2D globalSurfaceFog;
 #ifndef __cplusplus
   DDGIArgs ddgi;
 #else

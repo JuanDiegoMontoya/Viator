@@ -1,6 +1,7 @@
 #include "Game/World.h"
 #include "Game/Game.h"
-#include "Game/Voxel/Grid.h"
+#include "Game/Globals.h"
+#include "Game/Voxel/grid.h"
 #include "Core/Assert2.h"
 #include "Prefab.h"
 #include "Core/Image.h"
@@ -116,7 +117,7 @@ namespace
     }
   }
 
-  enum class SurfaceBiome : uint32_t
+  enum class SurfaceBiome : uint8_t
   {
     Desert,
     Corruption,
@@ -232,9 +233,8 @@ namespace
     void PlaceSurfaceFeatures(World& world, const World::MapGenInfo& mapGenInfo, glm::ivec3 posWS) override
     {
       ZoneScoped;
-      auto& registry_ = world.GetRegistry();
-      auto& grid      = registry_.ctx().get<Voxel::Grid>();
-      auto& blocks    = registry_.ctx().get<Block::Registry>();
+      auto& grid   = world.globals->grid;
+      auto& blocks = world.globals->blockRegistry;
 
       const auto x = posWS.x;
       const auto y = posWS.y;
@@ -254,17 +254,17 @@ namespace
 
       const auto meadowness = globalMeadowImage.Load({x, z});
 
-      const bool hasSolidFloor = grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
+      const bool hasSolidFloor = grid->GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
       const auto tree          = whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4);
       if (hasSolidFloor && tree > glm::mix(0.99f, 0.998f, meadowness))
       {
-        if (registry_.ctx().get<PCG::Rng>().RandFloat() < 0.9f)
+        if (world.globals->game->rng.RandFloat() < 0.9f)
         {
-          registry_.ctx().get<PrefabRegistry>().Get("Tree").Instantiate(world, {x, y, z});
+          world.globals->prefabRegistry->Get("Tree").Instantiate(world, {x, y, z});
         }
         else
         {
-          registry_.ctx().get<PrefabRegistry>().Get("Tree2").Instantiate(world, {x, y, z});
+          world.globals->prefabRegistry->Get("Tree2").Instantiate(world, {x, y, z});
         }
       }
       else
@@ -272,36 +272,36 @@ namespace
         if (hasSolidFloor &&
             shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 9) * 0.2f < 0.03f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_01"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("bush_01"));
         }
 
         if (hasSolidFloor &&
             shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 31) * 0.7f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 30) * 0.3f >
               0.88f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_02"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("bush_02"));
         }
 
         if (hasSolidFloor &&
             shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 16) * 0.7f + whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 17) * 0.3f > 0.93f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("mushroom"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("mushroom"));
         }
         else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) * 0.7f +
                                       whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 25) * 0.3f >
                                     0.95f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rose"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("rose"));
         }
         else if (hasSolidFloor && meadowness * shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 22) * 0.7f +
                                       whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 23) * 0.3f >
                                     0.93f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("dandelion"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("dandelion"));
         }
         else if (hasSolidFloor && whiteNoise->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 24) > 0.999f)
         {
-          grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("rock_small"));
+          grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("rock_small"));
         }
         else // Because it's low priority, grass shouldn't override other foliage.
         {
@@ -312,19 +312,19 @@ namespace
           {
             if (grasss > 0.6f)
             {
-              grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_short"));
+              grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("grass_short"));
             }
             if (grasss > 0.7f)
             {
-              grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_medium"));
+              grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("grass_medium"));
             }
             if (grasss > 0.8f)
             {
-              grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("grass_long"));
+              grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("grass_long"));
             }
             if (grasss > 0.9f)
             {
-              registry_.ctx().get<PrefabRegistry>().Get("Double Grass").Instantiate(world, {x, y, z});
+              world.globals->prefabRegistry->Get("Double Grass").Instantiate(world, {x, y, z});
             }
           }
         }
@@ -383,9 +383,8 @@ namespace
     void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
     {
       ZoneScoped;
-      auto& registry_ = world.GetRegistry();
-      auto& grid      = registry_.ctx().get<Voxel::Grid>();
-      auto& blocks    = registry_.ctx().get<Block::Registry>();
+      auto& grid         = world.globals->grid;
+      const auto& blocks = world.globals->blockRegistry;
 
       auto shrimplex = FastNoise::New<FastNoise::Simplex>();
       shrimplex->SetScale(25);
@@ -403,18 +402,18 @@ namespace
       const auto y = posWS.y;
       const auto z = posWS.z;
 
-      const bool hasSolidFloor = grid.GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
+      const bool hasSolidFloor = grid->GetVoxelAtUnchecked({x, y - 1, z}) != voxel_t::Air;
 
       if (hasSolidFloor &&
           shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 4) * 0.2f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 10) * 0.8f > 0.96f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("cactus_small"));
+        grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("cactus_small"));
       }
 
       if (hasSolidFloor &&
           shrimplex->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 5) * 0.2f + whiteNoise2->GenSingle2D((float)x, (float)z, mapGenInfo.seed + 11) * 0.8f > 0.94f)
       {
-        grid.SetVoxelAtUnchecked({x, y, z}, blocks.Get("bush_03"));
+        grid->SetVoxelAtUnchecked({x, y, z}, blocks->Get("bush_03"));
       }
     }
 
@@ -531,12 +530,12 @@ namespace
 
     void PlaceSurfaceFeatures(World& world, const World::MapGenInfo& mapGenInfo, glm::ivec3 posWS) override
     {
-      auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
-      const auto water = world.GetRegistry().ctx().get<Block::Registry>().Get("water_8");
+      auto& grid = world.globals->grid;
+      const auto water = world.globals->blockRegistry->Get("water_8");
 
       for (; posWS.y < mapGenInfo.seaLevel - 10; posWS.y++)
       {
-        grid.SetVoxelAt(posWS, water);
+        grid->SetVoxelAt(posWS, water);
       }
     }
 
@@ -571,12 +570,12 @@ namespace
 
     void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const World::MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override
     {
-      //auto& grid       = world.GetRegistry().ctx().get<Voxel::Grid>();
-      //const auto water = world.GetRegistry().ctx().get<Block::Registry>().Get("water_8");
+      //auto& grid       = world.globals->grid;
+      //const auto water = world.globals->blockRegistry->Get("water_8");
 
       //for (; posWS.y < mapGenInfo.seaLevel - 15; posWS.y++)
       //{
-      //  grid.SetVoxelAt(posWS, water);
+      //  grid->SetVoxelAt(posWS, water);
       //}
     }
 
@@ -787,33 +786,33 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 {
   ZoneScoped;
 #ifndef GAME_HEADLESS
-  auto& progressText = registry_.ctx().get<std::atomic<const char*>>("progressText"_hs);
-  auto& progress     = registry_.ctx().get<std::atomic_int32_t>("progress"_hs);
-  auto& total        = registry_.ctx().get<std::atomic_int32_t>("total"_hs);
+  auto& progressText = globals->progressText;
+  auto& progress     = globals->progress;
+  auto& total        = globals->total;
 #endif
-  auto& blocks            = registry_.ctx().get<Block::Registry>();
-  const auto& placeholder = blocks.Get("placeholder");
-  const auto& dirt        = blocks.Get("dirt");
-  [[maybe_unused]] const auto& malachite = blocks.Get("malachite");
-  [[maybe_unused]] const auto& galena    = blocks.Get("galena");
-  [[maybe_unused]] const auto& water8    = blocks.Get("water_8");
+  auto& blocks            = globals->blockRegistry;
+  const auto& placeholder = blocks->Get("placeholder");
+  const auto& dirt        = blocks->Get("dirt");
+  [[maybe_unused]] const auto& malachite = blocks->Get("malachite");
+  [[maybe_unused]] const auto& galena    = blocks->Get("galena");
+  [[maybe_unused]] const auto& water8    = blocks->Get("water_8");
 
   constexpr auto samplesPerAxis = 64;
   constexpr auto sampleScale    = (float)samplesPerAxis / Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
 
-  auto& grid = registry_.ctx().get<Voxel::Grid>();
+  auto& grid = globals->grid;
 
   auto tlBrickColCoords = std::vector<glm::ivec2>();
-  for (int k = 0; k < grid.topLevelBricksDims_.z; k++)
+  for (int k = 0; k < grid->topLevelBricksDims_.z; k++)
   {
-    for (int i = 0; i < grid.topLevelBricksDims_.x; i++)
+    for (int i = 0; i < grid->topLevelBricksDims_.x; i++)
     {
       tlBrickColCoords.emplace_back(k, i);
     }
   }
 
-  auto globalSurfaceHeightImage = Core::DSP::Image<2, float>({grid.Dimensions().x, grid.Dimensions().z});
-  auto globalSurfaceBiomeImage  = Core::DSP::Image<2, SurfaceBiome>({grid.Dimensions().x, grid.Dimensions().z});
+  auto globalSurfaceHeightImage = Core::DSP::Image<2, float>({grid->Dimensions().x, grid->Dimensions().z});
+  auto globalSurfaceBiomeImage  = Core::DSP::Image<2, SurfaceBiome>({grid->Dimensions().x, grid->Dimensions().z});
 
   auto whiteNoise = FastNoise::New<FastNoise::White>();
   whiteNoise->SetOutputMin(0);
@@ -828,13 +827,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   shrimplex2->SetOutputMin(0);
 
   auto surfaceBiomes                       = std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>();
-  //surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
-  surfaceBiomes[int(SurfaceBiome::Snow)]   = std::make_unique<SnowBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("snow"), blocks.Get("dirt")});
-  //surfaceBiomes[int(SurfaceBiome::Corruption)] = std::make_unique<SurfaceCorruptionNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass_corrupt"), blocks.Get("dirt")});
-  //surfaceBiomes[int(SurfaceBiome::Ocean)]  = std::make_unique<Ocean>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
-  surfaceBiomes[int(SurfaceBiome::Rivers)]  = std::make_unique<Rivers>(SurfaceBiomeNoise::CreateInfo{blocks.Get("sand")});
-  surfaceBiomes[int(SurfaceBiome::Forest)] = std::make_unique<ForestBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks.Get("grass"), blocks.Get("dirt")},
-    glm::ivec2{grid.topLevelBricksDims_.x, grid.topLevelBricksDims_.z});
+  //surfaceBiomes[int(SurfaceBiome::Desert)] = std::make_unique<DesertBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks->Get("sand")});
+  surfaceBiomes[int(SurfaceBiome::Snow)]   = std::make_unique<SnowBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks->Get("snow"), blocks->Get("dirt")});
+  surfaceBiomes[int(SurfaceBiome::Corruption)] = std::make_unique<SurfaceCorruptionNoise>(SurfaceBiomeNoise::CreateInfo{blocks->Get("grass_corrupt"), blocks->Get("dirt")});
+  //surfaceBiomes[int(SurfaceBiome::Ocean)]  = std::make_unique<Ocean>(SurfaceBiomeNoise::CreateInfo{blocks->Get("sand")});
+  surfaceBiomes[int(SurfaceBiome::Rivers)]  = std::make_unique<Rivers>(SurfaceBiomeNoise::CreateInfo{blocks->Get("sand")});
+  surfaceBiomes[int(SurfaceBiome::Forest)] = std::make_unique<ForestBiomeNoise>(SurfaceBiomeNoise::CreateInfo{blocks->Get("grass"), blocks->Get("dirt")},
+    glm::ivec2{grid->topLevelBricksDims_.x, grid->topLevelBricksDims_.z});
 
   {
     ZoneScopedN("Surface");
@@ -848,8 +847,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto leadOre = FastNoise::NewFromEncodedNodeTree("FgIAAIA/BxUFBg@BhBCK5HoT//AxAFCw@AFxBCJqZmT8M@CP8CAACAQf///w==");
 
 #ifndef GAME_HEADLESS
-    total.store((int32_t)grid.numTopLevelBricks_);
-    progressText.store("Surface");
+    total->store((int32_t)grid->numTopLevelBricks_);
+    progressText->store("Surface");
 #endif
 
     // Column of top level bricks
@@ -938,8 +937,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   {
     ZoneScopedN("Generate rivers");
 #ifndef GAME_HEADLESS
-    progressText.store("Generate rivers");
-    progress.store(0);
+    progressText->store("Generate rivers");
+    progress->store(0);
 #endif
 
     const auto kernelXGauss = Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 21, 5);
@@ -953,13 +952,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
     FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
 
-    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), mapGenInfo.seed + 123456, grid.Dimensions().x, grid.Dimensions().z, Core::DSP::Filter::Nearest);
+    const auto riverMask0 = GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), mapGenInfo.seed + 123456, grid->Dimensions().x, grid->Dimensions().z, Core::DSP::Filter::Nearest);
 
     const auto riverMask1 = riverMask0.Map([](float v) { return glm::smoothstep(0.8f, 1.0f, 1 - v); });
     const auto riverMask2 = riverMask1.Convolve(kernelXGauss);
     const auto riverMask3 = riverMask2.Convolve(kernelYGauss);
 
-    const auto erodedTerrain = globalSurfaceHeightImage.Map(
+    auto erodedTerrain = globalSurfaceHeightImage.Map(
       [&](glm::ivec2 pos, float originalHeight)
       {
         const auto blurredHeight = blur2.Load(pos);
@@ -970,6 +969,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         }
         return glm::mix(originalHeight, blurredHeight - 15, riverness);
       });
+
+    globalSurfaceHeightImage = std::move(erodedTerrain);
 
     //const auto map  = [](float v) { return glm::min(255.0f, v * 256); };
     //const auto out1 = Map<uint8_t>(riverMask1, map);
@@ -994,7 +995,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int i = tlBrickColCoord[1];
 
         // Top level bricks
-        for (int j = 0; j < grid.topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
+        for (int j = 0; j < grid->topLevelBricksDims_.y; j++) // Y last so we can compute heightmap once
         {
           ZoneScopedN("Top level brick");
           const auto tl = glm::ivec3{i, j, k};
@@ -1002,7 +1003,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
-              const auto height     = erodedTerrain.Load({positionWS.x, positionWS.z});
+              const auto height     = globalSurfaceHeightImage.Load({positionWS.x, positionWS.z});
               const auto biome      = globalSurfaceBiomeImage.Load({positionWS.x, positionWS.z});
               const auto& biomeInfo = surfaceBiomes[int(biome)];
 
@@ -1041,14 +1042,14 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
               if (blockTypeToSet != voxel_t::Air)
               {
-                grid.SetVoxelAtUncheckedNoDirty(positionWS, blockTypeToSet);
+                grid->SetVoxelAtUncheckedNoDirty(positionWS, blockTypeToSet);
               }
             });
 
-          grid.MarkTopLevelBrickAndChildrenDirty(tl);
-          grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
+          grid->MarkTopLevelBrickAndChildrenDirty(tl);
+          grid->CoalesceTopLevelBrickAndChildren(grid->GetTopLevelBrickPointerFromTopLevelPosition(tl));
 #ifndef GAME_HEADLESS
-          progress.fetch_add(1);
+          progress->fetch_add(1);
 #endif
         }
       });
@@ -1056,36 +1057,35 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     if (mapGenInfo.settleLiquids)
     {
       ZoneScopedN("Settle liquids");
-    constexpr int numIterations = 150;
+      constexpr int numIterations = 150;
 #ifndef GAME_HEADLESS
-    progressText.store("Settle water");
-    progress.store(0);
-    total.store(numIterations);
+      progressText->store("Settle liquids");
+      progress->store(0);
+      total->store(numIterations);
 #endif
-    for (int i = 0; i < numIterations; i++)
-    {
-      this->ProcessBlockTickQueue();
+      for (int i = 0; i < numIterations; i++)
+      {
+        this->ProcessBlockTickQueue();
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+        progress->fetch_add(1);
 #endif
+      }
     }
-
-    registry_.ctx().get<World::WaterQueue>().clear();
   }
 
   if (true)
   {
     ZoneScopedN("Underground Biomes");
 #ifndef GAME_HEADLESS
-    progressText.store("Caves");
-    progress.store(0);
+    progressText->store("Caves");
+    progress->store(0);
 #endif
 
     auto undergroundBiomes = std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>();
-    //undergroundBiomes[int(UndergroundBiome::DesertCaves)] = std::make_unique<DesertCaves>(blocks.Get("sand"));
-    undergroundBiomes[int(UndergroundBiome::FunkyCaves)] = std::make_unique<FunkyCaves>(blocks.Get("dirt"));
-    undergroundBiomes[int(UndergroundBiome::Corruption)] = std::make_unique<UndergroundCorruption>(blocks.Get("stone_corrupt"));
-    undergroundBiomes[int(UndergroundBiome::SurfaceCaves)] = std::make_unique<SurfaceCaves>(blocks.Get("stone"));
+    //undergroundBiomes[int(UndergroundBiome::DesertCaves)] = std::make_unique<DesertCaves>(blocks->Get("sand"));
+    undergroundBiomes[int(UndergroundBiome::FunkyCaves)] = std::make_unique<FunkyCaves>(blocks->Get("dirt"));
+    undergroundBiomes[int(UndergroundBiome::Corruption)] = std::make_unique<UndergroundCorruption>(blocks->Get("stone_corrupt"));
+    undergroundBiomes[int(UndergroundBiome::SurfaceCaves)] = std::make_unique<SurfaceCaves>(blocks->Get("stone"));
 
     std::for_each(std::execution::par,
       tlBrickColCoords.begin(),
@@ -1097,7 +1097,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int i = tlBrickColCoord[1];
 
         // Top level bricks
-        for (int j = 0; j < grid.topLevelBricksDims_.y; j++)
+        for (int j = 0; j < grid->topLevelBricksDims_.y; j++)
         {
           ZoneScopedN("Top level brick");
 
@@ -1107,7 +1107,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           {
             if (undergroundBiomes[m] != nullptr && undergroundBiomes[m]->BroadPhase({i, j, k}))
             {
-              biomeDensities[m] = undergroundBiomes[m]->GenImageForChunk({i, j, k}, grid.topLevelBricksDims_, mapGenInfo);
+              biomeDensities[m] = undergroundBiomes[m]->GenImageForChunk({i, j, k}, grid->topLevelBricksDims_, mapGenInfo);
             }
           }
 
@@ -1171,26 +1171,26 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               const auto density = sumDensities / sumWeights;
 
               {
-                const auto blockAtPos = grid.GetVoxelAtUnchecked(positionWS);
+                const auto blockAtPos = grid->GetVoxelAtUnchecked(positionWS);
                 const auto biomeAtPos = globalSurfaceBiomeImage.Load({positionWS.x, positionWS.z});
                 if (density >= 0.0f && 
-                  //grid.GetVoxelAt(positionWS + Block::DirectionToNeighbor(Block::Direction::Up)) != water8
+                  //grid->GetVoxelAt(positionWS + Block::DirectionToNeighbor(Block::Direction::Up)) != water8
                     !(blockAtPos == water8 || (biomeAtPos == SurfaceBiome::Rivers && blockAtPos == surfaceBiomes[int(biomeAtPos)]->GetSurfaceBlockType()))
                   )
                 {
-                  grid.SetVoxelAtUncheckedNoDirty(positionWS, voxel_t::Air);
+                  grid->SetVoxelAtUncheckedNoDirty(positionWS, voxel_t::Air);
                 }
                 else if (blockAtPos == placeholder)
                 {
-                  grid.SetVoxelAtUncheckedNoDirty(positionWS, undergroundBiomes[int(biome)]->GetSubstrateBlockType());
+                  grid->SetVoxelAtUncheckedNoDirty(positionWS, undergroundBiomes[int(biome)]->GetSubstrateBlockType());
                 }
               }
             });
 
-          grid.MarkTopLevelBrickAndChildrenDirty(tl);
-          grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
+          grid->MarkTopLevelBrickAndChildrenDirty(tl);
+          grid->CoalesceTopLevelBrickAndChildren(grid->GetTopLevelBrickPointerFromTopLevelPosition(tl));
 #ifndef GAME_HEADLESS
-          progress.fetch_add(1);
+          progress->fetch_add(1);
 #endif
         }
       });
@@ -1200,27 +1200,27 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   if (true)
   {
 #ifndef GAME_HEADLESS
-    progressText.store("Surface foliage");
-    total.store(grid.dimensions_.x * grid.dimensions_.z);
-    progress.store(0);
+    progressText->store("Surface foliage");
+    total->store(grid->dimensions_.x * grid->dimensions_.z);
+    progress->store(0);
 #endif
-    for (int z = 0; z < grid.dimensions_.z; z++)
-    for (int x = 0; x < grid.dimensions_.x; x++)
+    for (int z = 0; z < grid->dimensions_.z; z++)
+    for (int x = 0; x < grid->dimensions_.x; x++)
     {
       const auto biome = globalSurfaceBiomeImage.Load({x, z});
       const auto y = (int)globalSurfaceHeightImage.Load({x, z});
       surfaceBiomes[int(biome)]->PlaceSurfaceFeatures(*this, mapGenInfo, {x, y, z});
 
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+      progress->fetch_add(1);
 #endif
     }
   }
   #endif
 #ifndef GAME_HEADLESS
-  progressText.store("Vines");
-  total.store(grid.topLevelBricksDims_.x * grid.topLevelBricksDims_.y * grid.topLevelBricksDims_.z);
-  progress.store(0);
+  progressText->store("Vines");
+  total->store(grid->topLevelBricksDims_.x * grid->topLevelBricksDims_.y * grid->topLevelBricksDims_.z);
+  progress->store(0);
 #endif
 
   struct PrefabAndPosition
@@ -1244,7 +1244,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         const int k = tlBrickColCoord[0];
         const int i = tlBrickColCoord[1];
 
-        for (int j = 0; j < grid.topLevelBricksDims_.y; j++)
+        for (int j = 0; j < grid->topLevelBricksDims_.y; j++)
         {
           ZoneScopedN("Top level brick");
 
@@ -1268,13 +1268,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
             [&](glm::ivec3 positionWS)
             {
               const auto tlLocal = positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
-              if (grid.GetVoxelAtUnchecked(positionWS) == voxel_t::Air)
+              if (grid->GetVoxelAtUnchecked(positionWS) == voxel_t::Air)
               {
                 const auto aboveWS = positionWS + glm::ivec3(0, 1, 0);
                 const auto belowWS = positionWS + glm::ivec3(0, -1, 0);
-                if (aboveWS.y < grid.dimensions_.y - 1)
+                if (aboveWS.y < grid->dimensions_.y - 1)
                 {
-                  const auto aboveBlock = grid.GetVoxelAtUnchecked(aboveWS);
+                  const auto aboveBlock = grid->GetVoxelAtUnchecked(aboveWS);
                   if (aboveBlock != voxel_t::Air)
                   {
                     if (simplexImage.Load(tlLocal) + whiteImage.Load(tlLocal) * 0.3f < 0.05f)
@@ -1282,11 +1282,11 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
                       auto lk = std::unique_lock(mutex);
                       if (aboveBlock == dirt)
                       {
-                        prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Root"), positionWS);
+                        prefabs.emplace_back(&globals->prefabRegistry->Get("Root"), positionWS);
                       }
                       else
                       {
-                        prefabs.emplace_back(&registry_.ctx().get<PrefabRegistry>().Get("Vine"), positionWS);
+                        prefabs.emplace_back(&globals->prefabRegistry->Get("Vine"), positionWS);
                       }
                     }
                   }
@@ -1294,29 +1294,29 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
                 if (belowWS.y > 0)
                 {
-                  const auto belowBlock = grid.GetVoxelAtUnchecked(belowWS);
+                  const auto belowBlock = grid->GetVoxelAtUnchecked(belowWS);
                   if (belowBlock == dirt && whiteImage.Load(tlLocal) > 0.98f)
                   {
-                    grid.SetVoxelAtNoDirty(positionWS, blocks.Get("pot"));
+                    grid->SetVoxelAtNoDirty(positionWS, blocks->Get("pot"));
                   }
                 }
               }
             });
 
 #ifndef GAME_HEADLESS
-          progress.fetch_add(1);
+          progress->fetch_add(1);
 #endif
-          grid.MarkTopLevelBrickAndChildrenDirty(tl);
-          grid.CoalesceTopLevelBrickAndChildren(grid.GetTopLevelBrickPointerFromTopLevelPosition(tl));
+          grid->MarkTopLevelBrickAndChildrenDirty(tl);
+          grid->CoalesceTopLevelBrickAndChildren(grid->GetTopLevelBrickPointerFromTopLevelPosition(tl));
         }
       });
   }
 
   {
 #ifndef GAME_HEADLESS
-    progressText.store("Instantiate prefabs");
-    total.store(int(prefabs.size()));
-    progress.store(0);
+    progressText->store("Instantiate prefabs");
+    total->store(int(prefabs.size()));
+    progress->store(0);
 #endif
 
     ZoneScopedN("Instantiate Prefabs");
@@ -1324,7 +1324,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     {
       prefab->Instantiate(*this, positionWS);
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+      progress->fetch_add(1);
 #endif
     }
   }
@@ -1335,19 +1335,19 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     auto bigTreeNoise = FastNoise::NewFromEncodedNodeTree(
       "FgMVBRoFGwUVBRcFBQMs@EFBgAAgAVDB@AoMAIAACgQP//BwQEAACAP/8LLAAC@BBSUF/wAA////AygJAABvEgM8/wAApptEPP8DLAAC@BBSw@EUlAAI@BFBgQ@C/////wY@C//8CAACAv/8CAACAv/8CAACAP/8DFwUbBQQEzcxMvQYAACDC//8DFgMbBQQEzczMvP8DFQUXBRsFGgUVBQQEj8L1PP8DJQAD@BBSwFBg@APZBB@DI@BP/////8CAACAP///AxUFGQU@CgL///wIK1yM8//8DFQUXBQUHBAQAAIA///8CbxKDOv8D/xsA////Bw8FE@BMZCBQY@ADJQv8CmpnKQv//////BxYCAACAPwcaBRsFHAUdBRUFE@AgDBDBSUABg@BUGAACAg0L//wMXBRUFFwUFBnuUFkP/AlJJnTn/AvYokkL/AmZmpkD//wP/LgD/AgrXo7z/AgAAgD//AgrXo7z/AgAAgD////8=");
 
-    auto& rng          = registry_.ctx().get<PCG::Rng>();
+    auto& rng          = globals->game->rng;
     const auto fractXZ = glm::vec2(rng.RandFloat(0.4f, 0.6f), rng.RandFloat(0.4f, 0.6f));
-    const auto posXZ   = glm::ivec2(fractXZ * glm::vec2(grid.dimensions_.x, grid.dimensions_.z) + 0.5f);
+    const auto posXZ   = glm::ivec2(fractXZ * glm::vec2(grid->dimensions_.x, grid->dimensions_.z) + 0.5f);
     const auto posY    = globalSurfaceHeightImage.Load(posXZ);
     const auto pos     = glm::ivec3(posXZ[0], posY, posXZ[1]);
     const auto bot     = glm::ivec3(glm::vec3(pos / Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE) + 0.5f);
     const auto top     = bot + 1 + glm::ivec3(0, 1, 0);
 
 #ifndef GAME_HEADLESS
-    progressText.store("Yggdrasil");
+    progressText->store("Yggdrasil");
     const auto dif = top - bot + 1;
-    total.store(dif.x * dif.y * dif.z);
-    progress.store(0);
+    total->store(dif.x * dif.y * dif.z);
+    progress->store(0);
 #endif
 
     for (int tz = bot.z; tz <= top.z; tz++)
@@ -1372,24 +1372,24 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           {
             if (density <= 0)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("wood"));
+              grid->SetVoxelAt(positionWS, blocks->Get("wood"));
             }
           }
           else
           {
             if (density <= -0.032f)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("wood"));
+              grid->SetVoxelAt(positionWS, blocks->Get("wood"));
             }
             else if (density <= 0.0f)
             {
-              grid.SetVoxelAt(positionWS, blocks.Get("leaves_01"));
+              grid->SetVoxelAt(positionWS, blocks->Get("leaves_01"));
             }
           }
         });
 
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+      progress->fetch_add(1);
 #endif
     }
   }
@@ -1398,18 +1398,18 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     ZoneScopedN("Ruins");
     constexpr int DUNGEON_CELL_SIZE = 16; // One attempt per cell.
 #ifndef GAME_HEADLESS
-    progressText.store("Ruins");
-    total.store((grid.dimensions_.x / DUNGEON_CELL_SIZE) * (grid.dimensions_.y / DUNGEON_CELL_SIZE) * (grid.dimensions_.z / DUNGEON_CELL_SIZE));
-    progress.store(0);
+    progressText->store("Ruins");
+    total->store((grid->dimensions_.x / DUNGEON_CELL_SIZE) * (grid->dimensions_.y / DUNGEON_CELL_SIZE) * (grid->dimensions_.z / DUNGEON_CELL_SIZE));
+    progress->store(0);
 #endif
 
     auto rng = PCG::Rng(mapGenInfo.seed);
-    for (int zt = 0; zt < grid.dimensions_.z / DUNGEON_CELL_SIZE; zt++)
-    for (int yt = 0; yt < grid.dimensions_.y / DUNGEON_CELL_SIZE; yt++)
-    for (int xt = 0; xt < grid.dimensions_.x / DUNGEON_CELL_SIZE; xt++)
+    for (int zt = 0; zt < grid->dimensions_.z / DUNGEON_CELL_SIZE; zt++)
+    for (int yt = 0; yt < grid->dimensions_.y / DUNGEON_CELL_SIZE; yt++)
+    for (int xt = 0; xt < grid->dimensions_.x / DUNGEON_CELL_SIZE; xt++)
     {
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+      progress->fetch_add(1);
 #endif
       if (rng.RandFloat() < 0.15f)
       {
@@ -1424,7 +1424,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           const auto surfaceHeight = int(globalSurfaceHeightImage.Load({posWS.x, posWS.z}));
           if (posWS.y <= surfaceHeight - 8 && posWS.y >= mapGenInfo.seaLevel - mapGenInfo.surfaceThickness)
           {
-            registry_.ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(*this, posWS);
+            globals->prefabRegistry->Get("AbandonedHouse").Instantiate(*this, posWS);
             break;
           }
         }
@@ -1436,18 +1436,18 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     ZoneScopedN("Floating Islands");
     constexpr int ISLAND_CELL_SIZE = 64; // One attempt per cell.
 #ifndef GAME_HEADLESS
-    progressText.store("Floating islands");
-    total.store((grid.dimensions_.x / ISLAND_CELL_SIZE) * (grid.dimensions_.y / ISLAND_CELL_SIZE) * (grid.dimensions_.z / ISLAND_CELL_SIZE));
-    progress.store(0);
+    progressText->store("Floating islands");
+    total->store((grid->dimensions_.x / ISLAND_CELL_SIZE) * (grid->dimensions_.y / ISLAND_CELL_SIZE) * (grid->dimensions_.z / ISLAND_CELL_SIZE));
+    progress->store(0);
 #endif
 
     auto rng = PCG::Rng(mapGenInfo.seed);
-    for (int zt = 0; zt < grid.dimensions_.z / ISLAND_CELL_SIZE; zt++)
-    for (int yt = 0; yt < grid.dimensions_.y / ISLAND_CELL_SIZE; yt++)
-    for (int xt = 0; xt < grid.dimensions_.x / ISLAND_CELL_SIZE; xt++)
+    for (int zt = 0; zt < grid->dimensions_.z / ISLAND_CELL_SIZE; zt++)
+    for (int yt = 0; yt < grid->dimensions_.y / ISLAND_CELL_SIZE; yt++)
+    for (int xt = 0; xt < grid->dimensions_.x / ISLAND_CELL_SIZE; xt++)
     {
 #ifndef GAME_HEADLESS
-      progress.fetch_add(1);
+      progress->fetch_add(1);
 #endif
       if (rng.RandFloat() < 0.1f)
       {
@@ -1458,12 +1458,12 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           // Spawn prefab somewhere within the cell.
           const auto posSub = glm::ivec3(rng.RandU32() % ISLAND_CELL_SIZE, rng.RandU32() % ISLAND_CELL_SIZE, rng.RandU32() % ISLAND_CELL_SIZE);
           const auto posWS  = posCell * ISLAND_CELL_SIZE + posSub;
-          const auto posFraction = glm::vec3(posWS) / glm::vec3(grid.dimensions_);
+          const auto posFraction = glm::vec3(posWS) / glm::vec3(grid->dimensions_);
 
           const auto surfaceHeight = int(globalSurfaceHeightImage.Load({posWS.x, posWS.z}));
           if (posWS.y >= surfaceHeight + 125 && posFraction.x < 0.9f && posFraction.y < 0.9f && posFraction.z < 0.9f)
           {
-            registry_.ctx().get<PrefabRegistry>().Get("FloatingIsland").Instantiate(*this, posWS);
+            globals->prefabRegistry->Get("FloatingIsland").Instantiate(*this, posWS);
             break;
           }
         }
@@ -1471,6 +1471,31 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
-  grid.CoalesceDirtyBricks();
-  registry_.ctx().get<World::WaterQueue>().clear();
+  grid->CoalesceDirtyBricks();
+
+  const auto fogMask = globalSurfaceBiomeImage.Map<float>(
+    [](SurfaceBiome biome)
+    {
+      if (biome == SurfaceBiome::Rivers)
+      {
+        return 1;
+      }
+
+      if (biome == SurfaceBiome::Corruption)
+      {
+        return 3;
+      }
+
+      return 0;
+    });
+
+  const auto fog2 = fogMask.Convolve(Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 41, 7));
+  auto fog3 = fog2.Convolve(Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::Y, 41, 7));
+
+  const auto height2 = globalSurfaceHeightImage.Convolve(Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::X, 15, 5));
+  auto height3 = height2.Convolve(Core::DSP::CreateSeparableGaussianKernel2D(Core::DSP::SeparableKernelDirection::Y, 15, 5));
+
+  *globals->globalSurfaceHeight = std::move(height3);
+  *globals->globalSurfaceFog = std::move(fog3);
+  globals->waterQueue->clear();
 }

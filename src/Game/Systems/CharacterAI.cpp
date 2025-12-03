@@ -2,6 +2,7 @@
 
 #include "Client/debug/Shapes.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/Pathfinding.h"
 #include "Game/World.h"
 #include "Game/Voxel/Grid.h"
@@ -261,7 +262,7 @@ void Systems::UpdateInputForPathfindingCharacters(World& world, float dt)
           }
 
           // path                 = Pathfinding::FindPath(*this, {.start = myFootPos, .goal = targetFootPos, .height = myHeight, .w = 1.5f});
-          path = registry_.ctx().get<Pathfinding::PathCache>().FindOrGetCachedPath(world,
+          path = world.globals->game->pathCache->FindOrGetCachedPath(world,
             {
               .start  = glm::ivec3(myFootPos),
               .goal   = glm::ivec3(targetFootPos),
@@ -284,13 +285,13 @@ void Systems::UpdateInputForPathfindingCharacters(World& world, float dt)
         if (wb->accumulator > wb->timeBetweenMoves)
         {
           wb->accumulator  = 0;
-          const auto& grid = registry_.ctx().get<Voxel::Grid>();
-          auto& rng        = registry_.ctx().get<PCG::Rng>();
+          const auto& grid = *world.globals->grid;
+          auto& rng        = world.globals->game->rng;
           for (int i = 0; i < 5; i++)
           {
             if (auto pos = SampleWalkablePosition(grid, rng, aiTransform.position, wb->minWanderDistance, wb->maxWanderDistance, wb->targetCanBeFloating))
             {
-              path = registry_.ctx().get<Pathfinding::PathCache>().FindOrGetCachedPath(world,
+              path = world.globals->game->pathCache->FindOrGetCachedPath(world,
                 {
                   .start            = glm::ivec3(myFootPos),
                   .goal             = glm::ivec3(*pos),
@@ -314,9 +315,9 @@ void Systems::UpdateInputForPathfindingCharacters(World& world, float dt)
       {
 #ifndef GAME_HEADLESS
         // Render path
-        if (registry_.ctx().get<Debugging>().drawPathLines)
+        if (world.globals->game->debugging.drawPathLines)
         {
-          auto& lines = registry_.ctx().get<std::vector<Debug::Line>>();
+          auto& lines = world.globals->debugLines;
           for (size_t i = 1; i < path.size(); i++)
           {
             lines.emplace_back(Debug::Line{

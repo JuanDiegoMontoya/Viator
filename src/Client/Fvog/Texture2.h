@@ -176,6 +176,12 @@ namespace Fvog
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
+    [[nodiscard]] shared::UTexture2D GetUTexture2D() noexcept
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
+      return {sampledDescriptorInfo_.value().GpuResource().index};
+    }
+
     [[nodiscard]] shared::Texture2DArray GetTexture2DArray() noexcept
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);

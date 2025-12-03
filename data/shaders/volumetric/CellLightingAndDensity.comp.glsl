@@ -18,6 +18,7 @@ vec3 phaseTex(float cosTheta)
 
 vec4 FogAtPoint(vec3 wPos)
 {
+  const vec3 ogPos = wPos;
   wPos -= vec3(50, 350, 50);
   // ground fog
   vec3 t = vec3(.2, 0.1, .3) * uniforms.time;
@@ -32,6 +33,16 @@ vec4 FogAtPoint(vec3 wPos)
   d *= 1.0 - smoothstep(0, 10, distance(abs(wPos.xz), vec2(0)) - 650);
   
   vec3 c = vec3(1, 1, 1); // base color
+
+  const ivec2 wSize = textureSize(uniforms.globalSurfaceHeight, 0);
+  //const ivec2 wPos2 = clamp(ivec2(wPos.xz), ivec2(0), wSize - 1);
+  const ivec2 wPos2 = ivec2(ogPos.xz);
+  if (all(greaterThanEqual(wPos2, ivec2(0))) && all(lessThan(wPos2, wSize)))
+  {
+    const float height = texelFetch(uniforms.globalSurfaceHeight, wPos2, 0).x;
+    const float fogginess = texelFetch(uniforms.globalSurfaceFog, wPos2, 0).x;
+    d += 3 * (1 - smoothstep(3, 8, abs(height - ogPos.y))) * fogginess;
+  }
 
   return vec4(c, d);
 }

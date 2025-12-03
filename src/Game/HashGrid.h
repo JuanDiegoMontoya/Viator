@@ -16,7 +16,7 @@ public:
   using ActualKey = glm::ivec3; // Provided "keys" are quantized
   using Value = entt::entity;
 
-  HashGrid(int chunkSize) : chunkSize_(chunkSize) {}
+  HashGrid(int chunkSize = 16) : chunkSize_(chunkSize) {}
 
   int ChunkSize() const
   {

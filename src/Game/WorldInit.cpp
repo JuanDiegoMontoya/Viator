@@ -7,6 +7,7 @@
 #include "World.h"
 #include "Game.h"
 #include "Voxel/Grid.h"
+#include "Game/Globals.h"
 
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
@@ -18,8 +19,8 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
-    const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
+    const auto& blocks = *world.globals->blockRegistry;
+    const auto& items  = *world.globals->itemRegistry;
     const auto& air    = blocks.Get("Air");
     const auto& wood   = blocks.Get("Wood Plank");
     const auto& chest  = blocks.Get("Cheste");
@@ -71,12 +72,12 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks    = world.GetRegistry().ctx().get<Block::Registry>();
+    const auto& blocks    = *world.globals->blockRegistry;
     const auto& vinesMain = blocks.Get("vines_main");
     const auto& vinesEnd  = blocks.Get("vines_end");
 
     // Count number of air blocks starting from worldPos.
-    auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+    auto& grid = *world.globals->grid;
     int freeRealEstate = 0;
     for (int y = 0; y > -5; y--)
     {
@@ -109,12 +110,12 @@ public:
 
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
-    const auto& blocks    = world.GetRegistry().ctx().get<Block::Registry>();
+    const auto& blocks    = *world.globals->blockRegistry;
     const auto& rootsMain = blocks.Get("roots_main");
     const auto& rootsEnd  = blocks.Get("roots_end");
 
     // Count number of air blocks starting from worldPos.
-    auto& grid         = world.GetRegistry().ctx().get<Voxel::Grid>();
+    auto& grid         = *world.globals->grid;
     int freeRealEstate = 0;
     for (int y = 0; y > -3; y--)
     {
@@ -148,9 +149,9 @@ public:
   void Instantiate(World& world, glm::ivec3 worldPos) const override
   {
     ZoneScoped;
-    auto& grid         = world.GetRegistry().ctx().get<Voxel::Grid>();
-    const auto& blocks = world.GetRegistry().ctx().get<Block::Registry>();
-    const auto& items  = world.GetRegistry().ctx().get<Item::Registry>();
+    auto& grid         = *world.globals->grid;
+    const auto& blocks = *world.globals->blockRegistry;
+    const auto& items  = *world.globals->itemRegistry;
     const auto& air    = blocks.Get("air");
     const auto& wood   = blocks.Get("plank_wood");
     
@@ -159,7 +160,7 @@ public:
     constexpr int ROOM_HEIGHT  = 6;
     constexpr int MAX_SUPPORT_LENGTH = 10;
 
-    auto& rng             = world.GetRegistry().ctx().get<PCG::Rng>();
+    auto& rng             = world.globals->game->rng;
     const auto roomWidth  = rng.RandU32(MIN_ROOM_DIM, MAX_ROOM_DIM + 1);
     const auto roomLength = rng.RandU32(MIN_ROOM_DIM, MAX_ROOM_DIM + 1);
     for (uint32_t zl = 0; zl < roomLength; zl++)
@@ -247,11 +248,11 @@ public:
     auto cloudNoise = FastNoise::NewFromEncodedNodeTree(
       "JQAK@BBRUFFwUOBQsAAIDSQgRI4erACI/C9b7//wMNBQY@ADiQQT2KFw/CNejEED///8DFgMXBQUDFwUE@BgD//AwAAw/UoP///CxcF/wYAAwQIAACAP////wIK1yM8/waPwvU9////");
     constexpr auto regionSize = glm::ivec3(75, 32, 75);
-    const auto& blocks        = world.GetRegistry().ctx().get<Block::Registry>();
-    const auto& grid          = world.GetRegistry().ctx().get<Voxel::Grid>();
+    const auto& blocks        = *world.globals->blockRegistry;
+    const auto& grid          = *world.globals->grid;
     const auto& cloudA        = blocks.Get("cloud");
     const auto& cloudB        = blocks.Get("cloud_b");
-    const auto seed           = int(world.GetRegistry().ctx().get<PCG::Rng>().RandU32(0, 1 << 20));
+    const auto seed           = int(world.globals->game->rng.RandU32(0, 1 << 20));
 
     // Island shape
     for (int zl = -regionSize.z / 2; zl <= regionSize.z / 2; zl++)
@@ -281,22 +282,18 @@ public:
       }
     }
 
-    world.GetRegistry().ctx().get<PrefabRegistry>().Get("AbandonedHouse").Instantiate(world, worldPos + glm::ivec3(0, structureY, 0));
+    world.globals->prefabRegistry->Get("AbandonedHouse").Instantiate(world, worldPos + glm::ivec3(0, structureY, 0));
   }
 };
 
 Physics::Engine& World::GetPhysicsEngine()
 {
-  auto* engine = registry_.ctx().find<std::unique_ptr<Physics::Engine>>();
-  ASSERT(engine);
-  return **engine;
+  return *globals->physics;
 }
 
 const Physics::Engine& World::GetPhysicsEngine() const
 {
-  const auto* engine = registry_.ctx().find<std::unique_ptr<Physics::Engine>>();
-  ASSERT(engine);
-  return **engine;
+  return *globals->physics;
 }
 
 void World::InitializeGameState()
@@ -308,18 +305,17 @@ void World::InitializeGameState()
     registry_.destroy(e);
   }
 
-  registry_.ctx().insert_or_assign<NpcSpawnDirector>(NpcSpawnDirector{*this});
-  registry_.ctx().insert_or_assign<bool>("UpdateNPCSpawnDirector"_hs, true);
-
+  globals->game->npcSpawnDirector = {};
+  globals->game->updateNpcSpawnDirector = true;
   // Reset RNG
-  registry_.ctx().insert_or_assign<PCG::Rng>(1234);
+  globals->game->rng                    = PCG::Rng(1234);
 }
 
 void World::InitializeGameDefinitions()
 {
   ZoneScoped;
   // Reset entity prefab registry
-  auto& entityPrefabs               = registry_.ctx().insert_or_assign<EntityPrefabRegistry>({});
+  auto& entityPrefabs               = *globals->entityPrefabRegistry = {};
   [[maybe_unused]] auto meleeFrogId = entityPrefabs.Add("Melee Frog", new MeleeFrogDefinition({.name = "Melee Frog", .spawnChance = 0.095f}));
   [[maybe_unused]] auto flyingFrogId =
     entityPrefabs.Add("Flying Frog", new FlyingFrogDefinition({.name = "Flying Frog", .spawnChance = 0.035f, .canSpawnFloating = true}));
@@ -329,7 +325,7 @@ void World::InitializeGameDefinitions()
   [[maybe_unused]] auto wormBossId = entityPrefabs.Add("Worm Boss", new WormBossDefinition());
 
   // Reset item registry
-  auto& items = registry_.ctx().insert_or_assign<Item::Registry>({});
+  auto& items = *globals->itemRegistry = {};
 
   const auto gunId = Item::CreateGun(items, "weapon_m4", "M4", 800, {});
   Item::CreateGun(items,
@@ -501,7 +497,7 @@ void World::InitializeGameDefinitions()
     .pullAcceleration = 10,
   };
 
-  auto& blocks = registry_.ctx().insert_or_assign<Block::Registry>({});
+  auto& blocks = *globals->blockRegistry = {};
 
   const auto stoneBlock = Block::CreateStandardBlock(*this,
     {
@@ -1036,7 +1032,7 @@ void World::InitializeGameDefinitions()
         .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = chestId},
       }));
 
-  auto& prefabs = registry_.ctx().insert_or_assign<PrefabRegistry>({});
+  auto& prefabs = *globals->prefabRegistry = {};
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();
 
@@ -1093,7 +1089,7 @@ void World::InitializeGameDefinitions()
   prefabs.Add(new AbandonedHousePrefab({.name = "AbandonedHouse"}));
   prefabs.Add(new FloatingIslandPrefab({.name = "FloatingIsland"}));
 
-  [[maybe_unused]] auto& crafting = registry_.ctx().insert_or_assign<Crafting>({});
+  [[maybe_unused]] auto& crafting = globals->game->crafting = {};
   
   crafting.recipes.emplace_back(Crafting::Recipe{
     {{stoneBlockId, 15}},
@@ -1212,7 +1208,7 @@ void World::InitializeGameDefinitions()
     .description = "Makes a really useful item for storing stuff. This block can be placed and interacted with by pressing F.",
   });
 
-  auto& loot        = registry_.ctx().insert_or_assign<LootRegistry>({});
+  auto& loot        = globals->game->lootRegistry = {};
   auto standardLoot = std::make_unique<LootDrops>();
   standardLoot->drops.emplace_back(RandomLootDrop{
     .item         = coinId,
@@ -1250,7 +1246,7 @@ void World::InitializeGameDefinitions()
 
 void World::CreateGrid(glm::ivec3 numChunks)
 {
-  registry_.ctx().insert_or_assign(Voxel::Grid(numChunks));
+  *globals->grid = Voxel::Grid(numChunks);
   CreateRenderingMaterials();
 }
 
@@ -1258,7 +1254,7 @@ void World::CreateRenderingMaterials()
 {
   ZoneScoped;
   auto voxelMats = std::vector<Voxel::Grid::Material>();
-  const auto& blocks = registry_.ctx().get<Block::Registry>();
+  const auto& blocks = *globals->blockRegistry;
   const auto& blockMap = blocks.GetIdToTagMap();
   for (const auto& [id, tag] : blockMap)
   {
@@ -1268,9 +1264,9 @@ void World::CreateRenderingMaterials()
       .subGrid   = Block::GetSubGrid(*this, id),
     });
   }
-  registry_.ctx().get<Voxel::Grid>().SetMaterialArray(std::move(voxelMats));
+  globals->grid->SetMaterialArray(std::move(voxelMats));
 
-  auto* head = registry_.ctx().get<Head*>();
+  auto* head = globals->head;
   head->CreateRenderingMaterials(*this);
 }
 

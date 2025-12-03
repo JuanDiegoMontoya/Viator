@@ -1,6 +1,7 @@
 #include "Physics.h"
 #include "Game/World.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/Voxel/Grid.h"
 
 #include "PhysicsUtils.h"
@@ -744,7 +745,7 @@ namespace Physics
         JPH::ShapeFilter(),
         [&](voxel_t voxel) -> bool
         {
-          auto& blockReg = world.GetRegistry().ctx().get<Block::Registry>();
+          auto& blockReg = *world.globals->blockRegistry;
           if (blockReg.GetRegistry().try_get<Block::Component::Flows>(entt::entity(voxel)))
           {
             return true;
@@ -939,9 +940,9 @@ namespace Physics
     // Simulate projectiles
     for (auto&& [entity, gt, lt, projectile, linearVelocity] : world.GetRegistry().view<const GlobalTransform, LocalTransform, Projectile, LinearVelocity>().each())
     {
-      auto& grid       = world.GetRegistry().ctx().get<Voxel::Grid>();
+      auto& grid       = *world.globals->grid;
       const auto voxel = grid.GetVoxelAt(gt.position);
-      if (world.GetRegistry().ctx().get<Block::Registry>().GetRegistry().all_of<Block::Component::Flows>(entt::entity(voxel)))
+      if (world.globals->blockRegistry->GetRegistry().all_of<Block::Component::Flows>(entt::entity(voxel)))
       {
         if (const auto* subGrid = grid.materials_[(int)voxel].subGrid)
         {
@@ -1048,7 +1049,7 @@ namespace Physics
     contactPersistedPairs.clear();
 
 #ifdef JPH_DEBUG_RENDERER
-    const auto debug = world.GetRegistry().ctx().get<Debugging>();
+    const auto debug = world.globals->game->debugging;
     debugRenderer->ClearPrimitives();
     for (auto&& [entity, transform] : world.GetRegistry().view<const LocalPlayer, const GlobalTransform>().each())
     {

@@ -3,6 +3,7 @@
 #include "Core/Serialization.h"
 #include "Core/Reflection.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
@@ -140,7 +141,7 @@ void Networking::ServerImpl::ProcessMessages([[maybe_unused]] World& world, std:
         {
           auto stream = std::stringstream();
           Core::Serialization::SerializeObjectStream(stream, PacketType::VoxelGrid | PacketType::Compressed);
-          const auto bytes             = Core::Serialization::SerializeObject(entt::forward_as_meta(world.GetRegistry().ctx().get<Voxel::Grid>()));
+          const auto bytes             = Core::Serialization::SerializeObject(entt::forward_as_meta(world.globals->grid));
           const auto maxCompressedSize = ZSTD_compressBound(bytes.size());
 
           auto tempBuffer = std::make_unique<char[]>(maxCompressedSize);

@@ -23,12 +23,11 @@
 #include "Game/Scripting.h"
 #include "Physics/PhysicsUtils.h"
 #include "Networking/Server.h"
+#include "Game/Globals.h"
 
 #include "tracy/Tracy.hpp"
 #include "entt/signal/dispatcher.hpp"
 #include "Jolt/Physics/Constraints/DistanceConstraint.h"
-
-#include "FastNoise/FastNoise.h"
 
 #include "spdlog/spdlog.h"
 
@@ -39,6 +38,12 @@
 #include <mutex>
 
 #define GAME_CATCH_EXCEPTIONS 0
+
+GameGlobals::GameGlobals()
+{
+  hashGrid.reset(new HashGrid(16));
+  pathCache.reset(new Pathfinding::PathCache());
+}
 
 // We don't want this to happen when the component/entity is actually deleted, as we care about having a valid parent.
 static void OnDeferredDeleteConstruct(entt::registry& registryRaw, entt::entity entity)
@@ -232,7 +237,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
     {
       if (const auto* p = world.GetRegistry().try_get<const SpawnBlockOnContact>(entity1))
       {
-        auto& grid               = world.GetRegistry().ctx().get<Voxel::Grid>();
+        auto& grid               = *world.globals->grid;
         const auto voxelPosition = ppair->position + ppair->normal * 1e-3f;
         if (grid.IsPositionInGrid(voxelPosition) && grid.GetVoxelAtUnchecked(voxelPosition) == voxel_t::Air)
         {
@@ -438,7 +443,7 @@ void OnCharacterControllerShrimpleConstruct(entt::registry& registryRaw, entt::e
 
 void OnGlobalTransformRemove(entt::registry& registry, entt::entity entity)
 {
-  registry.ctx().get<HashGrid>().erase(entity);
+  registry.ctx().get<World&>().globals->game->hashGrid->erase(entity);
 }
 
 void OnLinearPathRemove(entt::registry& registryRaw, entt::entity entity)
@@ -471,7 +476,7 @@ Game::Game(const GameParams& params)
   if (params.worldToLoad)
   {
     Core::Serialization::LoadRegistryFromFile(*world_, *params.worldToLoad);
-    world_->GetRegistry().ctx().get<GameState>() = GameState::GAME;
+    world_->globals->game->gameState = GameState::GAME;
     world_->CreateRenderingMaterials();
   }
 
@@ -485,31 +490,27 @@ Game::Game(const GameParams& params)
 void CreateContextVariablesAndObservers(World& world)
 {
   ZoneScoped;
+  world.globals = {};
+  world.globals.reset(new WorldGlobals());
+  world.globals->game.reset(new GameGlobals());
+  world.globals->progressText.reset(new std::atomic<const char*>());
+  world.globals->progress.reset(new std::atomic_int32_t());
+  world.globals->total.reset(new std::atomic_int32_t());
+
   auto& registry = world.GetRegistryRaw();
 #ifndef GAME_HEADLESS
-  registry.ctx().emplace<GameState>() = GameState::MENU;
-  registry.ctx().emplace<std::vector<Debug::Line>>();
+  world.globals->game->gameState = GameState::MENU;
 #else
-  registry.ctx().emplace<GameState>() = GameState::LOADING_SP;
+  world.globals->game->gameState = GameState::LOADING_SP;
 #endif
 
   registry.ctx().emplace<World&>(world); // Observers only see a registry, so this is needed for flexibility and correctness.
-  registry.ctx().emplace<PCG::Rng>();
-  registry.ctx().emplace<Debugging>();
-  registry.ctx().emplace<TimeScale>();
-  registry.ctx().emplace<TickRate>().hz = 30;
-  registry.ctx().emplace_as<float>("time"_hs) = 0; // TODO: TEMP
-  registry.ctx().emplace<Pathfinding::PathCache>(); // Note: should be invalidated when voxel grid changes
-  registry.ctx().emplace<HashGrid>(16);
-  registry.ctx().emplace<Head*>() = gHead_HORRIBLE_HACK; // Hack
-  registry.ctx().emplace<std::unique_ptr<Networking::Interface>*>() = gNetworking_HORRIBLE_HACK; // Hack
-  registry.ctx().emplace<NpcSpawnDirector>(world);
-  registry.ctx().emplace_as<bool>("UpdateNPCSpawnDirector"_hs, true);
-  registry.ctx().emplace<SunInfo>();
-  registry.ctx().emplace<Scripting*>(gScripting_HORRIBLE_HACK);
-  registry.ctx().emplace<World::WaterQueue>();
-  registry.ctx().emplace<World::WaterSet>();
-  registry.ctx().emplace<std::unique_ptr<Physics::Engine>>() = Physics::Engine::Create(world);
+  world.globals->game->tickRate.hz = 30;
+  world.globals->head = gHead_HORRIBLE_HACK; // Hack
+  world.globals->networking = gNetworking_HORRIBLE_HACK; // Hack
+  world.globals->scripting         = gScripting_HORRIBLE_HACK;
+  world.globals->physics = Physics::Engine::Create(world);
+
   world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactAddedPair*>().connect<&OnContactAdded>(world);
   world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactPersistedPair*>().connect<&OnContactPersisted>(world);
 
@@ -528,7 +529,7 @@ void CreateContextVariablesAndObservers(World& world)
 
 void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel)
 {
-  auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+  auto& grid = *world.globals->grid;
   grid.SetVoxelAt(voxelPosition, voxel);
 }
 
@@ -552,8 +553,8 @@ void Game::Run()
     try
 #endif
     {
-      const auto timeScale      = world_->GetRegistry().ctx().get<TimeScale>().scale;
-      const auto tickHz         = world_->GetRegistry().ctx().get<TickRate>().hz;
+      const auto timeScale      = world_->globals->game->timeScale.scale;
+      const auto tickHz         = world_->globals->game->tickRate.hz;
       const double tickDuration = 1.0 / tickHz;
 
       const auto currentTimestamp = std::chrono::steady_clock::now();
@@ -584,7 +585,7 @@ void Game::Run()
       }
 
       //if (world_->IsServer())
-      if (world_->GetRegistry().ctx().get<GameState>() == GameState::GAME)
+      if (world_->globals->game->gameState == GameState::GAME)
       {
         for (auto&& [entity, player, inputLook, transform, gtransform] : world_->GetRegistry().view<const Player, const InputLookState, LocalTransform, GlobalTransform>().each())
         {
@@ -596,7 +597,7 @@ void Game::Run()
         }
       }
 
-      if (world_->GetRegistry().ctx().get<GameState>() == GameState::GAME)
+      if (world_->globals->game->gameState == GameState::GAME)
       {
         constexpr int MAX_TICKS = 4;
         int accumTicks          = 0;
@@ -1196,13 +1197,13 @@ const LootDrops* LootRegistry::Get(const std::string& name)
   return nullptr;
 }
 
-void NpcSpawnDirector::Update(float dt)
+void NpcSpawnDirector::Update(World& world, float dt)
 {
   accumulator += dt;
 
-  auto& registry = world_->GetRegistry();
-  auto& rng      = registry.ctx().get<PCG::Rng>();
-  auto& grid     = registry.ctx().get<Voxel::Grid>();
+  auto& registry = world.GetRegistry();
+  auto& rng      = world.globals->game->rng;
+  auto& grid     = *world.globals->grid;
 
   while (accumulator >= timeBetweenSpawns)
   {
@@ -1212,7 +1213,7 @@ void NpcSpawnDirector::Update(float dt)
 
     for (auto&& [entity, player, transform] : registry.view<const Player, const GlobalTransform>().each())
     {
-      for (const auto& pDefinition : registry.ctx().get<EntityPrefabRegistry>().GetAllPrefabs())
+      for (const auto& pDefinition : world.globals->entityPrefabRegistry->GetAllPrefabs())
       {
         if (registry.view<Enemy>().size() >= MAX_ENEMIES)
         {
@@ -1231,7 +1232,7 @@ void NpcSpawnDirector::Update(float dt)
         {
           if (auto realPos = SampleWalkablePosition(grid, rng, transform.position, info.minSpawnDistance, info.maxSpawnDistance, info.canSpawnFloating))
           {
-            auto newEntity = pDefinition->Spawn(*world_, *realPos);
+            auto newEntity = pDefinition->Spawn(world, *realPos);
             spdlog::debug("[NpcSpawnDirector] Spawned {}: {}", pDefinition->GetCreateInfo().name, entt::to_integral(newEntity));
             break;
           }

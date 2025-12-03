@@ -173,6 +173,10 @@ add_executable(frogRender
     src/Core/Image.cpp
     src/Core/Container/BitArray.h
     src/Core/Container/BitArray.cpp
+    src/Game/Globals.h
+    src/Game/Globals.cpp
+    src/Game/IncompleteTypeDeleter.h
+    src/Game/IncompleteTypeDeleter.cpp
 )
 
 # Precompiled headers for standard library

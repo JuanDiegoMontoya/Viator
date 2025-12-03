@@ -14,6 +14,7 @@
 #include "Game/Game.h"
 #include "Game/World.h"
 #include "Game/Prefab.h"
+#include "Game/Globals.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -1025,7 +1026,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 {
   ZoneScoped;
 
-  if (world.GetRegistry().ctx().get<Debugging>().disableAllUi)
+  if (world.globals->game->debugging.disableAllUi)
   {
     return;
   }
@@ -1033,7 +1034,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   // Toggle pause state if the user presses Escape.
   if (ImGui::GetKeyPressedAmount(ImGuiKey_Escape, 10000, 1))
   {
-    auto& state = world.GetRegistry().ctx().get<GameState>();
+    auto& state = world.globals->game->gameState;
     if (state == GameState::PAUSED)
     {
       state = GameState::GAME;
@@ -1049,7 +1050,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
   }
 
-  auto& gameState = world.GetRegistry().ctx().get<GameState>();
+  auto& gameState = world.globals->game->gameState;
   switch (gameState)
   {
   case GameState::MENU:
@@ -1103,12 +1104,12 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
     }
 
-    if (world.GetRegistry().ctx().get<Debugging>().showFps)
+    if (world.globals->game->debugging.showFps)
     {
       if (ImGui::Begin("Test"))
       {
         ImGui::Text("Framerate: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
-        auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+        auto& grid = *world.globals->grid;
         VmaStatistics stats{};
         vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
         auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
@@ -1233,7 +1234,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         // Get set of blocks around player. This is used to find the "crafting stations" that are near the player, which some recipes call for.
         auto nearVoxels  = std::unordered_set<BlockId>();
-        const auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+        const auto& grid = *world.globals->grid;
         for (int z = -5; z <= 5; z++)
           for (int y = -5; y <= 5; y++)
             for (int x = -5; x <= 5; x++)
@@ -1246,7 +1247,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
               }
             }
 
-        const auto& crafting      = world.GetRegistry().ctx().get<Crafting>();
+        const auto& crafting      = world.globals->game->crafting;
         static bool showUncraftableRecipes = true;
         static auto selectedRecipeIndex    = std::optional<int>();
 
@@ -1430,7 +1431,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         gameState = GameState::PAUSED_SETTINGS;
       }
 
-      auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+      auto& networking = world.globals->networking;
 
       ImGui::BeginDisabled(networking->get());
       if (ImGui::Selectable("Open Server"))
@@ -1453,30 +1454,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         {
           std::filesystem::create_directories(sWorldSavesDirectory);
         }
-        Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.GetRegistry().ctx().get<std::string>("WorldName"_hs) + ".rizz"));
+        Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.globals->worldName.c_str() + std::string(".rizz")));
       }
       ImGui::EndDisabled();
-
-      /*
-      if (ImGui::Selectable("Load (WIP)"))
-      {
-        if (!std::filesystem::is_directory(sWorldSavesDirectory))
-        {
-          std::filesystem::create_directories(sWorldSavesDirectory);
-        }
-        const auto worldName = world.GetRegistry().ctx().get<std::string>("WorldName"_hs);
-
-        world.GetRegistryRaw().clear();
-        world.GetRegistryRaw() = {};
-        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, worldName);
-        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
-        CreateContextVariablesAndObservers(world);
-        world.GetRegistry().ctx().get<GameState>() = GameState::PAUSED;
-        Core::Serialization::LoadRegistryFromFile(world, sWorldSavesDirectory / (worldName + ".rizz"));
-      }
-      */
 
       if (ImGui::Selectable("Exit to main menu"))
       {
@@ -1522,18 +1502,18 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       {
         world.GetRegistryRaw().clear();
         world.GetRegistryRaw() = {};
-        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
-        world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Loading world";
+        *world.globals->progressText = "Loading world";
+        *world.globals->progress     = 0;
+        *world.globals->total        = 1;
         CreateContextVariablesAndObservers(world);
-        world.GetRegistry().ctx().get<GameState>() = GameState::LOADING_SP;
+        world.globals->game->gameState = GameState::LOADING_SP;
         world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
           std::async(std::launch::async,
             [&world, path = sSelectedWorld.value()]
             {
               Core::Serialization::LoadRegistryFromFile(world, path);
-              world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, path.stem().string());
+              world.globals->worldName = path.stem().string();
+              world.globals->game->gameState = GameState::LOADING_SP;
             }));
         sSelectedWorld = std::nullopt;
       }
@@ -1584,28 +1564,25 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.InitializeGameState();
         world.CreateGrid(worldSizes.at(selectedWorldSize));
         world.CreateInitialEntities();
+        *world.globals->progress  = 0;
+        *world.globals->total     = 1;
+        *world.globals->progressText = "";
+        world.globals->worldName = sNewWorldName;
         // emplace_as doesn't overwrite context variables, so we have to first erase them (erase returns false if it failed, which is ok).
-        world.GetRegistry().ctx().erase<std::string>("WorldName"_hs);
-        world.GetRegistry().ctx().erase<std::atomic<const char*>>("progressText"_hs);
-        world.GetRegistry().ctx().erase<std::atomic_int32_t>("progress"_hs);
-        world.GetRegistry().ctx().erase<std::atomic_int32_t>("total"_hs);
         world.GetRegistry().ctx().erase<std::future<void>>("loading"_hs);
-        world.GetRegistry().ctx().emplace_as<std::string>("WorldName"_hs, sNewWorldName.c_str()); // Construct from C string so extra NULs aren't included.
-        world.GetRegistry().ctx().emplace_as<std::atomic<const char*>>("progressText"_hs, "");
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("progress"_hs, 0);
-        world.GetRegistry().ctx().emplace_as<std::atomic_int32_t>("total"_hs, 1);
         world.GetRegistry().ctx().emplace_as<std::future<void>>("loading"_hs,
           std::async(std::launch::async,
             [&world]
             {
               world.GenerateMap(mapGenInfo);
-              world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs) = "Saving";
+              *world.globals->progressText = "Saving";
               // Save world right after creating it.
               if (!std::filesystem::is_directory(sWorldSavesDirectory))
               {
                 std::filesystem::create_directories(sWorldSavesDirectory);
               }
-              Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.GetRegistry().ctx().get<std::string>("WorldName"_hs) + ".rizz"));
+              // Call to c_str() implicitly discards the trailing NULs that are present in worldName.
+              Core::Serialization::SaveRegistryToFile(world, sWorldSavesDirectory / (world.globals->worldName.c_str() + std::string(".rizz")));
             }));
         gameState = GameState::LOADING_SP;
         ImGui::CloseCurrentPopup();
@@ -1694,15 +1671,15 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     else
     {
       // Show loading bar.
-      const auto& progressText = world.GetRegistry().ctx().get<std::atomic<const char*>>("progressText"_hs);
-      const auto& progress     = world.GetRegistry().ctx().get<std::atomic_int32_t>("progress"_hs);
-      const auto& total        = world.GetRegistry().ctx().get<std::atomic_int32_t>("total"_hs);
+      const auto& progressText = world.globals->progressText;
+      const auto& progress     = world.globals->progress;
+      const auto& total        = world.globals->total;
       if (ImGui::Begin("Loading"))
       {
-        ImGui::Text("%s", progressText.load());
+        ImGui::Text("%s", progressText->load());
         constexpr auto bgColor = ImColor(0.4f, 0.4f, 0.4f, 1.0f);
         constexpr auto fgColor = ImColor(1.0f, 1.0f, 1.0f, 1.0f);
-        LoadingBar("##loading", float(progress.load()) / total.load(), ImVec2(ImGui::GetContentRegionAvail().x, 15), bgColor, fgColor);
+        LoadingBar("##loading", float(progress->load()) / total->load(), ImVec2(ImGui::GetContentRegionAvail().x, 15), bgColor, fgColor);
       }
       ImGui::End();
     }
@@ -1710,7 +1687,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   }
   case GameState::LOADING_MP:
   {
-    if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+    if (auto& networking = world.globals->networking)
     {
       auto* client = dynamic_cast<Networking::Client*>(networking->get());
       ASSERT(client);
@@ -1777,7 +1754,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::Separator();
 
       {
-        auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+        auto& networking = world.globals->networking;
         const auto table  = sServerList.get_as<toml::table>(sSelectedServerName);
         ImGui::BeginDisabled(!table);
         if (ImGui::Button("Join Server"))
@@ -1881,7 +1858,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   default: DEBUG_ASSERT(0);
   }
 
-  if (world.GetRegistry().ctx().get<Debugging>().showDebugGui)
+  if (world.globals->game->debugging.showDebugGui)
   {
     if (head_->GetAudio())
     {
@@ -1890,7 +1867,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         pAudio->DrawDebugUI();
       }
     }
-    world.GetRegistry().ctx().get<Scripting*>()->DrawDebugUI(world);
+    world.globals->scripting->DrawDebugUI(world);
     Physics::DrawDebugUI(world);
 
     ShowEditor(dt, world, EditorMode::Entities);
@@ -1901,8 +1878,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
-      auto& ctx   = world.GetRegistry().ctx();
-      auto& debug = ctx.get<Debugging>();
+      ImGui::Text("World: %s", world.globals->worldName.c_str());
+      auto& debug = world.globals->game->debugging;
       if (ImGui::Button("Enable noclip"))
       {
         if (auto player = world.TryGetLocalPlayer(); player != entt::null)
@@ -1911,15 +1888,15 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
       }
 
-      ImGui::Text("Game state: %s", Core::Reflection::EnumToString(ctx.get<GameState>()));
-      ImGui::Text("Time: %f", ctx.get<float>("time"_hs));
-      ImGui::Checkbox("Spawn NPCs", &world.GetRegistry().ctx().get<bool>("UpdateNPCSpawnDirector"_hs));
+      ImGui::Text("Game state: %s", Core::Reflection::EnumToString(world.globals->game->gameState));
+      ImGui::Text("Time: %f", world.globals->game->time);
+      ImGui::Checkbox("Spawn NPCs", &world.globals->game->updateNpcSpawnDirector);
       ImGui::Checkbox("Infinite items", &debug.infiniteItems);
 
-      ImGui::SliderFloat("Time Scale", &ctx.get<TimeScale>().scale, 0, 4, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
+      ImGui::SliderFloat("Time Scale", &world.globals->game->timeScale.scale, 0, 4, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
       auto min = uint32_t(5);
       auto max = uint32_t(120);
-      ImGui::SliderScalar("Tick Rate", ImGuiDataType_U32, &world.GetRegistry().ctx().get<TickRate>().hz, &min, &max, "%u", ImGuiSliderFlags_AlwaysClamp);
+      ImGui::SliderScalar("Tick Rate", ImGuiDataType_U32, &world.globals->game->tickRate.hz, &min, &max, "%u", ImGuiSliderFlags_AlwaysClamp);
 
       ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
       ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
@@ -2005,7 +1982,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           if (ImGui::CollapsingHeader("Sun"))
           {
             ImGui::SeparatorText("Sun position");
-            auto& sunInfo = world.GetRegistry().ctx().get<SunInfo>();
+            auto& sunInfo = world.globals->game->sunInfo;
             ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
             ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
             ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
@@ -2148,9 +2125,9 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::InputText("##Filter", buffer, 256);
       const auto len = std::strlen(buffer);
 
-      const auto& itemRegistry = world.GetRegistry().ctx().get<Item::Registry>();
-      auto scores              = std::multimap<double, decltype(*itemRegistry.GetNameToIdMap().begin()), std::greater<double>>();
-      for (const auto& pair : itemRegistry.GetNameToIdMap())
+      const auto& itemRegistry = world.globals->itemRegistry;
+      auto scores              = std::multimap<double, decltype(*itemRegistry->GetNameToIdMap().begin()), std::greater<double>>();
+      for (const auto& pair : itemRegistry->GetNameToIdMap())
       {
         scores.emplace(rapidfuzz::fuzz::partial_ratio(buffer, pair.first), pair);
       }
@@ -2187,7 +2164,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     
     if (ImGui::Begin("Networking", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
-      if (auto& networking = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>(); *networking)
+      if (auto& networking = *world.globals->networking)
       {
         if (world.IsServer())
         {
@@ -2205,7 +2182,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::TableSetupColumn("Ping (variance)");
           ImGui::TableSetupColumn("Packet loss");
           ImGui::TableHeadersRow();
-          for (const auto& info : networking->get()->GetClientNetworkInfos())
+          for (const auto& info : networking.get()->GetClientNetworkInfos())
           {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -2239,13 +2216,13 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
       auto prefabSaveNames = std::unordered_set<std::string>();
 
-      auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+      auto& grid = world.globals->grid;
 
       const auto pTransform = world.TryGetLocalPlayerTransform();
       ASSERT(pTransform);
 
       auto hit = Voxel::Grid::HitSurfaceParameters{};
-      if (grid.TraceRaySimple(pTransform->position, GetForward(pTransform->rotation), pickLength, hit))
+      if (grid->TraceRaySimple(pTransform->position, GetForward(pTransform->rotation), pickLength, hit))
       {
         const auto pos = glm::round(hit.positionWorld);
 
@@ -2368,7 +2345,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         for (int x = (int)min.x; x < max.x; x++)
         {
           const auto posWS = glm::ivec3(x, y, z);
-          const auto voxel = grid.GetVoxelAt(posWS);
+          const auto voxel = grid->GetVoxelAt(posWS);
           if (skipAir && voxel == voxel_t::Air)
           {
             continue;

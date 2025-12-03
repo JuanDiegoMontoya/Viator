@@ -6,6 +6,7 @@
 #include "Core/Assert2.h"
 #include "RpcInfo.h"
 #include "Game/World.h"
+#include "Game/Globals.h"
 
 #include "tracy/Tracy.hpp"
 #include "spdlog/spdlog.h"
@@ -45,7 +46,7 @@ void Networking::detail::InvokeSerializedRPC(World& world, std::stringstream& st
     // If client, remap remote entity IDs to local.
     if (world.IsClient() && func.arg(i).id() == entt::type_id<entt::entity>().hash())
     {
-      const auto* networking    = world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+      const auto* networking    = world.globals->networking;
       const auto& remoteToLocal = static_cast<Networking::Client*>(networking->get())->GetRemoteToLocalEntityMap();
       auto success = arg.assign(remoteToLocal.at(arg.cast<entt::entity>()));
       ASSERT(success);
@@ -75,7 +76,7 @@ void Networking::detail::CallRPCInternal(entt::id_type funcId, std::optional<ent
 
   // TODO: Validate argument types.
 
-  auto& networking = *world.GetRegistry().ctx().get<std::unique_ptr<Networking::Interface>*>();
+  auto& networking = *world.globals->networking;
 
   if (owningConnection && (!networking || !networking->IsEntityOwnedByRemote(*owningConnection)))
   {

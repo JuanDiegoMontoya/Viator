@@ -8,6 +8,7 @@
 
 #include "World.h"
 #include "Game.h"
+#include "Game/Globals.h"
 #include "HashUtilities.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -167,16 +168,16 @@ namespace Pathfinding
     costSoFar.emplace(params.start, 0.0f);
     cameFrom.emplace(params.start, params.start);
     
-    const auto& grid = world.GetRegistry().ctx().get<Voxel::Grid>();
+    const auto& grid = *world.globals->grid;
     for (int i = 0; !frontier.empty() && i < params.maxNodesToSearch; i++)
     {
       const auto [current, currentPriority] = frontier.top();
       frontier.pop();
 
 #ifndef GAME_HEADLESS
-      if (world.GetRegistry().ctx().get<Debugging>().drawPathLines)
+      if (world.globals->game->debugging.drawPathLines)
       {
-        auto& lines           = const_cast<World&>(world).GetRegistry().ctx().get<std::vector<Debug::Line>>();
+        auto& lines           = const_cast<World&>(world).globals->debugLines;
         constexpr auto offset = glm::vec3(0.5f, 0, 0.5f);
         lines.emplace_back(Debug::Line{
           .aPosition = glm::vec3(current) + offset,
@@ -344,7 +345,7 @@ TEST_CASE("Pathfinding integration")
   auto& registry           = game->GetWorld().GetRegistry();
   constexpr auto targetPos = glm::vec3(10, 1.5f, 0);
   const auto target        = game->GetWorld().CreateRenderableEntity(targetPos);
-  const auto frog          = registry.ctx().get<EntityPrefabRegistry>().Get("Melee Frog").Spawn(game->GetWorld(), {1, 3, 1});
+  const auto frog          = game->GetWorld().globals->entityPrefabRegistry->Get("Melee Frog").Spawn(game->GetWorld(), {1, 3, 1});
 
   registry.emplace_or_replace<AiTarget>(frog, target);
 

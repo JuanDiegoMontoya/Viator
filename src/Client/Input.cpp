@@ -1,6 +1,7 @@
 #include "Input.h"
 #include "Game/Networking/RPC.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/World.h"
 
 #include "GLFW/glfw3.h"
@@ -42,7 +43,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
 
   if (newCursorMode == GLFW_CURSOR_DISABLED)
   {
-    if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME)
+    if (world.globals->game->gameState == GameState::GAME)
     {
       for (auto&& [entity, player, input, inputLook] : world.GetRegistry().view<Player, LocalPlayer, InputState, InputLookState>().each())
       {
@@ -91,7 +92,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     }
   }
 
-  if (world.GetRegistry().ctx().get<GameState>() == GameState::GAME)
+  if (world.globals->game->gameState == GameState::GAME)
   {
     auto range = world.GetRegistry().view<Player, LocalPlayer>().each();
 
@@ -123,7 +124,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     newCursorMode = GLFW_CURSOR_NORMAL;
   }
 
-  auto& debug = world.GetRegistry().ctx().get<Debugging>();
+  auto& debug = world.globals->game->debugging;
   if (debug.forceShowCursor)
   {
     newCursorMode = GLFW_CURSOR_NORMAL;

@@ -7,6 +7,7 @@
 #include "entt/entity/entity.hpp"
 #include "entt/entity/registry.hpp"
 #include "Core/Container/RingBuffer.h"
+#include "Game/IncompleteTypeDeleter.h"
 
 #include <optional>
 #include <unordered_set>
@@ -29,12 +30,13 @@ namespace Physics
 }
 
 class Audio;
+struct WorldGlobals;
 
 class World
 {
 public:
   NO_COPY_NO_MOVE(World);
-  explicit World() : registry_(registryOld_) {}
+  explicit World();
   void FixedUpdate(float dt);
 
   RegistryProxy& GetRegistry()
@@ -256,8 +258,7 @@ public:
   };
   void SpawnHitParticles(const SpawnHitParticlesParams& params);
 
-  using WaterQueue = RingBuffer<glm::ivec3>;
-  using WaterSet = std::unordered_set<glm::ivec3>;
+  std::unique_ptr<WorldGlobals, IncompleteTypeDeleter<WorldGlobals>> globals;
 
 private:
   uint64_t ticks_ = 0;

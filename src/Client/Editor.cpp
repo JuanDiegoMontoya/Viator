@@ -1,5 +1,6 @@
 #include "VoxelRenderer.h"
 #include "Game/World.h"
+#include "Game/Globals.h"
 #include "Core/Assert2.h"
 #include "Game/Item.h"
 #include "Game/Block.h"
@@ -359,13 +360,13 @@ void VoxelRenderer::ShowEditor([[maybe_unused]] DeltaTime dt, World& world, Edit
   }
   case EditorMode::Items:
   {
-    pRegistry = &world.GetRegistry().ctx().get<Item::Registry>().GetRegistry();
+    pRegistry = &world.globals->itemRegistry->GetRegistry();
     title     = "Items";
     break;
   }
   case EditorMode::Blocks:
   {
-    pRegistry = &world.GetRegistry().ctx().get<Block::Registry>().GetRegistry();
+    pRegistry = &world.globals->blockRegistry->GetRegistry();
     title     = "Blocks";
     break;
   }

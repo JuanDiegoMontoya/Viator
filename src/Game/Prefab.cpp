@@ -1,5 +1,6 @@
 #include "Prefab.h"
 #include "World.h"
+#include "Game/Globals.h"
 #include "Block.h"
 #include "Core/Serialization.h"
 
@@ -8,7 +9,7 @@
 SimplePrefab::SimplePrefab(const World& world, const CreateInfo& info, const SerializableSimplePrefab& prefab)
   : PrefabDefinition(info)
 {
-  const auto& blockReg = world.GetRegistry().ctx().get<const Block::Registry>();
+  const auto& blockReg = *world.globals->blockRegistry;
 
   voxels.reserve(prefab.voxels.size());
   for (const auto& [pos, voxel] : prefab.voxels)
@@ -40,7 +41,7 @@ void SimplePrefab::Instantiate(World& world, glm::ivec3 worldPos) const
 
 SerializableSimplePrefab::SerializableSimplePrefab(const World& world, std::span<const std::pair<glm::ivec3, voxel_t>> prefab)
 {
-  const auto& blockReg = world.GetRegistry().ctx().get<const Block::Registry>();
+  const auto& blockReg = *world.globals->blockRegistry;
 
   voxels.reserve(prefab.size());
   for (const auto& [pos, voxel] : prefab)

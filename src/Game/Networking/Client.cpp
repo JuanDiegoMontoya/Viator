@@ -2,6 +2,7 @@
 #include "Game/Voxel/Grid.h"
 #include "Core/Serialization.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"
 #include "RPC.h"
@@ -283,8 +284,8 @@ int32_t Networking::ClientImpl::HandlePacket(World& world, const ENetPacket& ene
     spdlog::info("Finished downloading world.");
     status_   = ClientStatus::Connected;
     auto grid = Core::Serialization::DeserializeObjectStream<Voxel::Grid>(stream);
-    world.GetRegistry().ctx().insert_or_assign<Voxel::Grid>(std::move(grid));
-    world.GetRegistry().ctx().get<GameState>() = GameState::GAME;
+    *world.globals->grid = std::move(grid);
+    world.globals->game->gameState = GameState::GAME;
     
     world.CreateRenderingMaterials();
   }

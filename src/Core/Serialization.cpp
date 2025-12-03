@@ -4,6 +4,8 @@
 #include "Game/World.h"
 #include "Core/Assert2.h"
 #include "Game/CoreComponents.h"
+#include "Game/Globals.h"
+#include "Core/Image.h"
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -38,7 +40,7 @@ namespace Core::Serialization
     struct SerializationContext
     {
       bool remapRemoteEntities = false;
-      std::unordered_map<entt::entity, entt::entity>* remoteToLocalEntity;
+      std::unordered_map<entt::entity, entt::entity>* remoteToLocalEntity = nullptr;
     };
 
     template<typename Archive, typename T>
@@ -178,6 +180,22 @@ namespace Core::Serialization
       return;
     }
 
+    // std::optional and std::unique_ptr
+    if (value.type().traits<Traits>() & Traits::OPTIONAL)
+    {
+      auto emplaceFunc = value.type().func("emplace"_hs);
+      auto valueFunc = value.type().func("value"_hs);
+      ASSERT(emplaceFunc);
+      ASSERT(valueFunc);
+      if constexpr (!Save)
+      {
+        emplaceFunc.invoke({}, value.as_ref());
+      }
+      Serialize<Save>(ar, valueFunc.invoke({}, value.as_ref()));
+
+      return;
+    }
+
     // Serialize unique ptrs
     if (value.type().is_template_specialization() && value.type().template_type().info() == entt::type_id<entt::meta_class_template_tag<std::unique_ptr>>())
     {
@@ -288,6 +306,33 @@ namespace Core::Serialization
   } // namespace
 
   template<bool Save, typename Archive>
+  static void SerializeImage(Archive& ar, std::conditional_t<Save, const DSP::Image<2, float>, DSP::Image<2, float>>& image, const SerializationContext& = {})
+  {
+    ZoneScoped;
+
+    using ImageType = std::remove_cvref_t<decltype(image)>;
+    using value_type = typename ImageType::value_type;
+    using dimensions_type = typename ImageType::dimensions_type;
+
+    if constexpr (Save)
+    {
+      auto size = image.Size();
+      auto sizeBinary = cereal::BinaryData(&size, sizeof(size));
+      ar(sizeBinary);
+    }
+    else
+    {
+      auto size       = dimensions_type{};
+      auto sizeBinary = cereal::BinaryData(&size, sizeof(size));
+      ar(sizeBinary);
+      image = ImageType(size);
+    }
+
+    auto pixels = cereal::BinaryData(const_cast<value_type*>(image.Data()), sizeof(value_type) * image.NumTexels());
+    ar(pixels);
+  }
+
+  template<bool Save, typename Archive>
   static void SerializeGrid(Archive& ar, std::conditional_t<Save, const Voxel::Grid, Voxel::Grid>& grid, const SerializationContext& = {})
   {
     ZoneScoped;
@@ -381,6 +426,10 @@ namespace Core::Serialization
     //entt::meta_factory<char*>().func<[](cereal::BinaryOutputArchive& ar, char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
     //entt::meta_factory<const char*>().func<[](cereal::BinaryOutputArchive& ar, const char* str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
     //entt::meta_factory<std::string_view>().func<[](cereal::BinaryOutputArchive& ar, std::string_view str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
+
+    entt::meta_factory<Core::DSP::Image<2, float>>()
+      .func<SerializeImage<false, cereal::BinaryInputArchive>>("SerializeLoad"_hs)
+      .func<SerializeImage<true, cereal::BinaryOutputArchive>>("SerializeSave"_hs);
   }
 
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path)
@@ -392,8 +441,9 @@ namespace Core::Serialization
     ASSERT(file);
     auto outputArchive   = cereal::BinaryOutputArchive(file);
 
-    // Save relevant context variables.
-    auto& grid = registry.ctx().get<Voxel::Grid>();
+    // Save variables in world.globals.
+    Serialize<true>(outputArchive, entt::forward_as_meta(*world.globals));
+    auto& grid = *world.globals->grid;
     SerializeGrid<true>(outputArchive, grid);
 
     const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(), [](const auto& p) { return entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT; });
@@ -437,17 +487,16 @@ namespace Core::Serialization
     ASSERT(file);
 
     {
-      // Load relevant context variables.
+      // Load variables in world.globals.
       auto inputArchive = cereal::BinaryInputArchive(file);
+
+      Serialize<false>(inputArchive, entt::forward_as_meta(*world.globals));
+
       auto grid         = Voxel::Grid();
       SerializeGrid<false>(inputArchive, grid);
       grid.CoalesceBricksSLOW();
       grid.MarkAllBricksDirty();
-      registry.ctx().emplace<Voxel::Grid>(std::move(grid));
-
-      // TODO: this is legitimately horrendous and needs to be removed. Because it calls the GPU, it's super unsafe and necessitated making the copium mutex.
-      //auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
-      //world.CreateRenderingMaterials();
+      *world.globals->grid = std::move(grid);
     }
 
     DeserializeComponentStream(world, file, remoteToLocalTemp, localToRemoteTemp, false, false);

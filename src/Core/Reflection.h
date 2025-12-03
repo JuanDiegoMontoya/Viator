@@ -54,7 +54,7 @@ namespace Core::Reflection
     // Top-level component types for blocks only.
     BLOCK_COMPONENT = 1 << 10,
 
-    // For std::optional and similar. Provides functions for has_value, emplace, and reset.
+    // For std::optional, std::unique_ptr, and similar. Provides functions for has_value, emplace, and reset.
     OPTIONAL = 1 << 11,
   };
 

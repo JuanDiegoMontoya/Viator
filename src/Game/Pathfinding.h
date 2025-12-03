@@ -25,6 +25,7 @@ namespace Pathfinding
     glm::ivec3 start;
     glm::ivec3 goal;
     int height = 1;
+    // w: WA* weight factor. When w = 1, algorithm is A*. When w < 1, algorithm approaches Dijkstra's. When w > 1, algorithm approaches greedy BFS.
     float w = 1;
     bool canFly = false;
     int maxNodesToSearch = 1000;
@@ -44,7 +45,6 @@ namespace Pathfinding
     // float jitter = ? // Randomize time between updates so they don't happen simultaneously.
   };
 
-  // w: WA* weight factor. When w = 1, algorithm is A*. When w < 0, algorithm approaches Dijkstra's. When w > 1, algorithm approaches greedy BFS.
   Path FindPath(const World& world, const FindPathParams& params);
 
   class PathCache

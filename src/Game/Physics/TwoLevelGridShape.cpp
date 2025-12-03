@@ -1,5 +1,7 @@
 #include "TwoLevelGridShape.h"
+#include "Game/World.h"
 #include "Game/Game.h"
+#include "Game/Globals.h"
 #include "Game/Voxel/Grid.h"
 
 #include "Physics.h"
@@ -32,7 +34,7 @@ Physics::TwoLevelGridShape::TwoLevelGridShape(const entt::registry& registry)
 
 const Voxel::Grid& Physics::TwoLevelGridShape::GetTwoLevelGrid() const
 {
-  return registry_->ctx().get<Voxel::Grid>();
+  return *registry_->ctx().get<const World&>().globals->grid;
 }
 
 void Physics::TwoLevelGridShape::CollideTwoLevelGrid2(const Shape* inShape1,

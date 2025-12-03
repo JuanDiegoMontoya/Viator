@@ -3,6 +3,9 @@
 #include "ReflectionMacrosInternal.h"
 #include "Game/World.h"
 #include "Assert2.h"
+#include "Game/Globals.h"
+#include "Game/HashGrid.h"
+#include "Core/Image.h"
 
 #include <vector>
 #include <functional>
@@ -22,6 +25,7 @@
 #include "entt/meta/template.hpp"
 #include "entt/meta/pointer.hpp"
 #include "entt/core/hashed_string.hpp"
+using namespace entt::literals;
 
 namespace // type traits 2
 {
@@ -37,6 +41,19 @@ namespace // type traits 2
 
   template<typename T>
   constexpr bool is_optional_v = is_optional<T>::value;
+
+  template<typename T>
+  struct is_unique_ptr : std::false_type
+  {
+  };
+
+  template<typename T, typename D>
+  struct is_unique_ptr<std::unique_ptr<T, D>> : std::true_type
+  {
+  };
+
+  template<typename T>
+  constexpr bool is_unique_ptr_v = is_unique_ptr<T>::value;
 
   template<typename T>
   struct is_variant : std::false_type
@@ -1550,6 +1567,36 @@ void Core::Reflection::Initialize(Scripting& scripting)
   BEGIN_REFLECT_TYPE(SerializableSimplePrefab)
     MEMBER(voxelToName);
     MEMBER(voxels);
+  END_REFLECT
+
+  BEGIN_REFLECT_NON_OBJECT_TYPE(GameGlobals)
+    MEMBER(gameState) TRAITS(TRANSIENT);
+    MEMBER(rng);
+    MEMBER(debugging);
+    MEMBER(timeScale);
+    MEMBER(tickRate);
+    MEMBER(time);
+    MEMBER(hashGrid) TRAITS(TRANSIENT);
+    MEMBER(npcSpawnDirector);
+    MEMBER(updateNpcSpawnDirector);
+    MEMBER(sunInfo);
+    MEMBER(pathCache) TRAITS(TRANSIENT);
+    MEMBER(lootRegistry) TRAITS(TRANSIENT);
+    MEMBER(crafting) TRAITS(TRANSIENT);
+  END_REFLECT
+
+  BEGIN_REFLECT_NON_OBJECT_TYPE(WorldGlobals)
+    MEMBER(worldName);
+    MEMBER(grid) TRAITS(TRANSIENT);
+    MEMBER(prefabRegistry) TRAITS(TRANSIENT);
+    MEMBER(blockRegistry) TRAITS(TRANSIENT);
+    MEMBER(itemRegistry) TRAITS(TRANSIENT);
+    MEMBER(entityPrefabRegistry) TRAITS(TRANSIENT);
+    MEMBER(game);
+    MEMBER(waterQueue);
+    MEMBER(waterSet);
+    MEMBER(globalSurfaceHeight);
+    MEMBER(globalSurfaceFog);
   END_REFLECT
 
   for (auto& cb : s_reflectionRegistrationFuncs)

@@ -1,6 +1,6 @@
 #include "World.h"
 #include "Game.h"
-
+#include "Globals.h"
 #include "Audio.h"
 #include "Item.h"
 #include "Game/Physics/Physics.h"
@@ -24,11 +24,11 @@
 void World::FixedUpdate(float dt)
 {
   ZoneScoped;
-  if (registry_.ctx().get<GameState>() == GameState::GAME || IsClient())
+  if (globals->game->gameState == GameState::GAME || IsClient())
   {
-    registry_.ctx().get<float>("time"_hs) += dt;
+    globals->game->time += dt;
 #ifndef GAME_HEADLESS
-    registry_.ctx().get<std::vector<Debug::Line>>().clear();
+    globals->debugLines.clear();
 #endif
 
     registry_.ClearModifiedComponents();
@@ -55,14 +55,14 @@ void World::FixedUpdate(float dt)
       UpdateLocalTransform(entity);
     }
 
-    if (IsServer() && registry_.ctx().get<bool>("UpdateNPCSpawnDirector"_hs))
+    if (IsServer() && globals->game->updateNpcSpawnDirector)
     {
-      registry_.ctx().get<NpcSpawnDirector>().Update(dt);
+      globals->game->npcSpawnDirector.Update(*this, dt);
     }
 
     if (IsServer())
     {
-      auto& sunInfo = registry_.ctx().get<SunInfo>();
+      auto& sunInfo = globals->game->sunInfo;
       if (!sunInfo.pauseDayNightCycle)
       {
         sunInfo.timeOfDay += dt / sunInfo.dayLength * 2;
@@ -200,7 +200,7 @@ void World::FixedUpdate(float dt)
       {
         auto& reg   = registry_;
         auto& world = *this;
-        auto& grid  = reg.ctx().get<Voxel::Grid>();
+        auto& grid  = *globals->grid;
         auto hit    = Voxel::Grid::HitSurfaceParameters();
         auto child  = world.GetChildNamed(entity, "baller");
         if (grid.TraceRaySimple(transform.position, GetForward(transform.rotation), 5, hit))
@@ -280,7 +280,7 @@ void World::FixedUpdate(float dt)
         {
           const auto hitPos      = transform.position + forward * (result.mFraction * RAY_LENGTH + 1e-3f);
           const auto voxelHitPos = glm::ivec3(hitPos);
-          const auto hitVoxel    = registry_.ctx().get<Voxel::Grid>().GetVoxelAt(voxelHitPos);
+          const auto hitVoxel    = globals->grid->GetVoxelAt(voxelHitPos);
 
           hitEntity = static_cast<entt::entity>(GetPhysicsEngine().GetBodyInterface().GetUserData(result.mBodyID));
           if (registry_.valid(hitEntity))
@@ -302,7 +302,7 @@ void World::FixedUpdate(float dt)
             }
 
             // Handle other interactable voxels like doors.
-            if (registry_.ctx().get<Block::Registry>().GetRegistry().any_of<Block::Component::TransformWhenUsed>(entt::entity(hitVoxel)))
+            if (globals->blockRegistry->GetRegistry().any_of<Block::Component::TransformWhenUsed>(entt::entity(hitVoxel)))
             {
               showInteractPrompt = true;
 
@@ -694,7 +694,7 @@ void World::FixedUpdate(float dt)
         {
           if (auto* loot = registry_.try_get<const Loot>(entity))
           {
-            auto* table = registry_.ctx().get<LootRegistry>().Get(loot->name);
+            auto* table = globals->game->lootRegistry.Get(loot->name);
             ASSERT(table);
 
             for (auto drop : table->Collect(Rng()))
@@ -806,8 +806,8 @@ void World::FixedUpdate(float dt)
 void World::ProcessBlockTickQueue()
 {
   ZoneScopedN("Process block tick queue");
-  auto queue = std::move(registry_.ctx().get<WaterQueue>());
-  auto set   = std::move(registry_.ctx().get<WaterSet>());
+  auto queue = std::move(*globals->waterQueue);
+  auto set   = std::move(*globals->waterSet);
 
   int processed = 0;
   while (!queue.empty())
