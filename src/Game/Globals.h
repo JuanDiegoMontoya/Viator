@@ -83,5 +83,7 @@ public:
   std::unique_ptr<Physics::Engine> physics;
   unique_ptr<Core::DSP::Image<2, float>> globalSurfaceHeight;
   unique_ptr<Core::DSP::Image<2, float>> globalSurfaceFog;
+  unique_ptr<Core::DSP::Image<3, float>> globalFog;
+  bool globalFogNeedsUpdate = false;
 };
 //// END TEMP

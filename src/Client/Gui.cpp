@@ -1603,6 +1603,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         {
           ImGui::InputInt("Seed", &mapGenInfo.seed);
           ImGui::Checkbox("Settle liquids", &mapGenInfo.settleLiquids);
+          ImGui::Checkbox("Generate caves", &mapGenInfo.generateCaves);
           ImGui::Checkbox("Spawn Yggdrasil", &mapGenInfo.spawnYggdrasil);
           ImGui::TreePop();
         }

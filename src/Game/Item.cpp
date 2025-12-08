@@ -9,6 +9,7 @@
 #include "Physics/Physics.h"
 #include "Physics/PhysicsUtils.h"
 #include "Audio.h"
+#include "Core/Image.h"
 #include "Voxel/Grid.h"
 
 #include "Jolt/Physics/Collision/CollisionCollectorImpl.h"
@@ -260,6 +261,11 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         if (p->light)
         {
           reg.emplace<GpuLight>(b, *p->light);
+        }
+
+        if (p->fogEmitter)
+        {
+          reg.emplace<FogEmitter>(b, *p->fogEmitter);
         }
 
         const auto inheritedVelocity = world.GetInheritedLinearVelocity(self);
@@ -585,6 +591,32 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
 
       subtractCountFromState = true;
+    }
+
+    if (iReg.any_of<Component::AbsorbFogOnUse, Component::EmitFogOnUse>(state.id))
+    {
+      const auto& transform = reg.get<const GlobalTransform>(self);
+      const auto fogSize    = glm::vec3(world.globals->globalFog->Size());
+      const auto ratio      = glm::vec3(world.globals->grid->Dimensions()) / fogSize;
+      const auto uv         = (transform.position / ratio + 0.5f) / fogSize;
+      constexpr int radius  = 1;
+      for (int z = -radius; z <= radius; z++)
+      for (int y = -radius; y <= radius; y++)
+      for (int x = -radius; x <= radius; x++)
+      {
+        const auto texCoord = uv * fogSize + glm::vec3(x, y, z);
+        if (glm::all(glm::greaterThanEqual(texCoord, glm::vec3(0))) && glm::all(glm::lessThan(texCoord, fogSize)))
+        {
+          const bool isEmitting = iReg.any_of<Component::EmitFogOnUse>(state.id);
+          const auto prev = world.globals->globalFog->Load(texCoord);
+          const auto next = glm::max(0.0f, prev + dt * (isEmitting ? 20 : -20));
+          if (prev != next)
+          {
+            world.globals->globalFog->Store(texCoord, next);
+            world.globals->globalFogNeedsUpdate = true;
+          }
+        }
+      }
     }
 
     if (subtractCountFromState && !world.globals->game->debugging.infiniteItems)

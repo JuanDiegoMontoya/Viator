@@ -774,46 +774,46 @@ void Core::Reflection::Initialize(Scripting& scripting)
   ASSERT(asEngine->RegisterTypedef("short", "uint16") >= 0);
 
   entt::meta_factory<int>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<int>>("EditorWrite"_hs)
     .func<&EditorReadScalar<int>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, int v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint32_t>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint32_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint32_t>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint32_t v) { ((asIScriptContext*)ctx)->SetArgDWord(argIdx, std::bit_cast<asDWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint16_t>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint16_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint16_t>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint16_t v) { ((asIScriptContext*)ctx)->SetArgWord(argIdx, std::bit_cast<asWORD>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<uint8_t>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<uint8_t>>("EditorWrite"_hs)
     .func<&EditorReadScalar<uint8_t>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, uint8_t v) { ((asIScriptContext*)ctx)->SetArgByte(argIdx, std::bit_cast<asBYTE>(v)); }>("ASSetArg"_hs);
   entt::meta_factory<float>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<float>>("EditorWrite"_hs)
     .func<&EditorReadScalar<float>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL)
     .func<[](void* ctx, int argIdx, float v) { ((asIScriptContext*)ctx)->SetArgFloat(argIdx, v); }>("ASSetArg"_hs);
   entt::meta_factory<glm::vec3>()
+    TRAITS(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteVec3>("EditorWrite"_hs)
     .func<&EditorReadVec3>("EditorRead"_hs)
 #endif
-    TRAITS(TRIVIAL)
     DATA(glm::vec3, x)
     DATA(glm::vec3, y)
     DATA(glm::vec3, z);
@@ -827,11 +827,11 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(glm::ivec2, x)
     DATA(glm::ivec2, y);
   entt::meta_factory<glm::quat>()
+    TRAITS(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteQuat>("EditorWrite"_hs)
     .func<&EditorReadQuat>("EditorRead"_hs)
 #endif
-    TRAITS(TRIVIAL)
     DATA(glm::quat, w)
     DATA(glm::quat, x)
     DATA(glm::quat, y)
@@ -848,11 +848,12 @@ void Core::Reflection::Initialize(Scripting& scripting)
 #endif
   ;
   entt::meta_factory<bool>()
+    .traits(TRIVIAL)
 #ifndef GAME_HEADLESS
     .func<&EditorWriteScalar<bool>>("EditorWrite"_hs)
     .func<&EditorReadScalar<bool>>("EditorRead"_hs)
 #endif
-    .traits(TRIVIAL);
+    ;
   entt::meta_factory<entt::entity>()
 #ifndef GAME_HEADLESS
     .func<&EditorWriteEntity>("EditorWrite"_hs)
@@ -1209,7 +1210,7 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(WalkingMovementAttributes, waterGravity, PROP_MIN(-100.0f))
     DATA(WalkingMovementAttributes, waterJumpImpulse, PROP_MAX(100.0f))
     DATA(WalkingMovementAttributes, waterJumpControlTime, PROP_MAX(100.0f));
-  
+
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
 
   // TODO: Grid reflection should be removed
@@ -1403,7 +1404,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(Item::Component::Gun, hrecoilDev)
     DATA_BASE(Item::Component::Gun, light)
     DATA(Item::Component::Gun, sticky)
-    DATA(Item::Component::Gun, stickyDist);
+    DATA(Item::Component::Gun, stickyDist)
+    DATA_BASE(Item::Component::Gun, fogEmitter)
+  ;
 
   REFLECT_COMPONENT(Item::Component::MaterializeAsSprite, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::MaterializeAsSprite, tag)
@@ -1440,6 +1443,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(Item::Component::Rope, ITEM_COMPONENT | REPLICATED)
     DATA(Item::Component::Rope, length);
+
+  REFLECT_COMPONENT(Item::Component::AbsorbFogOnUse, ITEM_COMPONENT | REPLICATED);
 
   REFLECT_TYPE(Block::DropSelf);
 
@@ -1597,6 +1602,14 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(waterSet);
     MEMBER(globalSurfaceHeight);
     MEMBER(globalSurfaceFog);
+    MEMBER(globalFog);
+  END_REFLECT
+
+  BEGIN_REFLECT_COMPONENT(FogEmitter, REPLICATED | TRIVIAL)
+    MEMBER(radiusInner);
+    MEMBER(radiusOuter);
+    MEMBER(density);
+    MEMBER(color);
   END_REFLECT
 
   for (auto& cb : s_reflectionRegistrationFuncs)

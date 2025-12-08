@@ -187,51 +187,58 @@ namespace Fvog
   void Texture::UpdateImageSLOW(const TextureUpdateInfo& info)
   {
     ZoneScoped;
-    Fvog::GetDevice().ImmediateSubmit(
-    [this, &info](VkCommandBuffer commandBuffer)
+    Fvog::GetDevice().ImmediateSubmit([this, &info](VkCommandBuffer commandBuffer) { UpdateImage(commandBuffer, info); });
+  }
+
+  void Texture::UpdateImage(VkCommandBuffer commandBuffer, const TextureUpdateInfo& info)
+  {
+    ZoneScoped;
+    // Convenience- so the user doesn't have to explicitly specify 1 for height or depth when writing 1D or 2D images
+    auto extent   = info.extent;
+    extent.height = std::max(extent.height, 1u);
+    extent.depth  = std::max(extent.depth, 1u);
+
+    uint64_t size;
+    if (detail::FormatIsBlockCompressed(createInfo_.format))
     {
-      // Convenience- so the user doesn't have to explicitly specify 1 for height or depth when writing 1D or 2D images
-      auto extent = info.extent;
-      extent.height = std::max(extent.height, 1u);
-      extent.depth = std::max(extent.depth, 1u);
-
-      uint64_t size;
-      if (detail::FormatIsBlockCompressed(createInfo_.format))
-      {
-        size = detail::BlockCompressedImageSize(createInfo_.format, extent.width, extent.height, extent.depth);
-      }
-      else
-      {
-        size = extent.width * extent.height * extent.depth * detail::FormatStorageSize(createInfo_.format);
-      }
-      auto uploadBuffer = Buffer({.size = size, .flag = BufferFlagThingy::MAP_SEQUENTIAL_WRITE}, "UpdateImageSLOW Staging Buffer");
-      // TODO: account for row length and image height here
+      size = detail::BlockCompressedImageSize(createInfo_.format, extent.width, extent.height, extent.depth);
+    }
+    else
+    {
+      size = extent.width * extent.height * extent.depth * detail::FormatStorageSize(createInfo_.format);
+    }
+    auto uploadBuffer = Buffer({.size = size, .flag = BufferFlagThingy::MAP_SEQUENTIAL_WRITE}, "UpdateImageSLOW Staging Buffer");
+    // TODO: account for row length and image height here
+    {
+      ZoneScopedN("memcpy");
       std::memcpy(uploadBuffer.GetMappedMemory(), info.data, size);
-      auto ctx = Fvog::Context(commandBuffer);
-      ctx.ImageBarrier(*this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    }
+    auto ctx = Fvog::Context(commandBuffer);
+    ctx.ImageBarrier(*this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-      vkCmdCopyBufferToImage2(commandBuffer, detail::Address(VkCopyBufferToImageInfo2{
-        .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
-        .srcBuffer = uploadBuffer.Handle(),
-        .dstImage = image_,
+    vkCmdCopyBufferToImage2(commandBuffer,
+      detail::Address(VkCopyBufferToImageInfo2{
+        .sType          = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+        .srcBuffer      = uploadBuffer.Handle(),
+        .dstImage       = image_,
         .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .regionCount = 1,
+        .regionCount    = 1,
         .pRegions = detail::Address(VkBufferImageCopy2{
-          .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
-          .bufferOffset = 0,
-          .bufferRowLength = info.rowLength,
+          .sType             = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+          .bufferOffset      = 0,
+          .bufferRowLength   = info.rowLength,
           .bufferImageHeight = info.imageHeight,
-          .imageSubresource = VkImageSubresourceLayers{
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = info.level,
-            .layerCount = 1,
-          },
+          .imageSubresource =
+            VkImageSubresourceLayers{
+              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+              .mipLevel   = info.level,
+              .layerCount = 1,
+            },
           .imageOffset = info.offset,
           .imageExtent = extent,
         }),
       }));
-      ctx.ImageBarrier(*this, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    });
+    ctx.ImageBarrier(*this, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
   }
 
   Texture::Texture(Texture&& old) noexcept

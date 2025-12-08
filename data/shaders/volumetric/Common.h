@@ -7,6 +7,23 @@
 #include "../voxels/Voxels.h.glsl"
 #include "../GlobalUniforms.h.glsl"
 
+FVOG_DECLARE_BUFFER_REFERENCE_2(Vol_FogEmitter)
+{
+  FVOG_VEC3 position;
+  FVOG_FLOAT radiusInner;
+  FVOG_FLOAT radiusOuter;
+  FVOG_FLOAT density;
+  FVOG_VEC3 color;
+  FVOG_UVEC3 padding;
+};
+
+FVOG_DECLARE_BUFFER_REFERENCE_2(FogList)
+{
+  FVOG_INT32 count;
+  FVOG_UINT32 padding;
+  Vol_FogEmitter emitters;
+};
+
 struct VolumetricUniforms
 {
   FVOG_VEC3 viewPos;
@@ -35,6 +52,7 @@ struct VolumetricUniforms
   FVOG_SHARED Texture1D mieScattering;
   FVOG_SHARED Texture2D globalSurfaceHeight;
   FVOG_SHARED Texture2D globalSurfaceFog;
+  FVOG_SHARED Texture3D globalFog;
 #ifndef __cplusplus
   DDGIArgs ddgi;
 #else
@@ -44,6 +62,7 @@ struct VolumetricUniforms
   FVOG_UINT32 globalUniformsIndex;
   FVOG_INT32 sunSelfShadowSteps;
   FVOG_FLOAT sunSelfShadowDist;
+  FogList fogList;
 };
 
 #ifndef __cplusplus

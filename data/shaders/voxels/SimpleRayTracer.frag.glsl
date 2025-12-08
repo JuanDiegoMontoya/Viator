@@ -39,10 +39,6 @@ void main()
     normal = hit.flatNormalWorld;
     radiance += GetHitEmission(hit);
 
-    if (hit.hitTranslucent == true)
-    {
-      translucentHitT = hit.firstTranslucentHitT;
-    }
     const vec4 posClip = uniforms.viewProj * vec4(hit.positionWorld, 1.0);
     gl_FragDepth = posClip.z / posClip.w;
   }
@@ -50,6 +46,11 @@ void main()
   {
     radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
     gl_FragDepth = FAR_DEPTH;
+  }
+  
+  if (hit.hitTranslucent == true)
+  {
+    translucentHitT = hit.firstTranslucentHitT;
   }
 
   o_albedo = vec4(albedo, 1);

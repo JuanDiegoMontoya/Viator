@@ -3,6 +3,8 @@
 #include "Game/Assets.h"
 #include "Core/Assert2.h"
 #include "Client/Fvog/Rendering2.h"
+#include "Game/Game.h"
+#include "Game/World.h"
 
 #include "glm/common.hpp"
 #include "tracy/Tracy.hpp"
@@ -149,15 +151,42 @@ namespace Techniques
     });
   }
 
-  void FroxelFog::UpdateUniforms(VkCommandBuffer commandBuffer, const VolumetricUniforms& uniforms)
+  void FroxelFog::UpdateUniforms(VkCommandBuffer commandBuffer, const World& world, const VolumetricUniforms& uniforms)
   {
     if (!uniformBuffer)
     {
       uniformBuffer.emplace(1, "Froxel Fog Uniforms");
     }
+
+    auto fogs = std::vector<Vol_FogEmitter_t>();
+    for (const auto [entity, transform, emitter] : world.GetRegistry().view<const GlobalTransform, const FogEmitter>().each())
+    {
+      fogs.emplace_back(Vol_FogEmitter_t{
+        .position    = transform.position,
+        .radiusInner = emitter.radiusInner,
+        .radiusOuter = emitter.radiusOuter,
+        .density     = emitter.density,
+        .color       = emitter.color,
+      });
+    }
+
+    if (!fogEmittersBuffer || sizeof(FogList_t) + sizeof(Vol_FogEmitter_t) * fogs.size() > fogEmittersBuffer->SizeBytes())
+    {
+      fogEmittersBuffer.emplace(Fvog::BufferCreateInfo{.size = sizeof(FogList_t) + sizeof(Vol_FogEmitter_t) * 1000}, "Fog emitters");
+      fogEmittersBuffer->FillData(commandBuffer);
+    }
+
     auto uniforms2 = uniforms;
     uniforms2.mieScattering = scatteringTexture->ImageView().GetTexture1D();
+    uniforms2.fogList       = fogEmittersBuffer->GetDeviceAddress();
     uniformBuffer->UpdateData(commandBuffer, uniforms2);
+
+    const auto list = FogList_t{
+      .count    = int32_t(fogs.size()),
+      .emitters = fogEmittersBuffer->GetDeviceAddress() + sizeof(FogList_t),
+    };
+    Fvog::Context(commandBuffer).TeenyBufferUpdate(*fogEmittersBuffer, list);
+    fogEmittersBuffer->UpdateDataExpensive(commandBuffer, std::span(fogs), sizeof(FogList_t));
   }
 
   void FroxelFog::InjectFog(VkCommandBuffer commandBuffer, const Fvog::Texture& fogDensityVolume)

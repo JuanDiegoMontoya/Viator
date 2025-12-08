@@ -552,7 +552,10 @@ namespace Fvog
     }), VK_NULL_HANDLE);
 
     // TODO: Horrible sin
-    CheckVkResult(vkQueueWaitIdle(graphicsQueue_));
+    {
+      ZoneScopedN("vkQueueWaitIdle");
+      CheckVkResult(vkQueueWaitIdle(graphicsQueue_));
+    }
   }
 
   void Device::FreeUnusedResources()

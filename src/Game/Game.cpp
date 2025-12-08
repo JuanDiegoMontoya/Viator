@@ -521,7 +521,7 @@ void CreateContextVariablesAndObservers(World& world)
   registry.on_construct<Physics::CharacterControllerShrimple>().connect<&OnCharacterControllerShrimpleConstruct>();
   registry.on_destroy<GlobalTransform>().connect<&OnGlobalTransformRemove>();
   registry.on_destroy<LinearPath>().connect<&OnLinearPathRemove>();
-
+  
   world.GetPhysicsEngine().CreateObservers(registry);
 
   world.InitializeGameDefinitions();

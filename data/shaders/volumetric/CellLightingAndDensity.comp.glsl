@@ -39,12 +39,41 @@ vec4 FogAtPoint(vec3 wPos)
   const ivec2 wPos2 = ivec2(ogPos.xz);
   if (all(greaterThanEqual(wPos2, ivec2(0))) && all(lessThan(wPos2, wSize)))
   {
-    const float height = texelFetch(uniforms.globalSurfaceHeight, wPos2, 0).x;
-    const float fogginess = texelFetch(uniforms.globalSurfaceFog, wPos2, 0).x;
+    const vec2 uv = (ogPos.xz + 0.5) / (uniforms.voxels.dimensions.xz);
+    const float height = textureLod(uniforms.globalSurfaceHeight, uniforms.linearSampler, uv, 0).x;
+    const float fogginess = textureLod(uniforms.globalSurfaceFog, uniforms.linearSampler, uv, 0).x;
     d += 3 * (1 - smoothstep(3, 8, abs(height - ogPos.y))) * fogginess;
   }
 
-  return vec4(c, d);
+  const ivec2 wPos3 = ivec2(ogPos);
+  const vec3 uv2 = (ogPos + 0.5) / (uniforms.voxels.dimensions);
+  if (all(greaterThanEqual(uv2, vec3(0))) && all(lessThan(uv2, vec3(1))))
+  {
+    const float fogginess = 10 * textureLod(uniforms.globalFog, uniforms.linearSampler, uv2, 0).x;
+    d += fogginess;
+  }
+
+  for (int i = 0; i < uniforms.fogList.count; i++)
+  {
+    // TODO: figure out how color mixing works in participating media (probably an average of some sort).
+    Vol_FogEmitter emitter = uniforms.fogList.emitters[i];
+    const float density = emitter.density * (1 - smoothstep(emitter.radiusInner, emitter.radiusOuter, distance(emitter.position, ogPos)));
+    d += density;
+    
+    /*
+    vec3 frogPos = emitter.position;
+    frog_sdfRet ret = frog_map(0.125 * (ogPos - frogPos));
+    float froge = 1.0 - smoothstep(0.0, 0.05, ret.sdf);
+    {
+      c = mix(c, frog_idtocol(ret.id), froge);
+      d += froge * 105.0;
+    }
+    */
+  }
+
+  d = max(0, d);
+
+  return vec4(c, d * 0.0092);
 }
 
 vec4 DensityToLight(vec3 start, vec3 end, int steps)
@@ -55,10 +84,9 @@ vec4 DensityToLight(vec3 start, vec3 end, int steps)
   vec3 inScatteringAccum = vec3(0);
   float densityAccum = 0;
 
-  vec3 curPos = start;
-  for (int i = 0; i < steps; i++)
+  for (float i = 0.5; i < steps; i++)
   {
-    curPos += dir * stepSize;
+    const vec3 curPos = start + dir * stepSize * i;
 
     vec4 cd = FogAtPoint(curPos);
     densityAccum += cd.w * stepSize;
@@ -87,13 +115,13 @@ void main()
 
   vec4 colorAndDensity = FogAtPoint(wPos);
   vec3 fogColor = colorAndDensity.rgb;
-  float fogDensity = colorAndDensity.w * 0.0092;
+  float fogDensity = colorAndDensity.w;
   uint seed = PCG_Hash(gid.x) ^ PCG_Hash(gid.y) ^ PCG_Hash(gid.z);
   vec3 light = vec3(0);
   light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
   
   // Shadow
-  //const vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
+  //vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
   vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
   const vec3 transmittanceToSun = getTransmittanceAlongRay(globalUniforms.sky, globalUniforms.transmittanceLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, uniforms.viewPos);
   

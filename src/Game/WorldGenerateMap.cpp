@@ -1073,7 +1073,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
-  if (true)
+  *globals->globalFog = Core::DSP::Image<3, float>(grid->Dimensions() / 4);
+  globals->globalFog->Fill(0);
+
+  if (mapGenInfo.generateCaves)
   {
     ZoneScopedN("Underground Biomes");
 #ifndef GAME_HEADLESS
@@ -1110,9 +1113,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               biomeDensities[m] = undergroundBiomes[m]->GenImageForChunk({i, j, k}, grid->topLevelBricksDims_, mapGenInfo);
             }
           }
-
-          //auto densities = std::make_unique_for_overwrite<float[]>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
-          //auto biomes = std::make_unique_for_overwrite<UndergroundBiome[]>(samplesPerAxis * samplesPerAxis * samplesPerAxis);
 
           const auto tl = glm::ivec3{i, j, k};
           ForEachPositionInTLBrick(tl,
@@ -1169,6 +1169,13 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
               }
 
               const auto density = sumDensities / sumWeights;
+
+              const auto ratio = grid->Dimensions() / globals->globalFog->Size();
+              const auto surfaceHeight = globalSurfaceHeightImage.Load({positionWS.x, positionWS.z});
+              if (positionWS % ratio == glm::ivec3(0) && positionWS.y < surfaceHeight && biome == UndergroundBiome::Corruption)
+              {
+                globals->globalFog->Store(positionWS / ratio, .25f * glm::smoothstep(10.0f, 70.0f, abs(positionWS.y - surfaceHeight)));
+              }
 
               {
                 const auto blockAtPos = grid->GetVoxelAtUnchecked(positionWS);

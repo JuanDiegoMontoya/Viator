@@ -260,7 +260,7 @@ namespace GuiHelper
       if (hasValue)
       {
         ASSERT(valueFn);
-        auto value = valueFn.invoke({}, instance);
+        auto value = valueFn.invoke({}, instance.as_ref());
         ASSERT(value);
         ImGui::PushID(guiId++);
         changed |= GuiHelper::DrawComponent(world, entity, value.as_ref(), value.type().custom(), readonly, guiId);

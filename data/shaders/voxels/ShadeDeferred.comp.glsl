@@ -153,7 +153,7 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
       vec3(0.0),
       uniforms.sky.atmosphere_bottom
   );
-    
+
   bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 
   const vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
@@ -173,7 +173,7 @@ vec3 CalcRadianceFromPointSpecular(vec3 positionWS, vec3 normalWS, vec3 viewDirW
 
   HitSurfaceParameters hit;
   //if (vx_TraceRaySimple(rayPos, rayDir, 64, hit))
-  if (vx_TraceRayMultiLevel(rayPos, rayDir, 64, hit))
+  if (vx_TraceRayMultiLevel(rayPos, rayDir, 128, hit))
   {
     return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false));
   }
@@ -221,7 +221,7 @@ void main()
     internalColorSpace);
   const vec3 normal = normalize(texelFetch(uniforms.gBuffer.gNormal, gid, 0).xyz);
   const float depth = texelFetch(uniforms.gBuffer.gDepth, gid, 0).x;
-  const vec3 positionWorld = UnprojectUV_ZO(depth, uv, uniforms.invViewProj);
+  const vec3 positionWorld = UnprojectUV_ZO(depth == FAR_DEPTH ? 0.75 : depth, uv, uniforms.invViewProj);
   const vec3 viewDirWS = normalize(positionWorld - uniforms.cameraPos.xyz);
   const uint special = imageLoad(uniforms.gBuffer.gSpecial, gid).x;
   
@@ -232,11 +232,14 @@ void main()
   const vec3 positionTranslucentWS = uniforms.cameraPos.xyz + viewDirWS * depthTranslucent;
 
   vec3 normalTranslucent = imageLoad(uniforms.gBuffer.gNormalTranslucent, gid).xyz;
-  normalTranslucent = vec3(0, 1, 0);
+  if (dot(-viewDirWS, vec3(0, 1, 0)) > 0)
+  {
+    normalTranslucent = vec3(0, 1, 0);
+  }
   normalTranslucent = normalize(normalTranslucent + .05 * snoise_fbm(vec3(0, 1, 0) * uniforms.frameNumber * .01 + 2 * positionTranslucentWS, 3));
 
   vec3 transmission = vec3(1);
-  const float opaqueToCameraDist = distance(positionWorld, uniforms.cameraPos.xyz);
+  const float opaqueToCameraDist = depth == FAR_DEPTH ? 1e99 : distance(positionWorld, uniforms.cameraPos.xyz);
   if (depthTranslucent < opaqueToCameraDist || depth == FAR_DEPTH)
   {
     transmission = imageLoad(uniforms.gBuffer.gTransmission, gid).rgb;
@@ -246,25 +249,14 @@ void main()
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
 
-  // Sky.
-  if (depth == FAR_DEPTH)
-  {
-    imageStore(sceneColor, gid, vec4(radiance_internal * transmission, 0.0));
-    return;
-  }
-
-  if (normal == vec3(0))
-  {
-    const vec3 avgLuminance = SampleAverageLuminance(positionWorld, uniforms.linearSampler, ddgi);
-    const float artisticLightScale = 2; // Makes sprites "pop" a little more from their surroundings.
-    imageStore(sceneColor, gid, vec4(artisticLightScale * albedo_internal * avgLuminance, 0.0));
-    return;
-  }
-
   const float ior_water = 1.3;
   const float ior_air = 1.0;
   
-  vec3 finalRadianceOpaque = transmission * (radiance_internal + CalcRadianceFromPoint(positionWorld, normal, viewDirWS, albedo_internal, uv, true, true));
+  vec3 finalRadianceOpaque = vec3(0);
+  if (depth != FAR_DEPTH)
+  {
+    finalRadianceOpaque = transmission * (radiance_internal + CalcRadianceFromPoint(positionWorld, normal, viewDirWS, albedo_internal, uv, true, true));
+  }
   vec3 finalRadianceTranslucent = vec3(0);
   if (depthTranslucent < 1e9)
   {
@@ -280,6 +272,19 @@ void main()
       finalRadianceOpaque = CalcRadianceFromPointRefract(positionTranslucentWS, normalTranslucent, viewDirWS, albedoTranslucent_internal, ior_air / ior_water, false);
     }
 #endif
+  }
+
+  // Sky.
+  if (depth == FAR_DEPTH)
+  {
+    finalRadianceOpaque = radiance_internal * transmission;
+  }
+  else if (normal == vec3(0)) // Sprites, billboards, etc.
+  {
+    const vec3 avgLuminance = SampleAverageLuminance(positionWorld, uniforms.linearSampler, ddgi);
+    const float artisticLightScale = 2; // Makes sprites "pop" a little more from their surroundings.
+    imageStore(sceneColor, gid, vec4(artisticLightScale * albedo_internal * avgLuminance, 0.0));
+    return;
   }
 
   // Spelunker potion effect
@@ -306,7 +311,6 @@ void main()
   }
 
   vec3 reflectedColor = finalRadianceTranslucent;
-
   const float reflectance = FresnelSchlick(viewDirWS, normalTranslucent, ior_air / ior_water);
   vec3 realFinalRadiance = mix(finalRadianceOpaque, reflectedColor, reflectance);
   if (depthTranslucent >= 1e9 || depthTranslucent < 0.125 || depthTranslucent > opaqueToCameraDist)

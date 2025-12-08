@@ -76,6 +76,7 @@ public:
     int surfaceThickness = 80;
     bool settleLiquids   = true;
     bool spawnYggdrasil  = false;
+    bool generateCaves   = true;
   };
 
   void CreateGrid(glm::ivec3 numChunks);
@@ -115,7 +116,7 @@ public:
   }
 
   template<typename T>
-  [[nodiscard]] bool AncestorHasComponent(entt::entity entity)
+  [[nodiscard]] bool AncestorHasComponent(entt::entity entity) const
   {
     assert(registry_.valid(entity));
     if (registry_.all_of<T>(entity))

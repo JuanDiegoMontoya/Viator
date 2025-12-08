@@ -1,5 +1,6 @@
 #pragma once
 #include "BlockFwd.h"
+#include "Game.h"
 #include "ItemFwd.h"
 #include "Core/ClassImplMacros.h"
 #include "Game/Voxel/VoxelType.h"
@@ -122,6 +123,7 @@ namespace Item
       int maxBounces   = 0;
       std::optional<BlockId> spawnBlockOnHit;
       bool particles = true;
+      std::optional<FogEmitter> fogEmitter;
     };
 
     struct MaterializeAsSprite
@@ -191,6 +193,9 @@ namespace Item
       float springFrequencyVelocity = 8.0f;
       float springDamping           = 0.05f;
     };
+
+    struct AbsorbFogOnUse {};
+    struct EmitFogOnUse {};
   } // namespace Component
 
   class Registry

@@ -258,11 +258,15 @@ namespace Fvog
 
     [[nodiscard]] TextureView CreateSwizzleView(VkComponentMapping components, std::string name = {});
 
-    /// @brief Updates a subresource of the image
+    /// @brief Updates a subresource of the image immediately
     /// @param info The subresource and data to upload
     /// @note info.data must be in a compatible image format
     /// @note This function is provided for backwards compatibility only
     void UpdateImageSLOW(const TextureUpdateInfo& info);
+
+    /// @brief Updates a subresource of the image on the GPU timeline
+    /// @note Using this function to issue frequent large updates may consume a large amount of memory with multiple frames in flight
+    void UpdateImage(VkCommandBuffer commandBuffer, const TextureUpdateInfo& info);
 
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;

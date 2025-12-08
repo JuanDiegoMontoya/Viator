@@ -263,6 +263,7 @@ private:
 
   std::optional<Fvog::Texture> globalSurfaceHeightImage;
   std::optional<Fvog::Texture> globalSurfaceFogImage;
+  std::optional<Fvog::Texture> globalFogImage;
 };
 
 namespace GuiHelper

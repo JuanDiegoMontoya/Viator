@@ -829,21 +829,39 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   if (world.globals->grid->numTopLevelBricks_ > 0)
   {
+    ZoneScopedN("Flush buffer and image writes");
     auto& grid = *world.globals->grid;
     grid.Buffer().FlushWritesToGPU(commandBuffer);
 
     if (needsHeightmapInit)
     {
-      needsHeightmapInit = false;
-
       const auto extent        = Fvog::Extent3D{(uint32_t)grid.Dimensions().x, (uint32_t)grid.Dimensions().z};
-      globalSurfaceHeightImage = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY);
-      globalSurfaceFogImage    = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY);
-      globalSurfaceHeightImage->UpdateImageSLOW({.extent = extent, .data = world.globals->globalSurfaceHeight->Data()});
-      globalSurfaceFogImage->UpdateImageSLOW({.extent = extent, .data = world.globals->globalSurfaceFog->Data()});
-    }
-  }
+      globalSurfaceHeightImage = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY, "Global surface height");
+      globalSurfaceFogImage = Fvog::CreateTexture2D({extent.width, extent.height}, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::READ_ONLY, "Global surface fog");
 
+      globalSurfaceHeightImage->UpdateImage(commandBuffer, {.extent = extent, .data = world.globals->globalSurfaceHeight->Data()});
+      globalSurfaceFogImage->UpdateImage(commandBuffer, {.extent = extent, .data = world.globals->globalSurfaceFog->Data()});
+    }
+
+    if (needsHeightmapInit || world.globals->globalFogNeedsUpdate)
+    {
+      const auto size3   = world.globals->globalFog->Size();
+      const auto extent3 = Fvog::Extent3D{(uint32_t)size3.x, (uint32_t)size3.y, (uint32_t)size3.z};
+      globalFogImage = Fvog::Texture(
+        Fvog::TextureCreateInfo{
+          .viewType = VK_IMAGE_VIEW_TYPE_3D,
+          .format   = Fvog::Format::R32_SFLOAT,
+          .extent   = extent3,
+          .usage    = Fvog::TextureUsage::READ_ONLY,
+        },
+        "Global fog");
+      globalFogImage->UpdateImage(commandBuffer, {.extent = extent3, .data = world.globals->globalFog->Data()});
+    }
+
+    needsHeightmapInit = false;
+    world.globals->globalFogNeedsUpdate = false;
+  }
+  
   ctx.TeenyBufferUpdate(gBufferBuffer.value(),
     GBuffer_t{
       .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
@@ -1411,7 +1429,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       const auto nearVolume            = 1.5f;
       const auto farVolume             = 1000.0f;
       const auto clip_from_view_volume = glm::perspectiveZO(fovy, aspectRatio, nearVolume, farVolume);
-      fog_.UpdateUniforms(commandBuffer,
+      fog_.UpdateUniforms(commandBuffer, world,
         {
           .viewPos           = position,
           .time              = 0,
@@ -1440,6 +1458,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           //.mieScattering                        = ,
           .globalSurfaceHeight = globalSurfaceHeightImage->ImageView().GetTexture2D(),
           .globalSurfaceFog = globalSurfaceFogImage->ImageView().GetTexture2D(),
+          .globalFog = globalFogImage->ImageView().GetTexture3D(),
           .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
           .voxels = voxels,
           .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,

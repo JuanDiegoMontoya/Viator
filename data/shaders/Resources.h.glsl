@@ -65,15 +65,16 @@
 #extension GL_EXT_nonuniform_qualifier : require          // descriptor indexing
 #extension GL_EXT_scalar_block_layout : require	          // sane buffer layout
 #extension GL_EXT_buffer_reference : require              // BDA
+#extension GL_EXT_buffer_reference2 : require             // BDA pointer-to-array indexing
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int8 : require // TODO: check support for this ext
 #extension GL_EXT_shader_explicit_arithmetic_types_int16 : require // TODO: check support for this ext
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
-//#extension GL_EXT_buffer_reference2 : require              // BDA
 #extension GL_EXT_shader_image_load_formatted : require   // readable images without explicit format
 #extension GL_EXT_samplerless_texture_functions : require // texelFetch on sampled images
 #extension GL_EXT_debug_printf : enable                   // printf
 #extension GL_EXT_control_flow_attributes : require
+#extension GL_EXT_spirv_intrinsics : require
 
 #ifdef FROGRENDER_RAYTRACING_ENABLE
 #extension GL_EXT_ray_tracing : require
@@ -101,9 +102,10 @@
 #define NonUniformIndex nonuniformEXT
 #define printf debugPrintfEXT
 
+// TODO: Use __LINE__ and __FILE__ to make the asserts more useful.
 #ifdef GL_EXT_debug_printf
-  #define ASSERT_MSG(x, msg) do { if (!bool(x)) { printf(msg); } } while(false)
-  #define ASSERT(x) ASSERT_MSG(x, "Assertion failed!\n")
+  #define ASSERT_MSG(x, msg) do { if (!bool((x))) { printf(msg); } } while(false)
+  #define ASSERT(x) ASSERT_MSG((x), "Assertion failed!\n")
   #define UNREACHABLE ASSERT_MSG(false, "Unreachable path taken!\n")
 #else
   #define ASSERT_MSG(x, msg) (int(0))
@@ -128,7 +130,7 @@
   layout(set = 0, binding = FVOG_STORAGE_IMAGE_BINDING) uniform type i_storageImages_##type[]
 
 #define FVOG_DECLARE_BUFFER_REFERENCE(typename) \
-  layout(buffer_reference, scalar) buffer typename
+  layout(buffer_reference, buffer_reference_align = 8, scalar) buffer typename
 
 #define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) FVOG_DECLARE_BUFFER_REFERENCE(typename)
 

@@ -20,4 +20,5 @@ WorldGlobals::WorldGlobals()
   waterSet.reset(new WaterSet());
   globalSurfaceHeight.reset(new Core::DSP::Image<2, float>());
   globalSurfaceFog.reset(new Core::DSP::Image<2, float>());
+  globalFog.reset(new Core::DSP::Image<3, float>());
 }

@@ -6,6 +6,8 @@
 
 #include "shaders/volumetric/Common.h"
 
+class World;
+
 namespace Techniques
 {
   class FroxelFog
@@ -13,7 +15,7 @@ namespace Techniques
   public:
     explicit FroxelFog();
 
-    void UpdateUniforms(VkCommandBuffer commandBuffer, const VolumetricUniforms& uniforms);
+    void UpdateUniforms(VkCommandBuffer commandBuffer, const World& world, const VolumetricUniforms& uniforms);
 
     void InjectFog(VkCommandBuffer commandBuffer, const Fvog::Texture& fogDensityVolume);
 
@@ -30,6 +32,7 @@ namespace Techniques
     std::optional<PipelineManager::ComputePipelineKey> marchVolumePipeline;
     std::optional<PipelineManager::ComputePipelineKey> applyDeferredPipeline;
     std::optional<Fvog::NDeviceBuffer<VolumetricUniforms>> uniformBuffer;
+    std::optional<Fvog::Buffer> fogEmittersBuffer;
     std::optional<Fvog::Texture> scatteringTexture;
   };
 } // namespace Techniques

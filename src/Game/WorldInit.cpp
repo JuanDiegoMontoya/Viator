@@ -400,6 +400,14 @@ void World::InitializeGameDefinitions()
   items.GetRegistry().emplace<Item::Component::Usable>(healingPotion, 1.0f);
   items.GetRegistry().emplace<Item::Component::HealUserOnUse>(healingPotion, 30.0f);
 
+  const auto fogSucc = Item::CreateSimpleSpriteItem(items, "item_fog_absorber", "Fog Vacuum", "potion_healing");
+  items.GetRegistry().emplace<Item::Component::Usable>(fogSucc, 0.0f);
+  items.GetRegistry().emplace<Item::Component::AbsorbFogOnUse>(fogSucc);
+
+  const auto fogEmit = Item::CreateSimpleSpriteItem(items, "item_fog_emitter", "Fog Emit", "potion_healing", 1, {0, 0, 0});
+  items.GetRegistry().emplace<Item::Component::Usable>(fogEmit, 0.0f);
+  items.GetRegistry().emplace<Item::Component::EmitFogOnUse>(fogEmit);
+
   const auto opPickaxe = Item::CreateTool(items,
     "tool_op_pickaxe",
     "OP Pickaxe",

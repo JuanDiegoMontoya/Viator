@@ -305,8 +305,8 @@ namespace Core::Serialization
     }
   } // namespace
 
-  template<bool Save, typename Archive>
-  static void SerializeImage(Archive& ar, std::conditional_t<Save, const DSP::Image<2, float>, DSP::Image<2, float>>& image, const SerializationContext& = {})
+  template<bool Save, typename Archive, typename Image>
+  static void SerializeImage(Archive& ar, std::conditional_t<Save, const Image, Image>& image, const SerializationContext& = {})
   {
     ZoneScoped;
 
@@ -428,8 +428,12 @@ namespace Core::Serialization
     //entt::meta_factory<std::string_view>().func<[](cereal::BinaryOutputArchive& ar, std::string_view str) { ar(std::string(str)); }>("BinaryOutputArchive"_hs);
 
     entt::meta_factory<Core::DSP::Image<2, float>>()
-      .func<SerializeImage<false, cereal::BinaryInputArchive>>("SerializeLoad"_hs)
-      .func<SerializeImage<true, cereal::BinaryOutputArchive>>("SerializeSave"_hs);
+      .func<SerializeImage<false, cereal::BinaryInputArchive, Core::DSP::Image<2, float>>>("SerializeLoad"_hs)
+      .func<SerializeImage<true, cereal::BinaryOutputArchive, Core::DSP::Image<2, float>>>("SerializeSave"_hs);
+
+    entt::meta_factory<Core::DSP::Image<3, float>>()
+      .func<SerializeImage<false, cereal::BinaryInputArchive, Core::DSP::Image<3, float>>>("SerializeLoad"_hs)
+      .func<SerializeImage<true, cereal::BinaryOutputArchive, Core::DSP::Image<3, float>>>("SerializeSave"_hs);
   }
 
   void SaveRegistryToFile(const World& world, const std::filesystem::path& path)

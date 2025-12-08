@@ -620,6 +620,14 @@ struct VoxelsComponent {};
 
 struct NetworkNeedUpdateLocalTransform {};
 
+struct FogEmitter
+{
+  float radiusInner = 1;
+  float radiusOuter = 1;
+  float density     = 10; // Negative values are allowed and will remove fog.
+  glm::vec3 color   = {1, 1, 1};
+};
+
 struct SunInfo
 {
   float timeOfDay = 0.667f; // 0 = midnight, 1 = midday, 2 = midnight
