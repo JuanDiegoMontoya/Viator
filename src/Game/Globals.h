@@ -11,6 +11,7 @@
 #include "Physics/Physics.h"
 using WaterQueue = RingBuffer<glm::ivec3>;
 using WaterSet   = std::unordered_set<glm::ivec3>;
+//// END TEMP
 
 namespace Networking
 {
@@ -86,4 +87,3 @@ public:
   unique_ptr<Core::DSP::Image<3, float>> globalFog;
   bool globalFogNeedsUpdate = false;
 };
-//// END TEMP

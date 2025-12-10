@@ -177,6 +177,12 @@ add_executable(frogRender
     src/Game/Globals.cpp
     src/Game/IncompleteTypeDeleter.h
     src/Game/IncompleteTypeDeleter.cpp
+    src/Game/World/SurfaceBiome.h
+    src/Game/World/SurfaceBiome.cpp
+    src/Game/World/UndergroundBiome.h
+    src/Game/World/UndergroundBiome.cpp
+    src/Game/World/WorldGenHelpers.h
+    src/Game/World/WorldGenHelpers.cpp
 )
 
 # Precompiled headers for standard library
@@ -339,6 +345,7 @@ if (NOT GAME_HEADLESS)
         glslang::glslang-default-resource-limits
         glslang::SPIRV
         stbi
+        miniaudio
     )
 endif()
 
@@ -349,7 +356,7 @@ target_link_libraries(frogRender
     ${libraries_for_head}
     glm
     Tracy::TracyClient
-    VulkanMemoryAllocator # VMA is not in GAME_HEADLESS because its virtual allocator is used in server logic
+    VulkanMemoryAllocator # VMA is headless builds because its virtual allocator is used in server logic
     EnTT
     FastNoise
     unordered_dense
@@ -360,7 +367,6 @@ target_link_libraries(frogRender
     rapidfuzz::rapidfuzz
     angelscript
     as_addons
-    miniaudio
     Jolt
 )
 

@@ -32,6 +32,17 @@ namespace Physics
 class Audio;
 struct WorldGlobals;
 
+struct MapGenInfo
+{
+  int seed             = 1234;
+  int worldHeight      = 600;
+  int seaLevel         = 400;
+  int surfaceThickness = 80;
+  bool settleLiquids   = true;
+  bool spawnYggdrasil  = false;
+  bool generateCaves   = true;
+};
+
 class World
 {
 public:
@@ -67,17 +78,6 @@ public:
   void InitializeGameState();
 
   void InitializeGameDefinitions();
-
-  struct MapGenInfo
-  {
-    int seed             = 1234;
-    int worldHeight      = 600;
-    int seaLevel         = 400;
-    int surfaceThickness = 80;
-    bool settleLiquids   = true;
-    bool spawnYggdrasil  = false;
-    bool generateCaves   = true;
-  };
 
   void CreateGrid(glm::ivec3 numChunks);
   void CreateInitialEntities();

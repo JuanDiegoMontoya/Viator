@@ -1556,7 +1556,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       
       ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-      static auto mapGenInfo       = World::MapGenInfo{};
+      static auto mapGenInfo       = MapGenInfo{};
       static int selectedWorldSize = 0;
       auto MakeWorld = [&]
       {
