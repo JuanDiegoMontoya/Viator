@@ -51,6 +51,7 @@ public:
     if (auto itit = entityToPosition_.find(value); itit != entityToPosition_.end())
     {
       positionToEntities_.erase(itit->second);
+      entityToPosition_.erase(itit);
     }
   }
 
@@ -61,7 +62,7 @@ public:
     auto it = entityToPosition_.find(value);
     if (it != entityToPosition_.end())
     {
-      assert(it->second != positionToEntities_.end());
+      ASSERT(it->second != positionToEntities_.end());
       positionToEntities_.erase(it->second);
     }
 
