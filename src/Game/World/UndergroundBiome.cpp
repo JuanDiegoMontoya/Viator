@@ -181,3 +181,69 @@ std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>
 
   return undergroundBiomes;
 }
+
+UndergroundBiome GetUndergroundBiomeAtPosition(const std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>& biomes,
+  glm::ivec3 positionWS,
+  const std::function<void(UndergroundBiome, float)>& callback)
+{
+  const static auto shrimplex2 = []
+  {
+    auto noise = FastNoise::New<FastNoise::Simplex>();
+    noise->SetScale(8);
+    noise->SetOutputMin(0);
+    return noise;
+  }();
+
+  auto biomeWeights   = std::array<float, int(UndergroundBiome::COUNT)>();
+  auto biome          = UndergroundBiome(uint32_t(UndergroundBiome::COUNT) - 1);
+  auto maxBiomeWeight = 0.0125f;
+  auto sumWeights     = 0.0f;
+
+  for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
+  {
+    // Skip biomes that failed broadphase check.
+    if (biomes[m] == nullptr)
+    {
+      continue;
+    }
+
+    float weight;
+    // Last biome is the default (if weight of other biomes is low).
+    if (m == int(UndergroundBiome::COUNT) - 1)
+    {
+      weight = 1 - glm::min(1.0f, sumWeights);
+    }
+    else
+    {
+      weight = biomes[m]->GetWeight(positionWS);
+    }
+
+    biomeWeights[m] = weight;
+    sumWeights += weight;
+    if (callback)
+    {
+      callback(UndergroundBiome(m), weight);
+    }
+
+    if (weight > maxBiomeWeight)
+    {
+      biome          = UndergroundBiome(m);
+      maxBiomeWeight = weight;
+    }
+  }
+
+  // Dither biome edges
+  const auto target = sumWeights * shrimplex2->GenSingle3D((float)positionWS.x, (float)positionWS.y, (float)positionWS.z, 68);
+  auto accumRng     = 0.0f;
+  for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
+  {
+    accumRng += biomeWeights[m];
+    if (accumRng >= target)
+    {
+      biome = UndergroundBiome(m);
+      break;
+    }
+  }
+
+  return biome;
+}

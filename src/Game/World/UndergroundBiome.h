@@ -2,6 +2,8 @@
 #include "Core/ClassImplMacros.h"
 #include "Game/BlockFwd.h"
 
+#include <functional>
+
 namespace Core::DSP
 {
   template<size_t Dim, typename>
@@ -57,3 +59,7 @@ private:
 };
 
 std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)> GetUndergroundBiomeNoises(const World& world);
+
+UndergroundBiome GetUndergroundBiomeAtPosition(const std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>& biomes,
+  glm::ivec3 positionWS,
+  const std::function<void(UndergroundBiome, float)>& callback);

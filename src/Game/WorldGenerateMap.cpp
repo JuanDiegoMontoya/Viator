@@ -229,21 +229,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
         {
           globalSurfaceBiomeImage.Store(pos, SurfaceBiome::Rivers);
         }
-        return glm::mix(originalHeight, blurredHeight - 15, riverness);
+        return (float)(int)(glm::mix(originalHeight, blurredHeight - 16, riverness) + 0.5f);
       });
 
     globalSurfaceHeightImage = std::move(erodedTerrain);
-
-    //const auto map  = [](float v) { return glm::min(255.0f, v * 256); };
-    //const auto out1 = Map<uint8_t>(riverMask1, map);
-    //const auto out2 = Map<uint8_t>(riverMask3, map);
-    //const auto out3 = Map<uint8_t>(blur2, map);
-
-    //const auto width = out1.Size().x;
-    //const auto height = out1.Size().y;
-    //stbi_write_png("out1.png", width, height, 1, out1.data(), width);
-    //stbi_write_png("out2.png", width, height, 1, out2.data(), width);
-    //stbi_write_png("out3.png", width, height, 1, out3.data(), width);
 
     auto waterMutex = std::mutex();
 
@@ -376,55 +365,19 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           ForEachPositionInTLBrick(tl,
             [&](glm::ivec3 positionWS)
             {
-              auto biomeWeights   = std::array<float, int(UndergroundBiome::COUNT)>();
-              auto biome          = UndergroundBiome(uint32_t(UndergroundBiome::COUNT) - 1);
-              auto maxBiomeWeight = 0.0125f;
-              auto sumWeights     = 0.0f;
-              auto sumDensities   = 0.0f;
+              auto sumDensities = 0.0f;
+              auto sumWeights   = 0.0f;
 
-              for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
-              {
-                // Skip biomes that failed broadphase check.
-                if (biomeDensities[m].Data() == nullptr)
+              const auto biome = GetUndergroundBiomeAtPosition(undergroundBiomes,
+                positionWS,
+                [&](UndergroundBiome inBiome, float weight)
                 {
-                  continue;
-                }
-
-                float weight;
-                // Last biome is the default (if weight of other biomes is low).
-                if (m == int(UndergroundBiome::COUNT) - 1)
-                {
-                  weight = 1 - glm::min(1.0f, sumWeights);
-                }
-                else
-                {
-                  weight = undergroundBiomes[m]->GetWeight(positionWS);
-                }
-
-                biomeWeights[m] = weight;
-                sumWeights += weight;
-                sumDensities +=
-                  weight * biomeDensities[m].Load(positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
-
-                if (weight > maxBiomeWeight)
-                {
-                  biome          = UndergroundBiome(m);
-                  maxBiomeWeight = weight;
-                }
-              }
-
-              // Dither biome edges
-              const auto target = sumWeights * shrimplex2->GenSingle3D((float)positionWS.x, (float)positionWS.y, (float)positionWS.z, 68);
-              auto accumRng     = 0.0f;
-              for (int m = 0; m < int(UndergroundBiome::COUNT); m++)
-              {
-                accumRng += biomeWeights[m];
-                if (accumRng >= target)
-                {
-                  biome = UndergroundBiome(m);
-                  break;
-                }
-              }
+                  sumWeights += weight;
+                  if (biomeDensities[int(inBiome)].Data())
+                  {
+                    sumDensities += weight * biomeDensities[int(inBiome)].Load(positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+                  }
+                });
 
               const auto density = sumDensities / sumWeights;
 
