@@ -616,10 +616,14 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
     return 0;
   }
 
-  entt::entity foundEntity = entt::null;
-  BlockHealth* hp          = nullptr;
+  if ((damageType & Block::GetDamageFlags(*this, prevVoxel)).flags == 0 || damageTier < Block::GetDamageTier(*this, prevVoxel))
+  {
+    return 0;
+  }
 
-  const auto worldPos = glm::vec3(voxelPos) + 0.5f;
+  entt::entity foundEntity = entt::null;
+  const auto worldPos      = glm::vec3(voxelPos) + 0.5f;
+  BlockHealth* hp = nullptr;
   for (auto entity : GetEntitiesInSphere(worldPos, 0.125f))
   {
     hp = registry_.try_get<BlockHealth>(entity);
@@ -630,22 +634,7 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
     }
   }
 
-  if (foundEntity == entt::null)
-  {
-    foundEntity = this->CreateRenderableEntity(worldPos);
-    hp          = &registry_.emplace<BlockHealth>(foundEntity, Block::GetInitialHealth(*this, prevVoxel));
-  }
-
-  registry_.emplace_or_replace<Lifetime>(foundEntity).remainingSeconds = 5;
-
-  if ((damageType & Block::GetDamageFlags(*this, prevVoxel)).flags == 0 || damageTier < Block::GetDamageTier(*this, prevVoxel))
-  {
-    return 0;
-  }
-
-  const auto initialHealth = hp->health;
-  hp->health -= damage;
-  if (hp->health <= 0)
+  const auto DoDestroyBlock = [&]
   {
     Block::OnDestroyBlock(*this, voxelPos, prevVoxel);
 
@@ -659,7 +648,33 @@ float World::DamageBlock(glm::ivec3 voxelPos, float damage, int damageTier, Bloc
     // TODO: This doesn't seem to be robust. Setting mTimeBeforeSleep to 0 in PhysicsSettings seems to disable sleeping, which fixes this issue.
     GetPhysicsEngine().GetBodyInterface().ActivateBodiesInAABox({Physics::ToJolt(worldPos), 2.0f}, {}, {});
 
-    registry_.destroy(foundEntity);
+    if (foundEntity != entt::null)
+    {
+      registry_.destroy(foundEntity);
+    }
+  };
+
+  // Fast path (avoid spawning an entity) if the block will just be immediately destroyed.
+  const auto blockInitialHealth = Block::GetInitialHealth(*this, prevVoxel);
+  if (damage >= blockInitialHealth)
+  {
+    DoDestroyBlock();
+    return blockInitialHealth;
+  }
+
+  if (foundEntity == entt::null)
+  {
+    foundEntity = this->CreateRenderableEntity(worldPos);
+    hp          = &registry_.emplace<BlockHealth>(foundEntity, blockInitialHealth);
+  }
+
+  registry_.emplace_or_replace<Lifetime>(foundEntity).remainingSeconds = 5;
+
+  const auto initialHealth = hp->health;
+  hp->health -= damage;
+  if (hp->health <= 0)
+  {
+    DoDestroyBlock();
   }
 
   return initialHealth - hp->health;
