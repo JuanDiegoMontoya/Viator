@@ -430,3 +430,69 @@ std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)> GetSurf
 
   return surfaceBiomes;
 }
+
+SurfaceBiome GetSurfaceBiomeAtPosition(const std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>& biomes,
+  glm::ivec2 positionWS,
+  const std::function<void(SurfaceBiome, float)>& callback)
+{
+  const static auto shrimplex2 = []
+  {
+    auto noise = FastNoise::New<FastNoise::Simplex>();
+    noise->SetScale(8);
+    noise->SetOutputMin(0);
+    return noise;
+  }();
+
+  auto biomeWeights   = std::array<float, int(SurfaceBiome::COUNT)>();
+  auto biome          = SurfaceBiome(uint32_t(SurfaceBiome::COUNT) - 1);
+  auto maxBiomeWeight = 0.0125f;
+  auto sumWeights     = 0.0f;
+
+  for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
+  {
+    // Skip biomes that failed broadphase check.
+    if (biomes[j] == nullptr)
+    {
+      continue;
+    }
+
+    float weight;
+    // Last biome is the default (if weight of other biomes is low).
+    if (j == int(SurfaceBiome::COUNT) - 1)
+    {
+      weight = 1 - glm::min(1.0f, sumWeights);
+    }
+    else
+    {
+      weight = biomes[j]->GetWeight(positionWS);
+    }
+
+    biomeWeights[j] = weight;
+    sumWeights += weight;
+    if (callback)
+    {
+      callback(SurfaceBiome(j), weight);
+    }
+
+    if (weight > maxBiomeWeight)
+    {
+      biome          = SurfaceBiome(j);
+      maxBiomeWeight = weight;
+    }
+  }
+
+  // Dither biome edges
+  const auto target = sumWeights * shrimplex2->GenSingle2D((float)positionWS.x, (float)positionWS.y, 67);
+  auto accumRng     = 0.0f;
+  for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
+  {
+    accumRng += biomeWeights[j];
+    if (accumRng >= target)
+    {
+      biome = SurfaceBiome(j);
+      break;
+    }
+  }
+
+  return biome;
+}

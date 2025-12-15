@@ -95,7 +95,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   shrimplex2->SetScale(8);
   shrimplex2->SetOutputMin(0);
 
-  auto surfaceBiomes = GetSurfaceBiomeNoises(*this);
+  *globals->surfaceBiomes   = GetSurfaceBiomeNoises(*this);
+  const auto& surfaceBiomes = *globals->surfaceBiomes;
 
   {
     ZoneScopedN("Surface");
@@ -139,54 +140,19 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
           const auto pModTl = glm::ivec2(x, y);
           const auto positionWS = pModTl + glm::ivec2(i, k) * Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE;
 
-          auto biomeWeights   = std::array<float, int(SurfaceBiome::COUNT)>();
-          auto biome          = SurfaceBiome(uint32_t(SurfaceBiome::COUNT) - 1);
-          auto maxBiomeWeight = 0.0125f;
-          auto sumWeights     = 0.0f;
-          auto sumHeights     = 0.0f;
-          
-          for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
-          {
-            // Skip biomes that failed broadphase check.
-            if (biomeHeights[j].Data() == nullptr)
-            {
-              continue;
-            }
+          auto sumWeights = 0.0f;
+          auto sumHeights = 0.0f;
 
-            float weight;
-            // Last biome is the default (if weight of other biomes is low).
-            if (j == int(SurfaceBiome::COUNT) - 1)
+          const auto biome = GetSurfaceBiomeAtPosition(surfaceBiomes,
+            positionWS,
+            [&](SurfaceBiome inBiome, float weight)
             {
-              weight = 1 - glm::min(1.0f, sumWeights);
-            }
-            else
-            {
-              weight = surfaceBiomes[j]->GetWeight(positionWS);
-            }
-
-            biomeWeights[j] = weight;
-            sumWeights += weight;
-            sumHeights += weight * biomeHeights[j].Load(pModTl);
-
-            if (weight > maxBiomeWeight)
-            {
-              biome = SurfaceBiome(j);
-              maxBiomeWeight = weight;
-            }
-          }
-
-          // Dither biome edges
-          const auto target = sumWeights * shrimplex2->GenSingle2D((float)positionWS.x, (float)positionWS.y, 67);
-          auto accumRng   = 0.0f;
-          for (int j = 0; j < int(SurfaceBiome::COUNT); j++)
-          {
-            accumRng += biomeWeights[j];
-            if (accumRng >= target)
-            {
-              biome = SurfaceBiome(j);
-              break;
-            }
-          }
+              sumWeights += weight;
+              if (biomeHeights[int(inBiome)].Data())
+              {
+                sumHeights += weight * biomeHeights[int(inBiome)].Load(positionWS % Voxel::Grid::TL_BRICK_VOXELS_PER_SIDE);
+              }
+            });
 
           const auto height = glm::floor(mapGenInfo.seaLevel + sumHeights / sumWeights);
           globalSurfaceHeightImage.Store({positionWS.x, positionWS.y}, height);
@@ -335,7 +301,8 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     progress->store(0);
 #endif
 
-    auto undergroundBiomes = GetUndergroundBiomeNoises(*this);
+    *globals->undergroundBiomes = GetUndergroundBiomeNoises(*this);
+    const auto& undergroundBiomes = *globals->undergroundBiomes;
 
     std::for_each(std::execution::par,
       tlBrickColCoords.begin(),

@@ -21,4 +21,6 @@ WorldGlobals::WorldGlobals()
   globalSurfaceHeight.reset(new Core::DSP::Image<2, float>());
   globalSurfaceFog.reset(new Core::DSP::Image<2, float>());
   globalFog.reset(new Core::DSP::Image<3, float>());
+  surfaceBiomes.reset(new typename decltype(surfaceBiomes)::element_type());
+  undergroundBiomes.reset(new typename decltype(undergroundBiomes)::element_type());
 }

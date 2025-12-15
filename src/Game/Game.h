@@ -608,9 +608,10 @@ class NpcSpawnDirector
 public:
   void Update(World& world, float dt);
 
-private:
-  float accumulator = 0;
-  float timeBetweenSpawns = 1;
+  int maxEnemiesBase                = 20;
+  int maxEnemiesPerAdditionalPlayer = 10;
+  float timeBetweenSpawns           = 1;
+  float accumulator                 = 0;
 };
 
 struct Enemy {};

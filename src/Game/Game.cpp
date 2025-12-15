@@ -19,6 +19,7 @@
 #include "Networking/Interface.h"
 #include "VoxLoader.h"
 #include "World.h"
+#include "Core/Image.h"
 #include "Game/Audio.h"
 #include "Game/Scripting.h"
 #include "Physics/PhysicsUtils.h"
@@ -1209,31 +1210,51 @@ void NpcSpawnDirector::Update(World& world, float dt)
   {
     accumulator -= timeBetweenSpawns;
 
-    constexpr size_t MAX_ENEMIES = 20;
+    const int maxEnemies = maxEnemiesBase + (int)world.GetRegistry().view<const Player>().size<>() * maxEnemiesPerAdditionalPlayer;
 
     for (auto&& [entity, player, transform] : registry.view<const Player, const GlobalTransform>().each())
     {
       for (const auto& pDefinition : world.globals->entityPrefabRegistry->GetAllPrefabs())
       {
-        if (registry.view<Enemy>().size() >= MAX_ENEMIES)
+        if (registry.view<Enemy>().size() >= maxEnemies)
         {
           continue;
         }
 
         const auto& info = pDefinition->GetCreateInfo();
 
-        if (rng.RandFloat() > info.spawnChance)
-        {
-          continue;
-        }
-
         // Multiple attempts to spawn the entity in case spawn positions are invalid.
         for (int attempt = 0; attempt < 10; attempt++)
         {
           if (auto realPos = SampleWalkablePosition(grid, rng, transform.position, info.minSpawnDistance, info.maxSpawnDistance, info.canSpawnFloating))
           {
-            auto newEntity = pDefinition->Spawn(world, *realPos);
-            spdlog::debug("[NpcSpawnDirector] Spawned {}: {}", pDefinition->GetCreateInfo().name, entt::to_integral(newEntity));
+            const auto surfaceHeight = world.globals->globalSurfaceHeight->Load({realPos->x, realPos->z});
+            bool shouldSpawn         = false;
+            if (realPos->y < surfaceHeight - 25)
+            {
+              // Try to spawn an underground mob.
+              const auto biome = GetUndergroundBiomeAtPosition(*world.globals->undergroundBiomes, glm::ivec3(*realPos));
+              if (rng.RandFloat() <= pDefinition->GetUndergroundBiomeSpawnChance(biome))
+              {
+                shouldSpawn = true;
+              }
+            }
+            else
+            {
+              // Try to spawn a surface mob.
+              const auto biome = GetSurfaceBiomeAtPosition(*world.globals->surfaceBiomes, glm::ivec2(realPos->x, realPos->z));
+              if (rng.RandFloat() <= pDefinition->GetSurfaceBiomeSpawnChance(biome))
+              {
+                shouldSpawn = true;
+              }
+            }
+
+            if (shouldSpawn)
+            {
+              auto newEntity = pDefinition->Spawn(world, *realPos);
+              spdlog::debug("[NpcSpawnDirector] Spawned {}: {}", pDefinition->GetCreateInfo().name, entt::to_integral(newEntity));
+            }
+
             break;
           }
         }

@@ -3,6 +3,8 @@
 #include "Game/BlockFwd.h"
 
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace Core::DSP
 {
@@ -62,4 +64,4 @@ std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>
 
 UndergroundBiome GetUndergroundBiomeAtPosition(const std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>& biomes,
   glm::ivec3 positionWS,
-  const std::function<void(UndergroundBiome, float)>& callback);
+  const std::function<void(UndergroundBiome, float)>& callback = nullptr);

@@ -1,6 +1,8 @@
 #pragma once
 #include "EntityPrefabFwd.h"
 #include "Core/ClassImplMacros.h"
+#include "World/SurfaceBiome.h"
+#include "World/UndergroundBiome.h"
 
 #include "entt/entity/fwd.hpp"
 
@@ -15,17 +17,18 @@ class World;
 struct EntityPrefabDefinitionCreateInfo
 {
   std::string name       = "entity";
-  float spawnChance      = 0;
   float minSpawnDistance = 30;
   float maxSpawnDistance = 90;
   bool canSpawnFloating  = false;
   bool isVisible         = true;
+  std::unordered_map<SurfaceBiome, float> surfaceBiomeSpawnChance;
+  std::unordered_map<UndergroundBiome, float> undergroundBiomeSpawnChance;
 };
 
 class EntityPrefabDefinition
 {
 public:
-  explicit EntityPrefabDefinition(const EntityPrefabDefinitionCreateInfo& createInfo = {}) : info_(createInfo) {}
+  explicit EntityPrefabDefinition(EntityPrefabDefinitionCreateInfo createInfo = {}) : info_(std::move(createInfo)) {}
   DEFAULT_MOVE(EntityPrefabDefinition);
   NO_COPY(EntityPrefabDefinition);
 
@@ -33,10 +36,11 @@ public:
 
   virtual entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation = glm::identity<glm::quat>()) const = 0;
 
-  [[nodiscard]] const EntityPrefabDefinitionCreateInfo& GetCreateInfo() const
-  {
-    return info_;
-  }
+  [[nodiscard]] const EntityPrefabDefinitionCreateInfo& GetCreateInfo() const;
+
+  [[nodiscard]] float GetSurfaceBiomeSpawnChance(SurfaceBiome biome) const;
+
+  [[nodiscard]] float GetUndergroundBiomeSpawnChance(UndergroundBiome biome) const;
 
 protected:
   EntityPrefabDefinitionCreateInfo info_;
@@ -52,28 +56,15 @@ public:
   NO_COPY(EntityPrefabRegistry);
   DEFAULT_MOVE(EntityPrefabRegistry);
 
-  [[nodiscard]] const EntityPrefabDefinition& Get(const std::string& name) const
-  {
-    return *idToDefinition_.at(nameToId_.at(name));
-  }
-  [[nodiscard]] const EntityPrefabDefinition& Get(EntityPrefabId id) const
-  {
-    return *idToDefinition_.at(id);
-  }
+  [[nodiscard]] const EntityPrefabDefinition& Get(const std::string& name) const;
+
+  [[nodiscard]] const EntityPrefabDefinition& Get(EntityPrefabId id) const;
+
   [[nodiscard]] EntityPrefabId GetId(const std::string& name) const;
 
-  EntityPrefabId Add(const std::string& name, EntityPrefabDefinition* entityPrefabDefinition)
-  {
-    const auto myId = static_cast<uint32_t>(idToDefinition_.size());
-    nameToId_.emplace(name, myId);
-    idToDefinition_.emplace_back(entityPrefabDefinition);
-    return myId;
-  }
+  EntityPrefabId Add(const std::string& name, EntityPrefabDefinition* entityPrefabDefinition);
 
-  std::span<const std::unique_ptr<EntityPrefabDefinition>> GetAllPrefabs() const
-  {
-    return std::span(idToDefinition_);
-  }
+  std::span<const std::unique_ptr<EntityPrefabDefinition>> GetAllPrefabs() const;
 
 private:
   std::unordered_map<std::string, EntityPrefabId> nameToId_;
@@ -81,71 +72,4 @@ private:
 };
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class MeleeFrogDefinition : public EntityPrefabDefinition
-{
-public:
-  using EntityPrefabDefinition::EntityPrefabDefinition;
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat) const override;
-};
-
-class FlyingFrogDefinition : public EntityPrefabDefinition
-{
-public:
-  using EntityPrefabDefinition::EntityPrefabDefinition;
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat) const override;
-};
-
-class WormBossDefinition : public EntityPrefabDefinition
-{
-public:
-  using EntityPrefabDefinition::EntityPrefabDefinition;
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat) const override;
-};
-
-class TorchDefinition : public EntityPrefabDefinition
-{
-public:
-  using EntityPrefabDefinition::EntityPrefabDefinition;
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation) const override;
-};
-
-class ChestDefinition : public EntityPrefabDefinition
-{
-public:
-  using EntityPrefabDefinition::EntityPrefabDefinition;
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation) const override;
-};
-
-class ShrimpleMeshPrefabDefinition : public EntityPrefabDefinition
-{
-public:
-  explicit ShrimpleMeshPrefabDefinition(std::string_view model, glm::vec3 tint = {1, 1, 1}, const EntityPrefabDefinitionCreateInfo& createInfo = {})
-    : EntityPrefabDefinition(createInfo), modelName_(model), tint_(tint)
-  {
-  }
-
-  entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation) const override;
-
-private:
-  std::string modelName_;
-  glm::vec3 tint_;
-};
+void RegisterDefaultEntityPrefabs(EntityPrefabRegistry& entityPrefabRegistry);

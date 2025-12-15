@@ -1590,6 +1590,13 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(crafting) TRAITS(TRANSIENT);
   END_REFLECT
 
+  BEGIN_REFLECT_TYPE(NpcSpawnDirector)
+    MEMBER(maxEnemiesBase);
+    MEMBER(maxEnemiesPerAdditionalPlayer);
+    MEMBER(timeBetweenSpawns);
+    MEMBER(accumulator);
+  END_REFLECT
+
   BEGIN_REFLECT_NON_OBJECT_TYPE(WorldGlobals)
     MEMBER(worldName);
     MEMBER(grid) TRAITS(TRANSIENT);
@@ -1603,6 +1610,9 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(globalSurfaceHeight);
     MEMBER(globalSurfaceFog);
     MEMBER(globalFog);
+    MEMBER(globalFogNeedsUpdate) TRAITS(TRANSIENT);
+    MEMBER(undergroundBiomes) TRAITS(TRANSIENT);
+    MEMBER(surfaceBiomes) TRAITS(TRANSIENT);
   END_REFLECT
 
   BEGIN_REFLECT_COMPONENT(FogEmitter, REPLICATED | TRIVIAL)

@@ -77,3 +77,7 @@ private:
 };
 
 std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)> GetSurfaceBiomeNoises(const World& world);
+
+SurfaceBiome GetSurfaceBiomeAtPosition(const std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>& biomes,
+  glm::ivec2 positionWS,
+  const std::function<void(SurfaceBiome, float)>& callback = nullptr);

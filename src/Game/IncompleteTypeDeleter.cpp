@@ -1,6 +1,5 @@
 #include "Game/IncompleteTypeDeleter.h"
 
-#include "Game/Globals.h"
 #include "Game/Game.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/Prefab.h"
@@ -12,6 +11,7 @@
 #include "Game/HashGrid.h"
 #include "Game/Pathfinding.h"
 #include "Game/World.h"
+#include "Game/Globals.h"
 
 template<typename T>
 void IncompleteTypeDeleter<T>::operator()(T* p) const
@@ -20,13 +20,3 @@ void IncompleteTypeDeleter<T>::operator()(T* p) const
 }
 
 template struct IncompleteTypeDeleter<WorldGlobals>;
-template struct IncompleteTypeDeleter<Voxel::Grid>;
-template struct IncompleteTypeDeleter<PrefabRegistry>;
-template struct IncompleteTypeDeleter<Block::Registry>;
-template struct IncompleteTypeDeleter<Item::Registry>;
-template struct IncompleteTypeDeleter<EntityPrefabRegistry>;
-template struct IncompleteTypeDeleter<GameGlobals>;
-template struct IncompleteTypeDeleter<WaterQueue>;
-template struct IncompleteTypeDeleter<WaterSet>;
-template struct IncompleteTypeDeleter<Core::DSP::Image<2, float>>;
-template struct IncompleteTypeDeleter<Physics::Engine>;

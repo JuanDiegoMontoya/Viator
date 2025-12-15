@@ -9,6 +9,8 @@
 #include <atomic>
 #include <glm/gtx/hash.hpp>
 #include "Physics/Physics.h"
+#include "World/SurfaceBiome.h"
+#include "World/UndergroundBiome.h"
 using WaterQueue = RingBuffer<glm::ivec3>;
 using WaterSet   = std::unordered_set<glm::ivec3>;
 //// END TEMP
@@ -86,4 +88,6 @@ public:
   unique_ptr<Core::DSP::Image<2, float>> globalSurfaceFog;
   unique_ptr<Core::DSP::Image<3, float>> globalFog;
   bool globalFogNeedsUpdate = false;
+  unique_ptr<std::array<std::unique_ptr<UndergroundBiomeNoise>, int(UndergroundBiome::COUNT)>> undergroundBiomes;
+  unique_ptr<std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)>> surfaceBiomes;
 };

@@ -51,7 +51,7 @@ std::optional<glm::vec3> SampleWalkablePosition(const Voxel::Grid& grid, PCG::Rn
     for (int i = 0; i < 20; i++)
     {
       const auto nextPos = lastValidPos - glm::vec3(0, i, 0);
-      if (!grid.IsPositionInGrid(nextPos) || grid.GetVoxelAt(nextPos) != voxel_t::Air)
+      if (!grid.IsPositionInGrid(nextPos) || grid.IsVoxelSolid(grid.GetVoxelAt(nextPos)))
       {
         foundSolidSurface = true;
         break;

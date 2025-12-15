@@ -315,14 +315,8 @@ void World::InitializeGameDefinitions()
 {
   ZoneScoped;
   // Reset entity prefab registry
-  auto& entityPrefabs               = *globals->entityPrefabRegistry = {};
-  [[maybe_unused]] auto meleeFrogId = entityPrefabs.Add("Melee Frog", new MeleeFrogDefinition({.name = "Melee Frog", .spawnChance = 0.095f}));
-  [[maybe_unused]] auto flyingFrogId =
-    entityPrefabs.Add("Flying Frog", new FlyingFrogDefinition({.name = "Flying Frog", .spawnChance = 0.035f, .canSpawnFloating = true}));
-  [[maybe_unused]] auto torchId    = entityPrefabs.Add("Torch", new TorchDefinition());
-  [[maybe_unused]] auto chestId    = entityPrefabs.Add("Chest", new ChestDefinition({.isVisible = false}));
-  [[maybe_unused]] auto mushroomId = entityPrefabs.Add("Mushroom", new ShrimpleMeshPrefabDefinition("mushroom", {.52f, .31f, .16f}));
-  [[maybe_unused]] auto wormBossId = entityPrefabs.Add("Worm Boss", new WormBossDefinition());
+  auto& entityPrefabs = *globals->entityPrefabRegistry = {};
+  RegisterDefaultEntityPrefabs(entityPrefabs);
 
   // Reset item registry
   auto& items = *globals->itemRegistry = {};
@@ -1023,7 +1017,7 @@ void World::InitializeGameDefinitions()
         .breakable          = Block::Component::Breakable{.initialHealth = 10},
         .render             = std::nullopt,
         .physicalProperties = {.isSolid = false},
-        .entityPrefab       = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = torchId},
+        .entityPrefab       = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("Torch")},
       }));
   blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(blocks.Get("torch")));
 
@@ -1037,7 +1031,7 @@ void World::InitializeGameDefinitions()
           Block::Component::RenderAsSubGrid{
             .subGrid = VoxToSubGrid(*Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / "chest.vox")),
           },
-        .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = chestId},
+        .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("Chest")},
       }));
 
   auto& prefabs = *globals->prefabRegistry = {};
@@ -1051,21 +1045,21 @@ void World::InitializeGameDefinitions()
 
   {
     auto* testTree = new SimplePrefab({.name = "Tree"});
-    auto& binky    = testTree->voxels;
+    auto& voxels   = testTree->voxels;
     for (int z = -3; z <= 3; z++)
       for (int y = -1; y <= 3; y++)
         for (int x = -3; x <= 3; x++)
         {
           if (Math::Distance2({x, y + 3, z}, {0, 3, 0}) < 9)
           {
-            binky.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01"));
+            voxels.emplace_back(glm::ivec3(x, y + 3, z), blocks.Get("leaves_01"));
           }
         }
-    binky.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
-    binky.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
-    binky.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
-    binky.emplace_back(glm::ivec3(0, 3, 0), woodBlockId);
-    binky.emplace_back(glm::ivec3(0, 4, 0), woodBlockId);
+    voxels.emplace_back(glm::ivec3(0, 0, 0), woodBlockId);
+    voxels.emplace_back(glm::ivec3(0, 1, 0), woodBlockId);
+    voxels.emplace_back(glm::ivec3(0, 2, 0), woodBlockId);
+    voxels.emplace_back(glm::ivec3(0, 3, 0), woodBlockId);
+    voxels.emplace_back(glm::ivec3(0, 4, 0), woodBlockId);
     prefabs.Add(testTree);
   }
 

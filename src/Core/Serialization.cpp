@@ -6,6 +6,7 @@
 #include "Game/CoreComponents.h"
 #include "Game/Globals.h"
 #include "Core/Image.h"
+#include "Game/Game.h"
 
 #include "entt/meta/container.hpp"
 #include "entt/meta/meta.hpp"
@@ -495,8 +496,10 @@ namespace Core::Serialization
       auto inputArchive = cereal::BinaryInputArchive(file);
 
       Serialize<false>(inputArchive, entt::forward_as_meta(*world.globals));
+      world.globals->game->gameState = GameState::LOADING_SP;
+      *world.globals->progressText   = "Loading world";
 
-      auto grid         = Voxel::Grid();
+      auto grid = Voxel::Grid();
       SerializeGrid<false>(inputArchive, grid);
       grid.CoalesceBricksSLOW();
       grid.MarkAllBricksDirty();
