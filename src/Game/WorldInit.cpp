@@ -681,6 +681,24 @@ void World::InitializeGameDefinitions()
       }}});
   blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(malachiteBlockId));
 
+  const auto bloodOreBlockId = Block::CreateStandardBlock(*this,
+    {
+      "blood_ore",
+      "Blood Ore",
+      Block::Component::Breakable{
+        .initialHealth = 100,
+        .damageTier    = 4,
+        .damageFlags   = BlockDamageFlagBit::PICKAXE,
+      },
+      Block::Component::RenderAsTexturedCube{
+        {
+          .randomizeTexcoordRotation = false,
+          .baseColorTexture          = "blood_ore_albedo",
+        },
+      },
+    });
+  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(bloodOreBlockId));
+
   const auto galenaBlockId = Block::CreateStandardBlock(*this,
     {
       "galena",
@@ -1255,6 +1273,10 @@ void World::CreateGrid(glm::ivec3 numChunks)
 void World::CreateRenderingMaterials()
 {
   ZoneScoped;
+
+  *globals->surfaceBiomes     = GetSurfaceBiomeNoises(*this);
+  *globals->undergroundBiomes = GetUndergroundBiomeNoises(*this);
+
   auto voxelMats = std::vector<Voxel::Grid::Material>();
   const auto& blocks = *globals->blockRegistry;
   const auto& blockMap = blocks.GetIdToTagMap();

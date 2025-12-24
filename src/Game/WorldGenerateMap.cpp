@@ -19,9 +19,63 @@
 #endif
 
 #include <execution>
+#include <unordered_set>
+#include <vector>
 
 namespace
 {
+  struct OreInfo
+  {
+    voxel_t block;
+    int cellSize;
+    float spawnChance = 1;
+    int minCount = 1;
+    int maxCount = 10;
+    std::unordered_set<UndergroundBiome> biomes{};
+  };
+
+  void SpawnOreVein(const OreInfo& oreInfo, World& world, glm::ivec3 worldPos)
+  {
+    auto& rng        = world.globals->game->rng;
+    const auto count = rng.RandU32(oreInfo.minCount, oreInfo.maxCount + 1);
+
+    auto potential = std::vector<glm::ivec3>();
+    auto placed    = std::unordered_set<glm::ivec3>();
+    potential.reserve(count * 6);
+
+    placed.insert(worldPos);
+
+    auto prevPos = worldPos;
+
+    while (placed.size() < count)
+    {
+      for (int i = 0; i < 6; i++)
+      {
+        const auto nextPos = prevPos + Block::DirectionToNeighbor(Block::Direction(i));
+        if (!placed.contains(nextPos))
+        {
+          potential.push_back(nextPos);
+        }
+      }
+
+      const auto index = rng.RandU32(0, (uint32_t)potential.size());
+      prevPos          = potential[index];
+      placed.emplace(prevPos);
+
+      std::swap(potential[index], potential.back());
+      potential.pop_back();
+    }
+
+    auto& grid = world.globals->grid;
+    for (const auto position : placed)
+    {
+      if (Block::IsSolid(world, grid->GetVoxelAt(position)))
+      {
+        grid->SetVoxelAt(position, oreInfo.block);
+      }
+    }
+  }
+
   void ForEachPositionInTLBrick(glm::ivec3 topLevelBrickPos, const auto& function)
   {
     for (int c = 0; c < Voxel::Grid::TL_BRICK_SIDE_LENGTH; c++)
@@ -95,7 +149,6 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   shrimplex2->SetScale(8);
   shrimplex2->SetOutputMin(0);
 
-  *globals->surfaceBiomes   = GetSurfaceBiomeNoises(*this);
   const auto& surfaceBiomes = *globals->surfaceBiomes;
 
   {
@@ -290,6 +343,69 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     }
   }
 
+  {
+    ZoneScopedN("Ore");
+    progressText->store("Ore");
+    progress->store(0);
+
+    const auto oreInfos = std::array{
+      OreInfo{
+        .block       = blocks->Get("malachite"),
+        .cellSize    = 12,
+        .spawnChance = 0.75f,
+        .minCount    = 5,
+        .maxCount    = 10,
+        .biomes      = {UndergroundBiome::SurfaceCaves},
+      },
+      OreInfo{
+        .block       = blocks->Get("galena"),
+        .cellSize    = 10,
+        .spawnChance = 0.75f,
+        .minCount    = 5,
+        .maxCount    = 10,
+        .biomes      = {UndergroundBiome::SurfaceCaves},
+      },
+      OreInfo{
+        .block       = blocks->Get("blood_ore"),
+        .cellSize    = 10,
+        .spawnChance = 0.75f,
+        .minCount    = 5,
+        .maxCount    = 10,
+        .biomes      = {UndergroundBiome::Corruption},
+      },
+    };
+
+    int ttotal = 0;
+    for (const auto& oreInfo : oreInfos)
+    {
+      ttotal += glm::compMul(grid->Dimensions() / oreInfo.cellSize);
+    }
+    total->store(ttotal);
+
+    auto& rng = globals->game->rng;
+
+    for (const auto& oreInfo : oreInfos)
+    {
+      for (int zt = 0; zt < grid->dimensions_.z / oreInfo.cellSize; zt++)
+      for (int yt = 0; yt < grid->dimensions_.y / oreInfo.cellSize; yt++)
+      for (int xt = 0; xt < grid->dimensions_.x / oreInfo.cellSize; xt++)
+      {
+        if (rng.RandFloat() < oreInfo.spawnChance)
+        {
+          const auto posCell = glm::ivec3(xt, yt, zt);
+          const auto posSub  = glm::ivec3(rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize);
+          const auto posWS   = posCell * oreInfo.cellSize + posSub;
+          const auto biome   = GetUndergroundBiomeAtPosition(*globals->undergroundBiomes, posWS);
+          if (oreInfo.biomes.contains(biome))
+          {
+            SpawnOreVein(oreInfo, *this, posWS);
+          }
+        }
+        progress->fetch_add(1);
+      }
+    }
+  }
+
   *globals->globalFog = Core::DSP::Image<3, float>(grid->Dimensions() / 4);
   globals->globalFog->Fill(0);
 
@@ -299,9 +415,9 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 #ifndef GAME_HEADLESS
     progressText->store("Caves");
     progress->store(0);
+    total->store(glm::compMul(grid->TopLevelBricksDims()));
 #endif
 
-    *globals->undergroundBiomes = GetUndergroundBiomeNoises(*this);
     const auto& undergroundBiomes = *globals->undergroundBiomes;
 
     std::for_each(std::execution::par,
