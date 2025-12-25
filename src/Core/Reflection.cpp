@@ -1622,6 +1622,10 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(color);
   END_REFLECT
 
+  BEGIN_REFLECT_COMPONENT(Block::Component::RequiresSupportAdvanced, BLOCK_COMPONENT | REPLICATED)
+    MEMBER(supports);
+  END_REFLECT
+
   for (auto& cb : s_reflectionRegistrationFuncs)
   {
     cb();

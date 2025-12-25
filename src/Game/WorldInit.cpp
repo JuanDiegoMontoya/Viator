@@ -834,63 +834,81 @@ void World::InitializeGameDefinitions()
         }},
     });
 
-  auto RegisterFoliageBlock = [&](const char* tag, const char* name, bool dropsSelf, bool isSolid = false) -> BlockId
+  struct FoliageBlockParams
   {
-    auto vox       = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(tag) + ".vox"));
+    const char* tag{};
+    const char* name{};
+    bool dropsSelf = true;
+    bool isSolid = false;
+    std::optional<Block::Component::RequiresSupport> support = Block::Component::RequiresSupport{Block::Direction::Down};
+  };
+  auto RegisterFoliageBlock = [&](const FoliageBlockParams& params) -> BlockId
+  {
+    auto vox       = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(params.tag) + ".vox"));
     using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
-    return Block::CreateStandardBlock(*this,
-      {
-        tag,
-        name,
-        Block::Component::Breakable{
-          .initialHealth  = 10,
-          .dropWhenBroken = dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
-        },
-        Block::Component::RenderAsSubGrid{
-          .subGrid = VoxToSubGrid(*vox),
-        },
-        {
-          .isSolid = isSolid,
-        },
+    const auto id  = Block::CreateStandardBlock(*this,
+       {
+         .tag  = params.tag,
+         .name = params.name,
+         .breakable =
+          Block::Component::Breakable{
+             .initialHealth  = 10,
+             .dropWhenBroken = params.dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
+          },
+         .render             = Block::Component::RenderAsSubGrid{.subGrid = VoxToSubGrid(*vox)},
+         .physicalProperties = {.isSolid = params.isSolid},
+         .support            = params.support,
       });
+    return id;
   };
 
-  RegisterFoliageBlock("test", "Test", true);
-  RegisterFoliageBlock("grass_long", "Long Grass", false);
-  RegisterFoliageBlock("grass_medium", "Medium Grass", false);
-  RegisterFoliageBlock("grass_short", "Short Grass", false);
-  RegisterFoliageBlock("mushroom", "Mushroom", true);
-  RegisterFoliageBlock("mushroom_glowing", "Glowing Mushroom", true);
-  RegisterFoliageBlock("rock_small", "Small Rock", false);
-  RegisterFoliageBlock("vines_end", "Vines End", false);
-  RegisterFoliageBlock("vines_main", "Vines Main", false);
-  RegisterFoliageBlock("roots_end", "Roots End", false);
-  RegisterFoliageBlock("roots_main", "Roots Main", false);
-  RegisterFoliageBlock("bush_01", "Bush 1", false);
-  RegisterFoliageBlock("bush_02", "Bush 2", false);
-  RegisterFoliageBlock("grass_double_base", "Double Grass Base", false);
-  RegisterFoliageBlock("grass_double_top", "Double Grass Top", false);
-  RegisterFoliageBlock("leaves_01", "Leaves 1", false);
-  RegisterFoliageBlock("leaves_02", "Leaves 2", false);
-  RegisterFoliageBlock("dandelion", "Dandelion", true);
-  RegisterFoliageBlock("rose", "Rose", true);
-  RegisterFoliageBlock("pot", "Pot", true);
-  RegisterFoliageBlock("SM_Deccer_Cubes_Small", "Deccer's Cubes", true);
-  RegisterFoliageBlock("chair", "Chair", true);
-  RegisterFoliageBlock("table", "Table", true);
-  RegisterFoliageBlock("cloud", "Cloud", true);
-  RegisterFoliageBlock("anvil_lead", "Lead Anvil", true, true);
-  RegisterFoliageBlock("cactus_small", "Small Cactus", true);
-  RegisterFoliageBlock("bush_03", "Bush 3", false);
-  RegisterFoliageBlock("leaves_burnwillow_01", "BW Leaves", false);
-  RegisterFoliageBlock("vines_end_burnwillow", "Vines End BW", false);
-  RegisterFoliageBlock("vines_main_burnwillow", "Vines Main BW", false);
-  const auto arrow = RegisterFoliageBlock("north_arrow", "North Arrow", true);
+  RegisterFoliageBlock({.tag = "test", .name = "Test", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "grass_long", .name = "Long Grass", .dropsSelf = false});
+  RegisterFoliageBlock({.tag = "grass_medium", .name = "Medium Grass", .dropsSelf = false});
+  RegisterFoliageBlock({.tag = "grass_short", .name = "Short Grass", .dropsSelf = false});
+  RegisterFoliageBlock({.tag = "mushroom", .name = "Mushroom", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "mushroom_glowing", .name = "Glowing Mushroom", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "rock_small", .name = "Small Rock", .dropsSelf = false});
+  const auto vineEnd   = RegisterFoliageBlock({.tag = "vines_end", .name = "Vines End", .dropsSelf = false, .support = std::nullopt});
+  const auto vineMain = RegisterFoliageBlock({.tag = "vines_main", .name = "Vines Main", .dropsSelf = false, .support = std::nullopt});
+  const auto rootsEnd = RegisterFoliageBlock({.tag = "roots_end", .name = "Roots End", .dropsSelf = false, .support = std::nullopt});
+  const auto rootsMain = RegisterFoliageBlock({.tag = "roots_main", .name = "Roots Main", .dropsSelf = false, .support = std::nullopt});
+  RegisterFoliageBlock({.tag = "bush_01", .name = "Bush 1", .dropsSelf = false});
+  RegisterFoliageBlock({.tag = "bush_02", .name = "Bush 2", .dropsSelf = false});
+  const auto grassBase = RegisterFoliageBlock({.tag = "grass_double_base", .name = "Double Grass Base", .dropsSelf = false});
+  const auto grassTop = RegisterFoliageBlock({.tag = "grass_double_top", .name = "Double Grass Top", .dropsSelf = false, .support = std::nullopt});
+  blocks.GetRegistry().emplace<Block::Component::RequiresSupportByBlocks>(entt::entity(grassTop)).blocks[int(Block::Direction::Down)] = grassBase;
+  const auto leaves01 = RegisterFoliageBlock({.tag = "leaves_01", .name = "Leaves 1", .dropsSelf = false, .support = std::nullopt});
+  const auto leaves02 = RegisterFoliageBlock({.tag = "leaves_02", .name = "Leaves 2", .dropsSelf = false, .support = std::nullopt});
+  RegisterFoliageBlock({.tag = "dandelion", .name = "Dandelion", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "rose", .name = "Rose", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "pot", .name = "Pot", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "SM_Deccer_Cubes_Small", .name = "Deccer's Cubes", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "chair", .name = "Chair", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "table", .name = "Table", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "cloud", .name = "Cloud", .dropsSelf = true, .support = std::nullopt});
+  RegisterFoliageBlock({.tag = "anvil_lead", .name = "Lead Anvil", .dropsSelf = true, .isSolid = true});
+  RegisterFoliageBlock({.tag = "cactus_small", .name = "Small Cactus", .dropsSelf = true});
+  RegisterFoliageBlock({.tag = "bush_03", .name = "Bush 3", .dropsSelf = false});
+  const auto leaves03 = RegisterFoliageBlock({.tag = "leaves_burnwillow_01", .name = "BW Leaves", .dropsSelf = false, .support = std::nullopt});
+  const auto vineEndB = RegisterFoliageBlock({.tag = "vines_end_burnwillow", .name = "Vines End BW", .dropsSelf = false, .support = std::nullopt});
+  const auto vineMainB = RegisterFoliageBlock({.tag = "vines_main_burnwillow", .name = "Vines Main BW", .dropsSelf = false, .support = std::nullopt});
+
+  using RSA = Block::Component::RequiresSupportAdvanced;
+
+  blocks.GetRegistry().emplace<RSA>(entt::entity(vineEnd)).supports[int(Block::Direction::Up)]   = RSA::Support{RSA::SolidSupport{}, leaves01, leaves02, vineMain};
+  blocks.GetRegistry().emplace<RSA>(entt::entity(vineMain)).supports[int(Block::Direction::Up)]  = RSA::Support{RSA::SolidSupport{}, leaves01, leaves02, vineMain};
+  blocks.GetRegistry().emplace<RSA>(entt::entity(rootsEnd)).supports[int(Block::Direction::Up)]  = RSA::Support{RSA::SolidSupport{}, leaves01, leaves02, rootsMain};
+  blocks.GetRegistry().emplace<RSA>(entt::entity(rootsMain)).supports[int(Block::Direction::Up)] = RSA::Support{RSA::SolidSupport{}, leaves01, leaves02, rootsMain};
+  blocks.GetRegistry().emplace<RSA>(entt::entity(vineEndB)).supports[int(Block::Direction::Up)]  = RSA::Support{RSA::SolidSupport{}, leaves03, vineMainB};
+  blocks.GetRegistry().emplace<RSA>(entt::entity(vineMainB)).supports[int(Block::Direction::Up)] = RSA::Support{RSA::SolidSupport{}, leaves03, vineMainB};
+
+  const auto arrow = RegisterFoliageBlock({.tag = "north_arrow", .name = "North Arrow", .dropsSelf = true});
   Block::CreateStandardRotatedVariants(*this, arrow);
 
   {
-    const auto doorBottom = RegisterFoliageBlock("door_bottom", "Door", true, true);
-    const auto doorTop = RegisterFoliageBlock("door_top", "door_top", false, true);
+    const auto doorBottom = RegisterFoliageBlock({.tag = "door_bottom", .name = "Door", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    const auto doorTop = RegisterFoliageBlock({.tag = "door_top", .name = "door_top", .dropsSelf = false, .isSolid = true, .support = std::nullopt});
 
     blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
     blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};
@@ -900,8 +918,8 @@ void World::InitializeGameDefinitions()
   }
 
   {
-    const auto doorBottom = RegisterFoliageBlock("door_bottom_open", "door_bottom_open", true, true);
-    const auto doorTop    = RegisterFoliageBlock("door_top_open", "door_top_open", false, true);
+    const auto doorBottom = RegisterFoliageBlock({.tag = "door_bottom_open", .name = "door_bottom_open", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    const auto doorTop    = RegisterFoliageBlock({.tag = "door_top_open", .name = "door_top_open", .dropsSelf = false, .isSolid = true, .support = std::nullopt});
 
     blocks.GetRegistry().emplace<Block::Component::RequiresSupport>(entt::entity(doorBottom));
     blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(doorBottom)) = {.block = doorTop, .direction = Block::Direction::Up};
@@ -931,12 +949,12 @@ void World::InitializeGameDefinitions()
   Block::UpdateTransformedForRotatedVariants(*this, blocks.Get("door_top_open"));
 
   {
-    RegisterFoliageBlock("cargo_side", "Cargo Side", true, true);
-    RegisterFoliageBlock("cargo_top", "Cargo Top", true, true);
-    RegisterFoliageBlock("cargo_bottom", "Cargo Bottom", true, true);
-    RegisterFoliageBlock("cargo_runner_top", "Cargo Runner Top", true, true);
-    RegisterFoliageBlock("cargo_runner_bottom", "Cargo Runner Bottom", true, true);
-    RegisterFoliageBlock("cargo_runner_vertical", "Cargo Runner Vertical", true, true);
+    RegisterFoliageBlock({.tag = "cargo_side", .name = "Cargo Side", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    RegisterFoliageBlock({.tag = "cargo_top", .name = "Cargo Top", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    RegisterFoliageBlock({.tag = "cargo_bottom", .name = "Cargo Bottom", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    RegisterFoliageBlock({.tag = "cargo_runner_top", .name = "Cargo Runner Top", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    RegisterFoliageBlock({.tag = "cargo_runner_bottom", .name = "Cargo Runner Bottom", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
+    RegisterFoliageBlock({.tag = "cargo_runner_vertical", .name = "Cargo Runner Vertical", .dropsSelf = true, .isSolid = true, .support = std::nullopt});
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_side"));
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_top"));
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_bottom"));
@@ -951,7 +969,7 @@ void World::InitializeGameDefinitions()
     for (int i = 1; i <= 8; i++)
     {
       auto id          = "water_" + std::to_string(i);
-      const auto block = RegisterFoliageBlock(id.c_str(), id.c_str(), true);
+      const auto block = RegisterFoliageBlock({.tag = id.c_str(), .name = id.c_str(), .dropsSelf = false, .support = std::nullopt});
       waters.push_back(block);
     }
 

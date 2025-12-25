@@ -282,14 +282,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
     }
     else
     {
-      if (const auto* pp = reg.try_get<const Block::Component::PhysicalProperties>(entt::entity(neighbor)))
-      {
-        if (!pp->isSolid)
-        {
-          isSupported = false;
-        }
-      }
-      else
+      if (!IsSolid(world, neighbor))
       {
         isSupported = false;
       }
@@ -306,6 +299,50 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
       {
         isSupported = false;
         break;
+      }
+    }
+  }
+
+  if (const auto* p = reg.try_get<const Block::Component::RequiresSupportAdvanced>(entt::entity(block)))
+  {
+    for (int i = 0; i < 6; i++)
+    {
+      const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
+      const auto neighbor    = grid.GetVoxelAt(neighborPos);
+      if (p->supports[i])
+      {
+        bool supportSatisfied = false;
+        for (const auto& support : *p->supports[i])
+        {
+          if (std::visit(
+                [&]<typename T>(const T& arg) -> bool
+                {
+                  if constexpr (std::is_same_v<T, Component::RequiresSupportAdvanced::SolidSupport>)
+                  {
+                    return IsSolid(world, neighbor);
+                  }
+                  else if constexpr (std::is_same_v<T, BlockId>)
+                  {
+                    return neighbor == arg;
+                  }
+                  else
+                  {
+                    static_assert(false, "Non-exhaustive visitor.");
+                    return false;
+                  }
+                },
+                support))
+          {
+            supportSatisfied = true;
+            break;
+          }
+        }
+
+        if (!supportSatisfied)
+        {
+          isSupported = false;
+          break;
+        }
       }
     }
   }

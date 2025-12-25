@@ -125,6 +125,16 @@ namespace Block
       std::array<std::optional<BlockId>, 6> blocks;
     };
 
+    struct RequiresSupportAdvanced
+    {
+      struct SolidSupport
+      {
+        bool operator==(const SolidSupport&) const noexcept = default;
+      };
+      using Support = std::vector<std::variant<SolidSupport, BlockId>>;
+      std::array<std::optional<Support>, 6> supports;
+    };
+
     // Automatically added when a block variant is made.
     // The base variant is the variant that will be dropped when the block is destroyed.
     struct BaseVariant
