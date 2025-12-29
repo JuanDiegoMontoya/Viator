@@ -15,6 +15,96 @@
 #include "tracy/Tracy.hpp"
 #include "entt/meta/resolve.hpp"
 
+namespace
+{
+  // Checks the conditions required to satify the RequiresSupport* components, if present.
+  bool IsBlockSupportedAtPosition(const World& world, BlockId block, glm::ivec3 voxelPosition)
+  {
+    using namespace Block;
+
+    auto& grid = *world.globals->grid;
+    auto& reg  = world.globals->blockRegistry->GetRegistry();
+
+    if (const auto* p = reg.try_get<const Block::Component::RequiresSupport>(entt::entity(block)))
+    {
+      const auto neighborPos = voxelPosition + DirectionToNeighbor(p->supportingSide);
+      const auto neighbor    = grid.GetVoxelAt(neighborPos);
+      if (const auto* b = reg.try_get<const Block::Component::RequiresSupportByBlock>(entt::entity(block)))
+      {
+        if (b->block != neighbor)
+        {
+          return false;
+        }
+      }
+      else
+      {
+        if (!IsSolid(world, neighbor))
+        {
+          return false;
+        }
+      }
+    }
+
+    if (const auto* p = reg.try_get<const Block::Component::RequiresSupportByBlocks>(entt::entity(block)))
+    {
+      for (int i = 0; i < 6; i++)
+      {
+        const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
+        const auto neighbor    = grid.GetVoxelAt(neighborPos);
+        if (p->blocks[i] && *p->blocks[i] != neighbor)
+        {
+          return false;
+        }
+      }
+    }
+
+    if (const auto* p = reg.try_get<const Block::Component::RequiresSupportAdvanced>(entt::entity(block)))
+    {
+      for (int i = 0; i < 6; i++)
+      {
+        const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
+        const auto neighbor    = grid.GetVoxelAt(neighborPos);
+        if (p->supports[i])
+        {
+          bool supportSatisfied = false;
+          for (const auto& support : *p->supports[i])
+          {
+            if (std::visit(
+                  [&]<typename T>(const T& arg) -> bool
+                  {
+                    if constexpr (std::is_same_v<T, Component::RequiresSupportAdvanced::SolidSupport>)
+                    {
+                      return IsSolid(world, neighbor);
+                    }
+                    else if constexpr (std::is_same_v<T, BlockId>)
+                    {
+                      return neighbor == arg;
+                    }
+                    else
+                    {
+                      static_assert(false, "Non-exhaustive visitor.");
+                      return false;
+                    }
+                  },
+                  support))
+            {
+              supportSatisfied = true;
+              break;
+            }
+          }
+
+          if (!supportSatisfied)
+          {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+}
+
 Block::Registry::Registry()
 {
   registry_ = std::make_unique<entt::registry>();
@@ -66,29 +156,9 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
   auto& grid                = *world.globals->grid;
   if (grid.IsPositionInGrid(voxelPosition))
   {
-    // Ensure the block is supported, if necessary.
-    if (const auto* support = blockRegistry.try_get<const Block::Component::RequiresSupport>(entt::entity(block)))
+    if (!IsBlockSupportedAtPosition(world, block, voxelPosition))
     {
-      const auto neighborPos = DirectionToNeighbor(support->supportingSide);
-      const auto neighbor    = grid.GetVoxelAt(voxelPosition + neighborPos);
-      if (const auto* pp = blockRegistry.try_get<const Block::Component::RequiresSupportByBlock>(entt::entity(block)))
-      {
-        if (neighbor != pp->block)
-        {
-          return false;
-        }
-      }
-      else if (const auto* ppp = blockRegistry.try_get<const Block::Component::PhysicalProperties>(entt::entity(neighbor)))
-      {
-        if (!ppp->isSolid)
-        {
-          return false;
-        }
-      }
-      else
-      {
-        return false;
-      }
+      return false;
     }
 
     if (const auto* sp = blockRegistry.try_get<const Block::Component::SpawnExtraBlockOnPlace>(entt::entity(block)); sp && !isBeingTransformed)
@@ -267,85 +337,7 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
   auto block = grid.GetVoxelAt(voxelPosition);
   auto& reg  = world.globals->blockRegistry->GetRegistry();
 
-  // Check whether block requires support from a specific side.
-  bool isSupported = true;
-  if (const auto* p = reg.try_get<const Block::Component::RequiresSupport>(entt::entity(block)))
-  {
-    const auto neighborPos = voxelPosition + DirectionToNeighbor(p->supportingSide);
-    const auto neighbor = grid.GetVoxelAt(neighborPos);
-    if (const auto* b = reg.try_get<const Block::Component::RequiresSupportByBlock>(entt::entity(block)))
-    {
-      if (b->block != neighbor)
-      {
-        isSupported = false;
-      }
-    }
-    else
-    {
-      if (!IsSolid(world, neighbor))
-      {
-        isSupported = false;
-      }
-    }
-  }
-
-  if (const auto* p = reg.try_get<const Block::Component::RequiresSupportByBlocks>(entt::entity(block)))
-  {
-    for (int i = 0; i < 6; i++)
-    {
-      const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
-      const auto neighbor    = grid.GetVoxelAt(neighborPos);
-      if (p->blocks[i] && *p->blocks[i] != neighbor)
-      {
-        isSupported = false;
-        break;
-      }
-    }
-  }
-
-  if (const auto* p = reg.try_get<const Block::Component::RequiresSupportAdvanced>(entt::entity(block)))
-  {
-    for (int i = 0; i < 6; i++)
-    {
-      const auto neighborPos = voxelPosition + DirectionToNeighbor(Direction(i));
-      const auto neighbor    = grid.GetVoxelAt(neighborPos);
-      if (p->supports[i])
-      {
-        bool supportSatisfied = false;
-        for (const auto& support : *p->supports[i])
-        {
-          if (std::visit(
-                [&]<typename T>(const T& arg) -> bool
-                {
-                  if constexpr (std::is_same_v<T, Component::RequiresSupportAdvanced::SolidSupport>)
-                  {
-                    return IsSolid(world, neighbor);
-                  }
-                  else if constexpr (std::is_same_v<T, BlockId>)
-                  {
-                    return neighbor == arg;
-                  }
-                  else
-                  {
-                    static_assert(false, "Non-exhaustive visitor.");
-                    return false;
-                  }
-                },
-                support))
-          {
-            supportSatisfied = true;
-            break;
-          }
-        }
-
-        if (!supportSatisfied)
-        {
-          isSupported = false;
-          break;
-        }
-      }
-    }
-  }
+  const bool isSupported = IsBlockSupportedAtPosition(world, block, voxelPosition);
 
   if (!isSupported)
   {

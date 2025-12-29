@@ -110,21 +110,26 @@ namespace Block
       std::filesystem::path path;
     };
 
+    // Block must be supported by a solid block from the specified direction.
+    // If not supported, the block breaks.
     struct RequiresSupport
     {
       Direction supportingSide = Direction::Down;
     };
 
+    // Block must be supported by a specific block. Used in conjunction with RequiresSupport to specify a direction.
     struct RequiresSupportByBlock
     {
       BlockId block;
     };
 
+    // Block must be supported by a block ID, specified for each side.
     struct RequiresSupportByBlocks
     {
       std::array<std::optional<BlockId>, 6> blocks;
     };
 
+    // Block must be supported by one of the block IDs OR a solid block (if SolidSupport is used), specified for each side.
     struct RequiresSupportAdvanced
     {
       struct SolidSupport
