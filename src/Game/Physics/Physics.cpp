@@ -1343,6 +1343,7 @@ namespace Physics
         ImGui::EndTabBar();
       }
     }
+    ImGui::End();
   }
 }
 #endif

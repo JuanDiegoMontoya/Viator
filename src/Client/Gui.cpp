@@ -1019,6 +1019,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
     ImGui::EndDisabled();
     return true;
   }
+  ImGui::End();
   return false;
 }
 
@@ -1512,6 +1513,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             [&world, path = sSelectedWorld.value()]
             {
               Core::Serialization::LoadRegistryFromFile(world, path);
+              world.InitializeGameDefinitions();
               world.globals->worldName = path.stem().string();
               world.globals->game->gameState = GameState::LOADING_SP;
             }));

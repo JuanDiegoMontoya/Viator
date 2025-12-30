@@ -63,6 +63,7 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid2(const Shape* inShape1,
   const auto s2min    = JPH::Vec3::sMax(boundsOf2InSpaceOf1.GetCenter() - boundsOf2InSpaceOf1.GetExtent(), JPH::Vec3::sReplicate(0));
   const auto s2max    = JPH::Vec3::sMin(boundsOf2InSpaceOf1.GetCenter() + boundsOf2InSpaceOf1.GetExtent(), ToJolt(s1Grid.Dimensions() - 1));
   const auto boxShape = JPH::BoxShape({0.5f - VX_EPSILON, 0.5f - VX_EPSILON, 0.5f - VX_EPSILON});
+  boxShape.SetEmbedded();
 
   for (int z = (int)std::floor(s2min.GetZ() - VX_AABB_EPSILON); z < (int)std::ceil(s2max.GetZ() + VX_AABB_EPSILON); z++)
   for (int y = (int)std::floor(s2min.GetY() - VX_AABB_EPSILON); y < (int)std::ceil(s2max.GetY() + VX_AABB_EPSILON); y++)
@@ -87,7 +88,7 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid2(const Shape* inShape1,
     {
       auto scaleResult       = boxShape.ScaleShape(ToJolt(1.0f / glm::vec3(subGrid->dimensions)));
       const auto subBoxShape = scaleResult.Get();
-      subBoxShape->SetEmbedded();
+      //subBoxShape->SetEmbedded();
 
       // Calculate bounds of object in sub-grid space.
       const auto subGridDims = glm::vec3(subGrid->dimensions);
