@@ -2,7 +2,10 @@
 #include "Core/ClassImplMacros.h"
 #include "Game/BlockFwd.h"
 
+#include "glm/vec3.hpp"
+
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 

@@ -13,6 +13,7 @@
 #include <optional>
 #include <map>
 #include <unordered_map>
+#include <filesystem>
 
 class World;
 

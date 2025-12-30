@@ -3,6 +3,7 @@
 #include "entt/meta/meta.hpp"
 
 #include <iosfwd>
+#include <optional>
 
 class World;
 

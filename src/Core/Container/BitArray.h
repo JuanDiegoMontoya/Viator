@@ -1,4 +1,6 @@
 #pragma once
+#include <climits>
+#include <cstddef>
 #include <cstdint>
 
 namespace Core

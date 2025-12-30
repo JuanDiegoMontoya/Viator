@@ -91,7 +91,7 @@ namespace Techniques
     {
       sum += e * 180.0f;
     }
-    sum /= data.size();
+    sum /= static_cast<double>(data.size());
 
     //printf("sum: %f, %f, %f\n", sum.r, sum.g, sum.b);
 

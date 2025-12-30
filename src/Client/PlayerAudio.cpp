@@ -1,6 +1,8 @@
 #include "PlayerAudio.h"
 #include "Game/Assets.h"
 
+#include "glm/common.hpp"
+
 #include "miniaudio.h"
 #include "ma_reverb_node.h"
 

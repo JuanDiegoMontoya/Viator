@@ -5,6 +5,7 @@
 #include "World/UndergroundBiome.h"
 
 #include "entt/entity/fwd.hpp"
+#include "glm/gtc/quaternion.hpp"
 
 #include <span>
 #include <string>

@@ -2,7 +2,12 @@
 #include "Core/ClassImplMacros.h"
 #include "Game/BlockFwd.h"
 
+#include "glm/vec2.hpp"
+#include "glm/vec3.hpp"
+
 #include <array>
+#include <functional>
+#include <memory>
 
 namespace Core::DSP
 {
