@@ -491,9 +491,7 @@ Game::Game(const GameParams& params)
 void CreateContextVariablesAndObservers(World& world)
 {
   ZoneScoped;
-  world.globals = {};
   world.globals.reset(new WorldGlobals());
-  world.globals->game.reset(new GameGlobals());
   world.globals->progressText.reset(new std::atomic<const char*>());
   world.globals->progress.reset(new std::atomic_int32_t());
   world.globals->total.reset(new std::atomic_int32_t());

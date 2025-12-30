@@ -129,7 +129,7 @@ void main()
   const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
   const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const float validity = args.gridInfo[cascade].probes.data[stableProbeIndex].validity;
+  const float validity = probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].validity;
   const float alpha = max(0.01, 1.0 / validity);
   const vec3 newRadiance = mix(oldRadiance, radiance, alpha);
   WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newRadiance, 0));

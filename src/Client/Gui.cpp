@@ -1464,7 +1464,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         world.GetRegistryRaw().clear();
         world.GetRegistryRaw() = {};
         CreateContextVariablesAndObservers(world);
-        gameState = GameState::MENU;
+        world.globals->game->gameState = GameState::MENU; // CreateContextVariablesAndObservers() invalidates the reference `gameState`.
       }
 
       if (ImGui::Selectable("Exit to desktop"))
@@ -1597,7 +1597,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           mapGenInfo        = {};
         }
 
-        ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium");
+        ImGui::Combo("Size", &selectedWorldSize, "Tiny\0Small\0Medium\0");
 
         if (ImGui::TreeNodeEx("Advanced"))
         {

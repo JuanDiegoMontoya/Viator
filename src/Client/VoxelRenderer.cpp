@@ -1154,8 +1154,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       {
         if (!ddgiDebugFreezeGrid_)
         {
-          ddgi.args.gridInfo[i].probes        = ddgi.probeDataBuffers[i].value().GetDeviceAddress();
-          ddgi.args.gridInfo[i].oldGridOffset = ddgi.args.gridInfo[i].gridOffset;
+          ddgi.args.gridInfo[i].probeInfosIndex = ddgi.probeDataBuffers[i].value().GetResourceHandle().index;
+          ddgi.args.gridInfo[i].oldGridOffset   = ddgi.args.gridInfo[i].gridOffset;
           const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
                                        ddgi.args.gridInfo[i].baseGridScale;
           ddgi.args.gridInfo[i].gridOffset         = glm::floor(offset);

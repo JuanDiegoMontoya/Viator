@@ -22,10 +22,10 @@ struct ProbeData
 };
 
 #ifndef __cplusplus
-FVOG_DECLARE_BUFFER_REFERENCE(ProbeInfo)
+FVOG_DECLARE_STORAGE_BUFFERS(ProbeInfo)
 {
   ProbeData data[];
-};
+} probeInfosBuffers[];
 #endif
 
 struct DDGIProbeGridInfo
@@ -38,11 +38,7 @@ struct DDGIProbeGridInfo
   FVOG_IVEC3 gridOffset; // Offset of the grid, in baseGridScale units, from the origin.
   FVOG_IVEC3 oldGridOffset; // Previous frame's gridOffset. Used to determine which probes to reset.
   FVOG_VEC3 gridOffsetFraction;
-#ifdef __cplusplus
-  VkDeviceAddress probes;
-#else
-  ProbeInfo probes;
-#endif
+  FVOG_UINT32 probeInfosIndex;
 };
 
 #ifndef __cplusplus
@@ -292,7 +288,7 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     }
 #endif
 
-    const float validityWeight = min(1.0, ddgi.gridInfo[cascade].probes.data[probeIndex].validity / 100);
+    const float validityWeight = min(1.0, probeInfosBuffers[ddgi.gridInfo[cascade].probeInfosIndex].data[probeIndex].validity / 100);
     float weightNoTrilinear = backfaceWeight * shadowWeight * validityWeight;
     float weightNoTrilinearNoShadow = backfaceWeight * validityWeight;
     
@@ -386,7 +382,7 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
     //const vec2 uv = ProbeDirectionToUv(normalWS, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
     //const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
-    const vec3 illuminance = ddgi.gridInfo[cascade].probes.data[probeIndex].averageLuminance;
+    const vec3 illuminance = probeInfosBuffers[ddgi.gridInfo[cascade].probeInfosIndex].data[probeIndex].averageLuminance;
 
     float shadowWeight = 1;
     const float normalBias = 0.45 * ddgi.gridInfo[cascade].baseGridScale;
@@ -421,7 +417,7 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     }
 #endif
 
-    const float validityWeight = min(1.0, ddgi.gridInfo[cascade].probes.data[probeIndex].validity / 100);
+    const float validityWeight = min(1.0, probeInfosBuffers[ddgi.gridInfo[cascade].probeInfosIndex].data[probeIndex].validity / 100);
     float weightNoTrilinear = shadowWeight * validityWeight;
     float weightNoTrilinearNoShadow = validityWeight;
     
