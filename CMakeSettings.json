@@ -162,6 +162,37 @@
           "type": "BOOL"
         }
       ]
+    },
+    {
+      "name": "x64-DebugFast-ASan",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "variables": [
+        {
+          "name": "FROGRENDER_FSR2_ENABLE",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "TRACY_ENABLE",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "FROGRENDER_DISABLE_OPTS",
+          "value": "True",
+          "type": "BOOL"
+        },
+        {
+          "name": "GAME_ENABLE_ASAN",
+          "value": "True",
+          "type": "BOOL"
+        }
+      ]
     }
   ]
 }

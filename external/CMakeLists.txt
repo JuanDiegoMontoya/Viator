@@ -44,7 +44,7 @@ if (NOT GAME_HEADLESS)
     FetchContent_Declare(
         glslang
         GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
-        GIT_TAG        5398d55e33dff7d26fecdd2c35808add986c558c
+        GIT_TAG        16.1.0
         #SYSTEM
     )
     
@@ -258,14 +258,16 @@ FetchContent_MakeAvailable(
 target_compile_definitions(glm INTERFACE GLM_FORCE_SILENT_WARNINGS)
 
 # Precompiled headers for third-party libraries
-target_precompile_headers(frogRender PRIVATE
-#    "${entt_SOURCE_DIR}/src/entt/entity/registry.hpp"
-#    "${entt_SOURCE_DIR}/src/entt/entity/entity.hpp"
-    "${joltphysics_SOURCE_DIR}/Jolt/Jolt.h"
-#    "${joltphysics_SOURCE_DIR}/Jolt/Physics/Body/Body.h"
-#    "${glm_SOURCE_DIR}/glm/vec4.hpp"
-    "${glm_SOURCE_DIR}/glm/vec3.hpp"
-    "${glm_SOURCE_DIR}/glm/vec2.hpp"
-#    "${glm_SOURCE_DIR}/glm/mat4x4.hpp"
-    "${glm_SOURCE_DIR}/glm/gtc/quaternion.hpp"
-)
+if (NOT GAME_ENABLE_ASAN)
+    target_precompile_headers(frogRender PRIVATE
+    #    "${entt_SOURCE_DIR}/src/entt/entity/registry.hpp"
+    #    "${entt_SOURCE_DIR}/src/entt/entity/entity.hpp"
+        "${joltphysics_SOURCE_DIR}/Jolt/Jolt.h"
+    #    "${joltphysics_SOURCE_DIR}/Jolt/Physics/Body/Body.h"
+    #    "${glm_SOURCE_DIR}/glm/vec4.hpp"
+        "${glm_SOURCE_DIR}/glm/vec3.hpp"
+        "${glm_SOURCE_DIR}/glm/vec2.hpp"
+    #    "${glm_SOURCE_DIR}/glm/mat4x4.hpp"
+        "${glm_SOURCE_DIR}/glm/gtc/quaternion.hpp"
+    )
+endif()

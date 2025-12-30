@@ -8,14 +8,13 @@ option(FROGRENDER_FSR2_ENABLE "Enable FidelityFX Super Resolution 2. Windows onl
 option(GAME_HEADLESS "Build the game without graphics or input." FALSE)
 option(GAME_COMPILE_TESTS "Compile the game's tests." TRUE)
 option(GAME_FORCE_DEBUG_INFO "Compile the game with debug info." FALSE)
+option(GAME_ENABLE_ASAN "Compile with address sanitizer." FALSE)
 
 #TODO: Use an allocator that doesn't require Vulkan.
 find_package(Vulkan REQUIRED)
 
 if (NOT GAME_HEADLESS)
     set(viator_client_files
-        vendor/tiny_obj_loader.cpp
-        vendor/ma_reverb_node.cpp
         src/Client/techniques/Bloom.h
         src/Client/techniques/Bloom.cpp
         src/Client/RendererUtilities.h
@@ -83,7 +82,6 @@ add_executable(frogRender
     ${viator_client_files}
     src/Client/Fvog/detail/Common.h
     src/Client/Fvog/detail/Common.cpp
-    vendor/zstd.cpp
     src/main.cpp
     src/Client/Fvog/detail/Flags.h
     src/PCG.h
@@ -185,23 +183,11 @@ add_executable(frogRender
     src/Game/World/WorldGenHelpers.cpp
 )
 
-# Precompiled headers for standard library
-target_precompile_headers(frogRender PRIVATE 
-    <algorithm>
-#    <array>
-#    <bit>
-    <chrono>
-    <filesystem>
-    <functional>
-    <memory>
-    <optional>
-    <string>
-    <span>
-    <unordered_map>
-    <unordered_set>
-    <variant>
-    <vector>
-)
+if (NOT GAME_ENABLE_ASAN)
+    set(EDIT_AND_CONTINUE_FLAGS "/ZI /INCREMENTAL") # Flags incompatible with /fsanitize=address
+else()
+    set(EDIT_AND_CONTINUE_FLAGS "")
+endif()
 
 target_compile_options(frogRender
     PRIVATE
@@ -247,8 +233,7 @@ target_compile_options(frogRender
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     #/JMC # Has a non-negligible perf impact.
     #/UNDEBUG # Undefine NDEBUG for DebugFast builds. Causes linker errors with Jolt.
-    /ZI          # Program Database for Edit and Continue
-    /INCREMENTAL # Incremental linking is required for Edit and Continue
+    ${EDIT_AND_CONTINUE_FLAGS}
     /DFROG_DEBUG
     /DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
     >
@@ -276,6 +261,35 @@ if (GAME_FORCE_DEBUG_INFO)
     else()
         target_compile_options(frogRender PRIVATE -g)
     endif()
+endif()
+
+if (GAME_ENABLE_ASAN)
+    target_compile_options(frogRender PRIVATE -fsanitize=address)
+    add_compile_options(-fsanitize=address)
+    if (NOT MSVC)
+        target_link_options(frogRender PRIVATE -fsanitize=address)
+        add_link_options(-fsanitize=address)
+    endif()
+endif()
+
+# Precompiled headers for standard library
+if (NOT GAME_ENABLE_ASAN) # ASan and PCH don't play well together on MSVC, for some reason.
+    target_precompile_headers(frogRender PRIVATE 
+        <algorithm>
+    #    <array>
+    #    <bit>
+        <chrono>
+        <filesystem>
+        <functional>
+        <memory>
+        <optional>
+        <string>
+        <span>
+        <unordered_map>
+        <unordered_set>
+        <variant>
+        <vector>
+    )
 endif()
 
 add_subdirectory(external)
@@ -332,8 +346,13 @@ target_include_directories(frogRender
     ${enet_SOURCE_DIR}/include # hack
 )
 
+add_library(miniaudio vendor/miniaudio.cpp vendor/ma_reverb_node.cpp)
+add_library(zstd vendor/zstd.cpp)
+target_compile_definitions(zstd PRIVATE ZSTD_ASAN_DONT_POISON_WORKSPACE) # on MSVC, zstd attempts to call some undefined functions when ASan is enabled.
+
 if (NOT GAME_HEADLESS)
     add_library(stbi vendor/stb_image.cpp)
+    add_library(tinyobj vendor/tiny_obj_loader.cpp)
     set(libraries_for_head
         glfw
         lib_imgui
@@ -346,10 +365,9 @@ if (NOT GAME_HEADLESS)
         glslang::SPIRV
         stbi
         miniaudio
+        tinyobj
     )
 endif()
-
-add_library(miniaudio vendor/miniaudio.cpp)
 
 target_link_libraries(frogRender
     PRIVATE
@@ -368,6 +386,7 @@ target_link_libraries(frogRender
     angelscript
     as_addons
     Jolt
+    zstd
 )
 
 if (MSVC)
