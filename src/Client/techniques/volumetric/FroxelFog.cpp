@@ -186,7 +186,10 @@ namespace Techniques
       .emitters = fogEmittersBuffer->GetDeviceAddress() + sizeof(FogList_t),
     };
     Fvog::Context(commandBuffer).TeenyBufferUpdate(*fogEmittersBuffer, list);
-    fogEmittersBuffer->UpdateDataExpensive(commandBuffer, std::span(fogs), sizeof(FogList_t));
+    if (list.count > 0)
+    {
+      fogEmittersBuffer->UpdateDataExpensive(commandBuffer, std::span(fogs), sizeof(FogList_t));
+    }
   }
 
   void FroxelFog::InjectFog(VkCommandBuffer commandBuffer, const Fvog::Texture& fogDensityVolume)
