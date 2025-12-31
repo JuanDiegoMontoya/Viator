@@ -16,14 +16,14 @@ void main()
   const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, args.ddgi.gridInfo[v_cascade]);
   if (args.debugMode == 5) // Validity
   {
-    o_sceneColor.rgb = vec3(min(10, probeInfosBuffers[args.ddgi.gridInfo[v_cascade].probeInfosIndex].data[stableProbeIndex].validity / 100));
+    o_sceneColor.rgb = vec3(min(10, probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].validity / 100));
     o_sceneColor.a = 1;
     return;
   }
 
   if (args.debugMode == 6)
   {
-    o_sceneColor.rgb = probeInfosBuffers[args.ddgi.gridInfo[v_cascade].probeInfosIndex].data[stableProbeIndex].averageLuminance;
+    o_sceneColor.rgb = probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
     return;
   }
   ivec3 swizzle = {0, 1, 2};

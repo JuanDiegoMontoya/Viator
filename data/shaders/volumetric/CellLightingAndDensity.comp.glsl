@@ -116,7 +116,6 @@ void main()
   vec4 colorAndDensity = FogAtPoint(wPos);
   vec3 fogColor = colorAndDensity.rgb;
   float fogDensity = colorAndDensity.w;
-  uint seed = PCG_Hash(gid.x) ^ PCG_Hash(gid.y) ^ PCG_Hash(gid.z);
   vec3 light = vec3(0);
   light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
   

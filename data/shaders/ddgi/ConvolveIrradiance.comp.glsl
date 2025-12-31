@@ -51,7 +51,7 @@ void main()
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeIrradiance).xy, args.gridInfo[cascade].probeIrradianceResolution);
   const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const float validity = probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].validity;
+  const float validity = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity;
   const float alpha = max(0.05, 1.0 / validity);
   const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
   WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
@@ -72,7 +72,7 @@ void main()
   }
   const float pdf = uniform_sphere_PDF();
   averageLuminance = averageLuminance / AVG_SAMPLES;
-  const vec3 oldAverageLuminance = probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].averageLuminance;
+  const vec3 oldAverageLuminance = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
   const vec3 newAverageLuminance = mix(oldAverageLuminance, averageLuminance, alpha);
-  probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].averageLuminance = newAverageLuminance;
+  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance = newAverageLuminance;
 }

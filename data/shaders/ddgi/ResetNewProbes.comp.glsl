@@ -24,8 +24,8 @@ void main()
 
   if (any(lessThan(probePosOldProbeSpace, vec3(0))) || any(greaterThanEqual(probePosOldProbeSpace, args.gridInfo[cascade].gridResolution)))
   {
-    probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].validity = 0;
+    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 0;
   }
 
-  probeInfosBuffers[args.gridInfo[cascade].probeInfosIndex].data[stableProbeIndex].validity += 1.02;
+  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity += 1.02;
 }
