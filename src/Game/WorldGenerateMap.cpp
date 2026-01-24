@@ -24,20 +24,32 @@
 
 namespace
 {
+  struct OreDistribution
+  {
+    float spawnChance = 1;
+    int minCount      = 1;
+    int maxCount      = 10;
+
+    // Distribution follows a trapezoidal shape that builds from 0 at upperZero to 1 at upperOne, 
+    // stays at 1 until lowerOne, then gradually returns to 0 at lowerZero.
+    float upperZero = 1000;
+    float upperOne  = 999;
+    float lowerOne  = -999;
+    float lowerZero = -1000;
+  };
+
   struct OreInfo
   {
     voxel_t block;
     int cellSize;
-    float spawnChance = 1;
-    int minCount = 1;
-    int maxCount = 10;
-    std::unordered_set<UndergroundBiome> biomes{};
+    OreDistribution distribution;
+    std::unordered_map<UndergroundBiome, std::optional<OreDistribution>> biomes{}; // Biomes and optional distribution overrides.
   };
 
   void SpawnOreVein(const OreInfo& oreInfo, World& world, glm::ivec3 worldPos)
   {
     auto& rng        = world.globals->game->rng;
-    const auto count = rng.RandU32(oreInfo.minCount, oreInfo.maxCount + 1);
+    const auto count = rng.RandU32(oreInfo.distribution.minCount, oreInfo.distribution.maxCount + 1);
 
     auto potential = std::vector<glm::ivec3>();
     auto placed    = std::unordered_set<glm::ivec3>();
@@ -350,28 +362,83 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
     const auto oreInfos = std::array{
       OreInfo{
+        .block    = blocks->Get("sulfur"),
+        .cellSize = 15,
+        .distribution =
+          {
+            .spawnChance = 0.25f,
+            .minCount    = 4,
+            .maxCount    = 15,
+          },
+        .biomes = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
+      },
+      OreInfo{
+        .block    = blocks->Get("coal"),
+        .cellSize = 15,
+        .distribution =
+          {
+            .spawnChance = 0.25f,
+            .minCount    = 5,
+            .maxCount    = 20,
+          },
+        .biomes = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
+      },
+      OreInfo{
+        .block    = blocks->Get("cassiterite"),
+        .cellSize = 12,
+        .distribution =
+          {
+            .spawnChance = 0.25f,
+            .minCount    = 3,
+            .maxCount    = 7,
+          },
+        .biomes = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
+      },
+      OreInfo{
+        .block    = blocks->Get("copper"),
+        .cellSize = 12,
+        .distribution =
+          {
+            .spawnChance = 0.75f,
+            .minCount    = 5,
+            .maxCount    = 10,
+          },
+        .biomes = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
+      },
+      OreInfo{
         .block       = blocks->Get("malachite"),
         .cellSize    = 12,
-        .spawnChance = 0.75f,
-        .minCount    = 5,
-        .maxCount    = 10,
-        .biomes      = {UndergroundBiome::SurfaceCaves},
+        .distribution =
+          {
+            .spawnChance = 0.175f,
+            .minCount    = 5,
+            .maxCount    = 10,
+          },
+        .biomes      = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
       },
       OreInfo{
         .block       = blocks->Get("galena"),
         .cellSize    = 10,
-        .spawnChance = 0.75f,
-        .minCount    = 5,
-        .maxCount    = 10,
-        .biomes      = {UndergroundBiome::SurfaceCaves},
+        .distribution =
+          {
+            .spawnChance = 0.75f,
+            .minCount    = 5,
+            .maxCount    = 10,
+          },
+        .biomes      = {{UndergroundBiome::SurfaceCaves, std::nullopt}},
       },
       OreInfo{
         .block       = blocks->Get("blood_ore"),
         .cellSize    = 10,
-        .spawnChance = 0.75f,
-        .minCount    = 5,
-        .maxCount    = 10,
-        .biomes      = {UndergroundBiome::Corruption},
+        .distribution =
+          {
+            .spawnChance = 0.5f,
+            .minCount    = 5,
+            .maxCount    = 10,
+            .upperZero = -50,
+            .upperOne = -100,
+          },
+        .biomes      = {{UndergroundBiome::Corruption, std::nullopt}},
       },
     };
 
@@ -390,13 +457,29 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
       for (int yt = 0; yt < grid->dimensions_.y / oreInfo.cellSize; yt++)
       for (int xt = 0; xt < grid->dimensions_.x / oreInfo.cellSize; xt++)
       {
-        if (rng.RandFloat() < oreInfo.spawnChance)
+        const auto posCell = glm::ivec3(xt, yt, zt);
+        const auto posSub  = glm::ivec3(rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize);
+        const auto posWS   = posCell * oreInfo.cellSize + posSub;
+        const auto biome   = GetUndergroundBiomeAtPosition(*globals->undergroundBiomes, posWS);
+        const auto it      = oreInfo.biomes.find(biome);
+        if (it != oreInfo.biomes.end())
         {
-          const auto posCell = glm::ivec3(xt, yt, zt);
-          const auto posSub  = glm::ivec3(rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize, rng.RandU32() % oreInfo.cellSize);
-          const auto posWS   = posCell * oreInfo.cellSize + posSub;
-          const auto biome   = GetUndergroundBiomeAtPosition(*globals->undergroundBiomes, posWS);
-          if (oreInfo.biomes.contains(biome))
+          const auto dist = it->second.value_or(oreInfo.distribution);
+          float spawnModifier = 1;
+
+          if (posWS.y - mapGenInfo.seaLevel > dist.upperOne)
+          {
+            DEBUG_ASSERT(dist.upperOne < dist.upperZero);
+            spawnModifier = 1 - glm::smoothstep(dist.upperOne, dist.upperZero, (float)posWS.y - mapGenInfo.seaLevel);
+          }
+
+          if (posWS.y - mapGenInfo.seaLevel < dist.lowerOne)
+          {
+            DEBUG_ASSERT(dist.lowerOne > dist.lowerZero);
+            spawnModifier = glm::smoothstep(dist.lowerZero, dist.lowerOne, (float)posWS.y - mapGenInfo.seaLevel);
+          }
+
+          if (rng.RandFloat() < dist.spawnChance * spawnModifier)
           {
             SpawnOreVein(oreInfo, *this, posWS);
           }

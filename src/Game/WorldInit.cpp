@@ -12,6 +12,31 @@
 #include "FastNoise/FastNoise.h"
 #include "tracy/Tracy.hpp"
 
+namespace
+{
+  BlockId RegisterOreBlock(World& world, std::string_view tag, std::string_view name, std::string_view albedo, int tier)
+  {
+    const auto blockId = Block::CreateStandardBlock(world,
+      {
+        std::string(tag),
+        std::string(name),
+        Block::Component::Breakable{
+          .initialHealth = 100,
+          .damageTier    = tier,
+          .damageFlags   = BlockDamageFlagBit::PICKAXE,
+        },
+        Block::Component::RenderAsTexturedCube{
+          {
+            .randomizeTexcoordRotation = true,
+            .baseColorTexture          = std::string(albedo),
+          },
+        },
+      });
+    world.globals->blockRegistry->GetRegistry().emplace<Block::Component::Valuable>(entt::entity(blockId));
+    return blockId;
+  }
+}
+
 class DungeonPrefab : public PrefabDefinition
 {
 public:
@@ -25,7 +50,7 @@ public:
     const auto& wood   = blocks.Get("Wood Plank");
     const auto& chest  = blocks.Get("Cheste");
     const auto& light  = blocks.Get("Light");
-
+    
     constexpr int ds = 3;
     for (int z = -ds; z <= ds; z++)
     {
@@ -667,53 +692,13 @@ void World::InitializeGameDefinitions()
         }},
       }));
 
-  const auto malachiteBlockId = Block::CreateStandardBlock(*this,
-    {"malachite",
-      "Malachite",
-      Block::Component::Breakable{
-        .initialHealth = 100,
-        .damageTier    = 2,
-        .damageFlags   = BlockDamageFlagBit::PICKAXE,
-      },
-      Block::Component::RenderAsTexturedCube{{
-        .randomizeTexcoordRotation = true,
-        .baseColorTexture          = "malachite_albedo",
-      }}});
-  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(malachiteBlockId));
-
-  const auto bloodOreBlockId = Block::CreateStandardBlock(*this,
-    {
-      "blood_ore",
-      "Blood Ore",
-      Block::Component::Breakable{
-        .initialHealth = 100,
-        .damageTier    = 4,
-        .damageFlags   = BlockDamageFlagBit::PICKAXE,
-      },
-      Block::Component::RenderAsTexturedCube{
-        {
-          .randomizeTexcoordRotation = false,
-          .baseColorTexture          = "blood_ore_albedo",
-        },
-      },
-    });
-  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(bloodOreBlockId));
-
-  const auto galenaBlockId = Block::CreateStandardBlock(*this,
-    {
-      "galena",
-      "Galena",
-      Block::Component::Breakable{
-        .initialHealth = 100,
-        .damageTier    = 3,
-        .damageFlags   = BlockDamageFlagBit::PICKAXE,
-      },
-      Block::Component::RenderAsTexturedCube{{
-        .randomizeTexcoordRotation = true,
-        .baseColorTexture          = "galena_albedo",
-      }},
-    });
-  blocks.GetRegistry().emplace<Block::Component::Valuable>(entt::entity(galenaBlockId));
+  RegisterOreBlock(*this, "coal", "Coal", "coal_albedo", 2);
+  RegisterOreBlock(*this, "sulfur", "Sulfur", "sulfur_albedo", 2);
+  const auto malachiteBlockId = RegisterOreBlock(*this, "malachite", "Malachite", "malachite_albedo", 2);
+  RegisterOreBlock(*this, "copper", "Copper", "copper_albedo", 2);
+  const auto galenaBlockId = RegisterOreBlock(*this, "galena", "Galena", "galena_albedo", 3);
+  RegisterOreBlock(*this, "cassiterite", "Cassiterite", "cassiterite_albedo", 3);
+  RegisterOreBlock(*this, "blood_ore", "Blood Ore", "blood_ore_albedo", 6);
 
   const auto forgeFace = Block::CubeFaceMaterial{
     .baseColorTexture = "forge_side_albedo",
@@ -890,6 +875,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock({.tag = "anvil_lead", .name = "Lead Anvil", .dropsSelf = true, .isSolid = true});
   RegisterFoliageBlock({.tag = "cactus_small", .name = "Small Cactus", .dropsSelf = true});
   RegisterFoliageBlock({.tag = "bush_03", .name = "Bush 3", .dropsSelf = false});
+  RegisterFoliageBlock({.tag = "remains_generic", .name = "Corpse", .dropsSelf = false});
   const auto leaves03 = RegisterFoliageBlock({.tag = "leaves_burnwillow_01", .name = "BW Leaves", .dropsSelf = false, .support = std::nullopt});
   const auto vineEndB = RegisterFoliageBlock({.tag = "vines_end_burnwillow", .name = "Vines End BW", .dropsSelf = false, .support = std::nullopt});
   const auto vineMainB = RegisterFoliageBlock({.tag = "vines_main_burnwillow", .name = "Vines Main BW", .dropsSelf = false, .support = std::nullopt});
@@ -961,6 +947,12 @@ void World::InitializeGameDefinitions()
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_top"));
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_bottom"));
     Block::CreateStandardRotatedVariants(*this, blocks.Get("cargo_runner_vertical"));
+  }
+
+  {
+    RegisterFoliageBlock({.tag = "saltpeter_spike_base", .name = "Saltpeter Spike Base", .dropsSelf = true, .isSolid = true});
+    RegisterFoliageBlock({.tag = "saltpeter_spike_top", .name = "Saltpeter Spike Top", .dropsSelf = true, .isSolid = false});
+    RegisterFoliageBlock({.tag = "saltpeter_spike_small", .name = "Saltpeter Spike Small", .dropsSelf = true, .isSolid = false});
   }
 
   {

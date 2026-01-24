@@ -102,11 +102,11 @@ entt::entity CreateSnake(World& world, glm::vec3, glm::quat)
       world.GetPhysicsEngine().GetBodyInterface().SetGravityFactor(rb.body, 1);
       world.GetPhysicsEngine().GetBodyInterface().SetMotionQuality(rb.body, JPH::EMotionQuality::LinearCast);
     }
-
+    
     if (i == 0)
     {
       head = a;
-      registry.emplace<Physics::CharacterControllerShrimpleSettings>(a, Physics::CharacterControllerShrimpleSettings{.shape = Physics::Sphere{0.5f}});
+      registry.emplace<Physics::CharacterControllerShrimpleSettings>(a, Physics::CharacterControllerShrimpleSettings{.shape = {Physics::Sphere{0.5f}}});
       body = registry.get<Physics::CharacterControllerShrimple>(a).character->GetBodyID();
       // registry.emplace<NoclipCharacterController>(a);
       registry.emplace<SimplePathfindingEnemyBehavior>(a);
