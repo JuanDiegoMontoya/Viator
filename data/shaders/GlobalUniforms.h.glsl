@@ -2,6 +2,7 @@
 #define GLOBAL_UNIFORMS_H
 
 #include "Resources.h.glsl"
+#include "Debug/DebugCommon.h.glsl"
 
 #define CULL_MESHLET_FRUSTUM    (1 << 0)
 #define CULL_MESHLET_HIZ        (1 << 1)
@@ -86,7 +87,7 @@ inline SkyParameters InitSkyParameters()
 }
 struct GlobalUniforms
 #else
-FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict PerFrameUniformsBuffer)
 #endif
 {
   FVOG_MAT4 viewProj;
@@ -109,6 +110,8 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict readonly PerFrameUniformsBuffer)
   FVOG_SHARED Texture2D transmittanceLut;
   FVOG_SHARED Sampler linearSampler;
   GBuffer gBuffer;
+  DebugDrawData debugDraw;
+  FVOG_SHARED Texture2D blueNoise;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

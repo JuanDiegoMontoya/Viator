@@ -7,90 +7,103 @@
 
 struct DebugAabb
 {
-  PackedVec3 center;
-  PackedVec3 extent;
-  PackedVec4 color;
+  FVOG_VEC3 center;
+  FVOG_VEC3 extent;
+  FVOG_VEC4 color;
 };
 
 struct DebugRect
 {
-  PackedVec2 minOffset;
-  PackedVec2 maxOffset;
-  PackedVec4 color;
-  float depth;
+  FVOG_VEC2 minOffset;
+  FVOG_VEC2 maxOffset;
+  FVOG_VEC4 color;
+  FVOG_FLOAT depth;
 };
 
 struct DebugLine
 {
-  PackedVec3 aPosition;
-  PackedVec4 aColor;
-  PackedVec3 bPosition;
-  PackedVec4 bColor;
+  FVOG_VEC3 aPosition;
+  FVOG_VEC4 aColor;
+  FVOG_VEC3 bPosition;
+  FVOG_VEC4 bColor;
 };
 
-FVOG_DECLARE_STORAGE_BUFFERS(restrict DebugAabbBuffer)
+FVOG_DECLARE_BUFFER_REFERENCE_2(DebugAabbBuffer)
 {
-  DrawIndirectCommand drawCommand;
-  DebugAabb aabbs[];
-} debugAabbBuffers[];
+  DebugAabb aabb;
+};
 
-FVOG_DECLARE_STORAGE_BUFFERS(restrict DebugRectBuffer)
+FVOG_DECLARE_BUFFER_REFERENCE_2(DebugRectBuffer)
 {
-  DrawIndirectCommand drawCommand;
-  DebugRect rects[];
-} debugRectBuffers[];
+  DebugRect rect;
+};
 
-FVOG_DECLARE_STORAGE_BUFFERS(restrict DebugLineBuffer)
+FVOG_DECLARE_BUFFER_REFERENCE_2(DebugLineBuffer)
 {
-  DrawIndirectCommand drawCommand;
-  DebugLine lines[];
-} debugLineBuffers[];
+  DebugLine line;
+};
 
+FVOG_DECLARE_BUFFER_REFERENCE_2(DebugDrawData)
+{
+  DrawIndirectCommand aabbDrawCommand;
+  DrawIndirectCommand rectDrawCommand;
+  DrawIndirectCommand lineDrawCommand;
+  FVOG_UINT32 maxAabbCount;
+  FVOG_UINT32 maxRectCount;
+  FVOG_UINT32 maxLineCount;
+  DebugAabbBuffer aabbs;
+  DebugRectBuffer rects;
+  DebugLineBuffer lines;
+};
+
+#ifndef __cplusplus
 // World-space box
-bool TryPushDebugAabb(uint bufferIndex, DebugAabb box)
+bool TryPushDebugAabb(DebugDrawData debug, DebugAabb box)
 {
-  uint index = atomicAdd(debugAabbBuffers[bufferIndex].drawCommand.instanceCount, 1);
+  uint index = atomicAdd(debug.aabbDrawCommand.instanceCount, 1);
 
   // Check if buffer is full
-  if (index >= debugAabbBuffers[bufferIndex].aabbs.length())
+  if (index >= debug.maxAabbCount)
   {
-    atomicAdd(debugAabbBuffers[bufferIndex].drawCommand.instanceCount, -1);
+    atomicAdd(debug.aabbDrawCommand.instanceCount, -1);
     return false;
   }
 
-  debugAabbBuffers[bufferIndex].aabbs[index] = box;
+  debug.aabbs[index].aabb = box;
   return true;
 }
 
 // UV-space rect
-bool TryPushDebugRect(uint bufferIndex, DebugRect rect)
+bool TryPushDebugRect(DebugDrawData debug, DebugRect rect)
 {
-  uint index = atomicAdd(debugRectBuffers[bufferIndex].drawCommand.instanceCount, 1);
+  uint index = atomicAdd(debug.rectDrawCommand.instanceCount, 1);
 
   // Check if buffer is full
-  if (index >= debugRectBuffers[bufferIndex].rects.length())
+  if (index >= debug.maxRectCount)
   {
-    atomicAdd(debugRectBuffers[bufferIndex].drawCommand.instanceCount, -1);
+    atomicAdd(debug.rectDrawCommand.instanceCount, -1);
     return false;
   }
 
-  debugRectBuffers[bufferIndex].rects[index] = rect;
+  debug.rects[index].rect = rect;
   return true;
 }
 
 // World-space line
-bool TryPushDebugLine(Buffer lineBuffer, DebugLine line)
+bool TryPushDebugLine(DebugDrawData debug, DebugLine line)
 {
-  uint index = atomicAdd(debugLineBuffers[lineBuffer.bufIdx].drawCommand.instanceCount, 1);
+  uint index = atomicAdd(debug.lineDrawCommand.instanceCount, 1);
 
   // Check if buffer is full
-  if (index >= debugLineBuffers[lineBuffer.bufIdx].lines.length())
+  if (index >= debug.maxLineCount)
   {
-    atomicAdd(debugLineBuffers[lineBuffer.bufIdx].drawCommand.instanceCount, -1);
+    atomicAdd(debug.lineDrawCommand.instanceCount, -1);
     return false;
   }
 
-  debugLineBuffers[lineBuffer.bufIdx].lines[index] = line;
+  debug.lines[index].line = line;
   return true;
 }
+#endif // __cplusplus
+
 #endif // DEBUG_COMMON_H

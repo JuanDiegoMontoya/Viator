@@ -11,12 +11,6 @@
 
 #include <optional>
 
-namespace Fvog
-{
-  class Device;
-  class Tlas;
-}
-
 namespace Techniques
 {
   class RayTracedAO

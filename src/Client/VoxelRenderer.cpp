@@ -558,6 +558,11 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
 
   Fvog::GetDevice().ImmediateSubmit([this](VkCommandBuffer cmd) { exposureBuffer.UpdateDataExpensive(cmd, 0.0f); });
 
+  debugRenderingInfo.emplace(Fvog::TypedBufferCreateInfo{}, "Debug Rendering Info");
+  debugAabbBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug AABB Buffer");
+  debugRectBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug Rect Buffer");
+  debugLineBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug Line Buffer");
+
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
 
@@ -862,6 +867,40 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     world.globals->globalFogNeedsUpdate = false;
   }
   
+  if (debugClearGpuPrimtives)
+  {
+    ctx.TeenyBufferUpdate(debugRenderingInfo.value(),
+      DebugDrawData_t{
+        .aabbDrawCommand =
+          DrawIndirectCommand{
+            .vertexCount   = 14,
+            .instanceCount = 0,
+            .firstVertex   = 0,
+            .firstInstance = 0,
+          },
+        .rectDrawCommand =
+          DrawIndirectCommand{
+            .vertexCount   = 4,
+            .instanceCount = 0,
+            .firstVertex   = 0,
+            .firstInstance = 0,
+          },
+        .lineDrawCommand =
+          DrawIndirectCommand{
+            .vertexCount   = 2,
+            .instanceCount = 0,
+            .firstVertex   = 0,
+            .firstInstance = 0,
+          },
+        .maxAabbCount = debugAabbBuffer->Size(),
+        .maxRectCount = debugRectBuffer->Size(),
+        .maxLineCount = debugLineBuffer->Size(),
+        .aabbs        = debugAabbBuffer->GetDeviceAddress(),
+        .rects        = debugRectBuffer->GetDeviceAddress(),
+        .lines        = debugLineBuffer->GetDeviceAddress(),
+      });
+  }
+
   ctx.TeenyBufferUpdate(gBufferBuffer.value(),
     GBuffer_t{
       .gAlbedo              = frame.sceneAlbedo->ImageView().GetTexture2D(),
@@ -970,6 +1009,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .transmittanceLut       = transmittanceLut.value().ImageView().GetTexture2D(),
       .linearSampler          = linearClampSampler,
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
+      .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
+      .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
     });
 
   ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1300,6 +1341,23 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         });
         ctx.Draw(uint32_t(billboardSprites.size() * 6), 1, 0, 0);
       }
+
+      // GPU-driven debug shapes
+      {
+        // GPU debug lines
+        // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, aabbDrawCommand), 1, 0);
+        // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, rectDrawCommand), 1, 0);
+        ctx.BindGraphicsPipeline(debugLinesPipeline.GetPipeline());
+        ctx.SetPushConstants(DebugLinesPushConstants{
+          .vertexBufferIndex   = debugLineBuffer->GetResourceHandle().index,
+          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .useGpuVertexBuffer  = 1,
+        });
+        ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, lineDrawCommand), 1, 0);
+
+        // GPU debug meshes
+        // ctx.DrawIndirect();
+    }
     }
     ctx.EndRendering();
 

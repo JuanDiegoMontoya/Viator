@@ -10,25 +10,25 @@ layout(location = 0) out vec4 v_color;
 
 FVOG_DECLARE_ARGUMENTS(DebugRectArguments)
 {
-  FVOG_UINT32 debugRectBufferIndex;
+  DebugDrawData debug;
 };
 
 void main()
 {
-  DebugRect rect = debugRectBuffers[debugRectBufferIndex].rects[gl_InstanceIndex + gl_BaseInstance];
-  v_color = PackedToVec4(rect.color);
+  DebugRect rect = debug.rects[gl_InstanceIndex + gl_BaseInstance].rect;
+  v_color = rect.color;
 
-  PackedVec2 uvPos;
+  vec2 uvPos;
   if (gl_VertexIndex == 0)
     uvPos = rect.minOffset;
   else if (gl_VertexIndex == 1)
-    uvPos = PackedVec2(rect.maxOffset.x, rect.minOffset.y);
+    uvPos = vec2(rect.maxOffset.x, rect.minOffset.y);
   else if (gl_VertexIndex == 2)
     uvPos = rect.maxOffset;
   else
-    uvPos = PackedVec2(rect.minOffset.x, rect.maxOffset.y);
+    uvPos = vec2(rect.minOffset.x, rect.maxOffset.y);
   
-  vec2 clip = PackedToVec2(uvPos) * 2.0 - 1.0;
+  vec2 clip = uvPos * 2.0 - 1.0;
 
   gl_Position = vec4(clip, rect.depth, 1.0);
 }

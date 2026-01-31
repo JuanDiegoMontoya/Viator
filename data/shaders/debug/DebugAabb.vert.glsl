@@ -9,17 +9,17 @@
 FVOG_DECLARE_ARGUMENTS(DebugAabbArguments)
 {
   FVOG_UINT32 globalUniformsIndex;
-  FVOG_UINT32 debugAabbBufferIndex;
+  DebugDrawData debug;
 };
 
 layout(location = 0) out vec4 v_color;
 
 void main()
 {
-  DebugAabb box = debugAabbBuffers[debugAabbBufferIndex].aabbs[gl_InstanceIndex + gl_BaseInstance];
-  v_color = PackedToVec4(box.color);
+  DebugAabb box = debug.aabbs[gl_InstanceIndex + gl_BaseInstance].aabb;
+  v_color = box.color;
 
   vec3 a_pos = CreateCube(gl_VertexIndex) - 0.5;
-  vec3 worldPos = a_pos * PackedToVec3(box.extent) + PackedToVec3(box.center);
+  vec3 worldPos = a_pos * box.extent + box.center;
   gl_Position = perFrameUniformsBuffers[globalUniformsIndex].viewProj * vec4(worldPos, 1.0);
 }

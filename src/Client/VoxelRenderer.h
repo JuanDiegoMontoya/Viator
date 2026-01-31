@@ -17,6 +17,7 @@
 #include "shaders/GlobalUniforms.h.glsl"
 #include "shaders/sky/SkyShared.h.glsl"
 #include "shaders/voxels/ShadeDeferred.shared.h"
+#include "shaders/debug/DebugCommon.h.glsl"
 
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
@@ -264,6 +265,21 @@ private:
   std::optional<Fvog::Texture> globalSurfaceHeightImage;
   std::optional<Fvog::Texture> globalSurfaceFogImage;
   std::optional<Fvog::Texture> globalFogImage;
+
+  // GPU debug drawing
+  enum class GPUDebugMesh
+  {
+    Circle,
+    Semicircle,
+    Rectangle,
+  };
+  //std::optional<Fvog::TypedBuffer<Fvog::DrawIndirectCommand>> debugMeshIndirectCommands;
+  //std::optional<Fvog::TypedBuffer<,>> debugMeshInstanceData;
+  std::optional<Fvog::TypedBuffer<DebugDrawData_t>> debugRenderingInfo;
+  std::optional<Fvog::TypedBuffer<DebugAabb>> debugAabbBuffer;
+  std::optional<Fvog::TypedBuffer<DebugRect>> debugRectBuffer;
+  std::optional<Fvog::TypedBuffer<DebugLine>> debugLineBuffer;
+  bool debugClearGpuPrimtives = true;
 };
 
 namespace GuiHelper
