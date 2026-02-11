@@ -975,11 +975,18 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 
       if (ImGui::BeginTabItem("Audio"))
       {
-        auto volume = ma_engine_get_volume(head_->audio_->engine_);
-        if (ImGui::SliderFloat("Volume", &volume, 0, 1, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+        if (head_->audio_)
         {
-          sGameSettingsModified = true;
-          ma_engine_set_volume(head_->audio_->engine_, volume);
+          auto volume = ma_engine_get_volume(head_->audio_->engine_);
+          if (ImGui::SliderFloat("Volume", &volume, 0, 1, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+          {
+            sGameSettingsModified = true;
+            ma_engine_set_volume(head_->audio_->engine_, volume);
+          }
+        }
+        else
+        {
+          ImGui::TextUnformatted("Missing audio interface.");
         }
 
         ImGui::EndTabItem();
@@ -1103,26 +1110,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
         ImGui::End();
       }
-    }
-
-    if (world.globals->game->debugging.showFps)
-    {
-      if (ImGui::Begin("Test"))
-      {
-        ImGui::Text("Framerate: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
-        auto& grid = *world.globals->grid;
-        VmaStatistics stats{};
-        vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
-        auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
-        auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
-        ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
-
-        if (ImGui::Button("Collapse da grid"))
-        {
-          grid.CoalesceDirtyBricks();
-        }
-      }
-      ImGui::End();
     }
 
     // Get information about the local player
@@ -1861,6 +1848,22 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
   default: DEBUG_ASSERT(0);
   }
 
+  if (world.globals->game->debugging.showFps)
+  {
+    ImGui::SetNextWindowPos({0, ImGui::GetIO().DisplaySize.y}, ImGuiCond_Always, {0, 1});
+    if (ImGui::Begin("Test",
+          nullptr,
+          ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
+    {
+      static float smoothDt = dt.real;
+      smoothDt              = glm::mix(smoothDt, dt.real, 0.04f);
+      ImGui::Text("FPS: %.0f (%.2fms)", 1 / dt.real, dt.real * 1000);
+      ImGui::Text("Avg. FPS: %.0f (%.2fms)", 1 / smoothDt, smoothDt * 1000);
+    }
+    ImGui::End();
+  }
+
   if (world.globals->game->debugging.showDebugGui)
   {
     if (head_->GetAudio())
@@ -1909,6 +1912,18 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       ImGui::Checkbox("Draw Debug Normal", &debug.drawDebugNormal);
       ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
       ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
+
+      auto& grid = *world.globals->grid;
+      VmaStatistics stats{};
+      vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
+      auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
+      auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
+      ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
+
+      if (ImGui::Button("Collapse da grid"))
+      {
+        grid.CoalesceDirtyBricks();
+      }
 
       if (ImGui::Selectable("Save UI layout"))
       {
@@ -2115,6 +2130,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             ssgiParams_.debugCapture = true;
           }
 
+          ImGui::Checkbox("Enable##SSGI", &enableSsgi_);
           ImGui::SliderInt("Slice count", reinterpret_cast<int*>(&ssgiParams_.sliceCount), 1, 16);   // UB
           ImGui::SliderInt("Sample count", reinterpret_cast<int*>(&ssgiParams_.sampleCount), 1, 32); // UB
           ImGui::SliderFloat("Sample radius", &ssgiParams_.sampleRadius, 0.25f, 5.0f, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
