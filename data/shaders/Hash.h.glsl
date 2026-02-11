@@ -36,7 +36,7 @@ float PCG_RandFloat(inout uint state)
 
 ///////////////////////////////////////////////////////////////////////////////
 // Miscellany
-// mostly sin(fract(..)) stuff that I don't approve of but am too lazy to change
+// mostly fract(sin(..)) stuff that I don't approve of but am too lazy to change
 ///////////////////////////////////////////////////////////////////////////////
 
 float MM_Hash2(vec2 v)
@@ -47,6 +47,12 @@ float MM_Hash2(vec2 v)
 float MM_Hash3(vec3 v)
 {
   return MM_Hash2(vec2(MM_Hash2(v.xy), v.z));
+}
+
+// https://blog.demofox.org/2022/01/01/interleaved-gradient-noise-a-different-kind-of-low-discrepancy-sequence/
+float Hash_IGN(int x, int y)
+{
+  return mod(52.9829189 * mod(0.06711056 * float(x) + 0.00583715 * float(y), 1.0), 1.0);
 }
 
 #endif // HASH_H

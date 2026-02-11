@@ -230,7 +230,6 @@ namespace Fvog
       };
 
       {
-        
         ZoneScopedN("GlslangToSpv");
         spv::SpvBuildLogger logger;
         glslang::GlslangToSpv(*shader.getIntermediate(), info.binarySpv, &logger, &options);

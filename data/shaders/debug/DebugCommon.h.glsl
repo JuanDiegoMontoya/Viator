@@ -104,6 +104,26 @@ bool TryPushDebugLine(DebugDrawData debug, DebugLine line)
   debug.lines[index].line = line;
   return true;
 }
+
+bool TryPushDebugLine(DebugDrawData debug, vec3 aPosition, vec4 aColor, vec3 bPosition, vec4 bColor)
+{
+  DebugLine line;
+  line.aPosition = aPosition;
+  line.bPosition = bPosition;
+  line.aColor = aColor;
+  line.bColor = bColor;
+  return TryPushDebugLine(debug, line);
+}
+
+bool DrawDebugLineBasis(DebugDrawData debug, vec3 position, mat3 basis)
+{
+  uint success = 1;
+  success |= uint(TryPushDebugLine(debug, position, vec4(1, 0, 0, 1), position + basis[0], vec4(1, 0, 0, 1)));
+  success |= uint(TryPushDebugLine(debug, position, vec4(0, 1, 0, 1), position + basis[1], vec4(0, 1, 0, 1)));
+  success |= uint(TryPushDebugLine(debug, position, vec4(0, 0, 1, 1), position + basis[2], vec4(0, 0, 1, 1)));
+  return bool(success);
+}
+
 #endif // __cplusplus
 
 #endif // DEBUG_COMMON_H

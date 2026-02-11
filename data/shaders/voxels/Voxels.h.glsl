@@ -889,7 +889,7 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
     tLocalPrev = tLocal;
   }
 
-  printf("TraceRaySimple max iterations reached! (iterations: %d)", maxIterations);
+  //printf("TraceRaySimple max iterations reached! (iterations: %d)\n", maxIterations);
   return false;
 }
 

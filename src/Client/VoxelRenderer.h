@@ -10,6 +10,7 @@
 #include "techniques/AutoExposure.h"
 #include "techniques/volumetric/FroxelFog.h"
 #include "techniques/ao/RayTracedAO.h"
+#include "techniques/ao/ScreenSpaceGI.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -242,6 +243,10 @@ private:
   bool enableAo_ = true;
   std::optional<Fvog::Texture> whiteTexture_;
   Techniques::RayTracedAO::ComputeParams aoParams_{};
+
+  Techniques::ScreenSpaceGI ssgi_;
+  bool enableSsgi_ = true;
+  Techniques::ScreenSpaceGIDispatchInfo ssgiParams_{};
 
   enum class GIMethod
   {

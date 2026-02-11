@@ -1968,6 +1968,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
       }
 
+      ImGui::Checkbox("Clear GPU Primitives", &debugClearGpuPrimtives);
+
       if (ImGui::BeginTabBar("Options"))
       {
         if (ImGui::BeginTabItem("Atmosphere"))
@@ -2102,6 +2104,22 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           tonemapUniforms.curveExposure = b;
           ImGui::SliderFloat("Min exposure", &tonemapUniforms.minExposure, -20, tonemapUniforms.maxExposure, "%.1f");
           ImGui::SliderFloat("Max exposure", &tonemapUniforms.maxExposure, tonemapUniforms.minExposure, 20, "%.1f");
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("SSGI"))
+        {
+          ssgiParams_.debugCapture = false;
+          if (ImGui::Button("Capture SSGI info"))
+          {
+            ssgiParams_.debugCapture = true;
+          }
+
+          ImGui::SliderInt("Slice count", reinterpret_cast<int*>(&ssgiParams_.sliceCount), 1, 16);   // UB
+          ImGui::SliderInt("Sample count", reinterpret_cast<int*>(&ssgiParams_.sampleCount), 1, 32); // UB
+          ImGui::SliderFloat("Sample radius", &ssgiParams_.sampleRadius, 0.25f, 5.0f, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
+          ImGui::SliderFloat("Hit thickness", &ssgiParams_.hitThickness, 0.1f, 2.0f, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
+
           ImGui::EndTabItem();
         }
 
