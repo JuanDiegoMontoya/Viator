@@ -70,6 +70,11 @@ void main()
       // The terms cancel out so we're left with only visibility, which is handled by this branch.
       visibility += 1.0;
     }
+    else
+    {
+      // Smooth range falloff on hit.
+      visibility += smoothstep(0.8, 1.0, distance(rayOrigin, hit.positionWorld));
+    }
   }
 
   if (numRays == 0)
