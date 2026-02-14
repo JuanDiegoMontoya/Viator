@@ -56,9 +56,24 @@ namespace
       return VK_FALSE;
     }
 
-    auto ms = vkb::to_string_message_severity(messageSeverity);
-    auto mt = vkb::to_string_message_type(messageType);
-    printf("[%s: %s]\n%s\n", ms, mt, pCallbackData->pMessage);
+    //auto ms = vkb::to_string_message_severity(messageSeverity);
+    //auto mt = vkb::to_string_message_type(messageType);
+    //printf("[%s: %s]\n%s\n", ms, mt, pCallbackData->pMessage);
+
+    auto level = spdlog::level::err;
+    if (messageSeverity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+      level = spdlog::level::warn;
+    }
+    if (messageSeverity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+    {
+      level = spdlog::level::debug;
+    }
+    if (messageSeverity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+    {
+      level = spdlog::level::trace;
+    }
+    spdlog::log(level, "{}", pCallbackData->pMessage);
 
     return VK_FALSE;
   }

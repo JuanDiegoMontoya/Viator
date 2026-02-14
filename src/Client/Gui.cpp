@@ -15,6 +15,7 @@
 #include "Game/World.h"
 #include "Game/Prefab.h"
 #include "Game/Globals.h"
+#include "Client/GUI/Console.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -120,6 +121,10 @@ namespace
   std::string sHostName    = std::string(256, '\0');
   std::string sHostAddress = std::string(256, '\0');
   uint16_t sHostPort       = 1234;
+
+  // Fonts
+  ImFont* sStandardFont{};
+  ImFont* sMonospaceFont{};
 
   void SaveGameSettings()
   {
@@ -889,9 +894,10 @@ void VoxelRenderer::InitGui()
   glfwGetWindowContentScale(head_->window, &xscale, &yscale);
   const auto contentScale = std::max(xscale, yscale); // I don't know how to properly handle the case where xdpi != ydpi. Hopefully that never happens
   const float fontSize    = std::floor(18 * contentScale);
-  ImGui::GetIO().Fonts->AddFontFromFileTTF((GetTextureDirectory() / "RobotoCondensed-Regular.ttf").string().c_str(), fontSize);
+  sStandardFont           = ImGui::GetIO().Fonts->AddFontFromFileTTF((GetTextureDirectory() / "RobotoCondensed-Regular.ttf").string().c_str(), fontSize);
+  sMonospaceFont          = ImGui::GetIO().Fonts->AddFontDefault();
   // constexpr float iconFontSize = fontSize * 2.0f / 3.0f; // if GlyphOffset.y is not biased, uncomment this
-
+  
   // These fonts appear to interfere, possibly due to having overlapping ranges.
   // Loading FA first appears to cause less breakage
   {
@@ -1864,6 +1870,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     ImGui::End();
   }
 
+  Console::Get()->Draw(world);
+
   if (world.globals->game->debugging.showDebugGui)
   {
     if (head_->GetAudio())
@@ -2436,4 +2444,14 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     ImGui::End();
   }
+}
+
+ImFont* GuiHelper::GetStandardFont()
+{
+  return sStandardFont;
+}
+
+ImFont* GuiHelper::GetMonospaceFont()
+{
+  return sMonospaceFont;
 }

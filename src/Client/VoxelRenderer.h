@@ -245,7 +245,7 @@ private:
   Techniques::RayTracedAO::ComputeParams aoParams_{};
 
   Techniques::ScreenSpaceGI ssgi_;
-  bool enableSsgi_ = true;
+  bool enableSsgi_ = false;
   Techniques::ScreenSpaceGIDispatchInfo ssgiParams_{};
 
   enum class GIMethod
@@ -287,7 +287,11 @@ private:
   bool debugClearGpuPrimtives = true;
 };
 
+struct ImFont;
+
 namespace GuiHelper
 {
   bool DrawComponent(World& world, entt::entity entity, entt::meta_any instance, entt::meta_custom custom, bool readonly, int& guiId);
+  ImFont* GetStandardFont();
+  ImFont* GetMonospaceFont();
 }

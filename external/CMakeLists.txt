@@ -237,8 +237,8 @@ target_include_directories(frogRender PUBLIC ${joltphysics_SOURCE_DIR}/..)
 
 FetchContent_Declare(
     rapidfuzz
-    GIT_REPOSITORY https://github.com/rapidfuzz/rapidfuzz-cpp.git
-    GIT_TAG v3.3.2
+    GIT_REPOSITORY https://github.com/JuanDiegoMontoya/rapidfuzz-cpp.git
+    GIT_TAG e8bb83f5c6e2edafe6d89b6e15eef8903292d575
 )
 
 FetchContent_MakeAvailable(

@@ -75,6 +75,12 @@ if (NOT GAME_HEADLESS)
         src/Client/Editor.h
         src/Client/PlayerAudio.h
         src/Client/PlayerAudio.cpp
+        src/Client/techniques/ao/ScreenSpaceGI.h
+        src/Client/techniques/ao/ScreenSpaceGI.cpp
+        src/Client/Gui/Console.h
+        src/Client/Gui/Console.cpp
+        src/Client/Gui/CommandParser.h
+        src/Client/Gui/CommandParser.cpp
     )
 endif()
 
