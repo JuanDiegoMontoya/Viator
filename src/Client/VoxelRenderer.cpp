@@ -1475,6 +1475,24 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     }
 
     ctx.Barrier();
+
+    if (enableSsgi_)
+    {
+      ssgiParams_.inputAlbedo           = &frame.sceneAlbedo.value();
+      ssgiParams_.inputDepth            = &frame.sceneDepth.value();
+      ssgiParams_.inputNormal           = &frame.sceneNormal.value();
+      ssgiParams_.inputDiffuseLuminance = &frame.sceneColor.value();
+      ssgiParams_.outputSize            = {frame.sceneAlbedo->GetCreateInfo().extent.width, frame.sceneAlbedo->GetCreateInfo().extent.height};
+      ssgiParams_.frameNumber           = uint32_t(Fvog::GetDevice().frameNumber);
+      ssgiParams_.view_from_world       = view_from_world;
+      ssgiParams_.clip_from_view        = clip_from_view;
+      ssgiParams_.debugDraw             = debugRenderingInfo->GetDeviceAddress();
+
+      auto& sceneColorWithSSGI = ssgi_.Dispatch(commandBuffer, ssgiParams_);
+      std::swap(sceneColorWithSSGI, frame.sceneColor.value());
+    }
+
+    ctx.Barrier();
     ctx.ImageBarrier(frame.sceneColor.value(), VK_IMAGE_LAYOUT_GENERAL);
     ctx.ImageBarrier(frame.sceneDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
 

@@ -505,10 +505,10 @@ void CreateContextVariablesAndObservers(World& world)
 
   registry.ctx().emplace<World&>(world); // Observers only see a registry, so this is needed for flexibility and correctness.
   world.globals->game->tickRate.hz = 30;
-  world.globals->head = gHead_HORRIBLE_HACK; // Hack
-  world.globals->networking = gNetworking_HORRIBLE_HACK; // Hack
+  world.globals->head              = gHead_HORRIBLE_HACK;       // Hack
+  world.globals->networking        = gNetworking_HORRIBLE_HACK; // Hack
   world.globals->scripting         = gScripting_HORRIBLE_HACK;
-  world.globals->physics = Physics::Engine::Create(world);
+  world.globals->physics           = Physics::Engine::Create(world);
 
   world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactAddedPair*>().connect<&OnContactAdded>(world);
   world.GetPhysicsEngine().GetDispatcher().sink<Physics::ContactPersistedPair*>().connect<&OnContactPersisted>(world);
@@ -520,7 +520,8 @@ void CreateContextVariablesAndObservers(World& world)
   registry.on_construct<Physics::CharacterControllerShrimple>().connect<&OnCharacterControllerShrimpleConstruct>();
   registry.on_destroy<GlobalTransform>().connect<&OnGlobalTransformRemove>();
   registry.on_destroy<LinearPath>().connect<&OnLinearPathRemove>();
-  
+
+  world.globals->scripting->RegisterCommands(world);
   world.GetPhysicsEngine().CreateObservers(registry);
 
   world.InitializeGameDefinitions();

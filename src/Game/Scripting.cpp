@@ -1,4 +1,8 @@
 #include "Scripting.h"
+
+#include "CommandParser.h"
+#include "Commands.h"
+#include "Globals.h"
 #include "Core/Assert2.h"
 #include "Game/Assets.h"
 #include "Game/World.h"
@@ -7,10 +11,108 @@
 #include "spdlog/fmt/std.h"
 
 #include "angelscript.h"
+#include "Client/Gui/Console.h"
 #include "angelscript/sdk/add_on/scriptstdstring/scriptstdstring.h"
 #include "angelscript/sdk/add_on/scriptbuilder/scriptbuilder.h"
 
 #include "tracy/Tracy.hpp"
+
+namespace
+{
+  void ExecuteScriptInternal(const asIScriptModule& mod, asIScriptContext& context, const char* decl, std::vector<entt::meta_any> args)
+  {
+    ZoneScoped;
+    auto* func = mod.GetFunctionByName(decl);
+    if (func == nullptr)
+    {
+      spdlog::warn("Tried to execute a function that doesn't exist.\n"
+                   "Module: {}\n"
+                   "Function: {}",
+        mod.GetName(),
+        decl);
+      return;
+    }
+
+    if (context.Prepare(func) < 0)
+    {
+      spdlog::warn("Failed to prepare script.\n"
+                   "Module: {}\n"
+                   "Function: {}",
+        mod.GetName(),
+        func->GetDeclaration());
+      return;
+    }
+
+    if (func->GetParamCount() != args.size())
+    {
+      spdlog::warn("Number of args provided ({}) does not match the number of function parameters ({}).\n"
+                   "Module: {}\n"
+                   "Function: {}",
+        args.size(),
+        func->GetParamCount(),
+        mod.GetName(),
+        func->GetDeclaration());
+      return;
+    }
+
+    for (int i = 0; auto& arg : args)
+    {
+      ZoneScopedN("Argument");
+      const auto argIdx = i++;
+      using namespace entt::literals;
+      auto fn = arg.type().func("ASSetArg"_hs);
+      ASSERT(fn);
+      ASSERT(fn.invoke({}, (void*)&context, argIdx, arg));
+    }
+
+    try
+    {
+      ZoneScopedN("script.context->Execute()");
+      const auto ret = context.Execute();
+
+      if (ret == asEXECUTION_EXCEPTION)
+      {
+        const auto* exceptFn = context.GetExceptionFunction();
+        ASSERT(exceptFn);
+        spdlog::warn("Exception thrown while executing script.\n"
+                     "In module {}\n"
+                     "Function {}\n"
+                     "Line {}: {}",
+          exceptFn->GetModuleName(),
+          exceptFn->GetDeclaration(),
+          context.GetExceptionLineNumber(),
+          context.GetExceptionString());
+      }
+
+      if (ret == asEXECUTION_ERROR)
+      {
+        spdlog::warn("Unknown error while executing script.\n"
+                     "In module {}\n"
+                     "Top-level function {}",
+          func->GetModuleName(),
+          func->GetDeclaration());
+      }
+    }
+    catch (std::exception& e)
+    {
+      spdlog::warn("C++ exception thrown while executing script.\n"
+                   "In module {}\n"
+                   "Top-level function {}\n"
+                   "Message: {}",
+        mod.GetName(),
+        func->GetName(),
+        e.what());
+    }
+    catch (...)
+    {
+      spdlog::warn("Unknown C++ exception thrown while executing script.\n"
+                   "In module {}\n"
+                   "Top-level function {}",
+        mod.GetName(),
+        func->GetName());
+    }
+  }
+} // namespace
 
 namespace
 {
@@ -31,6 +133,7 @@ static void MessageCallback(asSMessageInfo* msg, void*)
 
 Scripting::Scripting()
 {
+  ZoneScoped;
   spdlog::info("Initializing scripting engine.");
   engine = asCreateScriptEngine();
   ASSERT(engine->SetMessageCallback(asFUNCTION(MessageCallback), nullptr, asCALL_CDECL) >= 0);
@@ -40,6 +143,7 @@ Scripting::Scripting()
 
 Scripting::~Scripting()
 {
+  ZoneScoped;
   spdlog::info("Terminating scripting engine.");
   for (const auto& [path, script] : scripts)
   {
@@ -47,6 +151,32 @@ Scripting::~Scripting()
   }
 
   engine->Release();
+}
+
+void Scripting::RegisterCommands(World& world)
+{
+  ZoneScoped;
+  auto& commandRegistry = *world.globals->commandRegistry;
+  commandRegistry.RegisterCommand({
+    .name        = "exec",
+    .description = "Executes some AngelScript code.",
+    .function    = [this, &world](std::string_view args)
+    {
+      auto parser = Game2::CmdParser(args);
+      const auto token  = parser.NextToken();
+
+      const std::string* str = std::get_if<std::string>(&token);
+      if (!str)
+      {
+        spdlog::warn("Usage: exec \"code\"");
+        return;
+      }
+
+      auto stream = std::stringstream();
+      stream << "void main(World& world){" << *str << "}\n";
+      ExecuteScriptFromCode(stream.str(), "main", {&world});
+    },
+  });
 }
 
 bool Scripting::AddScriptIfNotExist(const std::filesystem::path& path)
@@ -115,95 +245,42 @@ void Scripting::ExecuteScript(const std::filesystem::path& path, const char* dec
       path);
     return;
   }
-  
-  auto* func = mod->GetFunctionByName(decl);
-  if (func == nullptr)
+
+  ExecuteScriptInternal(*mod, *script.context, decl, std::move(args));
+}
+
+void Scripting::ExecuteScriptFromCode(std::string_view code, const char* decl, std::vector<entt::meta_any> args)
+{
+  ZoneScoped;
+
+  constexpr const char* tempModuleName = "TemporaryModuleDoNotReuseThisName";
+
+  auto builder = CScriptBuilder();
+  if (builder.StartNewModule(engine, tempModuleName) < 0)
   {
-    spdlog::warn("Tried to execute a function that doesn't exist.\n"
-                 "Module: {}\n"
-                 "Function: {}",
-      mod->GetName(),
-      decl);
+    spdlog::warn("Failed to start new module");
+    return;
+  }
+  if (builder.AddSectionFromMemory("Section", code.data(), static_cast<unsigned>(code.size())) < 0)
+  {
+    spdlog::warn("Failed to add section to script");
+    return;
+  }
+  if (builder.BuildModule() < 0)
+  {
+    spdlog::warn("Failed to build module");
     return;
   }
 
-  if (script.context->Prepare(func) < 0)
-  {
-    spdlog::warn("Failed to prepare script.\n"
-                 "Module: {}\n"
-                 "Function: {}",
-      mod->GetName(),
-      func->GetDeclaration());
-    return;
-  }
+  auto* context = engine->CreateContext();
 
-  if (func->GetParamCount() != args.size())
-  {
-    spdlog::warn("Number of args provided ({}) does not match the number of function parameters ({}).\n"
-                 "Module: {}\n"
-                 "Function: {}",
-      args.size(),
-      func->GetParamCount(),
-      mod->GetName(),
-      func->GetDeclaration());
-    return;
-  }
+  ExecuteScriptInternal(*builder.GetModule(), *context, decl, std::move(args));
 
-  for (int i = 0; auto& arg : args)
-  {
-    ZoneScopedN("Argument");
-    const auto argIdx = i++;
-    using namespace entt::literals;
-    auto fn = arg.type().func("ASSetArg"_hs);
-    ASSERT(fn);
-    ASSERT(fn.invoke({}, (void*)script.context, argIdx, arg));
-  }
+  engine->ReturnContext(context);
 
-  try
+  if (engine->DiscardModule(tempModuleName))
   {
-    ZoneScopedN("script.context->Execute()");
-    const auto ret = script.context->Execute();
-    
-    if (ret == asEXECUTION_EXCEPTION)
-    {
-      const auto* exceptFn = script.context->GetExceptionFunction();
-      ASSERT(exceptFn);
-      spdlog::warn("Exception thrown while executing script.\n"
-                   "In module {}\n"
-                   "Function {}\n"
-                   "Line {}: {}",
-        exceptFn->GetModuleName(),
-        exceptFn->GetDeclaration(),
-        script.context->GetExceptionLineNumber(),
-        script.context->GetExceptionString());
-    }
-
-    if (ret == asEXECUTION_ERROR)
-    {
-      spdlog::warn("Unknown error while executing script.\n"
-                   "In module {}\n"
-                   "Top-level function {}",
-        func->GetModuleName(),
-        func->GetDeclaration());
-    }
-  }
-  catch (std::exception& e)
-  {
-    spdlog::warn("C++ exception thrown while executing script.\n"
-                 "In module {}\n"
-                 "Top-level function {}\n"
-                 "Message: {}",
-      mod->GetName(),
-      func->GetName(),
-      e.what());
-  }
-  catch (...)
-  {
-    spdlog::warn("Unknown C++ exception thrown while executing script.\n"
-                 "In module {}\n"
-                 "Top-level function {}",
-      mod->GetName(),
-      func->GetName());
+    spdlog::warn("Failed to discard temporary module");
   }
 }
 

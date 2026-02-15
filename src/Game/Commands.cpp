@@ -18,7 +18,7 @@ Game2::CommandRegistry::CommandRegistry()
       Identifier* id = std::get_if<Identifier>(&token);
       if (!id)
       {
-        Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: find <convarname>");
+        Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: find <cvarname>");
         return;
       }
 
@@ -71,6 +71,11 @@ Game2::CommandRegistry::CommandRegistry()
       //   Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%-25s %s", params.name.c_str(), params.description.c_str());
       // }
     },
+  });
+  RegisterCommand({
+    .name        = "clear",
+    .description = "- Clears the contents of the console",
+    .function    = [](std::string_view) { Console::Get()->ClearLogEntries(); },
   });
 }
 

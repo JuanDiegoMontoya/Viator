@@ -11,6 +11,8 @@
 #include <string_view>
 
 class World;
+class asIScriptContext;
+class asIScriptModule;
 
 class Scripting
 {
@@ -19,8 +21,11 @@ public:
   ~Scripting();
   NO_COPY_NO_MOVE(Scripting);
 
+  void RegisterCommands(World& world);
+
   bool AddScriptIfNotExist(const std::filesystem::path& path);
   void ExecuteScript(const std::filesystem::path& path, const char* decl, std::vector<entt::meta_any> args);
+  void ExecuteScriptFromCode(std::string_view code, const char* decl, std::vector<entt::meta_any> args);
   void PollAndReloadModifiedScripts();
 
   [[nodiscard]] auto& GetEngine()
@@ -37,7 +42,7 @@ private:
   {
     std::filesystem::path path;
     uint64_t lastWriteTime{};
-    class asIScriptContext* context{};
+    asIScriptContext* context{};
   };
 
   class asIScriptEngine* engine = nullptr;

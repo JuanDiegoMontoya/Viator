@@ -268,7 +268,7 @@ void Console::Draw(World& world)
 void Console::DrawWindow(World& world)
 {
   ZoneScoped;
-  ImGui::ShowDemoWindow();
+
   if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent))
   {
     console->isOpen = !console->isOpen;
