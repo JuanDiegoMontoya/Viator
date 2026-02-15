@@ -79,8 +79,8 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/ao/ScreenSpaceGI.cpp
         src/Client/Gui/Console.h
         src/Client/Gui/Console.cpp
-        src/Client/Gui/CommandParser.h
-        src/Client/Gui/CommandParser.cpp
+        src/Game/CommandParser.h
+        src/Game/CommandParser.cpp
     )
 endif()
 
@@ -187,6 +187,10 @@ add_executable(frogRender
     src/Game/World/UndergroundBiome.cpp
     src/Game/World/WorldGenHelpers.h
     src/Game/World/WorldGenHelpers.cpp
+    src/Game/Commands.h
+    src/Game/Commands.cpp
+    src/Core/StringUtilities.h
+    src/Core/StringUtilities.cpp
 )
 
 if (NOT GAME_ENABLE_ASAN)

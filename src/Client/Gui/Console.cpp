@@ -1,20 +1,19 @@
 #include "Console.h"
-//#include "CVarInternal.h"
-//#include "Input.h"
-//#include "PCH.h"
-#include "CommandParser.h"
-#include "imgui_internal.h"
-#include "Client/GuiHelpers.h"
+#include "Game/CommandParser.h"
 #include "Client/VoxelRenderer.h"
 #include "Game/Game.h"
 #include "Game/Globals.h"
 #include "Game/World.h"
+#include "Core/StringUtilities.h"
+
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "Game/Commands.h"
 #include "rapidfuzz/rapidfuzz_all.hpp"
 
 #include <array>
 #include <execution>
 #include <functional>
-#include <imgui.h>
 #include <vector>
 
 //AutoCVar<cvar_vec3> defaultInputColor("c.inputColor", "Default color of console input", cvar_vec3(0.6f));
@@ -22,26 +21,6 @@
 
 namespace
 {
-  std::string StrToLower(std::string_view str)
-  {
-    auto out = std::string(str);
-    for (char& c : out)
-    {
-      c = static_cast<char>(std::tolower(c));
-    }
-    return out;
-  }
-
-  void TrimEndWhitespace(std::string& str)
-  {
-    str.erase(str.find_last_not_of(" \n\r\t") + 1);
-  }
-
-  void TrimStartWhitespace(std::string& str)
-  {
-    str.erase(0, str.find_first_not_of(" \n\r\t"));
-  }
-
   struct CColor
   {
     float r{}, g{}, b{};
@@ -95,13 +74,6 @@ namespace
   }
 }
 
-struct Command
-{
-  std::string name;
-  std::string description; // printed when `help` is executed on it
-  ConsoleFunc func{};
-};
-
 struct ConsoleLogEntry
 {
   ConsoleMessageType type;
@@ -117,7 +89,6 @@ struct ConsoleStorage
   std::vector<std::string> inputHistory;
   int historyPos{-1};
   std::array<char, 256> inputBuffer{0};
-  std::vector<Command> commands;
   std::vector<std::string> autocompleteCandidates;
   bool autoScroll     = true;
   bool scrollToBottom = false;
@@ -214,7 +185,7 @@ namespace
         console->state.clickedIdx  = -1;
       }
 
-      if (console->inputBuffer[0] == NULL)
+      if (console->inputBuffer[0] == '\0')
         console->state.userTypedKey = false;
 
       if (console->autocompleteCandidates.empty())
@@ -246,72 +217,11 @@ Console::Console()
 
   std::ranges::fill(console->filterMessageTypes, true);
   console->filterMessageTypes[static_cast<int>(ConsoleMessageType::LOG_TRACE)] = false;
-
-  RegisterCommand("find",
-    "- Finds commands with substring",
-    [con = console](const char* args)
-    {
-      CmdParser parser(args);
-      CmdToken token = parser.NextToken();
-      Identifier* id = std::get_if<Identifier>(&token);
-      if (!id)
-      {
-        Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: find <convarname>");
-        return;
-      }
-
-      std::vector<const Command*> commands;
-      std::string idLower = StrToLower(id->name);
-      for (const Command& cmd : con->commands)
-      {
-        std::string cmdLower = StrToLower(cmd.name);
-        if (cmdLower.find(idLower) != std::string::npos)
-        {
-          commands.push_back(&cmd);
-        }
-      }
-
-      for (const Command* cmd : commands)
-      {
-        Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%-25s %s", cmd->name.c_str(), cmd->description.c_str());
-      }
-    });
-  RegisterCommand("Lua", "- Runs the following Lua code", [](const char*) { Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "Lua code :)"); });
-  //RegisterCommand("set",
-  //  "- Sets the value of a cvar",
-  //  [](const char* args)
-  //  {
-  //    CmdParser parser(args);
-  //    CmdToken token1 = parser.NextToken();
-  //    auto* id      = std::get_if<Identifier>(&token1);
-  //    if (!id || !CVarSystem::Get()->SetCVarParse(id->name.c_str(), parser.GetRemaining().c_str()))
-  //    {
-  //      Console::Get()->Log("Usage: set <convar> <value>");
-  //    }
-  //  });
-  RegisterCommand("findall",
-    "- Displays all cvars and commands",
-    [con = console/*, storage = CVarSystem::Get()->storage*/](const char*)
-    {
-      for (const auto& cmd : con->commands)
-      {
-        Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%-25s %s", cmd.name.c_str(), cmd.description.c_str());
-      }
-      //for (const auto& [key, params] : storage->cvarParameters)
-      //{
-      //  Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%-25s %s", params.name.c_str(), params.description.c_str());
-      //}
-    });
 }
 
 Console::~Console()
 {
   delete console;
-}
-
-void Console::RegisterCommand(const char* name, const char* description, ConsoleFunc fn)
-{
-  console->commands.emplace_back(name, description, std::move(fn));
 }
 
 void Console::Log(ConsoleMessageType type, const char* format, ...)
@@ -454,8 +364,8 @@ void Console::DrawWindow(World& world)
 
   // Reserve enough left-over height for 1 separator + 1 input text
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {4, 4});
-  const float footer_height_to_reserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
-  ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footer_height_to_reserve), false, ImGuiWindowFlags_HorizontalScrollbar);
+  const float footerHeightToReserve = ImGui::GetStyle().ItemSpacing.y + ImGui::GetFrameHeightWithSpacing();
+  ImGui::BeginChild("ScrollingRegion", ImVec2(0, -footerHeightToReserve), false, ImGuiWindowFlags_HorizontalScrollbar);
   if (ImGui::BeginPopupContextWindow())
   {
     if (ImGui::Selectable("Clear"))
@@ -552,12 +462,12 @@ void Console::DrawWindow(World& world)
   console->autocompleteCandidates.clear();
   if (console->inputBuffer[0] != 0)
   {
-    std::string inputLower = StrToLower(console->inputBuffer.data());
-    TrimStartWhitespace(inputLower);
-    TrimEndWhitespace(inputLower);
-    for (const auto& command : console->commands)
+    auto inputLower = Core::String::ToLower(console->inputBuffer.data());
+    Core::String::TrimStartWhitespace(inputLower);
+    Core::String::TrimEndWhitespace(inputLower);
+    for (const auto& command : world.globals->commandRegistry->GetAllCommands())
     {
-      std::string cmdLower = StrToLower(command.name);
+      std::string cmdLower = Core::String::ToLower(command.name);
       if (cmdLower.find(inputLower) != std::string::npos)
       {
         console->autocompleteCandidates.push_back(command.name);
@@ -580,13 +490,13 @@ void Console::DrawWindow(World& world)
     console->state.selectionChanged = true;
   }
 
-  auto SubmitCommand = [this]
+  auto SubmitCommand = [this, &world]
   {
-    std::string s = console->inputBuffer.data();
-    TrimEndWhitespace(s);
-    if (s[0])
+    auto s = std::string(console->inputBuffer.data());
+    Core::String::TrimEndWhitespace(s);
+    if (!s.empty())
     {
-      ExecuteCommand(s.c_str());
+      ExecuteCommand(world, s);
     }
     console->inputBuffer[0]    = NULL;
     console->state.isPopupOpen = false;
@@ -607,7 +517,7 @@ void Console::DrawWindow(World& world)
           ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackEdit,
         [](ImGuiInputTextCallbackData* data) -> int
         {
-          ConsoleStorage* cc = static_cast<ConsoleStorage*>(data->UserData);
+          auto* cc = static_cast<ConsoleStorage*>(data->UserData);
           return TextEditCallback(data, cc);
         },
         console))
@@ -703,42 +613,43 @@ void Console::DrawPopup(World&)
   ImGui::End();
 }
 
-void Console::ExecuteCommand(const char* cmd)
+void Console::ExecuteCommand(World& world, std::string_view name)
 {
   //const auto& color = defaultInputColor.Get();
   const auto color = glm::vec3(1, 1, 1);
-  LogColor(ConsoleMessageType::COMMAND_INPUT, color.r, color.g, color.b, ">>> %s <<<\n", cmd);
+  LogColor(ConsoleMessageType::COMMAND_INPUT, color.r, color.g, color.b, ">>> %.*s <<<\n", static_cast<int>(name.size()), name.data());
 
   // Insert into history. First find match and delete it so it can be pushed to the back.
   // This isn't trying to be smart or optimal.
   console->historyPos = -1;
   for (int i = (int)console->inputHistory.size() - 1; i >= 0; i--)
   {
-    if (console->inputHistory[i] == cmd)
+    if (console->inputHistory[i] == name)
     {
       console->inputHistory.erase(console->inputHistory.begin() + i);
       break;
     }
   }
-  console->inputHistory.push_back(cmd);
+  console->inputHistory.push_back(std::string(name));
   
-  CmdParser parser(cmd);
-  auto var = parser.NextToken();
-  auto* id = std::get_if<Identifier>(&var);
+  auto parser    = Game2::CmdParser(name);
+  const auto var = parser.NextToken();
+  const auto* id = std::get_if<Game2::Identifier>(&var);
   if (!id)
   {
-    Log(ConsoleMessageType::COMMAND_OUTPUT, "Commands must begin with an identifier\n");
-    Log(ConsoleMessageType::COMMAND_OUTPUT, "%s\n", cmd);
-    Log(ConsoleMessageType::COMMAND_OUTPUT, "^ not an identifier\n");
+    Log(ConsoleMessageType::COMMAND_OUTPUT, "Commands must begin with an identifier\n"
+                                            "%.*s\n"
+                                            "^ not an identifier", static_cast<int>(name.size()), name.data());
     return;
   }
 
-  const auto cmdLower = StrToLower(id->name);
-  const auto it       = std::ranges::find(console->commands, cmdLower, [](const auto& c) { return StrToLower(c.name); });
+  const auto cmdLower = Core::String::ToLower(id->name);
+  const auto& commands = world.globals->commandRegistry->GetAllCommands();
+  const auto it       = std::ranges::find(commands, cmdLower, [](const auto& c) { return Core::String::ToLower(c.name); });
 
-  if (it != console->commands.end())
+  if (it != commands.end())
   {
-    it->func(parser.GetRemaining().c_str());
+    it->function(parser.GetRemaining());
     return;
   }
 
@@ -768,16 +679,4 @@ void Console::ExecuteCommand(const char* cmd)
   //{
   Log(ConsoleMessageType::COMMAND_OUTPUT, "No cvar or command with identifier <%s> exists\n", id->name.c_str());
   //}
-}
-
-const char* Console::GetCommandDesc(const char* name) const
-{
-  for (const auto& cmd : console->commands)
-  {
-    if (StrToLower(cmd.name) == StrToLower(name))
-    {
-      return cmd.description.c_str();
-    }
-  }
-  return nullptr;
 }

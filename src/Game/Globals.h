@@ -11,6 +11,12 @@
 #include "Physics/Physics.h"
 #include "World/SurfaceBiome.h"
 #include "World/UndergroundBiome.h"
+
+namespace Game2
+{
+  class CommandRegistry;
+}
+
 using WaterQueue = RingBuffer<glm::ivec3>;
 using WaterSet   = std::unordered_set<glm::ivec3>;
 //// END TEMP
@@ -63,6 +69,7 @@ public:
   WorldGlobals();
   DEFAULT_MOVE(WorldGlobals);
   std::string worldName;
+  unique_ptr<Game2::CommandRegistry> commandRegistry;
   unique_ptr<Voxel::Grid> grid;
   unique_ptr<PrefabRegistry> prefabRegistry;
   unique_ptr<Block::Registry> blockRegistry;

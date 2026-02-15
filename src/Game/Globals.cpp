@@ -1,5 +1,6 @@
 #include "Globals.h"
 #include "Game/Game.h"
+#include "Game/Commands.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/Prefab.h"
 #include "Game/EntityPrefab.h"
@@ -10,6 +11,7 @@
 
 WorldGlobals::WorldGlobals()
 {
+  commandRegistry.reset(new Game2::CommandRegistry());
   grid.reset(new Voxel::Grid());
   prefabRegistry.reset(new PrefabRegistry());
   blockRegistry.reset(new Block::Registry());

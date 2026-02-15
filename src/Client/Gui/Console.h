@@ -1,11 +1,10 @@
 #pragma once
 #include "Core/ClassImplMacros.h"
-#include <functional>
+
+#include <string_view>
 
 struct ConsoleStorage;
 class World;
-
-using ConsoleFunc = std::function<void(const char*)>;
 
 enum class ConsoleMessageType
 {
@@ -30,9 +29,7 @@ public:
 
   NO_COPY_NO_MOVE(Console);
 
-  void RegisterCommand(const char* name, const char* description, ConsoleFunc fn);
-  void ExecuteCommand(const char* cmd);
-  const char* GetCommandDesc(const char* name) const;
+  void ExecuteCommand(World& world, std::string_view name);
 
   void Log(ConsoleMessageType type, const char* format, ...);
   void LogColor(ConsoleMessageType type, float r, float g, float b, const char* format, ...);

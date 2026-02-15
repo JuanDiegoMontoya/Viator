@@ -1,5 +1,6 @@
 #include "Game/IncompleteTypeDeleter.h"
 
+#include "Game/Commands.h"
 #include "Game/Game.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/Prefab.h"
