@@ -1248,7 +1248,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (auto* sp = world.GetRegistry().try_get<SimpleScriptable>(p.openContainerId))
       {
         p.inventoryIsOpen = true;
-        DrawSimpleScriptableWindow(world, playerEntity, *sp);
+        DrawSimpleScriptableWindow(world, p.openContainerId, *sp);
       }
     }
 

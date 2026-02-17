@@ -20,9 +20,19 @@ WorldGlobals::WorldGlobals()
   game.reset(new GameGlobals());
   waterQueue.reset(new WaterQueue());
   waterSet.reset(new WaterSet());
+  
   globalSurfaceHeight.reset(new Core::DSP::Image<2, float>());
   globalSurfaceFog.reset(new Core::DSP::Image<2, float>());
   globalFog.reset(new Core::DSP::Image<3, float>());
+
+  // TODO: HACK: Initializing the fog images like this is a hack to deal with the fact that they aren't yet networked to clients.
+  *globalSurfaceHeight = Core::DSP::Image<2, float>({1, 1});
+  *globalSurfaceFog = Core::DSP::Image<2, float>({1, 1});
+  *globalFog = Core::DSP::Image<3, float>({1, 1, 1});
+  globalSurfaceHeight->Fill(0);
+  globalSurfaceFog->Fill(0);
+  globalFog->Fill(0);
+
   surfaceBiomes.reset(new typename decltype(surfaceBiomes)::element_type());
   undergroundBiomes.reset(new typename decltype(undergroundBiomes)::element_type());
 }

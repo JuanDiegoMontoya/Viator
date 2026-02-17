@@ -1653,7 +1653,7 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(supports);
   END_REFLECT
 
-  BEGIN_REFLECT_COMPONENT(SimpleScriptable)
+  BEGIN_REFLECT_COMPONENT(SimpleScriptable, REPLICATED)
     MEMBER(interactable);
     MEMBER(playersCanWrite);
     MEMBER(playersCanExecute);
