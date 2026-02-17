@@ -93,6 +93,18 @@ void Networking::detail::CallRPCInternal(entt::id_type funcId, std::optional<ent
   execRemotely |= world.IsServer() && bool(traits & RpcTraits::Client) && owningConnection;
   execRemotely |= world.IsClient() && bool(traits & RpcTraits::Server);
 
+  // This machine is the server, but the RPC only runs on a *remote* server.
+  if (world.IsServer() && bool(traits & RpcTraits::Server) && bool(traits & RpcTraits::Remote))
+  {
+    return;
+  }
+
+  // This machine is the client, but the RPC only runs on a *remote* client.
+  if (world.IsClient() && bool(traits & RpcTraits::Client) && bool(traits & RpcTraits::Remote))
+  {
+    return;
+  }
+
   if (!execLocally && !execRemotely)
   {
     spdlog::warn("RPC dropped.");

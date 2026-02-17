@@ -1062,6 +1062,24 @@ void World::InitializeGameDefinitions()
         .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("Chest")},
       }));
 
+  [[maybe_unused]] const auto scriptingBlockId = Block::GetItemId(*this,
+    Block::CreateStandardBlock(*this,
+      {
+        .tag = "scripting",
+        .name = "Scripting Block",
+        .breakable = Block::Component::Breakable{
+          .initialHealth = 1,
+          .damageTier    = 10,
+          .damageFlags   = BlockDamageFlagBit::ALL_TOOLS,
+        },
+        .render = Block::Component::RenderAsTexturedCube{{
+          .randomizeTexcoordRotation = true,
+          .baseColorTexture          = "snow_albedo",
+          .baseColorFactor           = {3, .4f, 2},
+        }},
+        .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("SimpleScriptable")},
+      }));
+
   auto& prefabs = *globals->prefabRegistry = {};
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();

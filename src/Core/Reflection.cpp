@@ -6,6 +6,7 @@
 #include "Game/Globals.h"
 #include "Game/HashGrid.h"
 #include "Core/Image.h"
+#include "Game/Commands.h"
 
 #include <vector>
 #include <functional>
@@ -345,6 +346,26 @@ namespace
       world.GetRegistry().emplace_or_replace<LocalTransform>(entity, transform);
       world.UpdateLocalTransform(entity);
     }
+  }
+
+  void ExecuteCommand(World& world, const std::string& command)
+  {
+    world.globals->commandRegistry->ExecuteCommand(command);
+  }
+
+  BlockId GetVoxelAt(World& world, const glm::ivec3& voxelPosition)
+  {
+    return world.globals->grid->GetVoxelAt(voxelPosition);
+  }
+
+  void OnTryPlaceBlock(World& world, const glm::ivec3& voxelPosition, BlockId block)
+  {
+    Block::OnTryPlaceBlock(world, voxelPosition, block);
+  }
+
+  BlockId GetBlockId(World& world, const std::string& tag)
+  {
+    return world.globals->blockRegistry->Get(tag);
   }
 }
 
@@ -772,6 +793,11 @@ void Core::Reflection::Initialize(Scripting& scripting)
   ASSERT(asEngine->RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::quat>{}.func<[](void* ctx, int argIdx, glm::quat v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine->RegisterTypedef("short", "uint16") >= 0);
+
+  ASSERT(asEngine->RegisterGlobalFunction("void ExecuteCommand(World&, const string& in)", asFUNCTION(ExecuteCommand), asCALL_CDECL) >= 0);
+  ASSERT(asEngine->RegisterGlobalFunction("entity GetVoxel(World&, const ivec3& in)", asFUNCTION(GetVoxelAt), asCALL_CDECL) >= 0);
+  ASSERT(asEngine->RegisterGlobalFunction("void SetVoxel(World&, const ivec3& in, entity)", asFUNCTION(OnTryPlaceBlock), asCALL_CDECL) >= 0);
+  ASSERT(asEngine->RegisterGlobalFunction("entity GetBlockId(World&, const string& in)", asFUNCTION(GetBlockId), asCALL_CDECL) >= 0);
 
   entt::meta_factory<int>()
     .traits(TRIVIAL)
@@ -1281,6 +1307,7 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REGISTER_RPC(ThrowItemFromArmorRPC, RpcTraits::Server);
   REGISTER_RPC(DropItemFromArmorRPC, RpcTraits::Server);
   REGISTER_RPC(SwapArmorSlotsRPC, RpcTraits::Server);
+  REGISTER_RPC(UpdateSimpleScriptableCodeRPC, RpcTraits::Server | RpcTraits::Remote);
 
   REFLECT_ENUM(ActionType);
 
@@ -1624,6 +1651,13 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   BEGIN_REFLECT_COMPONENT(Block::Component::RequiresSupportAdvanced, BLOCK_COMPONENT | REPLICATED)
     MEMBER(supports);
+  END_REFLECT
+
+  BEGIN_REFLECT_COMPONENT(SimpleScriptable)
+    MEMBER(interactable);
+    MEMBER(playersCanWrite);
+    MEMBER(playersCanExecute);
+    MEMBER(code);
   END_REFLECT
 
   for (auto& cb : s_reflectionRegistrationFuncs)

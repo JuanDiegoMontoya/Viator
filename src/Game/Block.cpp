@@ -154,7 +154,7 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
 {
   const auto& blockRegistry = world.globals->blockRegistry->GetRegistry();
   auto& grid                = *world.globals->grid;
-  if (grid.IsPositionInGrid(voxelPosition))
+  if (grid.IsPositionInGrid(voxelPosition) && blockRegistry.valid(entt::entity(block)))
   {
     if (!IsBlockSupportedAtPosition(world, block, voxelPosition))
     {

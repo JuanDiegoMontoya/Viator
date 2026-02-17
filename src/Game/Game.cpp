@@ -749,6 +749,22 @@ bool SwapArmorSlotsRPC(World& world, entt::entity parent1, ArmorAndAccessories::
   return true;
 }
 
+void UpdateSimpleScriptableCodeRPC(World& world, entt::entity parent, std::string newCode)
+{
+  if (!world.GetRegistry().valid(parent))
+  {
+    spdlog::warn("Tried to modify code of SimpleScriptable on entity {}, but that entity is invalid.", entt::to_integral(parent));
+  }
+
+  if (auto [_, sp] = world.GetComponentFromAncestorOrDescendant<SimpleScriptable>(parent); sp)
+  {
+    sp->code = std::move(newCode);
+    return;
+  }
+
+  spdlog::warn("Tried to modify code of SimpleScriptable on entity {}, but that entity, its ancestors, and its descendants are missing a SimpleScriptable component.", entt::to_integral(parent));
+}
+
 glm::vec3 GetForward(glm::quat rotation)
 {
   return -glm::mat3_cast(rotation)[2];

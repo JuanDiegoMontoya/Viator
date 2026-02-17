@@ -506,6 +506,43 @@ namespace
     ImGui::End();
   }
 
+  void DrawSimpleScriptableWindow(World& world, [[maybe_unused]] entt::entity parent, SimpleScriptable& script)
+  {
+    ImGui::SetNextWindowSize({700, 600}, ImGuiCond_Once);
+    if (ImGui::Begin("SimpleScriptable", nullptr, ImGuiWindowFlags_NoSavedSettings))
+    {
+      ImGui::BeginDisabled(!script.playersCanExecute);
+      if (ImGui::Button("Execute"))
+      {
+        world.globals->scripting->ExecuteScriptFromCode(script.code, "main", {&world});
+      }
+      ImGui::EndDisabled();
+
+      ImGui::PushFont(GuiHelper::GetMonospaceFont());
+      if (ImGui::InputTextMultiline(
+        "##text",
+        script.code.data(),
+        script.code.capacity() + 1,
+        {-1, -1}, // Fill the remaining window space.
+        ImGuiInputTextFlags_CallbackResize | ImGuiInputTextFlags_AllowTabInput | (script.playersCanWrite ? 0 : ImGuiInputTextFlags_ReadOnly),
+        [](ImGuiInputTextCallbackData* data) -> int
+        {
+          if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+          {
+            auto* code = static_cast<std::string*>(data->UserData);
+            code->resize(data->BufTextLen);
+            data->Buf = code->data();
+          }
+          return 0;
+      }, &script.code))
+      {
+        Networking::CallRPC("UpdateSimpleScriptableCodeRPC"_hs, world, parent, script.code);
+      }
+      ImGui::PushFont(GuiHelper::GetStandardFont());
+    }
+    ImGui::End();
+  }
+
   bool LoadingBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col)
   {
     using namespace ImGui;
@@ -1207,6 +1244,11 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       if (auto* ap = world.GetRegistry().try_get<ArmorAndAccessories>(p.openContainerId))
       {
         DrawArmorAndAccessories(world, p.openContainerId, playerEntity, *ap);
+      }
+      if (auto* sp = world.GetRegistry().try_get<SimpleScriptable>(p.openContainerId))
+      {
+        p.inventoryIsOpen = true;
+        DrawSimpleScriptableWindow(world, playerEntity, *sp);
       }
     }
 

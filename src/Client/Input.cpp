@@ -100,7 +100,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     {
       auto&& [e, p] = *range.begin();
 
-      if (ImGui::GetKeyPressedAmount(ImGuiKey_Tab, 10000, 1))
+      if (ImGui::GetKeyPressedAmount(ImGuiKey_Tab, 10000, 1) && !ImGui::GetIO().WantCaptureKeyboard)
       {
         p.inventoryIsOpen = !p.inventoryIsOpen;
         if (!p.inventoryIsOpen)

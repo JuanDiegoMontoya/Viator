@@ -4,6 +4,7 @@
 #include "BlockFwd.h"
 #include "CoreComponents.h"
 #include "ItemFwd.h"
+#include "Core/Assert2.h"
 #include "entt/entity/entity.hpp"
 #include "entt/entity/registry.hpp"
 #include "Core/Container/RingBuffer.h"
@@ -103,7 +104,7 @@ public:
   template<typename T>
   [[nodiscard]] std::pair<entt::entity, T*> GetComponentFromAncestor(entt::entity entity)
   {
-    assert(registry_.valid(entity));
+    ASSERT(registry_.valid(entity));
     if (auto* component = registry_.try_get<T>(entity))
     {
       return {entity, component};
@@ -118,7 +119,7 @@ public:
   template<typename T>
   [[nodiscard]] bool AncestorHasComponent(entt::entity entity) const
   {
-    assert(registry_.valid(entity));
+    ASSERT(registry_.valid(entity));
     if (registry_.all_of<T>(entity))
     {
       return true;
@@ -133,7 +134,7 @@ public:
   template<typename T>
   [[nodiscard]] std::pair<entt::entity, T*> GetComponentFromDescendant(entt::entity entity)
   {
-    assert(registry_.valid(entity));
+    ASSERT(registry_.valid(entity));
     if (auto* component = registry_.try_get<T>(entity))
     {
       return {entity, component};
@@ -154,7 +155,7 @@ public:
   template<typename T>
   [[nodiscard]] std::optional<entt::entity> DescendantHasComponent(entt::entity entity)
   {
-    assert(registry_.valid(entity));
+    ASSERT(registry_.valid(entity));
     if (registry_.all_of<T>(entity))
     {
       return entity;

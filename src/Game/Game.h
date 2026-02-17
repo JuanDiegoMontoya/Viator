@@ -247,6 +247,8 @@ void TeleportPlayerRPC(World& world, entt::entity player, LocalTransform transfo
 bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot);
 bool SwapArmorSlotsRPC(World& world, entt::entity parent1, ArmorAndAccessories::Slot parent1Slot, entt::entity parent2, ArmorAndAccessories::Slot parent2Slot);
 
+void UpdateSimpleScriptableCodeRPC(World& world, entt::entity parent, std::string newCode);
+
 // Return to desktop
 struct CloseApplication {};
 
@@ -628,6 +630,14 @@ struct FogEmitter
   float radiusOuter = 1;
   float density     = 10; // Negative values are allowed and will remove fog.
   glm::vec3 color   = {1, 1, 1};
+};
+
+struct SimpleScriptable
+{
+  bool interactable = true;
+  bool playersCanWrite = true;
+  bool playersCanExecute = true;
+  std::string code;
 };
 
 struct SunInfo

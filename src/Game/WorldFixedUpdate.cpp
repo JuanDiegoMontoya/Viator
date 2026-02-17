@@ -227,7 +227,7 @@ void World::FixedUpdate(float dt)
         if (registry_.valid(player.openContainerId))
         {
           player.showInteractPrompt = false;
-          if (!registry_.all_of<Inventory>(player.openContainerId))
+          if (!registry_.any_of<Inventory, SimpleScriptable>(player.openContainerId))
           {
             player.openContainerId = entt::null;
             continue;
@@ -300,6 +300,14 @@ void World::FixedUpdate(float dt)
               hitEntity          = e3;
               showInteractPrompt = true;
             }
+            else if (auto [e32, simpleScriptable] = GetComponentFromAncestorOrDescendant<SimpleScriptable>(hitEntity); e32 != entt::null)
+            {
+              if (simpleScriptable->interactable)
+              {
+                hitEntity          = e32;
+                showInteractPrompt = true;
+              }
+            }
 
             // Handle other interactable voxels like doors.
             if (globals->blockRegistry->GetRegistry().any_of<Block::Component::TransformWhenUsed>(entt::entity(hitVoxel)))
@@ -345,6 +353,10 @@ void World::FixedUpdate(float dt)
             if (auto [ent, inv] = GetComponentFromAncestor<Inventory>(hitEntity); inv)
             {
               player.openContainerId = ent;
+            }
+            else if (auto [ent2, script] = GetComponentFromAncestor<SimpleScriptable>(hitEntity); script)
+            {
+              player.openContainerId = ent2;
             }
 
             if (const auto* p = registry_.try_get<const RopeAttachmentPoint>(hitEntity))

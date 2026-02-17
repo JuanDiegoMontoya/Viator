@@ -328,6 +328,28 @@ private:
   glm::vec3 tint_;
 };
 
+class SimpleScriptableDefinition : public EntityPrefabDefinition
+{
+public:
+  using EntityPrefabDefinition::EntityPrefabDefinition;
+
+  entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation) const override
+  {
+    auto& registry = world.GetRegistry();
+    auto entity    = registry.create();
+    auto& t        = registry.emplace<LocalTransform>(entity);
+    t.position     = position;
+    t.rotation     = rotation;
+    t.scale        = 1;
+
+    registry.emplace<GlobalTransform>(entity) = {t.position, t.rotation, t.scale};
+    registry.emplace<Hierarchy>(entity);
+    registry.emplace<Name>(entity, "script");
+    registry.emplace<SimpleScriptable>(entity);
+    return entity;
+  }
+};
+
 const EntityPrefabDefinitionCreateInfo& EntityPrefabDefinition::GetCreateInfo() const
 {
   return info_;
@@ -394,4 +416,5 @@ void RegisterDefaultEntityPrefabs(EntityPrefabRegistry& entityPrefabRegistry)
   entityPrefabRegistry.Add("Torch", new TorchDefinition());
   entityPrefabRegistry.Add("Chest", new ChestDefinition({.isVisible = false}));
   entityPrefabRegistry.Add("Worm Boss", new WormBossDefinition());
+  entityPrefabRegistry.Add("SimpleScriptable", new SimpleScriptableDefinition({.isVisible = false}));
 }
