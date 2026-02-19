@@ -11,6 +11,7 @@
 #include "techniques/volumetric/FroxelFog.h"
 #include "techniques/ao/RayTracedAO.h"
 #include "techniques/ao/ScreenSpaceGI.h"
+#include "techniques/shadows/CascadedShadowMaps.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -285,6 +286,13 @@ private:
   std::optional<Fvog::TypedBuffer<DebugRect>> debugRectBuffer;
   std::optional<Fvog::TypedBuffer<DebugLine>> debugLineBuffer;
   bool debugClearGpuPrimtives = true;
+
+  bool enableSunShadowPass         = true;
+  glm::ivec2 sunShadowResolution   = {512, 512};
+  float sunShadowFrustumSideLength = 100;
+  float sunShadowFrustumDepth      = 1000;
+  int sunShadowNumCascades         = 5;
+  Techniques::CascadedShadowMap cascadedShadowMap_;
 };
 
 struct ImFont;

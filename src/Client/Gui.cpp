@@ -2189,6 +2189,36 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::EndTabItem();
         }
 
+        if (ImGui::BeginTabItem("CSM"))
+        {
+          ImGui::Checkbox("Enable##CSM", &enableSunShadowPass);
+          if (ImGui::RadioButton("256##CSM_Resolution", sunShadowResolution.x == 256))
+          {
+            sunShadowResolution = {256, 256};
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("512##CSM_Resolution", sunShadowResolution.x == 512))
+          {
+            sunShadowResolution = {512, 512};
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("1024##CSM_Resolution", sunShadowResolution.x == 1024))
+          {
+            sunShadowResolution = {1024, 1024};
+          }
+          ImGui::SameLine();
+          if (ImGui::RadioButton("2048##CSM_Resolution", sunShadowResolution.x == 2048))
+          {
+            sunShadowResolution = {2048, 2048};
+          }
+
+          ImGui::SliderInt("Cascades##CSM", &sunShadowNumCascades, 1, 8, "%d", ImGuiSliderFlags_AlwaysClamp);
+          ImGui::SliderFloat("Frustum Width##CSM", &sunShadowFrustumSideLength, 10, 500, "%.0f", ImGuiSliderFlags_NoRoundToFormat | ImGuiSliderFlags_AlwaysClamp);
+          ImGui::SliderFloat("Frustum Depth##CSM", &sunShadowFrustumDepth, 1000, 3000, "%.0f", ImGuiSliderFlags_NoRoundToFormat | ImGuiSliderFlags_AlwaysClamp);
+
+          ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
       }
     }

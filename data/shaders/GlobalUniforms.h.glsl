@@ -3,6 +3,7 @@
 
 #include "Resources.h.glsl"
 #include "Debug/DebugCommon.h.glsl"
+#include "voxels/RayTracedVoxelsShadowCommon.h.glsl"
 
 #define CULL_MESHLET_FRUSTUM    (1 << 0)
 #define CULL_MESHLET_HIZ        (1 << 1)
@@ -112,6 +113,7 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict PerFrameUniformsBuffer)
   GBuffer gBuffer;
   DebugDrawData debugDraw;
   FVOG_SHARED Texture2D blueNoise;
+  CascadedShadowMapInfoPtr sunShadowMap;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

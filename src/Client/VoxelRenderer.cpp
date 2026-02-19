@@ -1011,6 +1011,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
       .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
+      .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
     });
 
   ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1178,6 +1179,22 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
       .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
     };
+
+    if (enableSunShadowPass)
+    {
+      ctx.Barrier();
+      cascadedShadowMap_.RenderTerrainShadowMap(commandBuffer,
+        {
+          .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
+          .numCascades           = uint32_t(sunShadowNumCascades),
+          .voxels                = voxels,
+          .playerPos             = world.GetRegistry().get<const GlobalTransform>(player).position,
+          .lightDirection        = -Math::SphericalToCartesian(sunElevation, sunAzimuth),
+          .frustumDepth          = sunShadowFrustumDepth,
+          .baseFrustumSideLength = sunShadowFrustumSideLength,
+        });
+      ctx.Barrier();
+    }
 
     // DDGI- good candidate for async compute or overlapped work.
     if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)

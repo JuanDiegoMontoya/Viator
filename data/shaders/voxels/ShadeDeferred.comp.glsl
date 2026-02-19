@@ -159,7 +159,16 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   const vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
 
   const float NoL = max(0, dot(normalWS, uniforms.sky.sunDir));
-  const vec3 sunVisibility = TraceSunRay(positionWS + normalWS * 1e-3, uniforms.sky.sunDir);
+  vec3 sunVisibility;
+  // Apply high quality shadows only to primary
+  if (applyAo)
+  {
+    sunVisibility = TraceSunRay(positionWS + normalWS * 1e-3, uniforms.sky.sunDir);
+  }
+  else
+  {
+    sunVisibility = vec3(SampleCascadedShadowMap(positionWS, uniforms.sunShadowMap));
+  }
   const vec3 sunlightIS = float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL / M_PI * sunVisibility;
   const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, positionWS);
   
@@ -243,6 +252,7 @@ void main()
   if (depthTranslucent < opaqueToCameraDist || depth == FAR_DEPTH)
   {
     transmission = imageLoad(uniforms.gBuffer.gTransmission, gid).rgb;
+    transmission *= vec3(0.2, 0.4, 0.6);
   }
 
   vec3 radiance_internal = color_convert_src_to_dst(texelFetch(uniforms.gBuffer.gRadiance, gid, 0).rgb,

@@ -49,8 +49,11 @@ void main()
       
       const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
-      //radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
+#if 0 // Path traced indirect light
+      radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
+#else
       radiance += albedo * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, args.linearSampler, args);
+#endif
       radiance *= hit.transmission;
 
       // Sun
@@ -69,7 +72,11 @@ void main()
           uniforms.sky.atmosphere_bottom);
 
       bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
+#if 0 // Ray traced shadow
       const vec3 sunVisibility = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
+#else
+      const float sunVisibility = SampleCascadedShadowMap(hit.positionWorld, uniforms.sunShadowMap);
+#endif
       vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, hit.positionWorld);
       vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
       vec3 sunlight_internal = albedo * NoL * sun_light * sunVisibility;

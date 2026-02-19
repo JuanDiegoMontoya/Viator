@@ -79,8 +79,8 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/ao/ScreenSpaceGI.cpp
         src/Client/Gui/Console.h
         src/Client/Gui/Console.cpp
-        src/Game/CommandParser.h
-        src/Game/CommandParser.cpp
+        src/Client/techniques/shadows/CascadedShadowMaps.h
+        src/Client/techniques/shadows/CascadedShadowMaps.cpp
     )
 endif()
 
@@ -191,6 +191,8 @@ add_executable(frogRender
     src/Game/Commands.cpp
     src/Core/StringUtilities.h
     src/Core/StringUtilities.cpp
+    src/Game/CommandParser.h
+    src/Game/CommandParser.cpp
 )
 
 if (NOT GAME_ENABLE_ASAN)
