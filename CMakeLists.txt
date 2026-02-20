@@ -193,6 +193,9 @@ add_executable(frogRender
     src/Core/StringUtilities.cpp
     src/Game/CommandParser.h
     src/Game/CommandParser.cpp
+    src/Game/CVar.h
+    src/Game/CVar.cpp
+    src/Game/CVarInternal.h
 )
 
 if (NOT GAME_ENABLE_ASAN)

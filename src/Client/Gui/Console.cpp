@@ -4,6 +4,7 @@
 #include "Game/Game.h"
 #include "Game/Globals.h"
 #include "Game/World.h"
+#include "Game/CVarInternal.h"
 #include "Core/StringUtilities.h"
 
 #include "imgui.h"
@@ -474,14 +475,14 @@ void Console::DrawWindow(World& world)
       }
     }
 
-    //for (const auto& [key, val] : CVarSystem::Get()->storage->cvarParameters)
-    //{
-    //  std::string cvarLower = ToLower(val.name.c_str());
-    //  if (cvarLower.find(inputLower) != std::string::npos)
-    //  {
-    //    console->autocompleteCandidates.push_back(val.name);
-    //  }
-    //}
+    for (const auto& [key, val] : Game2::CVarSystem::Get()->storage->cvarParameters)
+    {
+      std::string cvarLower = Core::String::ToLower(val.name);
+      if (cvarLower.find(inputLower) != std::string::npos)
+      {
+        console->autocompleteCandidates.push_back(val.name);
+      }
+    }
   }
 
   if (console->state.activeIdx == -1 && !console->autocompleteCandidates.empty())
@@ -653,30 +654,28 @@ void Console::ExecuteCommand(World& world, std::string_view name)
     return;
   }
 
-  //auto* params = CVarSystem::Get()->GetCVarParams(id->name.c_str());
-  //if (params)
-  //{
-  //  std::string remaining = parser.GetRemaining();
-  //  if (remaining.empty())
-  //  {
-  //    Log("%s\n", params->description.c_str());
-  //  }
-  //  else
-  //  {
-  //    bool success = CVarSystem::Get()->SetCVarParse(id->name.c_str(), remaining.c_str());
-  //    if (!success)
-  //    {
-  //      switch (params->type)
-  //      {
-  //      case CVarType::FLOAT: Log("Usage: %s <float>\n", params->name.c_str()); break;
-  //      case CVarType::STRING: Log("Usage: %s <string>\n", params->name.c_str()); break;
-  //      case CVarType::VEC3: Log("Usage: %s <vec3>\n", params->name.c_str()); break;
-  //      }
-  //    }
-  //  }
-  //}
-  //else
-  //{
-  Log(ConsoleMessageType::COMMAND_OUTPUT, "No cvar or command with identifier <%s> exists\n", id->name.c_str());
-  //}
+  if (const auto* params = Game2::CVarSystem::Get()->GetCVarParams(id->name))
+  {
+    std::string remaining = parser.GetRemaining();
+    if (remaining.empty())
+    {
+      Game2::LogFullCVarInfo(*params);
+    }
+    else
+    {
+      if (!Game2::CVarSystem::Get()->SetCVarParse(id->name, remaining))
+      {
+        switch (params->type)
+        {
+        case Game2::CVarType::FLOAT: Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: %s <float>\n", params->name.c_str()); break;
+        case Game2::CVarType::STRING: Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: %s <string>\n", params->name.c_str()); break;
+        case Game2::CVarType::VEC3: Log(ConsoleMessageType::COMMAND_OUTPUT, "Usage: %s <vec3>\n", params->name.c_str()); break;
+        }
+      }
+    }
+  }
+  else
+  {
+    Log(ConsoleMessageType::COMMAND_OUTPUT, "No cvar or command with identifier <%s> exists\n", id->name.c_str());
+  }
 }

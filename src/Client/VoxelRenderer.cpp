@@ -1180,7 +1180,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
     };
 
-    if (enableSunShadowPass)
+    if (enableSunShadowPass.Get() != 0)
     {
       ctx.Barrier();
       cascadedShadowMap_.RenderTerrainShadowMap(commandBuffer,

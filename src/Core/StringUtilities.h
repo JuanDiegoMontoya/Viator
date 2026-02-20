@@ -9,4 +9,6 @@ namespace Core::String
   void TrimEndWhitespace(std::string& str);
 
   void TrimStartWhitespace(std::string& str);
+
+  bool CompareCaseInsensitive(std::string_view a, std::string_view b);
 }

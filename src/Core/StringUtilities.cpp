@@ -1,5 +1,7 @@
 #include "StringUtilities.h"
 
+#include <ranges>
+
 std::string Core::String::ToLower(std::string_view str)
 {
   auto out = std::string(str);
@@ -18,4 +20,19 @@ void Core::String::TrimEndWhitespace(std::string& str)
 void Core::String::TrimStartWhitespace(std::string& str)
 {
   str.erase(0, str.find_first_not_of(" \n\r\t"));
+}
+
+bool Core::String::CompareCaseInsensitive(std::string_view a, std::string_view b)
+{
+  if (a.size() != b.size())
+  {
+    return false;
+  }
+
+  return std::ranges::all_of(std::views::zip(a, b),
+    [](const auto& p)
+    {
+      auto [ca, cb] = p;
+      return std::tolower(ca) == std::tolower(cb);
+    });
 }
