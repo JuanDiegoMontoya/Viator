@@ -659,11 +659,15 @@ void Console::ExecuteCommand(World& world, std::string_view name)
     std::string remaining = parser.GetRemaining();
     if (remaining.empty())
     {
-      Game2::LogFullCVarInfo(*params);
+      Game2::LogCVarInfo(*params);
     }
     else
     {
-      if (!Game2::CVarSystem::Get()->SetCVarParse(id->name, remaining))
+      if (Game2::CVarSystem::Get()->SetCVarParse(id->name, remaining))
+      {
+        Game2::LogCVarInfo(*params, true);
+      }
+      else
       {
         switch (params->type)
         {

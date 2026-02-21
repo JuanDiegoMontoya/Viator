@@ -288,7 +288,7 @@ private:
   std::optional<Fvog::TypedBuffer<DebugLine>> debugLineBuffer;
   bool debugClearGpuPrimtives = true;
 
-  Game2::AutoCVar<Game2::cvar_float> enableSunShadowPass = {"r.sun.csm.enablePass", "- Controls whether the sun shadow pass is enabled", 1, {}, {}, Game2::CVarFlagBits::CHEAT};
+  Game2::AutoCVar<Game2::cvar_float> enableSunShadowPass = {"r.sun.csm.enablePass", "- Controls whether the sun shadow pass is enabled", 1, {}, {}, Game2::CVarFlagBits::CHEAT | Game2::CVarFlagBits::ARCHIVE};
   glm::ivec2 sunShadowResolution   = {512, 512};
   float sunShadowFrustumSideLength = 100;
   float sunShadowFrustumDepth      = 1000;

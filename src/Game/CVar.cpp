@@ -1,4 +1,6 @@
 #include "CVar.h"
+
+#include "Assets.h"
 #include "CVarInternal.h"
 #include "CommandParser.h"
 #include "Client/Gui/Console.h" // TODO: replace with console storage
@@ -10,6 +12,9 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include <sstream>
+#include <fstream>
+#include <format>
+#include <set>
 
 namespace Game2
 {
@@ -22,31 +27,32 @@ namespace Game2
     }
     if (flags & CVarFlagBits::ARCHIVE)
     {
-      stream << "ARCHIVE |";
+      stream << "ARCHIVE | ";
     }
     if (flags & CVarFlagBits::READ_ONLY)
     {
-      stream << "READ_ONLY |";
+      stream << "READ_ONLY | ";
     }
     if (flags & CVarFlagBits::CHEAT)
     {
-      stream << "CHEAT |";
+      stream << "CHEAT | ";
     }
     if (flags & CVarFlagBits::REPLICATED)
     {
-      stream << "REPLICATED |";
+      stream << "REPLICATED | ";
     }
 
     auto str = stream.str();
-    if (!str.empty() && str.back() == '|')
+    if (str.size() >= 3 && str.back() == ' ')
     {
+      str.pop_back();
       str.pop_back();
       str.pop_back();
     }
     return str;
   }
 
-  void LogFullCVarInfo(const CVarParameters& params)
+  void LogCVarInfo(const CVarParameters& params, bool onlyLogValue)
   {
     switch (params.type)
     {
@@ -69,8 +75,12 @@ namespace Game2
       break;
     }
     }
-    Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "%s", CVarFlagsToString(params.flags).c_str());
-    Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%s", params.description.c_str());
+
+    if (!onlyLogValue)
+    {
+      Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "%s", CVarFlagsToString(params.flags).c_str());
+      Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%s", params.description.c_str());
+    }
   }
 
   CVarSystem* CVarSystem::Get()
@@ -81,14 +91,14 @@ namespace Game2
 
   bool CVarSystem::SetCVarParse(std::string_view name, std::string_view args)
   {
-    CVarParameters* params = GetCVarParams(name);
+    const auto* params = GetCVarParams(name);
     if (params == nullptr)
     {
       return false;
     }
 
-    auto parser      = CmdParser(args);
-    const auto token = parser.NextToken();
+    auto parser = CmdParser(args);
+    auto token  = parser.NextToken();
 
     switch (params->type)
     {
@@ -125,31 +135,130 @@ namespace Game2
   {
     storage = new CVarInternal::CVarSystemStorage();
 
-    // TODO: load cvars from storage
+    auto file = std::ifstream(GetConfigDirectory() / "cvars.cfg");
+
+    // Parse each line
+    for (int i = 0; file.peek() != EOF; i++)
+    {
+      auto line = std::string();
+      std::getline(file, line);
+      auto parser = CmdParser(line);
+
+      // Skip blank lines.
+      if (!parser.Valid())
+      {
+        continue;
+      }
+
+      const auto firstToken = parser.NextToken();
+      if (const auto* ip = std::get_if<Identifier>(&firstToken))
+      {
+        const auto secondToken = parser.NextToken();
+        try
+        {
+          if (const auto* dp = std::get_if<cvar_float>(&secondToken))
+          {
+            RegisterCVar(ip->name, "", *dp, {}, {}, CVarFlagBits::NONE, nullptr, true);
+          }
+          else if (const auto* sp = std::get_if<cvar_string>(&secondToken))
+          {
+            RegisterCVar(ip->name, "", *sp, CVarFlagBits::NONE, nullptr, true);
+          }
+          else if (const auto* vp = std::get_if<cvar_vec3>(&secondToken))
+          {
+            RegisterCVar(ip->name, "", *vp, {}, {}, CVarFlagBits::NONE, nullptr, true);
+          }
+          else
+          {
+            spdlog::error("Invalid argument in cvars.cfg, line {}", i);
+          }
+        }
+        catch (const std::runtime_error& e)
+        {
+          spdlog::error("{}", e.what());
+        }
+      }
+      else
+      {
+        spdlog::error("Invalid identifier in cvars.cfg, line {}", i);
+      }
+    }
   }
 
   CVarSystem::~CVarSystem()
   {
+    // Save archived cvars
+    auto file = std::ofstream(GetConfigDirectory() / "cvars.cfg", std::ios::out | std::ios::trunc);
+
+    auto orderedCvarParams = std::set<const CVarParameters*, decltype([](const auto& a, const auto& b) { return a->name < b->name; })>();
+    for (const auto& [_, params] : storage->cvarParameters)
+    {
+      orderedCvarParams.insert(&params);
+    }
+
+    for (const auto* params : orderedCvarParams)
+    {
+      switch (params->type)
+      {
+      case CVarType::FLOAT:
+      {
+        file << params->name << ' ' << storage->floatCVars.cvars.at(params->index).current << '\n';
+        break;
+      }
+      case CVarType::STRING:
+      {
+        file << params->name << " \"" << storage->stringCVars.cvars.at(params->index).current << "\"\n";
+        break;
+      }
+      case CVarType::VEC3:
+      {
+        auto v = storage->vec3CVars.cvars.at(params->index).current;
+        file << params->name << " {" << v.x << ", " << v.y << ", " << v.z << "}\n";
+        break;
+      }
+      default:
+      {
+        // TODO: Make the saving behavior more manual and don't put it in the destructor.
+        // Sketchy log since this is the destructor of a global, and spdlog may have been deinitialized already.
+        spdlog::error("Failed to save cvar {} because it has invalid type {}", params->name, int(params->type));
+      }
+      }
+    }
+
     delete storage;
   }
 
-  CVarParameters* CVarSystem::InitCVar(std::string_view name, std::string_view description, CVarFlags flags)
+  CVarParameters* CVarSystem::InitCVar(std::string_view name, std::string_view description, CVarFlags flags, bool isIncomplete, bool& wasIncomplete)
   {
     auto lock = std::scoped_lock(storage->mutex);
-    if (auto it = storage->cvarParameters.find(std::string(name)); it != storage->cvarParameters.end())
+    wasIncomplete = false;
+
+    // TODO: transparent lookup
+    auto it = storage->cvarParameters.find(std::string(name));
+    if (it != storage->cvarParameters.end())
     {
-      spdlog::error("Tried to create a new CVar with name {}, but it already exists!", name);
-      return &it->second;
+      if (it->second.isFullyInitialized)
+      {
+        throw std::runtime_error(std::format("Tried to create a new CVar with name {}, but it already exists!", name));
+      }
+      wasIncomplete = true;
+      spdlog::trace("Finishing initialization of partially initialized cvar {}", name);
     }
-    CVarParameters& params = storage->cvarParameters[std::string(name)]; // TODO: transparent lookup
-    params.index           = -1;
-    params.name            = name;
-    params.description     = description;
-    params.flags           = flags;
+    else
+    {
+      spdlog::trace("Initializing cvar {}", name);
+      it               = storage->cvarParameters.emplace(std::string(name), CVarParameters{}).first;
+      it->second.index = -1;
+    }
+    CVarParameters& params    = it->second;
+    params.name               = name;
+    params.description        = description;
+    params.flags              = flags;
+    params.isFullyInitialized = !isIncomplete;
     return &params;
   }
 
-  const CVarParameters* CVarSystem::GetCVarParams(std::string_view name)
+  const CVarParameters* CVarSystem::GetCVarParams(std::string_view name) const
   {
     if (auto it = storage->cvarParameters.find(std::string(name)); it != storage->cvarParameters.end())
     {
@@ -164,17 +273,35 @@ namespace Game2
     std::optional<cvar_float> minValue,
     std::optional<cvar_float> maxValue,
     CVarFlags flags,
-    OnChangeCallback<cvar_float> callback)
+    OnChangeCallback<cvar_float> callback,
+    bool isIncomplete)
   {
-    auto params  = InitCVar(name, description, flags);
+    bool wasIncomplete{};
+    auto* params = InitCVar(name, description, flags, isIncomplete, wasIncomplete);
+    if (wasIncomplete && params->type != CVarType::FLOAT)
+    {
+      throw std::runtime_error(
+        std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::FLOAT), int(params->type)));
+    }
     params->type = CVarType::FLOAT;
     storage->floatCVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
     return params;
   }
 
-  CVarParameters* CVarSystem::RegisterCVar(std::string_view name, std::string_view description, cvar_string defaultValue, CVarFlags flags, OnChangeCallback<cvar_string> callback)
+  CVarParameters* CVarSystem::RegisterCVar(std::string_view name,
+    std::string_view description,
+    cvar_string defaultValue,
+    CVarFlags flags,
+    OnChangeCallback<cvar_string> callback,
+    bool isIncomplete)
   {
-    auto params  = InitCVar(name, description, flags);
+    bool wasIncomplete{};
+    auto* params = InitCVar(name, description, flags, isIncomplete, wasIncomplete);
+    if (wasIncomplete && params->type != CVarType::STRING)
+    {
+      throw std::runtime_error(
+        std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::STRING), int(params->type)));
+    }
     params->type = CVarType::STRING;
     storage->stringCVars.AddCVar(std::move(defaultValue), params, std::move(callback));
     return params;
@@ -186,9 +313,16 @@ namespace Game2
     std::optional<cvar_vec3> minValue,
     std::optional<cvar_vec3> maxValue,
     CVarFlags flags,
-    OnChangeCallback<cvar_vec3> callback)
+    OnChangeCallback<cvar_vec3> callback,
+    bool isIncomplete)
   {
-    auto params  = InitCVar(name, description, flags);
+    bool wasIncomplete{};
+    auto* params = InitCVar(name, description, flags, isIncomplete, wasIncomplete);
+    if (wasIncomplete && params->type != CVarType::VEC3)
+    {
+      throw std::runtime_error(
+        std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::VEC3), int(params->type)));
+    }
     params->type = CVarType::VEC3;
     storage->vec3CVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
     return params;

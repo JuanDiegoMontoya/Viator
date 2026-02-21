@@ -60,7 +60,7 @@ Game2::CommandRegistry::CommandRegistry()
 
       for (const CVarParameters* params : cvars)
       {
-        LogFullCVarInfo(*params);
+        LogCVarInfo(*params);
       }
     },
   });
@@ -80,6 +80,7 @@ Game2::CommandRegistry::CommandRegistry()
       }
     },
   });
+
   RegisterCommand({
     .name        = "findall",
     .description = "- Displays all cvars and commands",
@@ -92,7 +93,7 @@ Game2::CommandRegistry::CommandRegistry()
       }
       for (const auto& [key, params] : CVarSystem::Get()->storage->cvarParameters)
       {
-        LogFullCVarInfo(params);
+        LogCVarInfo(params);
         //Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%-25s %s", params.name.c_str(), params.description.c_str());
       }
     },

@@ -19,7 +19,7 @@ namespace Game2
   using cvar_string = std::string;
   using cvar_vec3   = glm::vec3;
 
-  enum class CVarFlagBits
+  enum class CVarFlagBits : uint32_t
   {
     NONE       = 0,
     ARCHIVE    = 1 << 0,
@@ -33,6 +33,7 @@ namespace Game2
 
   enum class CVarType : uint8_t
   {
+    INVALID,
     FLOAT,
     STRING,
     VEC3,
@@ -43,8 +44,11 @@ namespace Game2
     std::string name;
     std::string description;
     CVarFlags flags;
-    CVarType type;
-    int index = -1;
+    CVarType type = CVarType::INVALID;
+    int index     = -1;
+    // Only false when the cvar is loaded from a file, in which case
+    // it's missing the description and flags, and the type may be wrong.
+    bool isFullyInitialized = false;
   };
 
   template<typename T>
@@ -66,7 +70,7 @@ namespace Game2
     struct CVarSystemStorage;
   }
 
-  void LogFullCVarInfo(const CVarParameters& params);
+  void LogCVarInfo(const CVarParameters& params, bool onlyLogValue = false);
 
   // One-per-program storage
   class CVarSystem
@@ -80,7 +84,8 @@ namespace Game2
       std::string_view description,
       cvar_string defaultValue,
       CVarFlags flags                        = CVarFlagBits::NONE,
-      OnChangeCallback<cvar_string> callback = nullptr);
+      OnChangeCallback<cvar_string> callback = nullptr,
+      bool isIncomplete                      = false);
 
     CVarParameters* RegisterCVar(std::string_view name,
       std::string_view description,
@@ -88,7 +93,8 @@ namespace Game2
       std::optional<cvar_float> minValue    = std::nullopt,
       std::optional<cvar_float> maxValue    = std::nullopt,
       CVarFlags flags                       = CVarFlagBits::NONE,
-      OnChangeCallback<cvar_float> callback = nullptr);
+      OnChangeCallback<cvar_float> callback = nullptr,
+      bool isIncomplete                     = false);
 
     CVarParameters* RegisterCVar(std::string_view name,
       std::string_view description,
@@ -96,7 +102,8 @@ namespace Game2
       std::optional<cvar_vec3> minValue    = std::nullopt,
       std::optional<cvar_vec3> maxValue    = std::nullopt,
       CVarFlags flags                      = CVarFlagBits::NONE,
-      OnChangeCallback<cvar_vec3> callback = nullptr);
+      OnChangeCallback<cvar_vec3> callback = nullptr,
+      bool isIncomplete                    = false);
 
     template<typename T>
     [[nodiscard]] T GetCVarValue(std::string_view name);
@@ -115,8 +122,8 @@ namespace Game2
     friend CommandRegistry;
 
     CVarSystem();
-    CVarParameters* InitCVar(std::string_view name, std::string_view description, CVarFlags flags);
-    const CVarParameters* GetCVarParams(std::string_view name);
+    CVarParameters* InitCVar(std::string_view name, std::string_view description, CVarFlags flags, bool isIncomplete, bool& wasIncomplete);
+    const CVarParameters* GetCVarParams(std::string_view name) const;
 
     CVarInternal::CVarSystemStorage* storage = nullptr;
   };

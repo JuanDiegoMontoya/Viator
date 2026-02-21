@@ -15,12 +15,21 @@ namespace Game2::CVarInternal
 
     int AddCVar(T value, CVarParameters* params, OnChangeCallback<T> callback, std::optional<T> min = {}, std::optional<T> max = {})
     {
-      // Thread-safe
-      int index = nextIndex++;
-      ASSERT(index < Capacity, "CVar count exceeds storage capacity");
+      auto index = params->index;
+      const bool needsAllocIndex = index == -1;
+      if (needsAllocIndex)
+      {
+        // Thread-safe
+        index = nextIndex++;
+        ASSERT(index < Capacity, "CVar count exceeds storage capacity");
+      }
 
+      // If loaded from archive and has the archive flag, don't update its current value.
+      if (!(params->flags & CVarFlagBits::ARCHIVE) || needsAllocIndex)
+      {
+        cvars[index].current = value;
+      }
       cvars[index].initial    = value;
-      cvars[index].current    = value;
       cvars[index].min        = std::move(min);
       cvars[index].max        = std::move(max);
       cvars[index].parameters = params;
