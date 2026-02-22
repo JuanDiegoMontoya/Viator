@@ -5,6 +5,7 @@
 #include "Core/Reflection.h"
 #include "Game/Scripting.h"
 #include "Core/Serialization.h"
+#include "Game/CVar.h"
 #ifdef GAME_HEADLESS
   #include "Game/Head.h"
 #else
@@ -166,5 +167,7 @@ int main(int argc, const char* const* argv)
   game.Run();
 
   Physics::Terminate();
+
+  Game2::CVarSystem::Get()->SaveArchivableCVars();
   return 0;
 }

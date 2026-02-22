@@ -77,8 +77,13 @@ namespace Game2
   {
   public:
     static CVarSystem* Get();
+    static void InitInstance(); // Initializes the instance without loading anything.
+    static void ResetInstance();
     NO_COPY_NO_MOVE(CVarSystem);
     ~CVarSystem();
+
+    void LoadArchivableCVars(std::string_view fileName = "cvars.cfg");
+    void SaveArchivableCVars(std::string_view fileName = "cvars.cfg") const;
 
     CVarParameters* RegisterCVar(std::string_view name,
       std::string_view description,
@@ -121,11 +126,13 @@ namespace Game2
     friend Console;
     friend CommandRegistry;
 
-    CVarSystem();
+    CVarSystem(bool loadCvars);
     CVarParameters* InitCVar(std::string_view name, std::string_view description, CVarFlags flags, bool isIncomplete, bool& wasIncomplete);
     const CVarParameters* GetCVarParams(std::string_view name) const;
 
     CVarInternal::CVarSystemStorage* storage = nullptr;
+
+    static CVarSystem* sInstance;
   };
 
   template<typename T>

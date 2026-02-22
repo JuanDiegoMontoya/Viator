@@ -866,7 +866,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     needsHeightmapInit = false;
     world.globals->globalFogNeedsUpdate = false;
   }
-  
+
   if (debugClearGpuPrimtives)
   {
     ctx.TeenyBufferUpdate(debugRenderingInfo.value(),
@@ -1374,7 +1374,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
         // GPU debug meshes
         // ctx.DrawIndirect();
-    }
+      }
     }
     ctx.EndRendering();
 
