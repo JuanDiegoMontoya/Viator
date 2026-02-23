@@ -241,6 +241,11 @@ namespace Game2
 
     for (const auto* params : orderedCvarParams)
     {
+      if (!(params->flags & CVarFlagBits::ARCHIVE))
+      {
+        continue;
+      }
+
 #ifdef FROG_DEBUG
       // Don't save non-fully initialized cvars. This prevents cvars.cfg from slowly expanding
       // over time as cvars are modified (removed, renamed, type changed, losing the ARCHIVE flag).
@@ -282,11 +287,10 @@ namespace Game2
 
   CVarParameters* CVarSystem::InitCVar(std::string_view name, std::string_view description, CVarFlags flags, bool isIncomplete, bool& wasIncomplete)
   {
-    auto lock = std::scoped_lock(storage->mutex);
+    auto lock = std::scoped_lock(storage->cvarParametersMutex);
     wasIncomplete = false;
 
-    // TODO: transparent lookup
-    auto it = storage->cvarParameters.find(std::string(name));
+    auto it = storage->cvarParameters.find(name);
     if (it != storage->cvarParameters.end())
     {
       if (it->second.isFullyInitialized)
@@ -312,7 +316,8 @@ namespace Game2
 
   const CVarParameters* CVarSystem::GetCVarParams(std::string_view name) const
   {
-    if (auto it = storage->cvarParameters.find(std::string(name)); it != storage->cvarParameters.end())
+    auto lock = std::shared_lock(storage->cvarParametersMutex);
+    if (auto it = storage->cvarParameters.find(name); it != storage->cvarParameters.end())
     {
       return &it->second;
     }
@@ -333,7 +338,6 @@ namespace Game2
     if (wasIncomplete && params->type != CVarType::FLOAT)
     {
       spdlog::warn("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::FLOAT), int(params->type));
-      //throw std::runtime_error(std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::FLOAT), int(params->type)));
     }
     params->type = CVarType::FLOAT;
     storage->floatCVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
@@ -352,7 +356,6 @@ namespace Game2
     if (wasIncomplete && params->type != CVarType::STRING)
     {
       spdlog::warn("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::STRING), int(params->type));
-      //throw std::runtime_error(std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::STRING), int(params->type)));
     }
     params->type = CVarType::STRING;
     storage->stringCVars.AddCVar(std::move(defaultValue), params, std::move(callback));
@@ -373,7 +376,6 @@ namespace Game2
     if (wasIncomplete && params->type != CVarType::VEC3)
     {
       spdlog::warn("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::VEC3), int(params->type));
-      //throw std::runtime_error(std::format("Tried to register partially initialized cvar {} as type {}, but it was already type {}", name, int(CVarType::VEC3), int(params->type)));
     }
     params->type = CVarType::VEC3;
     storage->vec3CVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
@@ -383,42 +385,42 @@ namespace Game2
   template<>
   cvar_float CVarSystem::GetCVarValue(std::string_view name)
   {
-    std::shared_lock lck(storage->mutex);
-    if (const auto* params = GetCVarParams(name))
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::FLOAT)
     {
+      auto lock = std::shared_lock(storage->cvarMutex);
       return storage->floatCVars.cvars[params->index].current;
     }
-    return 0;
+    return {};
   }
 
   template<>
   cvar_string CVarSystem::GetCVarValue(std::string_view name)
   {
-    std::shared_lock lck(storage->mutex);
-    if (const auto* params = GetCVarParams(name))
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::STRING)
     {
+      auto lock = std::shared_lock(storage->cvarMutex);
       return storage->stringCVars.cvars[params->index].current;
     }
-    return "";
+    return {};
   }
 
   template<>
   cvar_vec3 CVarSystem::GetCVarValue(std::string_view name)
   {
-    std::shared_lock lck(storage->mutex);
-    if (const auto* params = GetCVarParams(name))
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::VEC3)
     {
+      auto lock = std::shared_lock(storage->cvarMutex);
       return storage->vec3CVars.cvars[params->index].current;
     }
-    return cvar_vec3{};
+    return {};
   }
 
   template<>
   bool CVarSystem::SetCVarValue(std::string_view name, cvar_float value)
   {
-    auto lock = std::scoped_lock(storage->mutex);
-    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::FLOAT)
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::FLOAT && !(params->flags & CVarFlagBits::READ_ONLY))
     {
+      auto lock = std::scoped_lock(storage->cvarMutex);
       auto& cvar = storage->floatCVars.cvars[params->index];
       value      = glm::clamp(value, cvar.min.value_or(value), cvar.max.value_or(value));
       if (cvar.callback)
@@ -434,9 +436,9 @@ namespace Game2
   template<>
   bool CVarSystem::SetCVarValue(std::string_view name, cvar_string value)
   {
-    auto lock = std::scoped_lock(storage->mutex);
-    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::STRING)
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::STRING && !(params->flags& CVarFlagBits::READ_ONLY))
     {
+      auto lock = std::scoped_lock(storage->cvarMutex);
       auto& cvar = storage->stringCVars.cvars[params->index];
       if (cvar.callback)
       {
@@ -451,9 +453,9 @@ namespace Game2
   template<>
   bool CVarSystem::SetCVarValue(std::string_view name, cvar_vec3 value)
   {
-    auto lock = std::scoped_lock(storage->mutex);
-    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::VEC3)
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::VEC3 && !(params->flags & CVarFlagBits::READ_ONLY))
     {
+      auto lock = std::scoped_lock(storage->cvarMutex);
       auto& cvar = storage->vec3CVars.cvars[params->index];
       value      = glm::clamp(value, cvar.min.value_or(value), cvar.max.value_or(value));
       if (cvar.callback)
@@ -622,5 +624,24 @@ TEST_CASE("CVarSystem")
       CHECK_FALSE(system->SetCVarValue(name, Game2::cvar_string("a string")));
       CHECK_FALSE(system->SetCVarValue(name, Game2::cvar_float(0)));
     }
+  }
+
+  SUBCASE("CVar serialization round-trip")
+  {
+    system->RegisterCVar("test.string", "", Game2::cvar_string("test value"), Game2::CVarFlagBits::ARCHIVE);
+    system->RegisterCVar("test.float", "", Game2::cvar_float(4.5f), {}, {}, Game2::CVarFlagBits::ARCHIVE);
+    system->RegisterCVar("test.vec3", "", Game2::cvar_vec3(1, 2, 3), {}, {}, Game2::CVarFlagBits::ARCHIVE);
+    system->RegisterCVar("not.archived", "", Game2::cvar_vec3(1, 2, 3));
+    system->SaveArchivableCVars("test.cfg");
+    Game2::CVarSystem::ResetInstance();
+    Game2::CVarSystem::InitInstance();
+    system = Game2::CVarSystem::Get();
+    system->LoadArchivableCVars("test.cfg");
+    CHECK_EQ(system->GetCVarValue<Game2::cvar_string>("test.string"), Game2::cvar_string("test value"));
+    CHECK_EQ(system->GetCVarValue<Game2::cvar_float>("test.float"), Game2::cvar_float(4.5f));
+    CHECK_EQ(system->GetCVarValue<Game2::cvar_vec3>("test.vec3"), Game2::cvar_vec3(1, 2, 3));
+    CHECK_EQ(system->GetCVarParams("not.archived"), nullptr);
+    CHECK_EQ(system->GetCVarValue<Game2::cvar_vec3>("not.archived"), Game2::cvar_vec3{});
+    std::filesystem::remove(GetConfigDirectory() / "test.cfg");
   }
 }

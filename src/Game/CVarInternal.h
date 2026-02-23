@@ -45,8 +45,13 @@ namespace Game2::CVarInternal
     CVarInternal::CVarArray<cvar_float, 1000> floatCVars;
     CVarInternal::CVarArray<cvar_string, 1000> stringCVars;
     CVarInternal::CVarArray<cvar_vec3, 1000> vec3CVars;
+    
+  private:
+    struct Hash : std::hash<std::string_view> { using is_transparent = void; };
 
-    std::unordered_map<std::string, CVarParameters> cvarParameters;
-    std::shared_mutex mutex;
+  public:
+    std::unordered_map<std::string, CVarParameters, Hash, std::equal_to<>> cvarParameters;
+    std::shared_mutex cvarMutex;
+    std::shared_mutex cvarParametersMutex;
   };
 } // namespace Game2::CVarInternal

@@ -119,6 +119,8 @@ namespace Game2
 
     bool SetCVarParse(std::string_view name, std::string_view args);
 
+    const CVarParameters* GetCVarParams(std::string_view name) const;
+
   private:
     template<typename U>
     friend class AutoCVarBase;
@@ -128,7 +130,6 @@ namespace Game2
 
     CVarSystem(bool loadCvars);
     CVarParameters* InitCVar(std::string_view name, std::string_view description, CVarFlags flags, bool isIncomplete, bool& wasIncomplete);
-    const CVarParameters* GetCVarParams(std::string_view name) const;
 
     CVarInternal::CVarSystemStorage* storage = nullptr;
 
