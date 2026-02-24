@@ -341,6 +341,11 @@ namespace Game2
     }
     params->type = CVarType::FLOAT;
     storage->floatCVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
+    if (wasIncomplete) // The old value may need to be clamped if its constraints changed.
+    {
+      auto& cvar   = storage->floatCVars.cvars[params->index];
+      cvar.current = glm::clamp(cvar.current, cvar.min.value_or(cvar.current), cvar.max.value_or(cvar.current));
+    }
     return params;
   }
 
@@ -379,6 +384,11 @@ namespace Game2
     }
     params->type = CVarType::VEC3;
     storage->vec3CVars.AddCVar(defaultValue, params, std::move(callback), minValue, maxValue);
+    if (wasIncomplete) // The old value may need to be clamped if its constraints changed.
+    {
+      auto& cvar = storage->vec3CVars.cvars[params->index];
+      cvar.current = glm::clamp(cvar.current, cvar.min.value_or(cvar.current), cvar.max.value_or(cvar.current));
+    }
     return params;
   }
 
