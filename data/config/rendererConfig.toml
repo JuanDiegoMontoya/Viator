@@ -2,6 +2,7 @@
 
 [graphics]
 ambient_occlusion = true
+present_mode = 2
 
     [graphics.bloom]
     enable = true

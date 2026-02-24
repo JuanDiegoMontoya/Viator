@@ -77,6 +77,7 @@ private:
   std::vector<VkImage> swapchainImages_;
   std::vector<VkImageView> swapchainImageViews_;
   std::vector<VkSurfaceFormatKHR> availableSurfaceFormats_;
+  std::vector<VkPresentModeKHR> availablePresentModes_;
   static constexpr VkSurfaceFormatKHR defaultSwapchainFormat = {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
   VkSurfaceFormatKHR swapchainFormat_                        = defaultSwapchainFormat; // Only Application should modify this
   VkSurfaceFormatKHR nextSwapchainFormat_ =

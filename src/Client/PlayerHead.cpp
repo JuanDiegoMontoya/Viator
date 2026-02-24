@@ -564,6 +564,12 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
     vkGetPhysicalDeviceSurfaceFormatsKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceFormatCount, nullptr);
     availableSurfaceFormats_.resize(surfaceFormatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceFormatCount, availableSurfaceFormats_.data());
+
+    // Get available present modes for this surface
+    uint32_t presentModeCount{};
+    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, nullptr);
+    availablePresentModes_.resize(presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, availablePresentModes_.data());
   }
 
   glslang::InitializeProcess();

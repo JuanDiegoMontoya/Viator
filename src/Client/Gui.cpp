@@ -991,13 +991,17 @@ void VoxelRenderer::LoadGameSettings()
   spdlog::debug("Load renderer config.");
 
   sGameSettingsModified = false;
+
   auto file               = std::fstream(sGameSettingsPath, std::fstream::in | std::fstream::out | std::fstream::app);
-  sGameSettings           = toml::parse(file);
-  giMethod_               = sGameSettings["graphics"]["gi"]["method"].value_or(giMethod_);
-  pathTracerSamples       = sGameSettings["graphics"]["pathtracer"]["samples"].value_or(pathTracerSamples);
-  pathTracerBounces       = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
-  enableBloom             = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
-  enableAo_               = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
+
+  sGameSettings      = toml::parse(file);
+  giMethod_          = sGameSettings["graphics"]["gi"]["method"].value_or(giMethod_);
+  pathTracerSamples  = sGameSettings["graphics"]["pathtracer"]["samples"].value_or(pathTracerSamples);
+  pathTracerBounces  = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
+  enableBloom        = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
+  enableAo_          = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
+  head_->presentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->presentMode), 0, 2);
+  head_->shouldRemakeSwapchainNextFrame = true;
 
   if (head_->audio_)
   {
@@ -1071,6 +1075,33 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
     {
       if (ImGui::BeginTabItem("Graphics"))
       {
+        constexpr auto items    = std::array{"Immediate", "Mailbox", "FIFO"};
+        constexpr auto tooltips = std::array{"Classic \"vsync off\" mode. Uncapped framerate, with tearing.",
+          "Uncapped framerate, without tearing.",
+          "Classic \"vsync on\" mode. Framerate is capped to the display refresh rate, without tearing."};
+        const auto presentMode = static_cast<int>(head_->presentMode);
+        if (ImGui::BeginCombo("Present Mode", items[presentMode]))
+        {
+          for (int i = 0; i < 3; i++)
+          {
+            ImGui::BeginDisabled(!std::ranges::contains(head_->availablePresentModes_, static_cast<VkPresentModeKHR>(i)));
+            if (ImGui::Selectable(items[i], i == presentMode))
+            {
+              head_->shouldRemakeSwapchainNextFrame = true;
+              head_->presentMode                    = static_cast<VkPresentModeKHR>(i);
+              sGameSettingsModified                 = true;
+            }
+            ImGui::EndDisabled();
+
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal))
+            {
+              ImGui::SetTooltip("%s", tooltips[i]);
+            }
+          }
+
+          ImGui::EndCombo();
+        }
+
         ImGui::Text("Global Illumination Method");
         ImGui::Separator();
         if (ImGui::RadioButton("None", giMethod_ == GIMethod::None))
@@ -1142,6 +1173,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       bloom.insert_or_assign("enable", enableBloom);
       graphics.insert_or_assign("bloom", bloom);
       graphics.insert_or_assign("ambient_occlusion", enableAo_);
+      graphics.insert_or_assign("present_mode", head_->presentMode);
       auto gi = toml::table();
       gi.insert_or_assign("method", giMethod_);
       graphics.insert_or_assign("gi", gi);
