@@ -112,6 +112,7 @@ void main()
   // Apply our own curve by squaring the linear depth, then convert to inverted window-space Z and unproject it to get world position.
   float zInv = InvertDepthZO(uvw.z * uvw.z * uvw.z, uniforms.volumeNearPlane, uniforms.volumeFarPlane);
   vec3 wPos = UnprojectUVZO(zInv, uvw.xy, uniforms.invViewProjVolume);
+  vec3 wPos2 = UnprojectUVZO(0.5, uvw.xy, uniforms.invViewProjVolume); // ||viewPos-wPos|| has poor precision and causes flickering when used to sample the phase function
 
   vec4 colorAndDensity = FogAtPoint(wPos);
   vec3 fogColor = colorAndDensity.rgb;
@@ -121,7 +122,7 @@ void main()
   
   // Shadow
   //vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
-  vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir));
+  vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos2), globalUniforms.sky.sunDir));
   const vec3 transmittanceToSun = getTransmittanceAlongRay(globalUniforms.sky, globalUniforms.transmittanceLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, uniforms.viewPos);
   
   const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
