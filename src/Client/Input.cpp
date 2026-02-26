@@ -47,22 +47,28 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
     {
       for (auto&& [entity, player, input, inputLook] : world.GetRegistry().view<Player, LocalPlayer, InputState, InputLookState>().each())
       {
-        input.forward += glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS ? 1 : 0;
-        input.forward -= glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS ? 1 : 0;
-        input.strafe += glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS ? 1 : 0;
-        input.strafe -= glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS ? 1 : 0;
-        input.elevate += glfwGetKey(window_, GLFW_KEY_E) == GLFW_PRESS ? 1 : 0;
-        input.elevate -= glfwGetKey(window_, GLFW_KEY_Q) == GLFW_PRESS ? 1 : 0;
-        input.jump         = glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS ? true : false;
-        input.sprint       = glfwGetKey(window_, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? true : false;
-        input.walk         = glfwGetKey(window_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ? true : false;
-        input.usePrimary   = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS ? true : false;
-        input.useSecondary = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS ? true : false;
-        input.interact     = glfwGetKey(window_, GLFW_KEY_F) == GLFW_PRESS ? true : false;
+        if (!ImGui::GetIO().WantCaptureKeyboard)
+        {
+          input.forward += glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS ? 1 : 0;
+          input.forward -= glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS ? 1 : 0;
+          input.strafe += glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS ? 1 : 0;
+          input.strafe -= glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS ? 1 : 0;
+          input.elevate += glfwGetKey(window_, GLFW_KEY_E) == GLFW_PRESS ? 1 : 0;
+          input.elevate -= glfwGetKey(window_, GLFW_KEY_Q) == GLFW_PRESS ? 1 : 0;
+          input.jump         = glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS ? true : false;
+          input.sprint       = glfwGetKey(window_, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? true : false;
+          input.walk         = glfwGetKey(window_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ? true : false;
+          input.interact     = glfwGetKey(window_, GLFW_KEY_F) == GLFW_PRESS ? true : false;
+        }
+        if (!ImGui::GetIO().WantCaptureMouse)
+        {
+          input.usePrimary   = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_1) == GLFW_PRESS ? true : false;
+          input.useSecondary = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_2) == GLFW_PRESS ? true : false;
 
-        // angleAxis rotates clockwise if we are looking 'down' the axis (backwards). Keep in mind whether the coordinate system is LH or RH when doing this.
-        inputLook.yaw -= static_cast<float>(cursorFrameOffset.x * 0.0025f);
-        inputLook.pitch += static_cast<float>(cursorFrameOffset.y * 0.0025f);
+          // angleAxis rotates clockwise if we are looking 'down' the axis (backwards). Keep in mind whether the coordinate system is LH or RH when doing this.
+          inputLook.yaw -= static_cast<float>(cursorFrameOffset.x * 0.0025f);
+          inputLook.pitch += static_cast<float>(cursorFrameOffset.y * 0.0025f);
+        }
 
         // Do not allow inventory manipulation when dead.
         if (world.GetRegistry().any_of<GhostPlayer>(entity))
@@ -75,14 +81,14 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
           for (size_t j = 0; j < i->width; j++)
           {
             const auto currentSlotCoord = glm::ivec2(0, j);
-            if (glfwGetKey(window_, GLFW_KEY_1 + (int)j) == GLFW_PRESS && j < i->width)
+            if (glfwGetKey(window_, GLFW_KEY_1 + (int)j) == GLFW_PRESS && j < i->width && !ImGui::GetIO().WantCaptureKeyboard)
             {
               Networking::CallRPC("SetActiveSlotRPC"_hs, world, entity, currentSlotCoord);
               break;
             }
           }
 
-          if (scrollOffset.y != 0)
+          if (scrollOffset.y != 0 && !ImGui::GetIO().WantCaptureMouse)
           {
             const auto offset = -(int)scrollOffset.y;
             Networking::CallRPC("ScrollHotbarRPC"_hs, world, entity, offset);

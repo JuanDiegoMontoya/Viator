@@ -277,6 +277,7 @@ void Console::DrawWindow(World& world)
 
   if (!console->isOpen)
   {
+    console->state.isPopupOpen = false;
     if (console->wasOpenLastFrame)
     {
       world.globals->game->debugging.forceShowCursor = false;
