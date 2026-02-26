@@ -252,7 +252,7 @@ void main()
   if (depthTranslucent < opaqueToCameraDist || depth == FAR_DEPTH)
   {
     transmission = imageLoad(uniforms.gBuffer.gTransmission, gid).rgb;
-    transmission *= vec3(0.2, 0.4, 0.6);
+    transmission *= vec3(0.4, 0.75, 0.9);
   }
 
   vec3 radiance_internal = color_convert_src_to_dst(texelFetch(uniforms.gBuffer.gRadiance, gid, 0).rgb,

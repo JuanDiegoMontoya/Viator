@@ -92,6 +92,7 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict PerFrameUniformsBuffer)
 #endif
 {
   FVOG_MAT4 viewProj;
+  FVOG_MAT4 oldViewProj;
   FVOG_MAT4 oldViewProjUnjittered;
   FVOG_MAT4 viewProjUnjittered;
   FVOG_MAT4 invViewProj;

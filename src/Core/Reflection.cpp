@@ -923,7 +923,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(PreviousGlobalTransform, scale);
 
   REFLECT_COMPONENT(RenderTransform, EDITOR_READ_ONLY | REPLICATED | TRIVIAL | TRANSIENT)
-    DATA(RenderTransform, transform);
+    DATA(RenderTransform, transform)
+    DATA(RenderTransform, prevTransform);
 
   REFLECT_COMPONENT(Health, REPLICATED | TRIVIAL)
     DATA(Health, hp, PROP_MIN(0.0f), PROP_MAX(100.0f))

@@ -353,6 +353,7 @@ struct Health
 struct RenderTransform
 {
   GlobalTransform transform;
+  GlobalTransform prevTransform;
 };
 
 struct NoclipCharacterController {};

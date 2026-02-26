@@ -312,17 +312,20 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
         else if (previousGlobalTransform->position != transform.position || previousGlobalTransform->rotation != transform.rotation ||
                  previousGlobalTransform->scale != transform.scale || rtransform.transform.position != transform.position)
         {
-          auto& renderTransformMut = world.GetRegistry().get<RenderTransform>(entity).transform;
+          auto& renderTransformMut = world.GetRegistry().get<RenderTransform>(entity);
+          renderTransformMut.prevTransform = renderTransformMut.transform;
+          auto& newRenderTransformMut = renderTransformMut.transform;
+          
           if (previousGlobalTransform->position == transform.position)
           {
-            renderTransformMut.position = transform.position;
+            newRenderTransformMut.position = transform.position;
           }
           else
           {
-            renderTransformMut.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
+            newRenderTransformMut.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
           }
-          renderTransformMut.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
-          renderTransformMut.scale = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
+          newRenderTransformMut.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
+          newRenderTransformMut.scale = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
         }
       }
       else

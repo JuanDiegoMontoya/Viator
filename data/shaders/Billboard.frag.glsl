@@ -12,7 +12,8 @@ void main()
   o_albedo = mix(v_leftColor, v_rightColor, step(v_middle, v_uv.x));
   o_normal = vec4(0, 0, 0, 1);
   o_radiance = vec4(0, 0, 0, 1);
+  o_motion = vec2(0);
 
   // Values above 0.9 are not recommended for use, as they are "unlikely [...] to ever produce good results"
-  //o_reactiveMask = min(o_color.a, 0.9);
+  o_reactiveMask = min(o_albedo.a, 0.9);
 }

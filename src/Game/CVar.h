@@ -113,6 +113,9 @@ namespace Game2
     template<typename T>
     [[nodiscard]] T GetCVarValue(std::string_view name);
 
+    template<typename T>
+    [[nodiscard]] T GetDefaultCVarValue(std::string_view name);
+
     // Returns false if T is of the wrong type.
     template<typename T>
     bool SetCVarValue(std::string_view name, T value);
@@ -194,6 +197,13 @@ namespace Game2
   cvar_string CVarSystem::GetCVarValue(std::string_view);
   template<>
   cvar_vec3 CVarSystem::GetCVarValue(std::string_view);
+
+  template<>
+  cvar_float CVarSystem::GetDefaultCVarValue(std::string_view);
+  template<>
+  cvar_string CVarSystem::GetDefaultCVarValue(std::string_view);
+  template<>
+  cvar_vec3 CVarSystem::GetDefaultCVarValue(std::string_view);
 
   template<>
   bool CVarSystem::SetCVarValue(std::string_view, cvar_float);

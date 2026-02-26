@@ -40,13 +40,19 @@ void main()
     radiance += GetHitEmission(hit);
 
     const vec4 posClip = uniforms.viewProj * vec4(hit.positionWorld, 1.0);
+    const vec4 posClipOld = uniforms.oldViewProj * vec4(hit.positionWorld, 1.0);
     gl_FragDepth = posClip.z / posClip.w;
   }
   else
   {
     radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
     gl_FragDepth = FAR_DEPTH;
+    hit.positionWorld = rayPos + rayDir; // For computing accurate sky motion vectors.
   }
+
+  const vec4 posClip = uniforms.viewProjUnjittered * vec4(hit.positionWorld, 1.0);
+  const vec4 posClipOld = uniforms.oldViewProjUnjittered * vec4(hit.positionWorld, 1.0);
+  o_motion = ((posClipOld.xy / posClipOld.w) - (posClip.xy / posClip.w)) * 0.5;
   
   if (hit.hitTranslucent == true)
   {
@@ -60,6 +66,7 @@ void main()
   // bonus.g += gVoxelsTraversed / 30;
   // bonus.b += gBottomLevelBricksTraversed / 4;
   o_radiance = vec4((radiance + 1000 * bonus), 1);
+  o_reactiveMask = 0; // TODO: lower transmission = higher reactivity?
   imageStore(uniforms.gBuffer.gDepthTranslucent, ivec2(gl_FragCoord.xy), vec4(translucentHitT, 0, 0, 0));
   imageStore(uniforms.gBuffer.gTransmission, ivec2(gl_FragCoord.xy), vec4(hit.transmission, 0));
 }

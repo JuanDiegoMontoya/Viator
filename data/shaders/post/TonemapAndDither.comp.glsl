@@ -235,4 +235,5 @@ void main()
   }
   
   imageStore(outputImage, gid, vec4(ditheredColor, 1.0));
+  //imageStore(outputImage, gid, vec4(hdrColor, 1.0));
 }

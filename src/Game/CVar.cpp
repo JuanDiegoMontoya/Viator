@@ -58,19 +58,19 @@ namespace Game2
     {
     case Game2::CVarType::FLOAT:
     {
-      auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_float>(params.name);
+      const auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_float>(params.name);
       Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.9f, 0.4f, 0.4f, "%s = %f", params.name.c_str(), value);
       break;
     }
     case Game2::CVarType::STRING:
     {
-      auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_string>(params.name);
+      const auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_string>(params.name);
       Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.9f, 0.4f, 0.4f, "%s = \"%s\"", params.name.c_str(), value.c_str());
       break;
     }
     case Game2::CVarType::VEC3:
     {
-      auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_vec3>(params.name);
+      const auto value = Game2::CVarSystem::Get()->GetCVarValue<Game2::cvar_vec3>(params.name);
       Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.9f, 0.4f, 0.4f, "%s = {%f, %f, %f}", params.name.c_str(), value.x, value.y, value.z);
       break;
     }
@@ -78,6 +78,27 @@ namespace Game2
 
     if (!onlyLogValue)
     {
+      switch (params.type)
+      {
+      case CVarType::FLOAT:
+      {
+        const auto value = Game2::CVarSystem::Get()->GetDefaultCVarValue<Game2::cvar_float>(params.name);
+        Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "Default: %f", value);
+        break;
+      }
+      case CVarType::STRING:
+      {
+        const auto value = Game2::CVarSystem::Get()->GetDefaultCVarValue<Game2::cvar_string>(params.name);
+        Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "Default: \"%s\"", value.c_str());
+        break;
+      }
+      case CVarType::VEC3:
+      {
+        const auto value = Game2::CVarSystem::Get()->GetDefaultCVarValue<cvar_vec3>(params.name);
+        Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "Default: {%f, %f, %f}", value.x, value.y, value.z);
+        break;
+      }
+      }
       Console::Get()->LogColor(ConsoleMessageType::COMMAND_OUTPUT, 0.67f, 0.67f, 0.67f, "%s", CVarFlagsToString(params.flags).c_str());
       Console::Get()->Log(ConsoleMessageType::COMMAND_OUTPUT, "%s", params.description.c_str());
     }
@@ -421,6 +442,36 @@ namespace Game2
     {
       auto lock = std::shared_lock(storage->cvarMutex);
       return storage->vec3CVars.cvars[params->index].current;
+    }
+    return {};
+  }
+
+  template<>
+  cvar_float CVarSystem::GetDefaultCVarValue(std::string_view name)
+  {
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::FLOAT)
+    {
+      return storage->floatCVars.cvars[params->index].initial;
+    }
+    return {};
+  }
+
+  template<>
+  cvar_string CVarSystem::GetDefaultCVarValue(std::string_view name)
+  {
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::STRING)
+    {
+      return storage->stringCVars.cvars[params->index].initial;
+    }
+    return {};
+  }
+
+  template<>
+  cvar_vec3 CVarSystem::GetDefaultCVarValue(std::string_view name)
+  {
+    if (const auto* params = GetCVarParams(name); params && params->type == CVarType::VEC3)
+    {
+      return storage->vec3CVars.cvars[params->index].initial;
     }
     return {};
   }

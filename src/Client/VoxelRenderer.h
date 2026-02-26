@@ -22,6 +22,11 @@
 #include "shaders/debug/DebugCommon.h.glsl"
 #include "Game/CVar.h"
 
+#ifdef FROGRENDER_FSR2_ENABLE
+  #include "src/ffx-fsr2-api/ffx_fsr2.h"
+  #include "src/ffx-fsr2-api/vk/ffx_fsr2_vk.h"
+#endif
+
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "glm/mat4x4.hpp"
@@ -76,6 +81,7 @@ namespace Temp
   struct ObjectUniforms
   {
     glm::mat4 worldFromObject;
+    glm::mat4 worldFromObjectOld;
     VkDeviceAddress vertexBuffer;
     glm::vec3 tint;
   };
@@ -115,33 +121,38 @@ private:
   struct Frame
   {
     // G-buffer
-    std::optional<Fvog::Texture> sceneAlbedo;
-    std::optional<Fvog::Texture> sceneNormal;
-    std::optional<Fvog::Texture> sceneRadiance;
-    std::optional<Fvog::Texture> sceneIlluminance;
-    std::optional<Fvog::Texture> sceneIlluminancePingPong; // Used in denoising.
-    std::optional<Fvog::Texture> sceneSpecial;
+    std::optional<Fvog::Texture> gAlbedo;
+    std::optional<Fvog::Texture> gNormal;
+    std::optional<Fvog::Texture> gRadiance;
+    std::optional<Fvog::Texture> gIlluminance;
+    std::optional<Fvog::Texture> gIlluminancePingPong; // Used in denoising.
+    std::optional<Fvog::Texture> gSpecial;
+    std::optional<Fvog::Texture> gDepth;
+    std::optional<Fvog::Texture> gMotion;
+    std::optional<Fvog::Texture> gReactiveMask;
 
     constexpr static Fvog::Format sceneAlbedoFormat      = Fvog::Format::R8G8B8A8_SRGB;
     constexpr static Fvog::Format sceneNormalFormat      = Fvog::Format::R16G16B16A16_SNORM; // TODO: should be oct
     constexpr static Fvog::Format sceneIlluminanceFormat = Fvog::Format::R16G16B16A16_SFLOAT;
     constexpr static Fvog::Format sceneSpecialFormat     = Fvog::Format::R8_UINT;
+    constexpr static Fvog::Format sceneDepthFormat       = Fvog::Format::D32_SFLOAT;
+    constexpr static Fvog::Format sceneMotionFormat      = Fvog::Format::R16G16_SFLOAT;
+    constexpr static Fvog::Format gReactiveMaskFormat    = Fvog::Format::R8_UNORM;
 
-    std::optional<Fvog::Texture> sceneTransmission;
-    std::optional<Fvog::Texture> sceneAlbedoTranslucent;
-    std::optional<Fvog::Texture> sceneNormalTranslucent;
-    std::optional<Fvog::Texture> sceneDepthTranslucent;
+    std::optional<Fvog::Texture> gTransmission;
+    std::optional<Fvog::Texture> gAlbedoTranslucent;
+    std::optional<Fvog::Texture> gNormalTranslucent;
+    std::optional<Fvog::Texture> gDepthTranslucent;
 
     // Pre-tonemap
-    std::optional<Fvog::Texture> sceneColor;
+    std::optional<Fvog::Texture> sceneColorInternalRes;
+    std::optional<Fvog::Texture> sceneColorOutputRes;
     std::optional<Fvog::Texture> sceneColorBloomScratch;
     constexpr static Fvog::Format sceneColorFormat = Fvog::Format::R16G16B16A16_SFLOAT;
 
     // Post-tonemap. Format allows for HDR display support.
     std::optional<Fvog::Texture> sceneColorTonemapped;
     constexpr static Fvog::Format sceneColorTonemappedFormat = Fvog::Format::R16G16B16A16_SFLOAT;
-    std::optional<Fvog::Texture> sceneDepth;
-    constexpr static Fvog::Format sceneDepthFormat = Fvog::Format::D32_SFLOAT;
   };
   Frame frame;
 
@@ -294,6 +305,41 @@ private:
   float sunShadowFrustumDepth      = 1000;
   int sunShadowNumCascades         = 5;
   Techniques::CascadedShadowMap cascadedShadowMap_;
+
+  uint32_t renderInternalWidth{};
+  uint32_t renderInternalHeight{};
+  uint32_t renderOutputWidth{};
+  uint32_t renderOutputHeight{};
+
+#ifdef FROGRENDER_FSR2_ENABLE
+  // FSR 2
+  Game2::AutoCVar<Game2::cvar_float> fsr2Enable = {"r.fsr2.enable",
+    "- If true, FSR 2 (TAAU) pass will be performed",
+    1,
+    {},
+    {},
+    Game2::CVarFlagBits::ARCHIVE,
+    [this](std::string_view, Game2::cvar_float) { head_->shouldResizeNextFrame = true; }};
+  bool fsr2FirstInit  = true;
+  float fsr2Sharpness = 0;
+  float fsr2Ratio     = 1.5f; // FFX_FSR2_QUALITY_MODE_QUALITY
+  FfxFsr2Context fsr2Context{};
+  std::unique_ptr<char[]> fsr2ScratchMemory;
+#else
+  Game2::AutoCVar<Game2::cvar_float> fsr2Enable =
+    {"r.fsr2.enable", "- If true, FSR 2 (TAAU) pass will be performed (NOTE: FSR 2 is disabled in this build)", 0, 0, 0, Game2::CVarFlagBits::ARCHIVE};
+#endif
+
+  Game2::AutoCVar<Game2::cvar_float> cameraNearPlane = {"r.camera.nearPlane", "- Near plane of the viewer's camera.", 0.1f, 0.01f, {}, Game2::CVarFlagBits::ARCHIVE};
+  Game2::AutoCVar<Game2::cvar_float> cameraFovyRadians = {"r.camera.fovy",
+    "- Vertical field of view, in radians, of the viewer's camera.",
+    glm::radians(65.0f),
+    glm::radians(1.0f),
+    glm::radians(160.0f),
+    Game2::CVarFlagBits::ARCHIVE};
+
+  glm::mat4 clip_from_world_unjittered_old = glm::mat4(1);
+  glm::mat4 clip_from_world_old = glm::mat4(1);
 };
 
 struct ImFont;

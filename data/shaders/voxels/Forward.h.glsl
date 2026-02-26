@@ -24,6 +24,7 @@ FVOG_DECLARE_BUFFER_REFERENCE(FrameUniformsBuffer)
 struct ObjectUniforms
 {
   mat4 worldFromObject;
+  mat4 worldFromObjectOld;
   VertexBuffer vertexBuffer;
   vec3 tint;
   //FVOG_UINT32 materialId;
