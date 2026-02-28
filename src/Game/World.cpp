@@ -864,7 +864,7 @@ void World::SpawnHitParticles(const SpawnHitParticlesParams& p)
 {
   auto& reg = registry_;
 
-  auto cube = Physics::Box({p.size, p.size, p.size});
+  auto cube = Physics::Box{{p.size, p.size, p.size}};
 
   for (int i = 0; i < (int)p.numParticles; i++)
   {

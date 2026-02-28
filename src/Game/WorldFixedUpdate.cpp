@@ -481,6 +481,11 @@ void World::FixedUpdate(float dt)
       ProcessBlockTickQueue();
     }
 
+    if (IsServer())
+    {
+      ProcessRandomBlockUpdates();
+    }
+
     // Update items in inventories (important to ensure cooldowns, etc. reset even when items are put away).
     if (IsServer())
     {
@@ -817,7 +822,7 @@ void World::FixedUpdate(float dt)
 
 void World::ProcessBlockTickQueue()
 {
-  ZoneScopedN("Process block tick queue");
+  ZoneScoped;
   auto queue = std::move(*globals->waterQueue);
   auto set   = std::move(*globals->waterSet);
 
@@ -837,5 +842,18 @@ void World::ProcessBlockTickQueue()
   if (processed > 0)
   {
     spdlog::info("Processed {} scheduled block updates", processed);
+  }
+}
+
+void World::ProcessRandomBlockUpdates()
+{
+  ZoneScoped;
+
+  auto& rng = globals->game->rng;
+  const auto& grid = globals->grid;
+  for (int i = 0; i < 100; i++)
+  {
+    const auto voxelPosition = glm::ivec3(rng.RandU32(0, grid->Dimensions().x), rng.RandU32(0, grid->Dimensions().y), rng.RandU32(0, grid->Dimensions().z));
+    Block::OnRandomUpdateBlock(*this, voxelPosition);
   }
 }

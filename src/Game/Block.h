@@ -56,6 +56,7 @@ namespace Block
       R_MEMBER(initialHealth, float, 100, PROP_MIN(0.0f), PROP_MAX(100.0f));
       R_MEMBER(damageTier, int, {});
       R_MEMBER(damageFlags, BlockDamageFlags, BlockDamageFlagBit::ALL_TOOLS);
+      R_MEMBER(fireDestroyChance, float, 0);
       R_MEMBER(dropWhenBroken, LootType, DropSelf{});
     R_END();
 
@@ -81,10 +82,12 @@ namespace Block
       std::array<CubeFaceMaterial, 6> faces;
     };
 
-    struct PhysicalProperties
-    {
-      bool isSolid = true;
-    };
+    R_STRUCT(PhysicalProperties)
+      R_MEMBER(isSolid, bool, true);
+      R_MEMBER(flammability, float, 0);
+    R_END();
+
+    R_DECLARE_COMPONENT(PhysicalProperties, BLOCK_COMPONENT | REPLICATED);
 
     struct ExplodeWhenBroken
     {
@@ -187,6 +190,14 @@ namespace Block
       // Refers to the block that contains the BaseFlow component.
       BlockId base;
     };
+
+    R_STRUCT(Fire)
+      R_MEMBER(blockToSpawnOnPropagate, BlockId, entt::null);
+      R_MEMBER(chanceToPropagateOnRandomUpdate, float, 0);
+      R_MEMBER(chanceToDespawnOnRandomUpdate, float, 0);
+    R_END();
+
+    R_DECLARE_COMPONENT(Fire, BLOCK_COMPONENT | REPLICATED);
   }
 
   class Registry
@@ -223,6 +234,7 @@ namespace Block
   void OnDestroyBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
   [[nodiscard]] std::variant<std::monostate, ItemState, std::string> GetLootDropType(const World& world, BlockId block);
   void OnUpdateBlock(World& world, glm::ivec3 voxelPosition);
+  void OnRandomUpdateBlock(World& world, glm::ivec3 voxelPosition);
   void OnUseBlock(World& world, glm::ivec3 voxelPosition, BlockId block);
 
   void SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId block);

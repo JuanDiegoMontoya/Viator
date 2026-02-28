@@ -211,7 +211,7 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
       world.UpdateLocalTransform(parent);
     }
 
-    if (blockRegistry.any_of<Block::Component::Flows, Block::Component::BaseFlow>(entt::entity(block)))
+    if (blockRegistry.any_of<Block::Component::Flows, Block::Component::BaseFlow, Block::Component::Fire>(entt::entity(block)))
     {
       world.globals->waterQueue->push(voxelPosition);
     }
@@ -469,6 +469,81 @@ void Block::OnUpdateBlock(World& world, glm::ivec3 voxelPosition)
     TransferFlowTo(Direction::East);
 #endif
   }
+
+  if (const auto* p = reg.try_get<const Block::Component::Fire>(entt::entity(block)))
+  {
+    auto& rng = world.globals->game->rng;
+    if (p->blockToSpawnOnPropagate != entt::null && rng.RandFloat() < p->chanceToPropagateOnRandomUpdate)
+    {
+      // Try to propagate fire in a single direction.
+      for (int z = -1; z <= 1; z++)
+      for (int y = -1; y <= 1; y++)
+      for (int x = -1; x <= 1; x++)
+      {
+        if (x == 0 && y == 0 && z == 0)
+        {
+          continue;
+        }
+        const auto neighborPosition = voxelPosition + glm::ivec3(x, y, z);
+        const auto neighborBlock    = grid.GetVoxelAt(neighborPosition);
+        // Check if there's an air block nearby that's adjacent to something flammable.
+        if (neighborBlock == voxel_t::Air)
+        {
+          float flammability = 0;
+
+          for (int j = 0; j < 6; j++)
+          {
+            const auto direction2     = static_cast<Direction>(j);
+            const auto neighbor2Block = grid.GetVoxelAt(neighborPosition + DirectionToNeighbor(direction2));
+            if (const auto* pp = reg.try_get<const Component::PhysicalProperties>(entt::entity(neighbor2Block)))
+            {
+              flammability += pp->flammability;
+            }
+          }
+
+          if (rng.RandFloat() < flammability)
+          {
+            // Spawn fire.
+            OnTryPlaceBlock(world, neighborPosition, p->blockToSpawnOnPropagate);
+            goto out;
+          }
+        }
+      }
+
+    out:;
+    }
+
+    // Check immediate neighbors to see if they will be burned away.
+    // These checks could be folded into the loop above for efficiency.
+    for (int i = 0; i < 6; i++)
+    {
+      const auto direction        = static_cast<Direction>(i);
+      const auto neighborPosition = voxelPosition + DirectionToNeighbor(direction);
+      const auto neighborBlock    = grid.GetVoxelAt(neighborPosition);
+      if (const auto* pb = reg.try_get<const Component::Breakable>(entt::entity(neighborBlock)))
+      {
+        if (rng.RandFloat() < pb->fireDestroyChance)
+        {
+          OnDestroyBlock(world, neighborPosition, neighborBlock);
+        }
+      }
+    }
+
+    if (rng.RandFloat() < p->chanceToDespawnOnRandomUpdate)
+    {
+      OnDestroyBlock(world, voxelPosition, block);
+    }
+    else
+    {
+      auto& queue = world.globals->waterQueue;
+      queue->push(voxelPosition);
+    }
+  }
+}
+
+void Block::OnRandomUpdateBlock([[maybe_unused]] World& world, [[maybe_unused]] glm::ivec3 voxelPosition)
+{
+  ZoneScoped;
 }
 
 void Block::QueueUpdateNeighbors(World& world, glm::ivec3 position)

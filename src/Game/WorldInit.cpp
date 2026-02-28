@@ -1080,6 +1080,20 @@ void World::InitializeGameDefinitions()
         .entityPrefab = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("SimpleScriptable")},
       }));
 
+  auto prevFireBlockId = entt::entity(entt::null);
+  for (int i = 7; i >= 1; i--)
+  {
+    const auto fireBlockId = RegisterFoliageBlock({.tag = ("fire" + std::to_string(i)).c_str(), .name = ("Fire" + std::to_string(i)).c_str(), .dropsSelf = false, .isSolid = false});
+    blocks.GetRegistry().emplace<Block::Component::Fire>(entt::entity(fireBlockId),
+      Block::Component::Fire{
+        .blockToSpawnOnPropagate         = i == 7 ? fireBlockId : BlockId(prevFireBlockId),
+        .chanceToPropagateOnRandomUpdate = 0.015f / i,
+        .chanceToDespawnOnRandomUpdate   = 0.002f * (i * 0.25f),
+      });
+    blocks.GetRegistry().remove<Block::Component::RequiresSupport>(entt::entity(fireBlockId));
+    prevFireBlockId = entt::entity(fireBlockId);
+  }
+
   auto& prefabs = *globals->prefabRegistry = {};
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();

@@ -1499,9 +1499,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube2, BLOCK_COMPONENT | REPLICATED)
     DATA_BASE(Block::Component::RenderAsTexturedCube2, faces);
-
-  REFLECT_COMPONENT(Block::Component::PhysicalProperties, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::PhysicalProperties, isSolid);
   
   REFLECT_COMPONENT(Block::Component::ExplodeWhenBroken, BLOCK_COMPONENT | REPLICATED)
     DATA(Block::Component::ExplodeWhenBroken, radius)

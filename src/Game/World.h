@@ -246,6 +246,7 @@ public:
   void CreateRenderingMaterials();
 
   void ProcessBlockTickQueue();
+  void ProcessRandomBlockUpdates();
 
   struct SpawnHitParticlesParams
   {
