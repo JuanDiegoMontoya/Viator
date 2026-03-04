@@ -685,6 +685,7 @@ namespace Vox
 {
   struct Chunk;
 }
+std::vector<std::shared_ptr<Voxel::SubGrid>> VoxToSubGrids(const Vox::Chunk& root);
 std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root);
 
 class HashGrid;

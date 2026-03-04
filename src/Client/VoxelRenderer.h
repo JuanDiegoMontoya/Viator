@@ -339,7 +339,8 @@ private:
     Game2::CVarFlagBits::ARCHIVE};
 
   glm::mat4 clip_from_world_unjittered_old = glm::mat4(1);
-  glm::mat4 clip_from_world_old = glm::mat4(1);
+  glm::mat4 clip_from_world_old            = glm::mat4(1);
+  double time                              = 0;
 };
 
 struct ImFont;

@@ -37,6 +37,7 @@
 #include <execution>
 #include <algorithm>
 #include <mutex>
+#include <ranges>
 
 #define GAME_CATCH_EXCEPTIONS 0
 
@@ -780,50 +781,67 @@ glm::vec3 GetRight(glm::quat rotation)
   return glm::mat3_cast(rotation)[0];
 }
 
-std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
+std::vector<std::shared_ptr<Voxel::SubGrid>> VoxToSubGrids(const Vox::Chunk& root)
 {
   auto processed = Vox::ProcessModel(root);
-  ASSERT(processed.voxelChunk);
-  ASSERT(processed.sizeChunk);
+  ASSERT(!processed.voxelChunks.empty());
+  ASSERT(!processed.sizeChunks.empty());
   ASSERT(processed.paletteChunk);
   ASSERT(!processed.iMapChunk, "TODO: IMAP chunk");
-  const auto dims = glm::ivec3(processed.sizeChunk->sizeX, processed.sizeChunk->sizeZ, processed.sizeChunk->sizeY); // Z-up
-  auto subVoxels  = std::make_unique<Voxel::SubVoxel[]>(dims.x * dims.y * dims.z);
 
-  for (uint32_t i = 0; i < processed.voxelChunk->numVoxels; i++)
-  {
-    const auto voxel    = processed.voxelChunk->voxels[i];
-    const auto position = glm::ivec3(dims.x - 1 - voxel.x, voxel.z, voxel.y); // Z-up RH
-    ASSERT(glm::all(glm::greaterThanEqual(position, glm::ivec3(0))) && glm::all(glm::lessThan(position, dims)));
-    subVoxels[Voxel::Grid::FlattenGenericCoord(dims, position)] = Voxel::SubVoxel(voxel.colorIndex);
-  }
+  decltype(Voxel::SubGrid::materials) materials;
+  std::ranges::fill(materials, Voxel::SubVoxelMaterial{});
 
-  auto subGrid = std::make_shared<Voxel::SubGrid>(Voxel::SubGrid{
-    .dimensions = dims,
-    .grid       = std::move(subVoxels),
-  });
-  
   for (int i = 0; i < 255; i++)
   {
     const auto color                = processed.paletteChunk->colors[i];
-    subGrid->materials[i].colorSrgb = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1};
+    materials[i].colorSrgb = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, 1};
     if (i < processed.materials.size())
     {
       if (const auto emissionInfo = Vox::ParseEmissionInfoFromDict(processed.materials[i]->attributes))
       {
         // TODO: Fix color space.
-        subGrid->materials[i].emissionSrgb = subGrid->materials[i].colorSrgb * emissionInfo->emission * exp2(emissionInfo->power);
+        materials[i].emissionSrgb = materials[i].colorSrgb * emissionInfo->emission * exp2(emissionInfo->power);
       }
       if (const auto glassInfo = Vox::ParseGlassInfoFromDict(processed.materials[i]->attributes))
       {
-        subGrid->materials[i].density = glassInfo->density;
+        materials[i].density = glassInfo->density;
       }
     }
   }
 
-  return subGrid;
+  const auto zipped = std::views::zip(processed.sizeChunks, processed.voxelChunks);
+  auto subGrids = std::vector<std::shared_ptr<Voxel::SubGrid>>();
+  subGrids.reserve(zipped.size());
+
+  for (const auto [sizeChunk, voxelChunk] : zipped)
+  {
+    const auto dims = glm::ivec3(sizeChunk->sizeX, sizeChunk->sizeZ, sizeChunk->sizeY); // Z-up
+    auto subVoxels  = std::make_unique<Voxel::SubVoxel[]>(dims.x * dims.y * dims.z);
+
+    for (uint32_t i = 0; i < voxelChunk->numVoxels; i++)
+    {
+      const auto voxel    = voxelChunk->voxels[i];
+      const auto position = glm::ivec3(dims.x - 1 - voxel.x, voxel.z, voxel.y); // Z-up RH
+      ASSERT(glm::all(glm::greaterThanEqual(position, glm::ivec3(0))) && glm::all(glm::lessThan(position, dims)));
+      subVoxels[Voxel::Grid::FlattenGenericCoord(dims, position)] = Voxel::SubVoxel(voxel.colorIndex);
+    }
+
+    auto subGrid = std::make_shared<Voxel::SubGrid>(Voxel::SubGrid{
+      .dimensions = dims,
+      .grid       = std::move(subVoxels),
+    });
+    std::ranges::copy(materials, subGrid->materials);
+    subGrids.push_back(std::move(subGrid));
+  }
+
+  return subGrids;
 }
 
+std::shared_ptr<Voxel::SubGrid> VoxToSubGrid(const Vox::Chunk& root)
+{
+  return VoxToSubGrids(root).front();
+}
 
 void Hierarchy::AddChild(entt::entity child)
 {

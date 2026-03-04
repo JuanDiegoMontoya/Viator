@@ -622,7 +622,7 @@ void Block::SpawnLootDropFromBlock(World& world, glm::ivec3 voxelPos, BlockId bl
 bool Block::IsVisible(const World& world, BlockId block)
 {
   const auto& bReg = world.globals->blockRegistry->GetRegistry();
-  return bReg.any_of<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>(entt::entity(block));
+  return bReg.any_of<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid, Component::RenderAsAnimatedSubGrid>(entt::entity(block));
 }
 
 bool Block::IsSolid(const World& world, BlockId block)
@@ -635,14 +635,23 @@ bool Block::IsSolid(const World& world, BlockId block)
   return false;
 }
 
-const Voxel::SubGrid* Block::GetSubGrid(const World& world, BlockId block)
+std::vector<const Voxel::SubGrid*> Block::GetSubGrids(const World& world, BlockId block)
 {
   const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::RenderAsSubGrid>(entt::entity(block)))
   {
-    return p->subGrid.get();
+    return {p->subGrid.get()};
   }
-  return nullptr;
+  if (const auto* p = bReg.try_get<const Component::RenderAsAnimatedSubGrid>(entt::entity(block)))
+  {
+    auto grids = std::vector<const Voxel::SubGrid*>();
+    for (const auto& grid : p->subGrids)
+    {
+      grids.push_back(grid.get());
+    }
+    return grids;
+  }
+  return {};
 }
 
 ItemId Block::GetItemId(const World& world, BlockId block)
@@ -948,6 +957,8 @@ Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(
     {
       bReg.emplace_or_replace<Component::RenderAsTexturedCube2>(entt::entity(block), MakeRotatedCubeFaceMaterials(*p, dir));
     }
+
+    ASSERT(!bReg.try_get<Component::RenderAsAnimatedSubGrid>(entt::entity(base)), "Not implemented");
 
     bReg.emplace<Component::BaseVariant>(entt::entity(block), base);
 

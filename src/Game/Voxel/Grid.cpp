@@ -134,14 +134,15 @@ namespace Voxel
 
         const auto& material = materials_[int(voxel)];
         // TODO: This is a hack that ignores the predicate. The predicate must account for subgrids.
-        if (material.subGrid)
+        // TODO: This only uses the first subgrid, which will make selection and hit detection wrong for animated blocks.
+        if (!material.subGrids.empty())
         {
           InitialDDAState init;
           init.deltaDist   = deltaDist;
           init.S           = bvec3(S);
           init.stepDir     = i8vec3(stepDir);
           const float oldT = t;
-          if (TraceRaySubGrid(uvw * vec3(material.subGrid->dimensions), rayDirection, *material.subGrid, init, bvec3(cases), t, tMax, hit, TraceTranslucencyMode::ALL))
+          if (TraceRaySubGrid(uvw * vec3(material.subGrids[0]->dimensions), rayDirection, *material.subGrids[0], init, bvec3(cases), t, tMax, hit, TraceTranslucencyMode::ALL))
           {
             hit.positionWorld = rayPosition + rayDirection * t;
             return true;
@@ -607,7 +608,7 @@ namespace Voxel
     {
       i++;
 
-      if (auto* grid = material.subGrid)
+      for (const auto* grid : material.subGrids)
       {
         // Raw voxel data.
         if (!(grid->dimensions.x == grid->dimensions.y && grid->dimensions.x == grid->dimensions.z))
@@ -640,10 +641,28 @@ namespace Voxel
 #ifndef GAME_HEADLESS
         buffer->MarkDirtyPages(mem2);
 #endif
-        material.subGrid->myIndexINTERNAL = uint32_t(gridInfoAlloc.offset / sizeof(subGridInfo));
+        grid->myIndexINTERNAL = uint32_t(gridInfoAlloc.offset / sizeof(subGridInfo));
 
         subGridAllocations.emplace_back(gridAlloc);
         subGridAllocations.emplace_back(gridInfoAlloc);
+      }
+
+      // Animated subgrids: allocate GpuAnimatedSubGrid and copy subgrid indices into it.
+      if (material.subGrids.size() > 1)
+      {
+        ASSERT(material.subGrids.size() <= 8);
+        auto alloc = buffer->Allocate(sizeof(GpuAnimatedSubGrid), 4);
+        auto* mem  = buffer->GetBase<GpuAnimatedSubGrid>() + alloc.offset / sizeof(GpuAnimatedSubGrid);
+        mem->numFrames = static_cast<uint32_t>(material.subGrids.size());
+        mem->frameDuration = material.frameDuration;
+        for (size_t j = 0; j < material.subGrids.size(); j++)
+        {
+          mem->subGridIndices[j] = material.subGrids[j]->myIndexINTERNAL;
+        }
+#ifndef GAME_HEADLESS
+        buffer->MarkDirtyPages(mem);
+#endif
+        material.animatedSubGridInfoIndex = static_cast<uint32_t>(alloc.offset / sizeof(GpuAnimatedSubGrid));
       }
     }
   }

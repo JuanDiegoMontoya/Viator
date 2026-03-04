@@ -84,8 +84,10 @@ void Physics::TwoLevelGridShape::CollideTwoLevelGrid2(const Shape* inShape1,
       continue;
     }
 
-    if (const auto* subGrid = s1Grid.materials_[int(voxel)].subGrid)
+    if (!s1Grid.materials_[int(voxel)].subGrids.empty())
     {
+      // TODO: Use current animation frame.
+      const auto* subGrid    = s1Grid.materials_[int(voxel)].subGrids.front();
       auto scaleResult       = boxShape.ScaleShape(ToJolt(1.0f / glm::vec3(subGrid->dimensions)));
       const auto subBoxShape = scaleResult.Get();
       //subBoxShape->SetEmbedded();
@@ -218,8 +220,10 @@ void Physics::TwoLevelGridShape::CastTwoLevelGrid(const JPH::ShapeCast& inShapeC
     {
       continue;
     }
-    if (const auto* subGrid = s2Grid.materials_[int(voxel)].subGrid)
+    if (!s2Grid.materials_[int(voxel)].subGrids.empty())
     {
+      // TODO: Use current animation frame.
+      const auto* subGrid    = s2Grid.materials_[int(voxel)].subGrids.front();
       auto scaleResult       = boxShape.ScaleShape(ToJolt(1.0f / glm::vec3(subGrid->dimensions)));
       const auto subBoxShape = scaleResult.Get();
       subBoxShape->SetEmbedded();
@@ -420,10 +424,11 @@ namespace
       return false;
     }
 
-    if (const auto* subGrid = material.subGrid)
+    if (!material.subGrids.empty())
     {
-      const auto subGridPos   = glm::ivec3((position - glm::vec3(voxelPos)) * glm::vec3(subGrid->dimensions));
-      const auto subVoxel = subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, subGridPos)];
+      const auto* subGrid   = material.subGrids.front();
+      const auto subGridPos = glm::ivec3((position - glm::vec3(voxelPos)) * glm::vec3(subGrid->dimensions));
+      const auto subVoxel   = subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, subGridPos)];
       return subVoxel != Voxel::SubVoxel::Air;
     }
 
@@ -466,9 +471,9 @@ JPH::Vec3 Physics::TwoLevelGridShape::GetSurfaceNormal([[maybe_unused]] const JP
   }
 
   const auto& material = GetTwoLevelGrid().materials_[int(solidVoxel)];
-  if (material.subGrid)
+  if (!material.subGrids.empty())
   {
-    const auto& subGrid = *material.subGrid;
+    const auto& subGrid = *material.subGrids.front();
     const auto inSubPos = ToJolt((ToGlm(inLocalSurfacePosition) - glm::vec3(solidVoxelPos)) * glm::vec3(subGrid.dimensions));
     const auto absSubDiffFromInt =
       JPH::Vec3(abs(inSubPos.GetX() - round(inSubPos.GetX())), abs(inSubPos.GetY() - round(inSubPos.GetY())), abs(inSubPos.GetZ() - round(inSubPos.GetZ())));

@@ -944,8 +944,10 @@ namespace Physics
       const auto voxel = grid.GetVoxelAt(gt.position);
       if (world.globals->blockRegistry->GetRegistry().all_of<Block::Component::Flows>(entt::entity(voxel)))
       {
-        if (const auto* subGrid = grid.materials_[(int)voxel].subGrid)
+        // TODO: Use current frame of animation.
+        if (!grid.materials_[(int)voxel].subGrids.empty())
         {
+          const auto* subGrid = grid.materials_[(int)voxel].subGrids.front();
           // Get subvoxel at projectile position
           const auto voxelPosSS = glm::clamp(glm::ivec3(glm::fract(gt.position) * glm::vec3(subGrid->dimensions)), glm::ivec3(0), glm::ivec3(subGrid->dimensions) - 1);
           const auto subVoxel = subGrid->grid[Voxel::Grid::FlattenGenericCoord(subGrid->dimensions, voxelPosSS)];

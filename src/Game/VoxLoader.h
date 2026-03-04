@@ -151,8 +151,8 @@ namespace Vox
   {
     const Chunk_RGBA* paletteChunk = nullptr;
     const Chunk_IMAP* iMapChunk    = nullptr;
-    const Chunk_SIZE* sizeChunk    = nullptr;
-    const Chunk_XYZI* voxelChunk   = nullptr;
+    std::vector<const Chunk_SIZE*> sizeChunks;
+    std::vector<const Chunk_XYZI*> voxelChunks;
     std::vector<const Chunk_MATL*> materials;
   };
 

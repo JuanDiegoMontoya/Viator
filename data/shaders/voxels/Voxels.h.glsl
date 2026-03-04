@@ -16,8 +16,9 @@ struct Voxels
   FVOG_UINT32 globalUniformsIndex;
 };
 
-#define VOXEL_IS_INVISIBLE (1 << 0)
-#define VOXEL_IS_SUBGRID   (1 << 1)
+#define VOXEL_IS_INVISIBLE        (1 << 0)
+#define VOXEL_IS_SUBGRID          (1 << 1)
+#define VOXEL_IS_ANIMATED_SUBGRID (1 << 2)
 
 #define FACE_HAS_BASE_COLOR_TEXTURE       (1 << 0)
 #define FACE_HAS_EMISSION_TEXTURE         (1 << 1)
@@ -37,7 +38,7 @@ struct GpuVoxelMaterial
 {
   FVOG_UINT32 voxelFlags;
   CubeFaceMaterial faces[6];
-  FVOG_UINT32 subGridIndex;
+  FVOG_UINT32 subGridOrAnimatedSubGridInfoIndex;
   float density; // Negative density = solid voxel.
 };
 
@@ -136,6 +137,19 @@ struct GpuSubGrid
   SubVoxelMaterial materials[255];
 };
 
+struct GpuAnimatedSubGrid
+{
+  uint numFrames;
+  float frameDuration;
+  uint subGridIndices[8];
+};
+
+FVOG_DECLARE_STORAGE_BUFFERS_2(restrict GpuAnimatedSubGridInfos)
+{
+  GpuAnimatedSubGrid animatedSubGrids[];
+}
+animatedSubGridBuffers[];
+
 FVOG_DECLARE_STORAGE_BUFFERS_2(restrict SubGridInfos)
 {
   GpuSubGrid subGrids[];
@@ -148,6 +162,7 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict SubGridData)
 }
 subGridDataBuffers[];
 
+#define ANIMATED_SUBGRID_INFOS animatedSubGridBuffers[g_voxels.bufferIdx].animatedSubGrids
 #define SUBGRIDS subGridBuffers[g_voxels.bufferIdx].subGrids
 #define SUBVOXELS subGridDataBuffers[g_voxels.bufferIdx].subVoxels
 
@@ -362,6 +377,19 @@ float vx_Density(voxel_t voxel)
   return material.density;
 }
 
+uint vx_GetSubGridIndex(GpuVoxelMaterial material, vec3 positionWS)
+{
+  if (bool(material.voxelFlags & VOXEL_IS_ANIMATED_SUBGRID))
+  {
+    const float offset = Simplex_Noise(positionWS / 10);
+    const GpuAnimatedSubGrid info = ANIMATED_SUBGRID_INFOS[material.subGridOrAnimatedSubGridInfoIndex];
+    const uint frameIndex = uint((offset + v_globalUniforms.time) / info.frameDuration) % info.numFrames;
+    return info.subGridIndices[frameIndex];
+  }
+
+  return material.subGridOrAnimatedSubGridInfoIndex;
+}
+
 // Ray position in [0, subGrid.dimensions)
 bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, vx_InitialDDAState init, bvec3 cases, inout float t, float tMax, inout HitSurfaceParameters hit, const uint translucencyMode)
 {
@@ -474,7 +502,8 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
           if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
             const float oldT = t;
-            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, cases, t, tMax, hit, translucencyMode))
+            const uint subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
+            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[subGridIndex].dimensions, rayDirection, subGridIndex, init, cases, t, tMax, hit, translucencyMode))
             {
               return true;
             }
@@ -825,7 +854,8 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
             init.S = bvec3(S);
             init.stepDir = i8vec3(stepDir);
             const float oldT = t;
-            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, bvec3(cases), t, tMax, hit, translucencyMode))
+            const uint subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
+            if (vx_TraceRaySubGrid(uvw * SUBGRIDS[subGridIndex].dimensions, rayDirection, subGridIndex, init, bvec3(cases), t, tMax, hit, translucencyMode))
             {
               hit.positionWorld = rayPosition + rayDirection * t;
               return true;
@@ -1083,12 +1113,13 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
             break;
           }
 
+          subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
 #if 0
           vx_InitialDDAState init;
           init.deltaDist = deltaDist;
           init.S         = vec3(S);
           init.stepDir   = stepDir;
-          if (vx_TraceRaySubGrid(uvw * SUBGRIDS[material.subGridIndex].dimensions, rayDirection, material.subGridIndex, init, vec3(frames[rayState].cases), hit))
+          if (vx_TraceRaySubGrid(uvw * SUBGRIDS[subGridIndex].dimensions, rayDirection, subGridIndex, init, vec3(frames[rayState].cases), hit))
           {
             hit.positionWorld += ivec3(frames[rayState].mapPos);
             hasHit = true;
@@ -1096,8 +1127,6 @@ bool vx_TraceRayUnified(vec3 rayPositionW, vec3 rayDirection, float tMax, out Hi
           }
 #else
           rayState++;
-          
-          subGridIndex = material.subGridIndex;
           const vec3 subGridDims = SUBGRIDS[subGridIndex].dimensions;
           maxRayPos = mrp_t(subGridDims);
           frames[rayState].rayPosition = rp_t(clamp(uvw * subGridDims, vec3(EPSILON), vec3(subGridDims - EPSILON)));
@@ -1195,7 +1224,8 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
 
   if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
   {
-    const vec3 albedo_srgb_nonlinear = SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
+    const uint subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
+    const vec3 albedo_srgb_nonlinear = SUBGRIDS[subGridIndex].materials[hit.subVoxelMaterialIndex].colorSrgb.rgb;
     return color_sRGB_EOTF(albedo_srgb_nonlinear);
   }
 
@@ -1219,7 +1249,8 @@ vec3 GetHitEmission(HitSurfaceParameters hit)
   GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[hit.voxel];
   if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
   {
-    return SUBGRIDS[material.subGridIndex].materials[hit.subVoxelMaterialIndex].emissionSrgb.rgb;
+    const uint subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
+    return SUBGRIDS[subGridIndex].materials[hit.subVoxelMaterialIndex].emissionSrgb.rgb;
   }
 
   CubeFaceMaterial face = material.faces[vx_NormalToFaceIndex(hit.flatNormalWorld)];

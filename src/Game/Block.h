@@ -70,6 +70,13 @@ namespace Block
       std::shared_ptr<Voxel::SubGrid> subGrid;
     };
 
+    R_STRUCT(RenderAsAnimatedSubGrid)
+      R_MEMBER(frameDuration, float, 1.0f / 12);
+      R_MEMBER(subGrids, std::vector<std::shared_ptr<Voxel::SubGrid>>, {});
+    R_END();
+
+    R_DECLARE_COMPONENT(RenderAsAnimatedSubGrid, BLOCK_COMPONENT);
+
     // One material for every face.
     struct RenderAsTexturedCube
     {
@@ -241,7 +248,7 @@ namespace Block
 
   [[nodiscard]] bool IsVisible(const World& world, BlockId block);
   [[nodiscard]] bool IsSolid(const World& world, BlockId block);
-  [[nodiscard]] const Voxel::SubGrid* GetSubGrid(const World& world, BlockId block);
+  [[nodiscard]] std::vector<const Voxel::SubGrid*> GetSubGrids(const World& world, BlockId block);
   [[nodiscard]] ItemId GetItemId(const World& world, BlockId block);
   [[nodiscard]] float GetInitialHealth(const World& world, BlockId block);
   [[nodiscard]] BlockDamageFlags GetDamageFlags(const World& world, BlockId block);
@@ -255,7 +262,7 @@ namespace Block
     std::string tag;
     std::string name;
     std::optional<Component::Breakable> breakable;
-    std::optional<std::variant<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid>> render;
+    std::optional<std::variant<Component::RenderAsTexturedCube, Component::RenderAsTexturedCube2, Component::RenderAsSubGrid, Component::RenderAsAnimatedSubGrid>> render;
     Component::PhysicalProperties physicalProperties = {};
     std::optional<Component::Valuable> valuable;
     std::optional<Component::ExplodeWhenBroken> explode;

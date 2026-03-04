@@ -236,7 +236,7 @@ namespace Vox
   }
 
   // Invokes predicate on all nodes of the hierarchy. Exits early if predicate returns true.
-  bool ForEachNode(const Chunk& root, const auto& predicate)
+  static bool ForEachNode(const Chunk& root, const auto& predicate)
   {
     if (predicate(root))
     {
@@ -271,11 +271,11 @@ namespace Vox
         }
         else if (std::memcmp(chunk.id, "SIZE", 4) == 0)
         {
-          processed.sizeChunk = reinterpret_cast<const Chunk_SIZE*>(&chunk);
+          processed.sizeChunks.push_back(reinterpret_cast<const Chunk_SIZE*>(&chunk));
         }
         else if (std::memcmp(chunk.id, "XYZI", 4) == 0)
         {
-          processed.voxelChunk = reinterpret_cast<const Chunk_XYZI*>(&chunk);
+          processed.voxelChunks.push_back(reinterpret_cast<const Chunk_XYZI*>(&chunk));
         }
         else if (std::memcmp(chunk.id, "MATL", 4) == 0)
         {

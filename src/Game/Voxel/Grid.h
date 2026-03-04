@@ -201,12 +201,21 @@ namespace Voxel
       SubVoxelMaterial materials[255];
     };
 
+    struct GpuAnimatedSubGrid
+    {
+      uint32_t numFrames;
+      float frameDuration;
+      uint32_t subGridIndices[8];
+    };
+
   public:
     struct Material
     {
       bool isVisible;
       bool isSolid;
-      const SubGrid* subGrid; // Optional.
+      std::vector<const SubGrid*> subGrids; // Optional.
+      float frameDuration = 1.0f / 12;
+      std::optional<uint32_t> animatedSubGridInfoIndex; // Internal.
     };
 
     void SetMaterialArray(std::vector<Material> materials);

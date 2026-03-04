@@ -115,6 +115,8 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(restrict PerFrameUniformsBuffer)
   DebugDrawData debugDraw;
   FVOG_SHARED Texture2D blueNoise;
   CascadedShadowMapInfoPtr sunShadowMap;
+  FVOG_FLOAT time; // Seconds
+  FVOG_FLOAT dt;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

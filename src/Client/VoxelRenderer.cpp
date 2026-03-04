@@ -674,8 +674,9 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
       gpuMat.voxelFlags |= VOXEL_IS_INVISIBLE;
     }
 
-    if (const auto* subGrid = Block::GetSubGrid(world, BlockId(block)))
+    if (auto subGrids = Block::GetSubGrids(world, BlockId(block)); subGrids.size() == 1)
     {
+      const auto* subGrid = subGrids.front();
       // Check if all subvoxels are the same
       bool allSame   = true;
       auto lastSubVoxel = subGrid->grid[0];
@@ -709,8 +710,15 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
       else
       {
         gpuMat.voxelFlags |= VOXEL_IS_SUBGRID;
-        gpuMat.subGridIndex = subGrid->myIndexINTERNAL;
+        gpuMat.subGridOrAnimatedSubGridInfoIndex = subGrid->myIndexINTERNAL;
       }
+    }
+    else if (subGrids.size() > 1)
+    {
+      ASSERT(subGrids.size() <= 8);
+      gpuMat.voxelFlags |= VOXEL_IS_SUBGRID;
+      gpuMat.voxelFlags |= VOXEL_IS_ANIMATED_SUBGRID;
+      gpuMat.subGridOrAnimatedSubGridInfoIndex = world.globals->grid->Materials()[(int)block].animatedSubGridInfoIndex.value();
     }
 
     voxelMaterials.emplace_back(gpuMat);
@@ -1098,6 +1106,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
       .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
       .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
+      .time                   = static_cast<float>(time += dt),
+      .dt                     = static_cast<float>(dt),
     });
 
   clip_from_world_old = clip_from_world;

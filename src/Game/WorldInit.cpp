@@ -833,19 +833,29 @@ void World::InitializeGameDefinitions()
   {
     auto vox       = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string(params.tag) + ".vox"));
     using LootType = decltype(Block::Component::Breakable::dropWhenBroken);
-    const auto id  = Block::CreateStandardBlock(*this,
-       {
-         .tag  = params.tag,
-         .name = params.name,
-         .breakable =
+    auto subGrids  = VoxToSubGrids(*vox);
+    auto render    = decltype(Block::CreateBlockParams::render){};
+    if (subGrids.size() == 1)
+    {
+      render = Block::Component::RenderAsSubGrid{.subGrid = subGrids.front()};
+    }
+    else
+    {
+      render = Block::Component::RenderAsAnimatedSubGrid{.subGrids = subGrids};
+    }
+    const auto id = Block::CreateStandardBlock(*this,
+      {
+        .tag  = params.tag,
+        .name = params.name,
+        .breakable =
           Block::Component::Breakable{
-             .initialHealth     = 10,
-             .fireDestroyChance = params.flammable ? 0.01f : 0,
-             .dropWhenBroken = params.dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
+            .initialHealth     = 10,
+            .fireDestroyChance = params.flammable ? 0.01f : 0,
+            .dropWhenBroken    = params.dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
           },
-         .render             = Block::Component::RenderAsSubGrid{.subGrid = VoxToSubGrid(*vox)},
-         .physicalProperties = {.isSolid = params.isSolid, .flammability = params.flammable ? 0.1f : 0},
-         .support            = params.support,
+        .render             = render,
+        .physicalProperties = {.isSolid = params.isSolid, .flammability = params.flammable ? 0.1f : 0},
+        .support            = params.support,
       });
     return id;
   };
@@ -1328,10 +1338,12 @@ void World::CreateRenderingMaterials()
   const auto& blockMap = blocks.GetIdToTagMap();
   for (const auto& [id, tag] : blockMap)
   {
+    const auto* ap = blocks.GetRegistry().try_get<const Block::Component::RenderAsAnimatedSubGrid>(entt::entity(id));
     voxelMats.emplace_back(Voxel::Grid::Material{
       .isVisible = Block::IsVisible(*this, id),
       .isSolid   = Block::IsSolid(*this, id),
-      .subGrid   = Block::GetSubGrid(*this, id),
+      .subGrids  = Block::GetSubGrids(*this, id),
+      .frameDuration = ap ? ap->frameDuration : 0,
     });
   }
   globals->grid->SetMaterialArray(std::move(voxelMats));
