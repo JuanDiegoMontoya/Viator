@@ -377,11 +377,11 @@ float vx_Density(voxel_t voxel)
   return material.density;
 }
 
-uint vx_GetSubGridIndex(GpuVoxelMaterial material, vec3 positionWS)
+uint vx_GetSubGridIndex(GpuVoxelMaterial material, ivec3 voxelPosition)
 {
   if (bool(material.voxelFlags & VOXEL_IS_ANIMATED_SUBGRID))
   {
-    const float offset = Simplex_Noise(positionWS / 10);
+    const float offset = Simplex_Noise(vec3(voxelPosition) / 10);
     const GpuAnimatedSubGrid info = ANIMATED_SUBGRID_INFOS[material.subGridOrAnimatedSubGridInfoIndex];
     const uint frameIndex = uint((offset + v_globalUniforms.time) / info.frameDuration) % info.numFrames;
     return info.subGridIndices[frameIndex];
@@ -502,7 +502,7 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
           if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
           {
             const float oldT = t;
-            const uint subGridIndex = vx_GetSubGridIndex(material, hit.voxelPosition);
+            const uint subGridIndex = vx_GetSubGridIndex(material, ivec3(v_globalUniforms.cameraPos.xyz + (rayDirection * t - normal * 0.001)));
             if (vx_TraceRaySubGrid(uvw * SUBGRIDS[subGridIndex].dimensions, rayDirection, subGridIndex, init, cases, t, tMax, hit, translucencyMode))
             {
               return true;

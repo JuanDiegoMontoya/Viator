@@ -853,7 +853,7 @@ void World::InitializeGameDefinitions()
             .fireDestroyChance = params.flammable ? 0.01f : 0,
             .dropWhenBroken    = params.dropsSelf ? LootType(Block::DropSelf{}) : LootType(std::monostate{}),
           },
-        .render             = render,
+        .render             = std::move(render),
         .physicalProperties = {.isSolid = params.isSolid, .flammability = params.flammable ? 0.1f : 0},
         .support            = params.support,
       });
@@ -1095,12 +1095,12 @@ void World::InitializeGameDefinitions()
       }));
 
   auto prevFireBlockId = entt::entity(entt::null);
-  for (int i = 7; i >= 1; i--)
+  for (int i = 8; i >= 1; i--)
   {
     const auto fireBlockId = RegisterFoliageBlock({.tag = ("fire" + std::to_string(i)).c_str(), .name = ("Fire" + std::to_string(i)).c_str(), .dropsSelf = false, .isSolid = false});
     blocks.GetRegistry().emplace<Block::Component::Fire>(entt::entity(fireBlockId),
       Block::Component::Fire{
-        .blockToSpawnOnPropagate         = i == 7 ? fireBlockId : BlockId(prevFireBlockId),
+        .blockToSpawnOnPropagate         = i == 8 ? fireBlockId : BlockId(prevFireBlockId),
         .chanceToPropagateOnRandomUpdate = 0.015f / i,
         .chanceToDespawnOnRandomUpdate   = 0.002f * (i * 0.25f),
       });
