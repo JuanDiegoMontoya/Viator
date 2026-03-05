@@ -1,5 +1,6 @@
 #include "StringUtilities.h"
 
+#include <algorithm>
 #include <ranges>
 
 std::string Core::String::ToLower(std::string_view str)

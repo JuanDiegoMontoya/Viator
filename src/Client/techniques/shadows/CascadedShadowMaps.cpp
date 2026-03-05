@@ -4,6 +4,9 @@
 #include "Game/Assets.h"
 #include "shaders/Config.shared.h"
 
+#include "glm/gtc/epsilon.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+
 Techniques::CascadedShadowMap::CascadedShadowMap()
 {
   shadowPipeline_ = GetPipelineManager().EnqueueCompileGraphicsPipeline({

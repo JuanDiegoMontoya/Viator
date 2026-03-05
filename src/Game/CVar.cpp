@@ -7,6 +7,7 @@
 #include "Core/Assert2.h"
 
 #include "spdlog/spdlog.h"
+#include "glm/common.hpp"
 
 #include <array>
 #include <shared_mutex>
