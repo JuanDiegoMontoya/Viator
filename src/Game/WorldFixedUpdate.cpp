@@ -552,6 +552,20 @@ void World::FixedUpdate(float dt)
       }
     }
 
+    {
+      ZoneScopedN("AlwaysOrientTowardsVelocity");
+      for (auto&& [entity, velocity, ltransform] : registry_.view<const LinearVelocity, LocalTransform, const AlwaysOrientTowardsVelocity>().each())
+      {
+        const auto len = glm::length(velocity.v);
+        if (len > 1e-1f)
+        {
+          const auto dir      = velocity.v / len;
+          const auto up       = glm::epsilonEqual(glm::dot(dir, glm::vec3(0, 1, 0)), 1.0f, 1e-2f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+          ltransform.rotation = glm::quatLookAt(dir, up);
+        }
+      }
+    }
+
     if (IsClient())
     {
       // Recursively mark entities in hierarchies as owned.

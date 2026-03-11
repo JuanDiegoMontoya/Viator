@@ -352,7 +352,7 @@ void World::InitializeGameDefinitions()
     "Frogun",
     80,
     {
-      .model       = "frog",
+      .model       = "bow",
       .scale       = 0.125f,
       .damage      = 10,
       .knockback   = 2,
@@ -396,14 +396,71 @@ void World::InitializeGameDefinitions()
   const auto stonePickaxeId = Item::CreateTool(items, "tool_stone_pickaxe", "Stone Pickaxe", "pickaxe", {.2f, .2f, .2f}, 0.3f, {20, 2, BlockDamageFlagBit::PICKAXE});
   const auto stoneAxeId = Item::CreateTool(items, "tool_stone_axe", "Stone Axe", "axe", {.2f, .2f, .2f}, 0.3f, {20, 2, BlockDamageFlagBit::AXE});
   const auto stoneSpearId = Item::CreateSpear(items, "weapon_stone_spear", "Stone Spear", "spear", {.2f, .2f, .2f}, 0.55f, 15, 5);
+  [[maybe_unused]] const auto stoneSwordId = Item::CreateSword(items, "weapon_stone_sword", "Stone Sword", "sword", {.2f, .2f, .2f}, 0.45f, 15, 5);
+  [[maybe_unused]] const auto woodBowId = Item::CreateGun(items,
+    "weapon_wood_bow",
+    "Primitive Bow",
+    50,
+    {
+      .model       = "bow",
+      .tint        = {0.8f, 0.4f, 0.2f},
+      .scale       = 0.125f,
+      .damage      = 12,
+      .knockback   = 2,
+      .bullets     = 1,
+      .velocity    = 16,
+      .accuracyMoa = 150,
+      .vrecoil     = 1,
+      .vrecoilDev  = 0.25f,
+      .hrecoil     = 1,
+      .hrecoilDev  = 0.25f,
+    });
 
   const auto copperPickaxeId = Item::CreateTool(items, "tool_copper_pickaxe", "Copper Pickaxe", "pickaxe", {.78f, .51f, .27f}, 0.3f, {30, 3, BlockDamageFlagBit::PICKAXE});
   const auto copperAxeId = Item::CreateTool(items, "tool_copper_axe", "Copper Axe", "axe", {.78f, .51f, .27f}, 0.3f, {30, 3, BlockDamageFlagBit::AXE});
   const auto copperSpearId = Item::CreateSpear(items, "weapon_copper_spear", "Copper Spear", "spear", {.78f, .51f, .27f}, 0.55f, 20, 5);
+  [[maybe_unused]] const auto copperSwordId = Item::CreateSword(items, "weapon_copper_sword", "Copper Sword", "sword", {.78f, .51f, .27f}, 0.45f, 20, 5);
+  [[maybe_unused]] const auto copperBowId = Item::CreateGun(items,
+    "weapon_copper_bow",
+    "Copper Bow",
+    50,
+    {
+      .model       = "bow",
+      .tint        = {.78f, .51f, .27f},
+      .scale       = 0.125f,
+      .damage      = 16,
+      .knockback   = 2,
+      .bullets     = 1,
+      .velocity    = 18,
+      .accuracyMoa = 125,
+      .vrecoil     = 1,
+      .vrecoilDev  = 0.25f,
+      .hrecoil     = 1,
+      .hrecoilDev  = 0.25f,
+    });
 
   const auto leadPickaxeId = Item::CreateTool(items, "tool_lead_pickaxe", "Lead Pickaxe", "pickaxe", {.21f, .34f, .40f}, 0.3f, {35, 4, BlockDamageFlagBit::PICKAXE});
   const auto leadAxeId = Item::CreateTool(items, "tool_lead_axe", "Lead Axe", "axe", {.21f, .34f, .40f}, 0.3f, {35, 4, BlockDamageFlagBit::AXE});
   const auto leadSpearId = Item::CreateSpear(items, "weapon_lead_spear", "Lead Spear", "spear", {.21f, .34f, .40f}, 0.55f, 25, 5);
+  [[maybe_unused]] const auto leadSwordId = Item::CreateSword(items, "weapon_lead_sword", "Lead Sword", "sword", {.21f, .34f, .40f}, 0.55f, 25, 5);
+  [[maybe_unused]] const auto leadBowId = Item::CreateGun(items,
+    "weapon_lead_bow",
+    "Lead Bow",
+    40,
+    {
+      .model       = "bow",
+      .tint        = {.21f, .34f, .40f},
+      .scale       = 0.125f,
+      .damage      = 30,
+      .knockback   = 5,
+      .bullets     = 1,
+      .velocity    = 12,
+      .accuracyMoa = 125,
+      .vrecoil     = 1.5,
+      .vrecoilDev  = 0.25f,
+      .hrecoil     = 1.5,
+      .hrecoilDev  = 0.25f,
+    });
 
   const auto coinId = Item::CreateSimpleSpriteItem(items, "item_electrum", "Electrum", "coin", 999);
   const auto charcoalId = Item::CreateSimpleSpriteItem(items, "item_charcoal", "Charcoal", "charcoal", 999);

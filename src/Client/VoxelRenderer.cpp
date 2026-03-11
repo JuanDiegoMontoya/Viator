@@ -247,6 +247,9 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   g_meshes.emplace("mushroom", LoadObjFile(GetAssetDirectory() / "models/mushroom.obj"));
   g_meshes.emplace("player", LoadObjFile(GetAssetDirectory() / "models/player.obj"));
   //g_meshes.emplace("ant", LoadObjFile(GetAssetDirectory() / "models/ant.obj"));
+  g_meshes.emplace("sword", LoadObjFile(GetAssetDirectory() / "models/sword.obj"));
+  g_meshes.emplace("bow", LoadObjFile(GetAssetDirectory() / "models/bow.obj"));
+  g_meshes.emplace("arrow", LoadObjFile(GetAssetDirectory() / "models/arrow.obj"));
 
   head_->renderCallback_ = [this](float dt, World& world, VkCommandBuffer cmd, uint32_t swapchainImageIndex) { OnRender(dt, world, cmd, swapchainImageIndex); };
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };

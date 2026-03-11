@@ -238,7 +238,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 
       for (int i = 0; i < p->bullets; i++)
       {
-        const float bulletScale = 0.05f;
+        const float bulletScale = 1.0005f;
         const auto dir =
           Math::RandVecInCone({world.Rng().RandFloat(), world.Rng().RandFloat()}, GetForward(transform.rotation), glm::radians(p->accuracyMoa / 60.0f));
         auto up = glm::vec3(0, 1, 0);
@@ -250,9 +250,10 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         auto b   = world.CreateRenderableEntity(transform.position + glm::vec3(0, 0.1f, 0) + GetForward(transform.rotation) * 1.0f, rot, bulletScale);
 
         reg.emplace<Name>(b).name                 = "Bullet";
-        reg.emplace<Mesh>(b).name                 = "frog";
+        reg.emplace<Mesh>(b).name                 = "arrow";
         reg.emplace<Lifetime>(b).remainingSeconds = 8;
         reg.emplace<DespawnOnCollision>(b, p->maxBounces + 1);
+        reg.emplace<AlwaysOrientTowardsVelocity>(b);
         if (p->spawnBlockOnHit)
         {
           reg.emplace<SpawnBlockOnContact>(b, *p->spawnBlockOnHit);
@@ -787,6 +788,38 @@ ItemId Item::CreateSpear(Registry& registry, std::string tag, std::string name, 
   auto& path = registry.GetRegistry().emplace<Component::AnimatePathOnUse>(id);
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, -1}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_OUT_BACK});
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, 0}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_SINE});
+  return id;
+}
+
+ItemId Item::CreateSword(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, float damage, float knockback)
+{
+  const auto id = registry.Create(std::move(tag));
+  registry.GetRegistry().emplace<Name>(id, std::move(name));
+  registry.GetRegistry().emplace<Component::Usable>(id, timeBetweenUses);
+  registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = std::move(model), .tint = tint, .position = {0.3f, -0.35f, -0.7f}};
+  registry.GetRegistry().emplace<Component::ColliderWhenDropped>(id);
+  registry.GetRegistry().emplace<Component::SpawnTempHurtboxOnUse>(id) = {
+    .shape = Physics::Capsule{0.125f, 0.55f},
+    .position  = {0, 0.4f, 0},
+    .damage    = damage,
+    .knockback = knockback,
+    .duration  = timeBetweenUses * 0.6f,
+  };
+  auto& path = registry.GetRegistry().emplace<Component::AnimatePathOnUse>(id);
+
+  path.frames.emplace_back(LinearPath::KeyFrame{
+    .position = {-0.30f, -0.15f, -0.15f},
+    .rotation = glm::angleAxis(glm::radians(-100.0f), glm::vec3(1, 0, 0)) * 
+                glm::angleAxis(glm::radians(10.0f), glm::vec3(0, 1, 0)) *
+                glm::angleAxis(glm::radians(20.0f), glm::vec3(0, 0, 1)),
+    .offsetSeconds = timeBetweenUses * 0.3f,
+    .easing        = Math::Easing::EASE_OUT_CUBIC,
+  });
+  path.frames.emplace_back(LinearPath::KeyFrame{
+    .position      = {0, 0, 0},
+    .offsetSeconds = timeBetweenUses * 0.5f,
+    .easing        = Math::Easing::EASE_IN_CUBIC,
+  });
   return id;
 }
 

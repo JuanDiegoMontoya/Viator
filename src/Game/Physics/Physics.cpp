@@ -1016,12 +1016,15 @@ namespace Physics
         lt.position = hitPosition + hitNormal * (projectile.sticky ? projectile.stickyDist : 1e-3f);
         
         constexpr auto restitution = 0.25f;
-        // Reflect projectile with more restitution (bounciness) as the impact angle gets shallower.
-        linearVelocity.v = glm::reflect(newVelocity, hitNormal) * (1 - (1 - restitution) * abs(glm::dot(glm::normalize(newVelocity), hitNormal)));
 
         if (projectile.sticky)
         {
           projectile.isStuck = true;
+        }
+        else
+        {
+          // Reflect projectile with more restitution (bounciness) as the impact angle gets shallower.
+          linearVelocity.v = glm::reflect(newVelocity, hitNormal) * (1 - (1 - restitution) * abs(glm::dot(glm::normalize(newVelocity), hitNormal)));
         }
       }
 

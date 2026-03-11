@@ -641,6 +641,8 @@ struct SimpleScriptable
   std::string code;
 };
 
+struct AlwaysOrientTowardsVelocity {};
+
 struct SunInfo
 {
   float timeOfDay = 0.667f; // 0 = midnight, 1 = midday, 2 = midnight

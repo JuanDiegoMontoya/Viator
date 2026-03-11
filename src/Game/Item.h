@@ -253,6 +253,7 @@ namespace Item
   ItemId CreateGun(Registry& registry, std::string tag, std::string name, float rateOfFireRPM, const Component::Gun& gun);
   ItemId CreateTool(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, const Component::Tool& tool);
   ItemId CreateSpear(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, float damage, float knockback);
+  ItemId CreateSword(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, float damage, float knockback);
   ItemId CreateSimpleSpriteItem(Registry& registry, std::string tag, std::string name, std::string sprite, int maxStackSize = 1, glm::vec3 tint = {1, 1, 1});
   ItemId CreateEffector(Registry& registry, std::string tag, std::string name, EffectType type, float additive = 1, float multiplicative = 1);
   ItemId CreateEffectGranter(Registry& registry, std::string tag, std::string name, ItemId effector, float duration, std::string sprite, glm::vec3 tint = {1, 1, 1});

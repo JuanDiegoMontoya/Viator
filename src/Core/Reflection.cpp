@@ -1658,6 +1658,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(code);
   END_REFLECT
 
+  REFLECT_COMPONENT(AlwaysOrientTowardsVelocity, REPLICATED | TRIVIAL);
+
   for (auto& cb : s_reflectionRegistrationFuncs)
   {
     cb();
