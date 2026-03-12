@@ -309,23 +309,26 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
           prevGlobalTransformMut.rotation = transform.rotation;
           prevGlobalTransformMut.scale = transform.scale;
         }
-        else if (previousGlobalTransform->position != transform.position || previousGlobalTransform->rotation != transform.rotation ||
-                 previousGlobalTransform->scale != transform.scale || rtransform.transform.position != transform.position)
+        else
         {
           auto& renderTransformMut = world.GetRegistry().get<RenderTransform>(entity);
           renderTransformMut.prevTransform = renderTransformMut.transform;
           auto& newRenderTransformMut = renderTransformMut.transform;
           
-          if (previousGlobalTransform->position == transform.position)
+          if (previousGlobalTransform->position != transform.position || previousGlobalTransform->rotation != transform.rotation ||
+              previousGlobalTransform->scale != transform.scale || rtransform.transform.position != transform.position)
           {
-            newRenderTransformMut.position = transform.position;
+            if (previousGlobalTransform->position == transform.position)
+            {
+              newRenderTransformMut.position = transform.position;
+            }
+            else
+            {
+              newRenderTransformMut.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
+            }
+            newRenderTransformMut.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
+            newRenderTransformMut.scale = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
           }
-          else
-          {
-            newRenderTransformMut.position = glm::mix(previousGlobalTransform->position, transform.position, alpha);
-          }
-          newRenderTransformMut.rotation = glm::slerp(previousGlobalTransform->rotation, transform.rotation, alpha);
-          newRenderTransformMut.scale = glm::mix(previousGlobalTransform->scale, transform.scale, alpha);
         }
       }
       else

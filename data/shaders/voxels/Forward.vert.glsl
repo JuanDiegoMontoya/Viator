@@ -3,7 +3,8 @@
 layout(location = 0) out vec3 o_color;
 layout(location = 1) out vec3 o_normal;
 layout(location = 2) out vec4 o_posCS;
-layout(location = 3) out vec4 o_posCS_old;
+layout(location = 3) out vec4 o_posCS_unjittered;
+layout(location = 4) out vec4 o_posCS_old;
 
 void main()
 {
@@ -18,6 +19,7 @@ void main()
   const vec4 worldPosOld        = worldFromObjectOld * vec4(vertex.position, 1.0);
 
   o_posCS     = pc.frame.clipFromWorld * worldPos;
-  o_posCS_old = pc.frame.clipFromWorld * worldPosOld;
+  o_posCS_unjittered = pc.frame.viewProjUnjittered * worldPos;
+  o_posCS_old = pc.frame.oldViewProjUnjittered * worldPosOld;
   gl_Position = o_posCS;
 }

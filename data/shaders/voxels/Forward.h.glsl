@@ -16,9 +16,13 @@ FVOG_DECLARE_BUFFER_REFERENCE(VertexBuffer)
   Vertex vertices[];
 };
 
+// TODO: Just replace this with GlobalUniforms, since the definitions need to match.
 FVOG_DECLARE_BUFFER_REFERENCE(FrameUniformsBuffer)
 {
   mat4 clipFromWorld;
+  mat4 clipFromWorldOld;
+  mat4 oldViewProjUnjittered;
+  mat4 viewProjUnjittered;
 };
 
 struct ObjectUniforms
