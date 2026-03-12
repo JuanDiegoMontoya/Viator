@@ -11,6 +11,7 @@
 #include "Game/Physics/PhysicsUtils.h"
 #include "Jolt/Physics/Collision/CastResult.h"
 #include "Jolt/Physics/Collision/RayCast.h"
+#include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
 
 void Systems::UpdateInputForBirds(World& world, float dt)
@@ -118,6 +119,13 @@ void Systems::UpdateInputForPathfindingCharacters(World& world, float dt)
   if (world.IsServer())
   {
     ZoneScopedN("Pathfinding");
+
+    if (world.globals->game->disableNpcPathfinding)
+    {
+      SPDLOG_TRACE("[Pathfinding] Skipping pathfinding for NPCs.");
+      return;
+    }
+
     auto& registry_ = world.GetRegistry();
     // Won't work if entity is a child.
     for (auto&& [entity, input, aiTransform] : registry_.view<InputState, LocalTransform>(entt::exclude<Player>).each())
@@ -174,6 +182,15 @@ void Systems::UpdateInputForPathfindingCharacters(World& world, float dt)
       }
 
       auto* aiTarget = registry_.try_get<AiTarget>(entity);
+
+      if (world.globals->game->npcsIgnorePlayers)
+      {
+        pe = entt::null;
+        if (aiTarget && registry_.valid(aiTarget->currentTarget) && registry_.any_of<Player>(aiTarget->currentTarget))
+        {
+          aiTarget = nullptr;
+        }
+      }
 
       const bool hasValidTarget = (aiTarget && registry_.valid(aiTarget->currentTarget)) || pe != entt::null;
 

@@ -1597,6 +1597,13 @@ void Core::Reflection::Initialize(Scripting& scripting)
   BEGIN_REFLECT_TYPE(SerializableSimplePrefab)
     MEMBER(voxelToName);
     MEMBER(voxels);
+    END_REFLECT
+
+  BEGIN_REFLECT_NON_OBJECT_TYPE(SunInfo)
+    MEMBER(timeOfDay);
+    MEMBER(azimuth);
+    MEMBER(dayLength);
+    MEMBER(pauseDayNightCycle);
   END_REFLECT
 
   BEGIN_REFLECT_NON_OBJECT_TYPE(GameGlobals)
@@ -1609,6 +1616,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(hashGrid) TRAITS(TRANSIENT);
     MEMBER(npcSpawnDirector);
     MEMBER(updateNpcSpawnDirector);
+    MEMBER(npcsIgnorePlayers)
+    MEMBER(disableNpcPathfinding)
     MEMBER(sunInfo);
     MEMBER(pathCache) TRAITS(TRANSIENT);
     MEMBER(lootRegistry) TRAITS(TRANSIENT);

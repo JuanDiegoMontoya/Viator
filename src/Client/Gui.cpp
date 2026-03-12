@@ -2639,6 +2639,49 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
       }
     }
     ImGui::End();
+
+    if (ImGui::Begin("Entity Prefabs", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    {
+      const auto localPlayer = world.TryGetLocalPlayer();
+      const auto* playerTransform = world.GetRegistry().try_get<const GlobalTransform>(localPlayer);
+      ImGui::BeginDisabled(localPlayer == entt::null);
+      const auto& prefabs = world.globals->entityPrefabRegistry;
+      for (const auto& prefab : prefabs->GetAllPrefabs())
+      {
+        ImGui::PushID(prefab->GetCreateInfo().name.c_str());
+        if (ImGui::Button(" x1 "))
+        {
+          prefab->Spawn(world, playerTransform->position + 5.0f * GetForward(playerTransform->rotation));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(" x5 "))
+        {
+          for (int i = 0; i < 5; i++)
+          {
+            auto& rng         = world.globals->game->rng;
+            const auto jitter = 1.5f * glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1));
+            prefab->Spawn(world, jitter + playerTransform->position + 5.0f * GetForward(playerTransform->rotation));
+          }
+        }
+        ImGui::SameLine();
+        ImGui::Text("%s", prefab->GetCreateInfo().name.c_str());
+        ImGui::PopID();
+      }
+      ImGui::EndDisabled();
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("NPCs", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    {
+      ImGui::SliderFloat("Spawn period", &world.globals->game->npcSpawnDirector.timeBetweenSpawns, 0.01f, 100.0f, "%.2fs", ImGuiSliderFlags_Logarithmic);
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+      {
+        ImGui::SetTooltip("How often the NPC director will attempt to spawn mobs.");
+      }
+      ImGui::Checkbox("Disable pathfinding", &world.globals->game->disableNpcPathfinding);
+      ImGui::Checkbox("Ignore players", &world.globals->game->npcsIgnorePlayers);
+    }
+    ImGui::End();
   }
 }
 

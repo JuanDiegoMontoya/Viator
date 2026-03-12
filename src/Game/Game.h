@@ -714,6 +714,8 @@ public:
   unique_ptr<HashGrid> hashGrid;
   NpcSpawnDirector npcSpawnDirector;
   bool updateNpcSpawnDirector = true;
+  bool npcsIgnorePlayers      = false;
+  bool disableNpcPathfinding  = false;
   SunInfo sunInfo;
   unique_ptr<Pathfinding::PathCache> pathCache;
   LootRegistry lootRegistry;
