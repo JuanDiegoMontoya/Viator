@@ -81,6 +81,8 @@ if (NOT GAME_HEADLESS)
         src/Client/Gui/Console.cpp
         src/Client/techniques/shadows/CascadedShadowMaps.h
         src/Client/techniques/shadows/CascadedShadowMaps.cpp
+        src/Client/techniques/volumetric/RayMarchedClouds.h
+        src/Client/techniques/volumetric/RayMarchedClouds.cpp
     )
 endif()
 

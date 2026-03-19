@@ -191,6 +191,10 @@ namespace Game2
       OnChangeCallback<cvar_vec3> callback = nullptr);
   };
 
+  using AutoCVar_string = AutoCVar<cvar_string>;
+  using AutoCVar_float = AutoCVar<cvar_float>;
+  using AutoCVar_vec3 = AutoCVar<cvar_vec3>;
+
   template<>
   cvar_float CVarSystem::GetCVarValue(std::string_view);
   template<>

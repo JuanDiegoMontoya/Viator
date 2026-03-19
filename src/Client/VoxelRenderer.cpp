@@ -1113,9 +1113,6 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .dt                     = static_cast<float>(dt),
     });
 
-  clip_from_world_old = clip_from_world;
-  clip_from_world_unjittered_old = clip_from_world_unjittered;
-
   ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(multiscatteringLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(skyViewLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1624,6 +1621,32 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
     ctx.ImageBarrier(frame.gDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
 
+    {
+      auto marker2 = ctx.MakeScopedDebugMarker("Clouds");
+      rayMarchedClouds_->Render(commandBuffer,
+        {
+          .gDepth              = &frame.gDepth.value(),
+          .renderWidth         = uint32_t(renderInternalWidth * cloudsUpscaleRatio.Get()),
+          .renderHeight        = uint32_t(renderInternalHeight * cloudsUpscaleRatio.Get()),
+          .upscaleWidth        = renderInternalWidth,
+          .clip_from_view      = clip_from_view,
+          .view_from_world     = view_from_world,
+          .clip_from_view_old  = clip_from_view_old,
+          .view_from_world_old = view_from_world_old,
+          .numRayMarchSteps    = uint32_t(cloudsNumRayMarchSteps.Get()),
+          .sunDirection        = skyParameters.sunDir,
+          .sunIntensity        = skyParameters.sunColor * skyParameters.sunBrightness,
+          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .ddgi                = ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress(),
+          .frameNumber         = frameNumber,
+        });
+      ctx.Barrier();
+      rayMarchedClouds_->Upscale(commandBuffer, {.upscaleWidth = renderInternalWidth, .upscaleHeight = renderInternalHeight});
+      ctx.Barrier();
+      rayMarchedClouds_->Composite(commandBuffer, {.gRadianceIn = &frame.sceneColorInternalRes.value(), .gRadianceOut = &frame.sceneColorInternalRes.value()});
+      ctx.Barrier();
+    }
+
     if (!debugDisableFog)
     {
       auto markerFog = ctx.MakeScopedDebugMarker("Froxel fog");
@@ -1744,7 +1767,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     ctx.ImageBarrier(*frame.sceneColorInternalRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     ctx.ImageBarrier(*frame.gMotion, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    //ctx.ImageBarrier(*frame.gReactiveMask, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    ctx.ImageBarrier(*frame.gReactiveMask, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     ctx.ImageBarrierDiscard(*frame.sceneColorOutputRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     float jitterX{};
@@ -1845,6 +1868,11 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     });
     ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
   }
+
+  clip_from_world_old            = clip_from_world;
+  clip_from_world_unjittered_old = clip_from_world_unjittered;
+  clip_from_view_old             = clip_from_view;
+  view_from_world_old            = view_from_world;
 }
 
 Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name, bool srgb)

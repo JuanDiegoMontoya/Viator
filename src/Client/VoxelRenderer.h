@@ -12,6 +12,7 @@
 #include "techniques/ao/RayTracedAO.h"
 #include "techniques/ao/ScreenSpaceGI.h"
 #include "techniques/shadows/CascadedShadowMaps.h"
+#include "techniques/volumetric/RayMarchedClouds.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -91,7 +92,6 @@ namespace Temp
 class VoxelRenderer
 {
 public:
-
   explicit VoxelRenderer(PlayerHead* head);
   ~VoxelRenderer();
 
@@ -197,7 +197,7 @@ private:
   std::optional<Fvog::TextureView> transmittanceLutView;
   std::optional<Fvog::TextureView> multiscatteringLutView;
   std::optional<Fvog::TextureView> skyViewLutView;
-  SkyParameters skyParameters = InitSkyParameters(); 
+  SkyParameters skyParameters = InitSkyParameters();
 
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;
@@ -209,7 +209,7 @@ private:
   // DDGI
   struct DDGI
   {
-    //static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
+    // static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
     static constexpr Fvog::Format radianceFormat = Fvog::Format::R32G32B32A32_SFLOAT; // TODO: TEMP until quantization with smaller formats is dealt with.
     std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;
     std::optional<Fvog::Texture> packedProbeRadiance;
@@ -239,11 +239,11 @@ private:
     AverageLuminance,
   };
 
-  DDGIDebugView ddgiDebugView_ = DDGIDebugView::None;
-  float ddgiDebugProbeSize_    = 0.25f;
-  bool ddgiDebugPauseUpdates_  = false;
-  bool ddgiDebugFreezeGrid_    = false; // Pauses only grid movement- probes still update.
-  int ddgiDebugShowOnlyThisCascade_ = -1; // <0: show all cascades
+  DDGIDebugView ddgiDebugView_           = DDGIDebugView::None;
+  float ddgiDebugProbeSize_              = 0.25f;
+  bool ddgiDebugPauseUpdates_            = false;
+  bool ddgiDebugFreezeGrid_              = false; // Pauses only grid movement- probes still update.
+  int ddgiDebugShowOnlyThisCascade_      = -1;    // <0: show all cascades
   bool ddgiDebugShowCascadeIndexAsColor_ = false;
 
   Techniques::FroxelFog fog_;
@@ -276,9 +276,9 @@ private:
   bool enableBloom          = true;
   bool debugDisableFog      = false;
 
-  float sunElevation = 0.5f;
-  float sunAzimuth   = 0.3f;
-  glm::vec3 sunColor = glm::vec3(1.0f, 0.94f, 0.91f);
+  float sunElevation  = 0.5f;
+  float sunAzimuth    = 0.3f;
+  glm::vec3 sunColor  = glm::vec3(1.0f, 0.94f, 0.91f);
   float sunBrightness = 100'000;
 
   std::optional<Fvog::Texture> globalSurfaceHeightImage;
@@ -292,15 +292,16 @@ private:
     Semicircle,
     Rectangle,
   };
-  //std::optional<Fvog::TypedBuffer<Fvog::DrawIndirectCommand>> debugMeshIndirectCommands;
-  //std::optional<Fvog::TypedBuffer<,>> debugMeshInstanceData;
+  // std::optional<Fvog::TypedBuffer<Fvog::DrawIndirectCommand>> debugMeshIndirectCommands;
+  // std::optional<Fvog::TypedBuffer<,>> debugMeshInstanceData;
   std::optional<Fvog::TypedBuffer<DebugDrawData_t>> debugRenderingInfo;
   std::optional<Fvog::TypedBuffer<DebugAabb>> debugAabbBuffer;
   std::optional<Fvog::TypedBuffer<DebugRect>> debugRectBuffer;
   std::optional<Fvog::TypedBuffer<DebugLine>> debugLineBuffer;
   bool debugClearGpuPrimtives = true;
 
-  Game2::AutoCVar<Game2::cvar_float> enableSunShadowPass = {"r.sun.csm.enablePass", "- Controls whether the sun shadow pass is enabled", 1, {}, {}, Game2::CVarFlagBits::CHEAT | Game2::CVarFlagBits::ARCHIVE};
+  Game2::AutoCVar<Game2::cvar_float> enableSunShadowPass =
+    {"r.sun.csm.enablePass", "- Controls whether the sun shadow pass is enabled", 1, {}, {}, Game2::CVarFlagBits::CHEAT | Game2::CVarFlagBits::ARCHIVE};
   glm::ivec2 sunShadowResolution   = {512, 512};
   float sunShadowFrustumSideLength = 100;
   float sunShadowFrustumDepth      = 1000;
@@ -321,9 +322,9 @@ private:
     {},
     Game2::CVarFlagBits::ARCHIVE,
     [this](std::string_view, Game2::cvar_float) { head_->shouldResizeNextFrame = true; }};
-  bool fsr2FirstInit  = true;
-  float fsr2Sharpness = 0;
-  float fsr2Ratio     = 1.5f; // FFX_FSR2_QUALITY_MODE_QUALITY
+  bool fsr2FirstInit                            = true;
+  float fsr2Sharpness                           = 0;
+  float fsr2Ratio                               = 1.5f; // FFX_FSR2_QUALITY_MODE_QUALITY
   FfxFsr2Context fsr2Context{};
   std::unique_ptr<char[]> fsr2ScratchMemory;
 #else
@@ -331,8 +332,8 @@ private:
     {"r.fsr2.enable", "- If true, FSR 2 (TAAU) pass will be performed (NOTE: FSR 2 is disabled in this build)", 0, 0, 0, Game2::CVarFlagBits::ARCHIVE};
 #endif
 
-  Game2::AutoCVar<Game2::cvar_float> cameraNearPlane = {"r.camera.nearPlane", "- Near plane of the viewer's camera.", 0.1f, 0.01f, {}, Game2::CVarFlagBits::ARCHIVE};
-  Game2::AutoCVar<Game2::cvar_float> cameraFovyRadians = {"r.camera.fovy",
+  Game2::AutoCVar_float cameraNearPlane   = {"r.camera.nearPlane", "- Near plane of the viewer's camera.", 0.1f, 0.01f, {}, Game2::CVarFlagBits::ARCHIVE};
+  Game2::AutoCVar_float cameraFovyRadians = {"r.camera.fovy",
     "- Vertical field of view, in radians, of the viewer's camera.",
     glm::radians(65.0f),
     glm::radians(1.0f),
@@ -341,7 +342,28 @@ private:
 
   glm::mat4 clip_from_world_unjittered_old = glm::mat4(1);
   glm::mat4 clip_from_world_old            = glm::mat4(1);
+  glm::mat4 clip_from_view_old             = glm::mat4(1);
+  glm::mat4 view_from_world_old            = glm::mat4(1);
   double time                              = 0;
+
+  std::unique_ptr<Techniques::RayMarchedClouds> rayMarchedClouds_ = Techniques::RayMarchedClouds::Create();
+  Game2::AutoCVar_float cloudsUpscaleRatio                        = {
+    "r.clouds.renderScale",
+    "- The fraction of the render resolution to render clouds, prior to upscaling.",
+    0.25f,
+    0.01f,
+    1.0f,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudsNumRayMarchSteps = {
+    "r.clouds.rayMarch.steps",
+    "- The number of steps to take in the ray marching pass when rendering clouds.",
+    200,
+    1,
+    {},
+    Game2::CVarFlagBits::ARCHIVE,
+  };
 };
 
 struct ImFont;

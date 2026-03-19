@@ -216,4 +216,14 @@ float Simplex_Noise(vec3 v)
   return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
 }
 
+float Simplex_Fbm(vec3 v, int n)
+{
+  float r = 0;
+  for (int i = 0; i < n; i++)
+  {
+    r += Simplex_Noise(v * (1 << i)) / (1 << i);
+  }
+  return r;
+}
+
 #endif // HASH_H

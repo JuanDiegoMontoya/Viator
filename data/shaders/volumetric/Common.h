@@ -72,10 +72,12 @@ FVOG_DECLARE_STORAGE_BUFFERS_2(VolumetricUniformsBuffers)
   VolumetricUniforms uniforms;
 }buffers[];
 
+#ifndef VOLUMETRIC_NO_PUSH_CONSTANTS
 FVOG_DECLARE_ARGUMENTS(PushConstants)
 {
   FVOG_UINT32 uniformBufferIdx;
 }pc;
+#endif // !VOLUMETRIC_NO_PUSH_CONSTANTS
 
 #define uniforms buffers[pc.uniformBufferIdx].uniforms
 #define globalUniforms perFrameUniformsBuffers[uniforms.globalUniformsIndex]
