@@ -66,7 +66,7 @@ public:
   virtual void UpdateListener(glm::vec3 position, glm::vec3 direction, glm::vec3 velocity) = 0;
   virtual std::weak_ptr<SoundHandle> PlaySound(const Sound& sound) = 0;
 
-  // Garbage collection: runs every
+  // Garbage collection. Should be called regularly, e.g. every frame.
   virtual void FreeUnusedResources() = 0;
 };
 
