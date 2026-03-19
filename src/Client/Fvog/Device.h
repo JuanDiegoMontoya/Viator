@@ -14,10 +14,24 @@
 
 namespace Fvog
 {
+  class Buffer;
+
   namespace detail
   {
     class SamplerCache;
   }
+
+  template<typename T>
+  struct DevicePtr
+  {
+    T& operator*();
+    T* operator->()
+    {
+      return &**this;
+    }
+
+    VkDeviceAddress ptr{};
+  };
 
   class Device
   {
@@ -31,6 +45,33 @@ namespace Fvog
     Device(Device&&) = delete;
     Device& operator=(Device&&) = delete;
 
+    struct MemoryMapping
+    {
+      uintptr_t begin;
+      uintptr_t end;
+      VkDeviceAddress deviceAddress;
+      VmaAllocation allocation;
+      VkBuffer buffer;
+    };
+
+    struct MemoryMappings
+    {
+      std::vector<MemoryMapping> mappings;
+
+      [[nodiscard]] VkDeviceAddress HostToDeviceAddress(const void* ptr) const;
+
+      [[nodiscard]] MemoryMapping DeviceAddressToMapping(VkDeviceAddress ptr) const;
+    };
+
+    struct TransientAllocations
+    {
+      VkDeviceAddress Allocate(size_t size);
+      void Reset();
+
+      MemoryMappings mappings;
+      std::vector<std::pair<VmaVirtualBlock, Buffer>> arenas;
+    };
+
     // Everything is public :(
   //private:
     // Things that shouldn't be in this class, but are because I'm lazy:
@@ -42,6 +83,7 @@ namespace Fvog
       VkCommandBuffer commandBuffer;
       uint64_t renderTimelineSemaphoreWaitValue{};
       VkSemaphore swapchainSemaphore;
+      TransientAllocations transientAllocations;
     };
 
     PerFrameData frameData[frameOverlap]{};
@@ -85,6 +127,15 @@ namespace Fvog
     VkPhysicalDeviceVulkan13Features features13;
 
     void FreeUnusedResources();
+
+    VkDeviceAddress AllocTransient2(size_t size);
+
+    template<typename T>
+      requires std::is_trivially_constructible_v<T>
+    [[nodiscard]] DevicePtr<T> AllocTransient(size_t count = 1)
+    {
+      return {AllocTransient2(sizeof(T) * count)};
+    }
 
     // Descriptor stuff
     class IndexAllocator
@@ -176,4 +227,11 @@ namespace Fvog
   [[nodiscard]] Device& GetDevice();
   [[nodiscard]] bool IsDeviceInitialized();
   void DestroyDevice();
+
+  template<typename T>
+  T& DevicePtr<T>::operator*()
+  {
+    // This function will definitely need updating if DevicePtr can be sourced from places other than transient allocations.
+    return *reinterpret_cast<T*>(GetDevice().GetCurrentFrameData().transientAllocations.mappings.DeviceAddressToMapping(ptr).begin);
+  }
 }

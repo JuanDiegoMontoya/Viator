@@ -1,4 +1,6 @@
 #include "Device.h"
+
+#include "Buffer2.h"
 #include "detail/Common.h"
 #include "detail/SamplerCache2.h"
 #include "Core/Assert2.h"
@@ -493,7 +495,10 @@ namespace Fvog
   {
     ZoneScoped;
     detail::CheckVkResult(vkDeviceWaitIdle(device_));
-
+    for (auto& frame : frameData)
+    {
+      frame.transientAllocations = {};
+    }
     FreeUnusedResources();
 
     vkDestroyPipelineLayout(device_, defaultPipelineLayout, nullptr);
@@ -566,6 +571,11 @@ namespace Fvog
     {
       ZoneScopedN("Get graphics queue semaphore value");
       value = GetCurrentFrameData().renderTimelineSemaphoreWaitValue;
+    }
+
+    {
+      ZoneScopedN("Reset transient allocator");
+      GetCurrentFrameData().transientAllocations.Reset();
     }
 
     {
@@ -742,6 +752,11 @@ namespace Fvog
     }
   }
 
+  VkDeviceAddress Device::AllocTransient2(size_t size)
+  {
+    return GetCurrentFrameData().transientAllocations.Allocate(size);
+  }
+
   DescriptorInfo Device::AllocateStorageBufferDescriptor(VkBuffer buffer)
   {
     ZoneScoped;
@@ -898,6 +913,76 @@ namespace Fvog
         ResourceType::ACCELERATION_STRUCTURE,
         myIdx,
       }};
+  }
+
+  VkDeviceAddress Device::MemoryMappings::HostToDeviceAddress(const void* ptr) const {
+    const auto uPtr = reinterpret_cast<uintptr_t>(ptr);
+    for (const auto& mapping : mappings)
+    {
+      if (uPtr >= mapping.begin && uPtr < mapping.end)
+      {
+        return mapping.deviceAddress + (uPtr - mapping.begin);
+      }
+    }
+    
+    ASSERT(false);
+    return 0;
+  }
+
+  Device::MemoryMapping Device::MemoryMappings::DeviceAddressToMapping(VkDeviceAddress uPtr) const
+  {
+    for (const auto& mapping : mappings)
+    {
+      if (uPtr >= mapping.deviceAddress && uPtr < mapping.deviceAddress + (mapping.end - mapping.begin))
+      {
+        return mapping;
+      }
+    }
+
+    ASSERT(false);
+    return {};
+  }
+
+  VkDeviceAddress Device::TransientAllocations::Allocate(size_t size)
+  {
+    for (auto& [block, buffer] : arenas)
+    {
+      auto alloc = VmaVirtualAllocation{};
+      auto offset = VkDeviceSize{};
+      const auto ret = vmaVirtualAllocate(block, detail::Address(VmaVirtualAllocationCreateInfo{.size = size, .alignment = 8}), &alloc, &offset);
+      if (ret == VK_SUCCESS)
+      {
+        const auto address = buffer.GetDeviceAddress() + offset;
+        mappings.mappings.push_back({
+          .begin         = uintptr_t(buffer.GetMappedMemory()) + offset,
+          .end           = uintptr_t(buffer.GetMappedMemory()) + offset + size,
+          .deviceAddress = address,
+        });
+        return address;
+      }
+      ASSERT(ret == VK_ERROR_OUT_OF_DEVICE_MEMORY, "Unexpected error allocating transient memory");
+    }
+
+    // Create a new block large enough to fit the request.
+    const auto allocSize = glm::max(1llu << 15, size);
+    auto block = VmaVirtualBlock{};
+    vmaCreateVirtualBlock(detail::Address(VmaVirtualBlockCreateInfo{
+                            .size  = allocSize,
+                            .flags = VMA_VIRTUAL_BLOCK_CREATE_LINEAR_ALGORITHM_BIT,
+                          }),
+      &block);
+    arenas.emplace_back(block,
+      Buffer({.size = allocSize, .flag = BufferFlagThingy::NO_DESCRIPTOR | BufferFlagThingy::MAP_SEQUENTIAL_WRITE_DEVICE}, "Transient allocation buffer"));
+    return Allocate(size);
+  }
+
+  void Device::TransientAllocations::Reset()
+  {
+    mappings.mappings.clear();
+    for (const auto& [block, _] : arenas)
+    {
+      vmaClearVirtualBlock(block);
+    }
   }
 
   Device::IndexAllocator::IndexAllocator(uint32_t numIndices)
