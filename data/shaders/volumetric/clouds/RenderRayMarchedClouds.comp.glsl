@@ -25,7 +25,7 @@ float CloudDensityAtPoint(vec3 positionWS)
   const float gradientUpper = 1 - clamp((positionWS.y - height) / 300, 0, 1);
   const float gradient = gradientLower * gradientUpper;
   if (gradient < 1e-3) return 0;
-  return gradient * max(0, Simplex_Fbm(positionWS / 250, 7)) / 5;
+  return gradient * max(0, Simplex_Fbm(positionWS / 250, 7)) / 2;
 }
 
 float CloudDensityToPoint(vec3 start, vec3 end, int steps)
@@ -56,7 +56,7 @@ void main()
     return;
   }
 
-  const float depth = textureLod(pc.gDepth, pc.nearestSampler, uv, 0).x;
+  const float depth = textureLod(pc.gDepth, pc.nearestSampler, uv - pc.jitterUV, 0).x;
 
   const vec3 rayEnd = UnprojectUV_ZO(depth == FAR_DEPTH ? 0.5 : depth, uv, pc.world_from_clip);
   const vec3 rayOrigin = UnprojectUV_ZO(NEAR_DEPTH, uv, pc.world_from_clip);
@@ -116,7 +116,7 @@ void main()
       const float LoV = dot(-pc.sunDirection, -rayDir);
       const float powderEffect = mix(1, powder(accumDensity), max(0, -LoV));
       const float commonTerm = powderEffect * transmittance * stepDensity;
-      const float HACK_MAGIC_FACTOR = 100;
+      const float HACK_MAGIC_FACTOR = 10;
       accumScattering += HACK_MAGIC_FACTOR * commonTerm * sunlight_total * phaseHG(0.5, LoV);
       accumScattering += commonTerm * indirect * uniform_sphere_PDF();
 
@@ -128,6 +128,7 @@ void main()
       // Small perf improvement when no basically more light can make it through.
       if (transmittance < 1e-3)
       {
+        transmittance = 0;
         break;
       }
     }
@@ -138,7 +139,7 @@ void main()
   {
     hitT = 1500;
   }
-  const vec3 hitPos = rayOrigin + rayDir * hitT;
+  const vec3 hitPos     = rayOrigin + rayDir * hitT;
   const vec4 posClip    = pc.clip_from_world_unjittered * vec4(hitPos, 1.0);
   const vec4 posClipOld = pc.clip_from_world_old_unjittered * vec4(hitPos, 1.0);
   const vec2 motionUV   = ((posClipOld.xy / posClipOld.w) - (posClip.xy / posClip.w)) * 0.5;

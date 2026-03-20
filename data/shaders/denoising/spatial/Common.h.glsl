@@ -1,6 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include "../../Utility.h.glsl"
+
 float GetViewDepth(float depth, mat4 proj)
 {
   // Returns linear depth in [near, far]
@@ -36,9 +38,11 @@ float LuminanceWeight(float luminanceOther, float luminanceCenter, float varianc
   return exp(-num / den);
 }
 
-float Luminance(vec3 c)
+vec4 Bilerp(vec4 _00, vec4 _01, vec4 _10, vec4 _11, vec2 weight)
 {
-  return dot(c, vec3(0.213,  0.715, 0.072));
+  vec4 bottom = mix(_00, _10, weight.x);
+  vec4 top = mix(_01, _11, weight.x);
+  return mix(bottom, top, weight.y);
 }
 
 vec3 Bilerp(vec3 _00, vec3 _01, vec3 _10, vec3 _11, vec2 weight)

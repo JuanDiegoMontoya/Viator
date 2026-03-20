@@ -1641,9 +1641,19 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .frameNumber         = frameNumber,
         });
       ctx.Barrier();
-      rayMarchedClouds_->Upscale(commandBuffer, {.upscaleWidth = renderInternalWidth, .upscaleHeight = renderInternalHeight});
+      rayMarchedClouds_->Upscale(commandBuffer,
+        {
+          .gDepth        = &frame.gDepth.value(),
+          .upscaleWidth  = renderInternalWidth,
+          .upscaleHeight = renderInternalHeight,
+          .zNear         = (float)cameraNearPlane.Get(),
+        });
       ctx.Barrier();
-      rayMarchedClouds_->Composite(commandBuffer, {.gRadianceIn = &frame.sceneColorInternalRes.value(), .gRadianceOut = &frame.sceneColorInternalRes.value()});
+      rayMarchedClouds_->Composite(commandBuffer,
+        {
+          .gRadianceIn  = &frame.sceneColorInternalRes.value(),
+          .gRadianceOut = &frame.sceneColorInternalRes.value(),
+        });
       ctx.Barrier();
     }
 

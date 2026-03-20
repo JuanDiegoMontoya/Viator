@@ -33,8 +33,10 @@ namespace Techniques
 
   struct RayMarchedCloudsUpscaleParams
   {
+    Fvog::Texture* gDepth{};
     uint32_t upscaleWidth{};
     uint32_t upscaleHeight{};
+    float zNear{};
   };
 
   struct RayMarchedCloudsCompositeParams

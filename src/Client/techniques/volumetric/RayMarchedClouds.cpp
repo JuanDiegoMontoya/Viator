@@ -94,7 +94,17 @@ namespace Techniques
           Fvog::Format::R16G16_SFLOAT,
           "Low Res Cloud Motion Vectors");
 
-        const auto jitterNDC = 2.0f * GetJitterOffsetUV(params.frameNumber, params.renderWidth, params.renderHeight, params.upscaleWidth);
+        auto jitterNDC = 2.0f * GetJitterOffsetUV(params.frameNumber, params.renderWidth, params.renderHeight, params.upscaleWidth);
+
+        static bool overrideJitter = false;
+        static glm::vec2 jitterOverride{};
+        ImGui::Checkbox("Override jitter", &overrideJitter);
+        ImGui::InputFloat2("Jitter override", &jitterOverride[0]);
+        if (overrideJitter)
+        {
+          jitterNDC = jitterOverride / glm::vec2(params.renderWidth, params.renderHeight);
+        }
+
         currentJitterNDC     = jitterNDC;
 
         const auto jitterMatrix            = glm::translate(glm::mat4(1), glm::vec3(jitterNDC, 0));
@@ -115,6 +125,7 @@ namespace Techniques
           .clip_from_world_unjittered     = params.clip_from_view * params.view_from_world,
           .clip_from_world_old_unjittered = clip_from_view_old_unjittered * params.view_from_world_old,
           .numRayMarchSteps               = params.numRayMarchSteps,
+          .jitterUV                       = jitterNDC / 2.0f,
           .sunDirection                   = params.sunDirection,
           .sunIntensity                   = params.sunIntensity,
           .globalUniformsIndex            = params.globalUniformsIndex,
@@ -132,6 +143,7 @@ namespace Techniques
 
       void Upscale(VkCommandBuffer cmd, const RayMarchedCloudsUpscaleParams& params) override
       {
+        ASSERT(params.gDepth);
         ASSERT(lowResCloudRadianceTransmittance_.has_value());
         ASSERT(lowResCloudMotionVectors_.has_value());
         auto ctx    = Fvog::Context(cmd);
@@ -157,6 +169,7 @@ namespace Techniques
           .inLowResCloudRadianceTransmittance = lowResCloudRadianceTransmittance_->ImageView().GetTexture2D(),
           .inLowResCloudMotionVectors         = lowResCloudMotionVectors_.value().ImageView().GetTexture2D(),
           .inOldCloudRadianceTransmittance    = highResCloudRadianceTransmittanceHistory_.value().ImageView().GetTexture2D(),
+          .inHighResDepth                     = params.gDepth->ImageView().GetTexture2D(),
           .outCloudRadianceTransmittance      = highResCloudRadianceTransmittance_.value().ImageView().GetImage2D(),
           .linearSampler = Fvog::Sampler({
             .magFilter    = VK_FILTER_LINEAR,
@@ -165,6 +178,7 @@ namespace Techniques
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
           }),
           .jitterUV = 0.5f * currentJitterNDC,
+          .zNear = params.zNear,
         };
 
         ctx.BindComputePipeline(upscaleCloudsPipeline_.GetPipeline());
