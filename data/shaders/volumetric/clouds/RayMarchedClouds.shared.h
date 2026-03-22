@@ -30,6 +30,8 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(RayMarchedCloudsRenderGpuParams)
 #else
   VkDeviceAddress ddgi;
 #endif
+
+  FVOG_FLOAT zNear;
 };
 
 FVOG_DECLARE_BUFFER_REFERENCE_2(UpscaleCloudsGpuParams)
@@ -38,6 +40,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(UpscaleCloudsGpuParams)
   FVOG_SHARED Texture2D inLowResCloudMotionVectors;
   FVOG_SHARED Texture2D inOldCloudRadianceTransmittance;
   FVOG_SHARED Texture2D inHighResDepth;
+  FVOG_SHARED Texture2D inHighResDepthPrev;
   FVOG_SHARED Image2D outCloudRadianceTransmittance;
   FVOG_SHARED Sampler linearSampler;
   FVOG_VEC2 jitterUV;

@@ -25,7 +25,7 @@ float CloudDensityAtPoint(vec3 positionWS)
   const float gradientUpper = 1 - clamp((positionWS.y - height) / 300, 0, 1);
   const float gradient = gradientLower * gradientUpper;
   if (gradient < 1e-3) return 0;
-  return gradient * max(0, Simplex_Fbm(positionWS / 250, 7)) / 2;
+  return gradient * max(0, Simplex_Fbm(positionWS / 1500, 7)) / 5;
 }
 
 float CloudDensityToPoint(vec3 start, vec3 end, int steps)
@@ -139,6 +139,12 @@ void main()
   {
     hitT = 1500;
   }
+
+  // If hitT is too low (i.e. the player is in a cloud), then there will be horrible parallax.
+  hitT = max(100, hitT);
+  // However, we don't want hitT to go past real geometry.
+  hitT = min(hitT, -InfRevZ_To_ViewZ(depth, pc.zNear));
+
   const vec3 hitPos     = rayOrigin + rayDir * hitT;
   const vec4 posClip    = pc.clip_from_world_unjittered * vec4(hitPos, 1.0);
   const vec4 posClipOld = pc.clip_from_world_old_unjittered * vec4(hitPos, 1.0);

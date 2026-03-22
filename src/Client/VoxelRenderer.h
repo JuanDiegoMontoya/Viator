@@ -129,6 +129,7 @@ private:
     std::optional<Fvog::Texture> gIlluminancePingPong; // Used in denoising.
     std::optional<Fvog::Texture> gSpecial;
     std::optional<Fvog::Texture> gDepth;
+    std::optional<Fvog::Texture> gDepthPrev;
     std::optional<Fvog::Texture> gMotion;
     std::optional<Fvog::Texture> gReactiveMask;
 

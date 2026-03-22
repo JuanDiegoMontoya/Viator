@@ -1,15 +1,15 @@
 #include "RayMarchedClouds.h"
 
-#include "imgui.h"
-#include "volk.h"
 #include "Client/PipelineManager.h"
 #include "Client/Fvog/Device.h"
 #include "Client/Fvog/Rendering2.h"
 #include "Client/Fvog/Texture2.h"
-#include "Client/Fvog/detail/Common.h"
 #include "Game/Assets.h"
 
 #include "shaders/volumetric/clouds/RenderRayMarchedClouds.comp.glsl"
+
+#include "glm/integer.hpp"
+#include "imgui.h"
 
 #include <optional>
 
@@ -95,7 +95,9 @@ namespace Techniques
           "Low Res Cloud Motion Vectors");
 
         auto jitterNDC = 2.0f * GetJitterOffsetUV(params.frameNumber, params.renderWidth, params.renderHeight, params.upscaleWidth);
+        //auto jitterNDC = glm::vec2(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1)) / glm::vec2(params.renderWidth, params.renderHeight);
 
+#if 0   // 
         static bool overrideJitter = false;
         static glm::vec2 jitterOverride{};
         ImGui::Checkbox("Override jitter", &overrideJitter);
@@ -104,6 +106,7 @@ namespace Techniques
         {
           jitterNDC = jitterOverride / glm::vec2(params.renderWidth, params.renderHeight);
         }
+#endif
 
         currentJitterNDC     = jitterNDC;
 
@@ -130,6 +133,7 @@ namespace Techniques
           .sunIntensity                   = params.sunIntensity,
           .globalUniformsIndex            = params.globalUniformsIndex,
           .ddgi                           = params.ddgi,
+          .zNear                          = params.zNear,
         };
 
         const auto& outputResolution = params.gDepth->GetCreateInfo().extent;
@@ -170,6 +174,7 @@ namespace Techniques
           .inLowResCloudMotionVectors         = lowResCloudMotionVectors_.value().ImageView().GetTexture2D(),
           .inOldCloudRadianceTransmittance    = highResCloudRadianceTransmittanceHistory_.value().ImageView().GetTexture2D(),
           .inHighResDepth                     = params.gDepth->ImageView().GetTexture2D(),
+          .inHighResDepthPrev                 = params.gDepthPrev->ImageView().GetTexture2D(),
           .outCloudRadianceTransmittance      = highResCloudRadianceTransmittance_.value().ImageView().GetImage2D(),
           .linearSampler = Fvog::Sampler({
             .magFilter    = VK_FILTER_LINEAR,

@@ -811,6 +811,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.gIlluminance          = Fvog::CreateTexture2D(internalExtent, Frame::sceneIlluminanceFormat, Fvog::TextureUsage::GENERAL, "Scene illuminance");
   frame.gIlluminancePingPong  = Fvog::CreateTexture2D(internalExtent, Frame::sceneIlluminanceFormat, Fvog::TextureUsage::GENERAL, "Scene illuminance 2");
   frame.gDepth                = Fvog::CreateTexture2D(internalExtent, Frame::sceneDepthFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene depth");
+  frame.gDepthPrev            = Fvog::CreateTexture2D(internalExtent, Frame::sceneDepthFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene depth 2");
   frame.sceneColorInternalRes = Fvog::CreateTexture2D(internalExtent, Frame::sceneColorFormat, Fvog::TextureUsage::GENERAL, "Scene color (render res)");
   frame.gSpecial              = Fvog::CreateTexture2D(internalExtent, Frame::sceneSpecialFormat, Fvog::TextureUsage::GENERAL, "Scene special");
   frame.gMotion               = Fvog::CreateTexture2D(internalExtent, Frame::sceneMotionFormat, Fvog::TextureUsage::ATTACHMENT_READ_ONLY, "Scene motion");
@@ -1639,11 +1640,13 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
           .ddgi                = ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress(),
           .frameNumber         = frameNumber,
+          .zNear               = (float)cameraNearPlane.Get(),
         });
       ctx.Barrier();
       rayMarchedClouds_->Upscale(commandBuffer,
         {
           .gDepth        = &frame.gDepth.value(),
+          .gDepthPrev    = &frame.gDepthPrev.value(),
           .upscaleWidth  = renderInternalWidth,
           .upscaleHeight = renderInternalHeight,
           .zNear         = (float)cameraNearPlane.Get(),
@@ -1879,6 +1882,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
   }
 
+  std::swap(frame.gDepth, frame.gDepthPrev);
   clip_from_world_old            = clip_from_world;
   clip_from_world_unjittered_old = clip_from_world_unjittered;
   clip_from_view_old             = clip_from_view;

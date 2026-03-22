@@ -12,59 +12,12 @@ FVOG_DECLARE_ARGUMENTS(RayMarchedCloudsUpscalePushConstants)
 #include "../../denoising/spatial/Kernels.h.glsl"
 #include "../../denoising/spatial/Common.h.glsl"
 
-
-// https://stackoverflow.com/questions/13501081/efficient-bicubic-filtering-code-in-glsl
-vec4 cubic(float v)
-{
-  vec4 n  = vec4(1.0, 2.0, 3.0, 4.0) - v;
-  vec4 s  = n * n * n;
-  float x = s.x;
-  float y = s.y - 4.0 * s.x;
-  float z = s.z - 4.0 * s.y + 6.0 * s.x;
-  float w = 6.0 - x - y - z;
-  return vec4(x, y, z, w) * (1.0 / 6.0);
-}
-
-vec4 textureBicubic(Texture2D texture, Sampler linear, vec2 texCoords, int)
-{
-  vec2 texSize    = textureSize(texture, 0);
-  vec2 invTexSize = 1.0 / texSize;
-
-  texCoords = texCoords * texSize - 0.5;
-
-  vec2 fxy = fract(texCoords);
-  texCoords -= fxy;
-
-  vec4 xcubic = cubic(fxy.x);
-  vec4 ycubic = cubic(fxy.y);
-
-  vec4 c = texCoords.xxyy + vec2(-0.5, +1.5).xyxy;
-
-  vec4 s      = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
-  vec4 offset = c + vec4(xcubic.yw, ycubic.yw) / s;
-
-  offset *= invTexSize.xxyy;
-
-  vec4 sample0 = textureLod(texture, linear, offset.xz, 0);
-  vec4 sample1 = textureLod(texture, linear, offset.yz, 0);
-  vec4 sample2 = textureLod(texture, linear, offset.xw, 0);
-  vec4 sample3 = textureLod(texture, linear, offset.yw, 0);
-
-  float sx = s.x / (s.x + s.y);
-  float sy = s.z / (s.z + s.w);
-
-  return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
-}
-
-
-
 float DepthWeight(float zVS_0, float zVS_1, float phi)
 {
   return exp(-abs(zVS_0 - zVS_1) / phi);
 }
 
-
-bool DepthAwareBilerp(out vec4 value, Texture2D srcImage, Texture2D gDepth, float cDepthVS, vec2 reprojectedUV, vec2 jitterUV)
+bool DepthAwareBilerp(out vec4 value, Texture2D srcImage, Texture2D gDepth, float cDepthVS, vec2 reprojectedUV, vec2 jitterUV, int minValid)
 {
   const ivec2 srcResolution   = textureSize(srcImage, 0);
   const ivec2 depthResolution = textureSize(gDepth, 0);
@@ -93,7 +46,7 @@ bool DepthAwareBilerp(out vec4 value, Texture2D srcImage, Texture2D gDepth, floa
       }
 
       const float oDepthVS = InfRevZ_To_ViewZ(texelFetch(gDepth, depthSamplePos, 0).x, pc.zNear);
-      if (DepthWeight(cDepthVS, oDepthVS, 1) < 0.75)
+      if (DepthWeight(cDepthVS, oDepthVS, 50) < 0.75)
       {
         continue;
       }
@@ -104,14 +57,13 @@ bool DepthAwareBilerp(out vec4 value, Texture2D srcImage, Texture2D gDepth, floa
     }
   }
 
-  vec2 weight = fract(reprojectedUV.xy * srcResolution - 0.5);
+  const vec2 weight = fract(reprojectedUV.xy * srcResolution - 0.5);
 
-  // Requiring at least 3 valid samples (instead of 1) is a hack to deal with a jitter bug (no pun intended)
-  if (validCount > 0)
+  // Use weighted bilinear filter if any samples are valid.
+  if (validCount >= minValid)
   {
-    // Use weighted bilinear filter if any of its samples are valid
-    float factor = max(0.01, Bilerp(valid[0][0], valid[0][1], valid[1][0], valid[1][1], weight));
-    vec4 prevColor = Bilerp(colors[0][0], colors[0][1], colors[1][0], colors[1][1], weight) / factor;
+    const float factor = max(1e-3, Bilerp(valid[0][0], valid[0][1], valid[1][0], valid[1][1], weight));
+    const vec4 prevColor = Bilerp(colors[0][0], colors[0][1], colors[1][0], colors[1][1], weight) / factor;
 
     value = prevColor;
     return true;
@@ -123,15 +75,15 @@ bool DepthAwareBilerp(out vec4 value, Texture2D srcImage, Texture2D gDepth, floa
 
 
 // Find valid samples in neighborhood using depth weight.
-vec4 BilateralUpscale(Texture2D srcImage, Texture2D gDepth, ivec2 gid, float cDepthVS, ivec2 outResolution, vec2 jitterUV)
+vec4 BilateralUpscale(Texture2D srcImage, Texture2D gDepth, ivec2 gid, float cDepthVS, ivec2 outResolution, vec2 jitterUV, vec2 motionUV)
 {
   const ivec2 sourceDim = textureSize(srcImage, 0);
   const vec2 outToSrcRatio = vec2(sourceDim) / outResolution;
   const vec2 srcToOutRatio = 1.0 / outToSrcRatio;
 
-  const vec2 dstUv = (gid + 0.5) / outResolution;
+  const vec2 dstUv = (gid + 0.5) / outResolution + motionUV;
   const vec2 sourceUv = dstUv + jitterUV;
-  const ivec2 sourcePos = ivec2(sourceUv * sourceDim + 0.);
+  const ivec2 sourcePos = ivec2(sourceUv * sourceDim);
 
   vec4 accumValue = vec4(0);
   float accumWeight = 0;
@@ -175,10 +127,17 @@ vec4 BilateralUpscale(Texture2D srcImage, Texture2D gDepth, ivec2 gid, float cDe
     return accumValue / accumWeight;
   }
 
-  //return vec4(500, 0, 500, 0);
-  // Nearest-neighbor fallback.
-  //return texelFetch(srcImage, sourcePos, 0);
   return textureLod(srcImage, pc.linearSampler, (sourcePos + 0.5) / sourceDim, 0);
+}
+
+// Selects the vector with the greater length.
+vec2 maxLen(vec2 a, vec2 b)
+{
+  if (length(a) > length(b))
+  {
+    return a;
+  }
+  return b;
 }
 
 layout(local_size_x = 8, local_size_y = 8) in;
@@ -193,28 +152,44 @@ void main()
     return;
   }
 
+  const ivec2 srcResolution = textureSize(pc.inLowResCloudRadianceTransmittance, 0);
+  const vec2 srcToOutRatio = vec2(outResolution) / srcResolution;
+  const vec2 outToSrcRatio = 1.0 / srcToOutRatio;
+
   const float depthVS = InfRevZ_To_ViewZ(texelFetch(pc.inHighResDepth, gid, 0).x, pc.zNear);
 
   const vec2 uvForLowRes = uv + pc.jitterUV;
-  const vec2 motionUV = textureLod(pc.inLowResCloudMotionVectors, pc.linearSampler, uv, 0).xy;
+  const vec2 motionUV = textureLod(pc.inLowResCloudMotionVectors, pc.linearSampler, uvForLowRes, 0).xy;
   const vec2 uvForPrev = uv + motionUV;
 
-  // Sample history. Reject depth discontinuities.
-  const vec4 historySample = textureLod(pc.inOldCloudRadianceTransmittance, pc.linearSampler, uvForPrev, 0);
-
+  float historyWeight = 0.9;
+  
+  if (true)
+  {
+    // Preserve high frequency signal by reducing history weight when the nearest low res sample coincides with the current output sample.
+    const ivec2 nearestLowResSample  = ivec2(gid * outToSrcRatio);
+    const vec2 nearestLowResSampleUV = (nearestLowResSample + 0.5) / srcResolution - pc.jitterUV;
+    const vec2 nearestLowResSampleSS = nearestLowResSampleUV * outResolution;
+    const float distToLowResSample   = distance(nearestLowResSampleSS, uv * outResolution);
+    historyWeight = clamp(smoothstep(0.02 * srcToOutRatio.x, 0.125 * srcToOutRatio.x, distToLowResSample), 0.5, 0.95);
+  }
 
   vec4 currentSample;
-  //currentSample = textureLod(pc.inLowResCloudRadianceTransmittance, pc.linearSampler, uvForLowRes, 0);
-  //currentSample = BilateralUpscale(pc.inLowResCloudRadianceTransmittance, pc.inHighResDepth, gid, depthVS, outResolution, pc.jitterUV);
-  //currentSample = texelFetch(pc.inLowResCloudRadianceTransmittance, ivec2(uvForLowRes * textureSize(pc.inLowResCloudRadianceTransmittance, 0)), 0);
-  if (!DepthAwareBilerp(currentSample, pc.inLowResCloudRadianceTransmittance, pc.inHighResDepth, depthVS, uvForLowRes, pc.jitterUV))
+  if (!DepthAwareBilerp(currentSample, pc.inLowResCloudRadianceTransmittance, pc.inHighResDepth, depthVS, uvForLowRes, pc.jitterUV, 1))
   {
-    //currentSample = textureLod(pc.inLowResCloudRadianceTransmittance, pc.linearSampler, uvForLowRes, 0);
-    currentSample = BilateralUpscale(pc.inLowResCloudRadianceTransmittance, pc.inHighResDepth, gid, depthVS, outResolution, pc.jitterUV);
+    currentSample = BilateralUpscale(pc.inLowResCloudRadianceTransmittance, pc.inHighResDepth, gid, depthVS, outResolution, pc.jitterUV, vec2(0));
+  }
+
+  vec4 historySample;
+  // Require four valid samples to avoid certain artifacts, which isn't ideal.
+  if (!DepthAwareBilerp(historySample, pc.inOldCloudRadianceTransmittance, pc.inHighResDepthPrev, depthVS, uvForPrev, vec2(0), 4))
+  {
+    //historySample = BilateralUpscale(pc.inOldCloudRadianceTransmittance, pc.inHighResDepthPrev, gid, depthVS, outResolution, vec2(0), motionUV);
+    historyWeight = 0.0;
   }
 
   // Reject history when off-screen.
-  const float historyWeight = 0.05 * float(all(greaterThanEqual(uvForPrev, vec2(0))) && all(lessThan(uvForPrev, vec2(1))));
+  historyWeight *= float(all(greaterThanEqual(uvForPrev, vec2(0))) && all(lessThan(uvForPrev, vec2(1))));
   const vec4 blendedSample = mix(currentSample, historySample, historyWeight);
 
   imageStore(pc.outCloudRadianceTransmittance, gid, blendedSample);

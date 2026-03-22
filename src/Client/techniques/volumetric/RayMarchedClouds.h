@@ -28,12 +28,14 @@ namespace Techniques
     glm::vec3 sunIntensity{};
     uint32_t globalUniformsIndex{};
     VkDeviceAddress ddgi{};
-    uint32_t frameNumber;
+    uint32_t frameNumber{};
+    float zNear{};
   };
 
   struct RayMarchedCloudsUpscaleParams
   {
     Fvog::Texture* gDepth{};
+    Fvog::Texture* gDepthPrev{};
     uint32_t upscaleWidth{};
     uint32_t upscaleHeight{};
     float zNear{};
