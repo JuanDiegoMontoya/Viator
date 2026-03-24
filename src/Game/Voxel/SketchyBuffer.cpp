@@ -243,7 +243,7 @@ void SketchyBufferImpl::FlushWritesToGPU(VkCommandBuffer cmd)
       if (chunkL2 & (1 << bitL2))
       {
         const int chunkOffset = j * L2_PAGE_SIZE + bitL2;
-        for (int i = chunkOffset; i < int(chunkOffset + L2_PAGE_SIZE); i++)
+        for (int i = chunkOffset; i < int(std::min(chunkOffset + L2_PAGE_SIZE, dirtyPages_.NumChunks())); i++)
         //for (int i = 0; i < int(dirtyPages_.NumChunks()); i++) // Comment out the preceding control flow 
         {
           const auto chunk = dirtyPages_.GetChunk(i);
