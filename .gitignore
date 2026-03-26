@@ -50,3 +50,5 @@ cmake-build-release/
 # IntelliJ
 .idea/
 /bin
+/Folder.DotSettings.user
+/data/shaders/.vscode/settings.json
