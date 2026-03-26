@@ -365,6 +365,69 @@ private:
     {},
     Game2::CVarFlagBits::ARCHIVE,
   };
+
+  Game2::AutoCVar_float cloudCbsmResolution = {
+    "r.clouds.cbsm.resolution",
+    "- The resolution of Beer shadow map cascades used for cloud shadows.",
+    256,
+    1,
+    2048,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmNumCascades = {
+    "r.clouds.cbsm.cascades",
+    "- The number of cascades for the Beer shadow map.",
+    4,
+    1,
+    8,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmRayMarchSteps = {
+    "r.clouds.cbsm.rayMarch.steps",
+    "- The number of steps to take when rendering the Beer shadow map.",
+    50,
+    1,
+    1000,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmFrustumDepth = {
+    "r.clouds.cbsm.frustum.depth",
+    "- The length of the frustum used to render the Beer shadow map.",
+    2000,
+    100,
+    10000,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmFrustumSideLength = {
+    "r.clouds.cbsm.frustum.width",
+    "- The width of the frustum used to render the Beer shadow map.",
+    100,
+    10,
+    10000,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmHistoryWeight = {
+    "r.clouds.cbsm.historyWeight",
+    "- Weight of history sample when filtering Beer shadow map. 0 means no temporal accumulation.",
+    0.8f,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudCbsmJitterScale = {
+    "r.clouds.cbsm.jitterScale",
+    "- This scale is applied when jittering ray offsets for rendering the Beer shadow map.",
+    1,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
 };
 
 struct ImFont;

@@ -73,10 +73,11 @@ void main()
 
       bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 #if 0 // Ray traced shadow
-      const vec3 sunVisibility = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
+      vec3 sunVisibility = TraceSunRay(hit.positionWorld + hit.flatNormalWorld * 1e-3, uniforms.sky.sunDir);
 #else
-      const float sunVisibility = SampleCascadedShadowMap(hit.positionWorld, uniforms.sunShadowMap);
+      float sunVisibility = SampleCascadedShadowMap(hit.positionWorld, uniforms.sunShadowMap);
 #endif
+      sunVisibility *= SampleCascadedBeerShadowMap(hit.positionWorld, uniforms.beerShadowMap);
       vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, hit.positionWorld);
       vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
       vec3 sunlight_internal = albedo * NoL * sun_light * sunVisibility;
@@ -110,6 +111,10 @@ void main()
   else
   {
     radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, args.linearSampler, rayDir, rayPos);
+    // This is a giant hack. The attenuation here should be a function of ray direction, not position.
+    // This will cause overshadowing when a small cloud is above a probe. Likewise, it
+    // causes undershadowing when a small gap in a sky full of clouds is above a probe.
+    radiance *= SampleCascadedBeerShadowMap(rayPos, uniforms.beerShadowMap);
   }
   
   // Direct lighting

@@ -47,6 +47,22 @@ namespace Techniques
     Fvog::Texture* gRadianceOut{};
   };
 
+  struct RayMarchedCloudsRenderBeerShadowMapParams
+  {
+    VkDeviceAddress globalUniforms{};
+    uint32_t renderWidth{};
+    uint32_t renderHeight{};
+    uint32_t numCascades{};
+    glm::vec3 sunPosition{};
+    glm::vec3 sunDirection{};
+    uint32_t numRayMarchSteps{};
+    float frustumDepth{};
+    float baseFrustumSideLength{};
+    float time{};
+    float historyWeight{};
+    float jitterScale{};
+  };
+
   class RayMarchedClouds
   {
   public:
@@ -56,5 +72,7 @@ namespace Techniques
     virtual void Render(VkCommandBuffer cmd, const RayMarchedCloudsRenderParams& params) = 0;
     virtual void Upscale(VkCommandBuffer cmd, const RayMarchedCloudsUpscaleParams& params) = 0;
     virtual void Composite(VkCommandBuffer cmd, const RayMarchedCloudsCompositeParams& params) = 0;
+    virtual void RenderBeerShadowMap(VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) = 0;
+    virtual VkDeviceAddress GetCascadedBeerShadowMapInfoPtr() = 0;
   };
 }

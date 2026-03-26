@@ -4,6 +4,7 @@
 #include "Resources.h.glsl"
 #include "Debug/DebugCommon.h.glsl"
 #include "voxels/RayTracedVoxelsShadowCommon.h.glsl"
+#include "volumetric/clouds/BeerShadowMap.h.glsl"
 
 #define CULL_MESHLET_FRUSTUM    (1 << 0)
 #define CULL_MESHLET_HIZ        (1 << 1)
@@ -62,6 +63,40 @@ struct SkyParameters
   DensityProfileLayer absorption_density[PROFILE_LAYER_COUNT];
 };
 
+#define GLOBAL_UNIFORMS_FIELDS                \
+  FVOG_MAT4 viewProj;                         \
+  FVOG_MAT4 oldViewProj;                      \
+  FVOG_MAT4 oldViewProjUnjittered;            \
+  FVOG_MAT4 viewProjUnjittered;               \
+  FVOG_MAT4 invViewProj;                      \
+  FVOG_MAT4 proj;                             \
+  FVOG_MAT4 invProj;                          \
+  FVOG_MAT4 view;                             \
+  FVOG_MAT4 invView;                          \
+  FVOG_VEC4 cameraPos;                        \
+  FVOG_UINT32 meshletCount;                   \
+  FVOG_UINT32 maxIndices;                     \
+  FVOG_FLOAT bindlessSamplerLodBias;          \
+  FVOG_UINT32 flags;                          \
+  FVOG_FLOAT alphaHashScale;                  \
+  FVOG_UINT32 frameNumber;                    \
+  SkyParameters sky;                          \
+  FVOG_SHARED Texture2D skyViewLut;           \
+  FVOG_SHARED Texture2D transmittanceLut;     \
+  FVOG_SHARED Sampler linearSampler;          \
+  GBuffer gBuffer;                            \
+  DebugDrawData debugDraw;                    \
+  FVOG_SHARED Texture2D blueNoise;            \
+  CascadedShadowMapInfoPtr sunShadowMap;      \
+  CascadedBeerShadowMapInfoPtr beerShadowMap; \
+  FVOG_FLOAT time;                            \
+  FVOG_FLOAT dt
+
+FVOG_DECLARE_BUFFER_REFERENCE_2(GlobalUniformsPtr)
+{
+  GLOBAL_UNIFORMS_FIELDS;
+};
+
 #ifdef __cplusplus
 inline SkyParameters InitSkyParameters()
 {
@@ -91,32 +126,7 @@ struct GlobalUniforms
 FVOG_DECLARE_STORAGE_BUFFERS_2(restrict PerFrameUniformsBuffer)
 #endif
 {
-  FVOG_MAT4 viewProj;
-  FVOG_MAT4 oldViewProj;
-  FVOG_MAT4 oldViewProjUnjittered;
-  FVOG_MAT4 viewProjUnjittered;
-  FVOG_MAT4 invViewProj;
-  FVOG_MAT4 proj;
-  FVOG_MAT4 invProj;
-  FVOG_MAT4 view;
-  FVOG_MAT4 invView;
-  FVOG_VEC4 cameraPos;
-  FVOG_UINT32 meshletCount;
-  FVOG_UINT32 maxIndices;
-  FVOG_FLOAT bindlessSamplerLodBias;
-  FVOG_UINT32 flags;
-  FVOG_FLOAT alphaHashScale;
-  FVOG_UINT32 frameNumber;
-  SkyParameters sky;
-  FVOG_SHARED Texture2D skyViewLut;
-  FVOG_SHARED Texture2D transmittanceLut;
-  FVOG_SHARED Sampler linearSampler;
-  GBuffer gBuffer;
-  DebugDrawData debugDraw;
-  FVOG_SHARED Texture2D blueNoise;
-  CascadedShadowMapInfoPtr sunShadowMap;
-  FVOG_FLOAT time; // Seconds
-  FVOG_FLOAT dt;
+  GLOBAL_UNIFORMS_FIELDS;
 }
 #ifndef __cplusplus
 perFrameUniformsBuffers[]

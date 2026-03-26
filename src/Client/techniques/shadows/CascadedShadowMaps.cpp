@@ -81,6 +81,7 @@ Fvog::Texture& Techniques::CascadedShadowMap::RenderTerrainShadowMap(VkCommandBu
   auto shadow = CascadedShadowMapInfoPtr_t{
     .shadowMapArray = shadowArrayTexture_.value().ImageView().GetTexture2DArray(),
     .numCascades    = params.numCascades,
+    .frustumDepth   = params.frustumDepth,
   };
 
   const auto up = glm::epsilonEqual(abs(glm::dot(params.lightDirection, glm::vec3(0, 1, 0))), 1.0f, 1e-3f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);

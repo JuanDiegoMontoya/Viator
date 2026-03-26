@@ -1110,6 +1110,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
       .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
       .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
+      .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .time                   = static_cast<float>(time += dt),
       .dt                     = static_cast<float>(dt),
     });
@@ -1286,16 +1287,34 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
     if (enableSunShadowPass.Get() != 0)
     {
+      const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
+      const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
       ctx.Barrier();
       cascadedShadowMap_.RenderTerrainShadowMap(commandBuffer,
         {
           .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
           .numCascades           = uint32_t(sunShadowNumCascades),
           .voxels                = voxels,
-          .playerPos             = world.GetRegistry().get<const GlobalTransform>(player).position,
-          .lightDirection        = -Math::SphericalToCartesian(sunElevation, sunAzimuth),
+          .playerPos             = playerPosition,
+          .lightDirection        = sunDirection,
           .frustumDepth          = sunShadowFrustumDepth,
           .baseFrustumSideLength = sunShadowFrustumSideLength,
+        });
+
+      rayMarchedClouds_->RenderBeerShadowMap(commandBuffer,
+        {
+          .globalUniforms          = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+          .renderWidth             = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+          .renderHeight            = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+          .numCascades             = static_cast<uint32_t>(cloudCbsmNumCascades.Get()),
+          .sunPosition             = playerPosition,
+          .sunDirection            = sunDirection,
+          .numRayMarchSteps        = static_cast<uint32_t>(cloudCbsmRayMarchSteps.Get()),
+          .frustumDepth            = static_cast<float>(cloudCbsmFrustumDepth.Get()),
+          .baseFrustumSideLength   = static_cast<float>(cloudCbsmFrustumSideLength.Get()),
+          .time                    = static_cast<float>(time),
+          .historyWeight           = static_cast<float>(cloudCbsmHistoryWeight.Get()),
+          .jitterScale             = static_cast<float>(cloudCbsmJitterScale.Get()),
         });
       ctx.Barrier();
     }

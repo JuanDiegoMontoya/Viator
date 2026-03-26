@@ -134,10 +134,11 @@ void main()
 
   bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 #if 0 // Ray traced shadow
-  const vec3 sunVisibility = TraceSunRay(wPos, globalUniforms.sky.sunDir);
+  vec3 sunVisibility = TraceSunRay(wPos, globalUniforms.sky.sunDir);
 #else
-  const float sunVisibility = SampleCascadedShadowMap(wPos, globalUniforms.sunShadowMap);
+  float sunVisibility = SampleCascadedShadowMap(wPos, globalUniforms.sunShadowMap);
 #endif
+  sunVisibility *= SampleCascadedBeerShadowMap(wPos, globalUniforms.beerShadowMap);
   vec3 skylight_internal = fogColor * sunVisibility * getAtmosphereAlongRay(globalUniforms.sky, globalUniforms.skyViewLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, wPos);
 	vec3 sunlight_internal = sunVisibility * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
 

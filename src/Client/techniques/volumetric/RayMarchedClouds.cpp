@@ -4,12 +4,16 @@
 #include "Client/Fvog/Device.h"
 #include "Client/Fvog/Rendering2.h"
 #include "Client/Fvog/Texture2.h"
+#include "Client/Fvog/Buffer2.h"
 #include "Game/Assets.h"
 
 #include "shaders/volumetric/clouds/RenderRayMarchedClouds.comp.glsl"
+#include "shaders/volumetric/clouds/RenderBeerShadowMap.comp.glsl"
+#include "shaders/volumetric/clouds/BlurBeerShadowMap.comp.glsl"
 
 #include "glm/integer.hpp"
 #include "imgui.h"
+#include "spdlog/spdlog.h"
 
 #include <optional>
 
@@ -74,6 +78,18 @@ namespace Techniques
           .name             = "Composite clouds pipeline",
           .shaderModuleInfo = {.path = GetShaderDirectory() / "volumetric/clouds/CompositeClouds.comp.glsl"},
         });
+
+        renderBeerShadowMapPipeline_ = GetPipelineManager().EnqueueCompileComputePipeline({
+          .name             = "Render clouds Beer shadow map pipeline",
+          .shaderModuleInfo = {.path = GetShaderDirectory() / "volumetric/clouds/RenderBeerShadowMap.comp.glsl"},
+        });
+
+        blurBeerShadowMapPipeline_ = GetPipelineManager().EnqueueCompileComputePipeline({
+          .name             = "Blur clouds Beer shadow map pipeline",
+          .shaderModuleInfo = {.path = GetShaderDirectory() / "volumetric/clouds/BlurBeerShadowMap.comp.glsl"},
+        });
+
+        beerShadowMapInfoBuffer_.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Beer shadow map info buffer");
       }
 
       void Render(VkCommandBuffer cmd, const RayMarchedCloudsRenderParams& params) override
@@ -213,6 +229,103 @@ namespace Techniques
         ctx.DispatchInvocations(outputResolution.width, outputResolution.height, 1);
       }
 
+      void RenderBeerShadowMap(VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) override
+      {
+        ASSERT(params.numCascades <= BSM_MAX_CASCADES);
+
+        auto ctx    = Fvog::Context(cmd);
+        auto marker = ctx.MakeScopedDebugMarker("Clouds: render Beer shadow map");
+
+        constexpr auto format = Fvog::Format::R16G16B16A16_SFLOAT;
+
+        EnsureArrayTexture(ctx, beerShadowMap_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map");
+        EnsureArrayTexture(ctx, beerShadowMapHistory_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map 2");
+        EnsureArrayTexture(ctx, beerShadowMapPingPong_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map ping pong");
+
+        const auto up = glm::epsilonEqual(abs(glm::dot(params.sunDirection, glm::vec3(0, 1, 0))), 1.0f, 1e-3f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+        const auto view_from_world = glm::lookAt(params.sunPosition, params.sunPosition + params.sunDirection, up);
+
+        auto beerShadowMapInfo = CascadedBeerShadowMapInfoPtr_t{
+          .cascades        = {},
+          .shadowMapArray  = beerShadowMap_->ImageView().GetTexture2DArray(),
+          .shadowMapImages = beerShadowMap_->ImageView().GetImage2DArray(),
+          .numCascades     = params.numCascades,
+          .frustumDepth    = params.frustumDepth,
+        };
+
+        for (uint32_t i = 0; i < params.numCascades; i++)
+        {
+          const auto side            = (params.baseFrustumSideLength / 2) * exp2(float(i));
+          const auto clip_from_view  = glm::ortho(-side, side, -side, side, -params.frustumDepth / 2, params.frustumDepth / 2);
+          const auto clip_from_world = clip_from_view * view_from_world;
+
+          beerShadowMapInfo.cascades[i].clip_from_world = clip_from_world;
+          beerShadowMapInfo.cascades[i].world_from_clip = glm::inverse(clip_from_world);
+        }
+
+        ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
+        ctx.Barrier();
+
+        auto gpuParams = Fvog::GetDevice().AllocTransient<RenderBeerShadowMapGpuParams_t>();
+
+        *gpuParams = {
+          .cbsm             = beerShadowMapInfoBuffer_->GetDeviceAddress(),
+          .globalUniforms   = params.globalUniforms,
+          .numRayMarchSteps = params.numRayMarchSteps,
+          .time             = params.time,
+          .jitterScale      = params.jitterScale,
+        };
+
+        {
+          auto marker2 = ctx.MakeScopedDebugMarker("Render");
+          ctx.BindComputePipeline(renderBeerShadowMapPipeline_.GetPipeline());
+          ctx.SetPushConstants(gpuParams);
+          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+          ctx.Barrier();
+        }
+
+        {
+          auto marker2 = ctx.MakeScopedDebugMarker("Filter");
+
+          ctx.BindComputePipeline(blurBeerShadowMapPipeline_.GetPipeline());
+
+          auto blur0Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
+
+          *blur0Params = {
+            .inBeerShadowMap  = beerShadowMap_->ImageView().GetTexture2DArray(),
+            .outBeerShadowMap = beerShadowMapPingPong_->ImageView().GetImage2DArray(),
+            .doHorizontalPass = 0,
+            .historyWeight    = 0,
+          };
+
+          ctx.SetPushConstants(blur0Params);
+          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+          ctx.Barrier();
+
+          auto blur1Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
+
+          *blur1Params = {
+            .inBeerShadowMap        = beerShadowMapPingPong_->ImageView().GetTexture2DArray(),
+            .inBeerShadowMapHistory = beerShadowMapHistory_->ImageView().GetTexture2DArray(),
+            .outBeerShadowMap       = beerShadowMap_->ImageView().GetImage2DArray(),
+            .doHorizontalPass       = 1,
+            .historyWeight          = params.historyWeight,
+          };
+          ctx.SetPushConstants(blur1Params);
+          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+        }
+
+        beerShadowMapInfo.shadowMapArray = beerShadowMapHistory_->ImageView().GetTexture2DArray();
+        beerShadowMapInfo.shadowMapImages = beerShadowMapHistory_->ImageView().GetImage2DArray();
+        ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
+        std::swap(beerShadowMap_, beerShadowMapHistory_);
+      }
+
+      VkDeviceAddress GetCascadedBeerShadowMapInfoPtr() override
+      {
+        return beerShadowMapInfoBuffer_->GetDeviceAddress();
+      }
+
     private:
       static void EnsureTexture(Fvog::Context ctx, std::optional<Fvog::Texture>& texture, Fvog::Extent2D extent, Fvog::Format format, std::string name)
       {
@@ -225,13 +338,30 @@ namespace Techniques
         }
       }
 
+      static void EnsureArrayTexture(Fvog::Context ctx, std::optional<Fvog::Texture>& texture, Fvog::Extent2D extent, uint32_t layers, Fvog::Format format, std::string name)
+      {
+        if (!texture || Fvog::Extent2D(texture->GetCreateInfo().extent) != extent || texture->GetCreateInfo().arrayLayers != layers)
+        {
+          texture = Fvog::CreateTexture2DArray({extent.width, extent.height}, layers, format, Fvog::TextureUsage::GENERAL, std::move(name));
+          ctx.ImageBarrierDiscard(*texture, VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ClearTexture(*texture, {});
+          ctx.Barrier();
+        }
+      }
+
       PipelineManager::ComputePipelineKey renderCloudsPipeline_;
       PipelineManager::ComputePipelineKey upscaleCloudsPipeline_;
       PipelineManager::ComputePipelineKey compositeCloudsPipeline_;
+      PipelineManager::ComputePipelineKey renderBeerShadowMapPipeline_;
+      PipelineManager::ComputePipelineKey blurBeerShadowMapPipeline_;
       std::optional<Fvog::Texture> lowResCloudRadianceTransmittance_;
       std::optional<Fvog::Texture> lowResCloudMotionVectors_;
       std::optional<Fvog::Texture> highResCloudRadianceTransmittance_;
       std::optional<Fvog::Texture> highResCloudRadianceTransmittanceHistory_;
+      std::optional<Fvog::Texture> beerShadowMap_;
+      std::optional<Fvog::Texture> beerShadowMapPingPong_;
+      std::optional<Fvog::Texture> beerShadowMapHistory_;
+      std::optional<Fvog::TypedBuffer<CascadedBeerShadowMapInfoPtr_t>> beerShadowMapInfoBuffer_;
 
       glm::vec2 currentJitterNDC{};
       glm::mat4 clip_from_view_old = glm::mat4(1);

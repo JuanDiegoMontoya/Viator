@@ -169,6 +169,7 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   {
     sunVisibility = vec3(SampleCascadedShadowMap(positionWS, uniforms.sunShadowMap));
   }
+  sunVisibility *= vec3(SampleCascadedBeerShadowMap(positionWS, uniforms.beerShadowMap));
   const vec3 sunlightIS = float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL / M_PI * sunVisibility;
   const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, positionWS);
   

@@ -6,6 +6,7 @@ FVOG_DECLARE_ARGUMENTS(RayMarchedCloudsRenderPushConstants)
 };
 
 #ifndef __cplusplus
+#include "CloudDensity.h.glsl"
 #include "../../Math.h.glsl"
 #include "../../Hash.h.glsl"
 #include "../../Config.shared.h"
@@ -18,16 +19,6 @@ vec3 Quantize(vec3 v, float steps)
   return ivec3(v / steps) * steps;
 }
 
-float CloudDensityAtPoint(vec3 positionWS)
-{
-  const float height = 500;
-  const float gradientLower = smoothstep(height - 20, height, positionWS.y);
-  const float gradientUpper = 1 - clamp((positionWS.y - height) / 300, 0, 1);
-  const float gradient = gradientLower * gradientUpper;
-  if (gradient < 1e-3) return 0;
-  return gradient * max(0, Simplex_Fbm(positionWS / 1500, 7)) / 5;
-}
-
 float CloudDensityToPoint(vec3 start, vec3 end, int steps)
 {
   const vec3 dir = normalize(end - start);
@@ -38,7 +29,7 @@ float CloudDensityToPoint(vec3 start, vec3 end, int steps)
   for (float i = 0.5; i < steps; i++)
   {
     const vec3 curPos = start + dir * stepSize * i;
-    densityAccum += CloudDensityAtPoint(curPos) * stepSize;
+    densityAccum += CloudDensityAtPoint(curPos, globalUniforms2.time) * stepSize;
   }
 
   return densityAccum;
@@ -101,13 +92,14 @@ void main()
       {
         const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps);
         float selfShadow = beer(densityToSun);
+        //float selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
         skylight_internal *= selfShadow;
         sunlight_internal *= selfShadow;
       }
       const vec3 sunlight_total = float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal;
       //const vec3 sunlight_total = float(!view_ray_intersects_ground) * pc.sunIntensity * transmittanceToSun;
 
-      const float stepDensity = stepDist * CloudDensityAtPoint(curPos);
+      const float stepDensity = stepDist * CloudDensityAtPoint(curPos, globalUniforms2.time);
       //const float stepDensity = stepDist * 0.01;
       accumDensity += stepDensity;
       transmittance = beer(accumDensity);
