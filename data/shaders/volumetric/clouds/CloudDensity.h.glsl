@@ -2,6 +2,7 @@
 #define CLOUD_DENSITY_H
 
 #include "../../Hash.h.glsl"
+#include "../../Math.h.glsl"
 
 float CloudDensityAtPoint(vec3 positionWS, float time)
 {
@@ -11,7 +12,8 @@ float CloudDensityAtPoint(vec3 positionWS, float time)
   const float gradientUpper = 1 - clamp((positionWS.y - height) / 150, 0, 1);
   const float gradient = gradientLower * gradientUpper;
   if (gradient < 1e-3) return 0;
-  return gradient * max(0.0, Simplex_Fbm(positionWS / 150, 7)) / 1;
+  const float raw = Remap(Simplex_Fbm(positionWS / 150, 7), -1, 1, -1.5, 1);
+  return gradient * max(0.0, raw) / 1;
 }
 
 #endif // CLOUD_DENSITY_H

@@ -19,14 +19,14 @@ vec3 Quantize(vec3 v, float steps)
   return ivec3(v / steps) * steps;
 }
 
-float CloudDensityToPoint(vec3 start, vec3 end, int steps)
+float CloudDensityToPoint(vec3 start, vec3 end, int steps, float startOffset)
 {
   const vec3 dir = normalize(end - start);
   const float stepSize = distance(end, start) / steps;
 
   float densityAccum = 0;
 
-  for (float i = 0.5; i < steps; i++)
+  for (float i = startOffset; i < steps; i++)
   {
     const vec3 curPos = start + dir * stepSize * i;
     densityAccum += CloudDensityAtPoint(curPos, globalUniforms2.time) * stepSize;
@@ -55,6 +55,12 @@ void main()
   const float maxLength = depth == FAR_DEPTH ? 1e30 : length(rayEnd - rayOrigin);
   const vec3 rayDir = normalize(rayEnd - rayOrigin);
 
+  uint seed               = globalUniforms2.frameNumber;
+  const ivec2 frameOffset = ivec2(PCG_RandU32(seed), PCG_RandU32(seed));
+  const ivec2 noiseSize   = textureSize(globalUniforms2.blueNoise, 0);
+  const ivec2 noiseCoord  = (gid + frameOffset) % noiseSize;
+  const float jitter      = 0.5 + (texelFetch(globalUniforms2.blueNoise, noiseCoord, 0).x - 0.5);
+
   float accumDist = 0;
   float accumDensity = 0;
   vec3 accumScattering = vec3(0);
@@ -64,7 +70,7 @@ void main()
 
   for (uint i = 0; i < pc.numRayMarchSteps; i++)
   {
-    const float t = (i + 1) * 2.0;
+    const float t = (i + jitter) * 10.0;
     const vec3 curPos = rayOrigin + rayDir * t;
     const float stepDist = distance(curPos, prevPos);
     accumDist += stepDist;
@@ -90,17 +96,16 @@ void main()
       const int sunSelfShadowSteps = 1;
       if (sunSelfShadowSteps > 0)
       {
-        const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps);
+        const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps, jitter);
         float selfShadow = beer(densityToSun);
-        //float selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
+        selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
         skylight_internal *= selfShadow;
         sunlight_internal *= selfShadow;
       }
       const vec3 sunlight_total = float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal;
-      //const vec3 sunlight_total = float(!view_ray_intersects_ground) * pc.sunIntensity * transmittanceToSun;
 
       const float stepDensity = stepDist * CloudDensityAtPoint(curPos, globalUniforms2.time);
-      //const float stepDensity = stepDist * 0.01;
+      
       accumDensity += stepDensity;
       transmittance = beer(accumDensity);
       vec3 indirect = vec3(0);
@@ -109,7 +114,8 @@ void main()
       const float powderEffect = mix(1, powder(accumDensity), max(0, -LoV));
       const float commonTerm = powderEffect * transmittance * stepDensity;
       const float HACK_MAGIC_FACTOR = 10;
-      accumScattering += HACK_MAGIC_FACTOR * commonTerm * sunlight_total * phaseHG(0.5, LoV);
+      const float phase = (phaseHG(0.8, LoV) + phaseHG(0.0, LoV)) / 2; // Artistic mixture of phase functions.
+      accumScattering += HACK_MAGIC_FACTOR * commonTerm * sunlight_total * phase;
       accumScattering += commonTerm * indirect * uniform_sphere_PDF();
 
       if (transmittance < 0.9 && hitT == 0)

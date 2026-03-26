@@ -188,6 +188,39 @@ void main()
     historyWeight = 0.0;
   }
 
+  // Neighborhood clamping
+  if (historyWeight > 0)
+  {
+    float minLum = 1e30;
+    float maxLum = -1e30;
+    float minTrans = 1e30;
+    float maxTrans = -1e30;
+    const int radius = 1;
+    for (int y = -radius; y <= radius; y++)
+    for (int x = -radius; x <= radius; x++)
+    {
+      const vec2 offset = vec2(x, y) / srcResolution;
+      const vec2 sampleUv = uvForLowRes + offset;
+      const vec4 scatteringTransmittance = textureLod(pc.inLowResCloudRadianceTransmittance, gNearestClampSampler, sampleUv, 0);
+      const float lum = Luminance(scatteringTransmittance.rgb);
+      minLum = min(minLum, lum);
+      maxLum = max(maxLum, lum);
+      minTrans = min(minTrans, scatteringTransmittance.a);
+      maxTrans = max(maxTrans, scatteringTransmittance.a);
+    }
+    const float historyLum = max(1e-3, Luminance(historySample.rgb));
+    if (historyLum < minLum)
+    {
+      historySample.rgb = historySample.rgb / historyLum * minLum;
+    }
+    if (historyLum > maxLum)
+    {
+      historySample.rgb = historySample.rgb / historyLum * maxLum;
+    }
+    historySample.a = max(minTrans, historySample.a);
+    historySample.a = min(maxTrans, historySample.a);
+  }
+
   // Reject history when off-screen.
   historyWeight *= float(all(greaterThanEqual(uvForPrev, vec2(0))) && all(lessThan(uvForPrev, vec2(1))));
   const vec4 blendedSample = mix(currentSample, historySample, historyWeight);
