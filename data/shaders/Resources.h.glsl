@@ -10,6 +10,8 @@
 #include "glm/vec4.hpp"
 #include "glm/mat4x4.hpp"
 
+#define CONSTEXPR_INLINE constexpr inline
+
 #define FVOG_FLOAT float
 #define FVOG_VEC2 glm::vec2
 #define FVOG_VEC3 glm::vec3
@@ -38,6 +40,8 @@
   struct typeName ## _t
 
 #else // GLSL
+
+#define CONSTEXPR_INLINE const
 
 #define FVOG_FLOAT float
 #define FVOG_VEC2 vec2
@@ -280,6 +284,10 @@ struct AccelerationStructure
   FVOG_UINT32 tlasIdx;
 };
 #endif
+
+CONSTEXPR_INLINE Sampler gLinearClampSampler = {0};
+CONSTEXPR_INLINE Sampler gNearestClampSampler = {1};
+CONSTEXPR_INLINE Sampler gNearestMirrorSampler = {2};
 
 #ifdef __cplusplus
 } // namespace shared

@@ -489,6 +489,44 @@ namespace Fvog
         .objectHandle = reinterpret_cast<uint64_t>(defaultPipelineLayout),
         .pObjectName  = "Default Pipeline Layout",
       }));
+
+    // Create default global samplers.
+    // Important: the order of construction of these samplers must match the indices in Resource.h.glsl.
+    const auto linearClamp = samplerCache_->CreateOrGetCachedTextureSampler(
+      {
+        .magFilter    = VK_FILTER_LINEAR,
+        .minFilter    = VK_FILTER_LINEAR,
+        .mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      },
+      "Global linear clamp sampler");
+    ASSERT(linearClamp.GetResourceHandle().index == shared::gLinearClampSampler.samplerIdx);
+
+    const auto nearestClamp = samplerCache_->CreateOrGetCachedTextureSampler(
+      {
+        .magFilter    = VK_FILTER_NEAREST,
+        .minFilter    = VK_FILTER_NEAREST,
+        .mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      },
+      "Global nearest clamp sampler");
+    ASSERT(nearestClamp.GetResourceHandle().index == shared::gNearestClampSampler.samplerIdx);
+
+    const auto nearestMirror = samplerCache_->CreateOrGetCachedTextureSampler(
+      {
+        .magFilter    = VK_FILTER_NEAREST,
+        .minFilter    = VK_FILTER_NEAREST,
+        .mipmapMode   = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+      },
+      "Global nearest mirror sampler");
+    ASSERT(nearestMirror.GetResourceHandle().index == shared::gNearestMirrorSampler.samplerIdx);
   }
   
   Device::~Device()
