@@ -86,46 +86,48 @@ namespace Techniques
 
     ASSERT(!data.empty());
 
-    glm::dvec4 sum = {};
-    for (const auto& e : data)
     {
-      sum += e * 180.0f;
-    }
-    sum /= static_cast<double>(data.size());
+      ZoneScopedN("Normalize Mie scattering LUT");
+      glm::dvec4 sum = {};
+      for (const auto& e : data)
+      {
+        sum += e * 180.0f;
+      }
+      sum /= static_cast<double>(data.size());
 
-    //printf("sum: %f, %f, %f\n", sum.r, sum.g, sum.b);
+      // printf("sum: %f, %f, %f\n", sum.r, sum.g, sum.b);
 
-    auto eval = [&](const glm::vec3& dir)
-    {
-      auto cosine = glm::clamp(glm::dot(dir, {0, 0, 1}), -1.0f, 1.0f);
-      // return vec3(phaseHG(0.9f, uv));
-      // return vec3(phaseSchlick(0.9f, uv));
-      auto radians = acos(cosine);
-      auto ic      = radians / glm::pi<float>();
-      auto tc      = ic * (data.size() - 1);
-      auto left    = (size_t)floor(tc);
-      auto right   = (size_t)ceil(tc);
-      auto alpha   = glm::fract(tc);
-      return mix(data[left], data[right], alpha);
-    };
+      auto eval = [&](const glm::vec3& dir)
+      {
+        auto cosine = glm::clamp(glm::dot(dir, {0, 0, 1}), -1.0f, 1.0f);
+        // return vec3(phaseHG(0.9f, uv));
+        // return vec3(phaseSchlick(0.9f, uv));
+        auto radians = acos(cosine);
+        auto ic      = radians / glm::pi<float>();
+        auto tc      = ic * (data.size() - 1);
+        auto left    = (size_t)floor(tc);
+        auto right   = (size_t)ceil(tc);
+        auto alpha   = glm::fract(tc);
+        return mix(data[left], data[right], alpha);
+      };
 
-    uint32_t seed = PCG::Hash(7);
+      uint32_t seed = PCG::Hash(7);
 
-    constexpr int samples = 1'000'000;
-    glm::dvec4 estimate   = {};
-    for (int i = 0; i < samples; i++)
-    {
-      const auto xi = glm::vec2(PCG::RandFloat(seed), PCG::RandFloat(seed));
-      estimate += eval(MapToUnitSphere(xi)) / UniformSpherePDF();
-    }
-    estimate /= samples;
+      constexpr int samples = 1'000'000;
+      glm::dvec4 estimate   = {};
+      for (int i = 0; i < samples; i++)
+      {
+        const auto xi = glm::vec2(PCG::RandFloat(seed), PCG::RandFloat(seed));
+        estimate += eval(MapToUnitSphere(xi)) / UniformSpherePDF();
+      }
+      estimate /= samples;
 
-    // printf("estimate: %f, %f, %f\n", estimate.r, estimate.g, estimate.b);
+      // printf("estimate: %f, %f, %f\n", estimate.r, estimate.g, estimate.b);
 
-    for (auto& c : data)
-    {
-      c /= estimate;
-    }
+      for (auto& c : data)
+      {
+        c /= estimate;
+      }
 #if 0 // Re-integrate to see how close we got last time
     glm::dvec3 estimate2 = {};
     for (int i = 0; i < samples; i++)
@@ -137,6 +139,7 @@ namespace Techniques
 
     printf("estimate2: %f, %f, %f\n", estimate2.r, estimate2.g, estimate2.b);
 #endif
+    }
     scatteringTexture = Fvog::Texture(Fvog::TextureCreateInfo{
       .viewType    = VK_IMAGE_VIEW_TYPE_1D,
       .format      = Fvog::Format::R32G32B32A32_SFLOAT, // TODO: temp
