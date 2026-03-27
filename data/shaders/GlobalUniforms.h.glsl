@@ -5,6 +5,7 @@
 #include "Debug/DebugCommon.h.glsl"
 #include "voxels/RayTracedVoxelsShadowCommon.h.glsl"
 #include "volumetric/clouds/BeerShadowMap.h.glsl"
+#include "volumetric/clouds/WeatherGpuParams.shared.h"
 
 #define CULL_MESHLET_FRUSTUM    (1 << 0)
 #define CULL_MESHLET_HIZ        (1 << 1)
@@ -89,6 +90,7 @@ struct SkyParameters
   FVOG_SHARED Texture2D blueNoise;            \
   CascadedShadowMapInfoPtr sunShadowMap;      \
   CascadedBeerShadowMapInfoPtr beerShadowMap; \
+  WeatherGpuParams weatherParams;             \
   FVOG_FLOAT time;                            \
   FVOG_FLOAT dt
 

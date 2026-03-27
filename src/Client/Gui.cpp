@@ -2343,6 +2343,23 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::EndTabItem();
         }
 
+        if (ImGui::BeginTabItem("Weather"))
+        {
+          ImGui::Checkbox("Override game weather", &enableWeatherOverride_);
+          ImGui::BeginDisabled(!enableWeatherOverride_);
+          ImGui::SliderFloat("Cloud bottom altitude", &weather_.cloudBottomAltitude, 200, 2000, "%.0fm");
+          ImGui::SliderFloat("Cloud bottom falloff", &weather_.cloudBottomFalloffDistance, 0, 200, "%.1fm");
+          ImGui::SliderFloat("Cloud height", &weather_.cloudHeight, 0, 1000, "%.0fm");
+          ImGui::SliderFloat("Cloud coverage", &weather_.cloudCoverage, 0.01f, 1, "%.2f");
+          ImGui::SliderFloat("Cloud density", &weather_.cloudDensity, 0, 1, "%.2f");
+          ImGui::SliderFloat("Cloud frequency", &weather_.cloudFrequency, 0, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
+          ImGui::SliderFloat2("Wind velocity", &weather_.windVelocity[0], -10, 10, "%.2f");
+          ImGui::DragFloat2("Cloud position offset", &weather_.cloudHorizontalOffset[0], 1, 0, 0, "%.2f");
+          ImGui::DragFloat("Cloud time offset", &weather_.cloudTemporalOffset, 1, 0, 0, "%.2f");
+          ImGui::EndDisabled();
+          ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
       }
     }

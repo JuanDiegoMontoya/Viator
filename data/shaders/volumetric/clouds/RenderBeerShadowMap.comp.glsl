@@ -58,7 +58,7 @@ void main()
     const vec3 curPos = rayPos + rayDir * t;
     // Without this factor, the darkening is too subtle, maybe due to a bug. Either way, this "fixes" it.
     const float HACK_MAGIC_FACTOR = 25;
-    const float density = HACK_MAGIC_FACTOR * CloudDensityAtPoint(curPos, pc.time);
+    const float density = HACK_MAGIC_FACTOR * CloudDensityAtPoint(curPos, pc.globalUniforms.weatherParams);
 
     // What we consider to be "in" a cloud.
     const float extinctionThreshold = 1e-4;

@@ -181,8 +181,8 @@ void main()
   }
 
   vec4 historySample;
-  // Require four valid samples to avoid certain artifacts, which isn't ideal.
-  if (!DepthAwareBilerp(historySample, pc.inOldCloudRadianceTransmittance, pc.inHighResDepthPrev, depthVS, uvForPrev, vec2(0), 4))
+  // With neighborhood clamping, only one valid neighbor is necessary. Otherwise, we need four to minimize ghosting.
+  if (!DepthAwareBilerp(historySample, pc.inOldCloudRadianceTransmittance, pc.inHighResDepthPrev, depthVS, uvForPrev, vec2(0), 1))
   {
     //historySample = BilateralUpscale(pc.inOldCloudRadianceTransmittance, pc.inHighResDepthPrev, gid, depthVS, outResolution, vec2(0), motionUV);
     historyWeight = 0.0;
@@ -208,7 +208,7 @@ void main()
       minTrans = min(minTrans, scatteringTransmittance.a);
       maxTrans = max(maxTrans, scatteringTransmittance.a);
     }
-    const float historyLum = max(1e-3, Luminance(historySample.rgb));
+    const float historyLum = max(1e-4, Luminance(historySample.rgb));
     if (historyLum < minLum)
     {
       historySample.rgb = historySample.rgb / historyLum * minLum;

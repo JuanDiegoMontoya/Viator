@@ -29,7 +29,7 @@ float CloudDensityToPoint(vec3 start, vec3 end, int steps, float startOffset)
   for (float i = startOffset; i < steps; i++)
   {
     const vec3 curPos = start + dir * stepSize * i;
-    densityAccum += CloudDensityAtPoint(curPos, globalUniforms2.time) * stepSize;
+    densityAccum += CloudDensityAtPoint(curPos, globalUniforms2.weatherParams) * stepSize;
   }
 
   return densityAccum;
@@ -104,7 +104,7 @@ void main()
       }
       const vec3 sunlight_total = float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal;
 
-      const float stepDensity = stepDist * CloudDensityAtPoint(curPos, globalUniforms2.time);
+      const float stepDensity = stepDist * CloudDensityAtPoint(curPos, globalUniforms2.weatherParams);
       
       accumDensity += stepDensity;
       transmittance = beer(accumDensity);

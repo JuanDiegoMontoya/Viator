@@ -1084,6 +1084,9 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   skyParameters.sunColor = sunColor;
   skyParameters.sunBrightness = sunBrightness; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
 
+  auto weatherGpuParams = Fvog::GetDevice().AllocTransient<WeatherGpuParams_t>();
+  *weatherGpuParams = weather_;
+
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
       .viewProj               = clip_from_world,
@@ -1111,6 +1114,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
       .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
+      .weatherParams          = weatherGpuParams.ptr,
       .time                   = static_cast<float>(time += dt),
       .dt                     = static_cast<float>(dt),
     });

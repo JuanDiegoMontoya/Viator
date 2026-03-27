@@ -428,6 +428,19 @@ private:
     1,
     Game2::CVarFlagBits::ARCHIVE,
   };
+
+  bool enableWeatherOverride_ = false;
+  WeatherGpuParams_t weather_{
+    .cloudBottomAltitude        = 480.0f,
+    .cloudBottomFalloffDistance = 20.0f,
+    .cloudHeight                = 150.0f,
+    .cloudCoverage              = 1.0f,
+    .cloudDensity               = 0.2f,
+    .cloudFrequency             = 1.0f / 150.0f,
+    .windVelocity               = {},
+    .cloudHorizontalOffset      = {},
+    .cloudTemporalOffset        = {},
+  };
 };
 
 struct ImFont;
