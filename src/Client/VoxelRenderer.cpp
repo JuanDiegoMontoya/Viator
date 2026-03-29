@@ -1657,7 +1657,10 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .view_from_world     = view_from_world,
           .clip_from_view_old  = clip_from_view_old,
           .view_from_world_old = view_from_world_old,
-          .numRayMarchSteps    = uint32_t(cloudsNumRayMarchSteps.Get()),
+          .distForMinRaySteps  = (float)cloudsDistForMinRayStepCount.Get(),
+          .distForMaxRaySteps  = (float)cloudsDistForMaxRayStepCount.Get(),
+          .numRayMarchStepsMin = uint32_t(cloudsNumRayMarchStepsMin.Get()),
+          .numRayMarchStepsMax = uint32_t(cloudsNumRayMarchStepsMax.Get()),
           .sunDirection        = skyParameters.sunDir,
           .sunIntensity        = skyParameters.sunColor * skyParameters.sunBrightness,
           .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
@@ -1665,6 +1668,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .frameNumber         = frameNumber,
           .zNear               = (float)cameraNearPlane.Get(),
         });
+      weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt;
       ctx.Barrier();
       rayMarchedClouds_->Upscale(commandBuffer,
         {

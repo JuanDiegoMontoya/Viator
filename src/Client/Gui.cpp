@@ -2356,6 +2356,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::SliderFloat2("Wind velocity", &weather_.windVelocity[0], -10, 10, "%.2f");
           ImGui::DragFloat2("Cloud position offset", &weather_.cloudHorizontalOffset[0], 1, 0, 0, "%.2f");
           ImGui::DragFloat("Cloud time offset", &weather_.cloudTemporalOffset, 1, 0, 0, "%.2f");
+          ImGui::SliderFloat("Earth scale", &weather_.earthSizeFactor, 1.0f / 10000.0f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
           ImGui::EndDisabled();
           ImGui::EndTabItem();
         }

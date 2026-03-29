@@ -23,7 +23,10 @@ namespace Techniques
     glm::mat4 view_from_world{};
     glm::mat4 clip_from_view_old{};
     glm::mat4 view_from_world_old{};
-    uint32_t numRayMarchSteps{};
+    float distForMinRaySteps{};
+    float distForMaxRaySteps{};
+    uint32_t numRayMarchStepsMin{};
+    uint32_t numRayMarchStepsMax{};
     glm::vec3 sunDirection{};
     glm::vec3 sunIntensity{};
     uint32_t globalUniformsIndex{};

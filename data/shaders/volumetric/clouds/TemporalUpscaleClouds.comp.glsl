@@ -195,7 +195,7 @@ void main()
     float maxLum = -1e30;
     float minTrans = 1e30;
     float maxTrans = -1e30;
-    const int radius = 1;
+    const int radius = 2;
     for (int y = -radius; y <= radius; y++)
     for (int x = -radius; x <= radius; x++)
     {

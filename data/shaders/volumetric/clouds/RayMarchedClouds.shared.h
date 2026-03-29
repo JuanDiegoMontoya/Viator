@@ -17,7 +17,10 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(RayMarchedCloudsRenderGpuParams)
   FVOG_MAT4 clip_from_world_old;
   FVOG_MAT4 clip_from_world_unjittered;
   FVOG_MAT4 clip_from_world_old_unjittered;
-  FVOG_UINT32 numRayMarchSteps;
+  FVOG_FLOAT distForMinRayStepCount;
+  FVOG_FLOAT distForMaxRayStepCount;
+  FVOG_UINT32 numRayMarchStepsMin;
+  FVOG_UINT32 numRayMarchStepsMax;
   FVOG_VEC2 jitterUV;
 
   FVOG_VEC3 sunDirection;

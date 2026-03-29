@@ -357,10 +357,37 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
-  Game2::AutoCVar_float cloudsNumRayMarchSteps = {
-    "r.clouds.rayMarch.steps",
-    "- The number of steps to take in the ray marching pass when rendering clouds.",
+  Game2::AutoCVar_float cloudsNumRayMarchStepsMin = {
+    "r.clouds.rayMarch.minSteps",
+    "- The minimum number of steps to take in the ray marching pass when rendering clouds.",
+    10,
+    1,
+    {},
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudsNumRayMarchStepsMax = {
+    "r.clouds.rayMarch.maxSteps",
+    "- The maximum number of steps to take in the ray marching pass when rendering clouds.",
     200,
+    1,
+    {},
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudsDistForMinRayStepCount = {
+    "r.clouds.rayMarch.distForMinSteps",
+    "- The ray length required to to take the minimum number of steps when rendering clouds.",
+    50,
+    1,
+    {},
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float cloudsDistForMaxRayStepCount = {
+    "r.clouds.rayMarch.distForMaxSteps",
+    "- The ray length required to to take the maximum number of steps when rendering clouds.",
+    1000,
     1,
     {},
     Game2::CVarFlagBits::ARCHIVE,
@@ -440,6 +467,7 @@ private:
     .windVelocity               = {},
     .cloudHorizontalOffset      = {},
     .cloudTemporalOffset        = {},
+    .earthSizeFactor            = 1.0f / 10.0f,
   };
 };
 
