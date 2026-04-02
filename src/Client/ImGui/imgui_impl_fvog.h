@@ -31,6 +31,7 @@
 #ifndef IMGUI_DISABLE
   #include "imgui.h" // IMGUI_IMPL_API
 #include "Client/Fvog/Pipeline2.h"
+#include "Core/Assert2.h"
 
 // [Configuration] in order to use a custom Vulkan function loader:
 // (1) You'll need to disable default Vulkan function prototypes.
@@ -108,14 +109,15 @@ IMGUI_IMPL_API bool ImGui_ImplFvog_LoadFunctions(PFN_vkVoidFunction (*loader_fun
 // Combined texture-sampler type that can be stored in ImTextureID
 struct ImTextureSampler
 {
-  constexpr static uint32_t DefaultSamplerIndex = 65535;
+  constexpr static uint32_t DefaultSamplerIndex = 255;
   constexpr static uint32_t DefaultColorSpace = IMGUI_COLOR_SPACE_sRGB_NONLINEAR;
 
-  ImTextureSampler(uint32_t textureIndex, uint32_t samplerIndex = DefaultSamplerIndex, uint32_t colorSpace = DefaultColorSpace)
+  ImTextureSampler(uint32_t textureIndex, uint32_t samplerIndex = DefaultSamplerIndex, uint32_t colorSpace = DefaultColorSpace, bool alphaIsOne = false)
   {
     SetTextureIndex(textureIndex);
     SetSamplerIndex(samplerIndex);
     SetColorSpace(colorSpace);
+    SetAlphaIsOne(alphaIsOne);
   }
 
   explicit ImTextureSampler(ImTextureID id) : id_(id) {}
@@ -127,17 +129,22 @@ struct ImTextureSampler
 
   [[nodiscard]] uint32_t GetSamplerIndex() const
   {
-    return static_cast<uint32_t>((id_ & 0x0000FFFF00000000) >> 32ull);
+    return static_cast<uint32_t>((id_ & 0x0000'00FF'0000'0000) >> 32ull);
   }
 
   [[nodiscard]] uint32_t GetColorSpace() const
   {
-    return static_cast<uint32_t>((id_ & 0xFFFF000000000000) >> 48ull);
+    return static_cast<uint32_t>((id_ & 0x0000'FF00'0000'0000) >> 40ull);
   }
 
   [[nodiscard]] bool IsSamplerDefault() const
   {
     return GetSamplerIndex() == DefaultSamplerIndex;
+  }
+
+  [[nodiscard]] bool GetAlphaIsOne() const
+  {
+    return static_cast<bool>(id_ & 0x000F'0000'0000'0000);
   }
 
   void SetTextureIndex(uint32_t textureIndex)
@@ -147,12 +154,18 @@ struct ImTextureSampler
 
   void SetSamplerIndex(uint32_t samplerIndex)
   {
-    id_ = (id_ & 0xFFFF0000FFFFFFFF) | ((uint64_t)samplerIndex << 32ull);
+    ASSERT(samplerIndex <= DefaultSamplerIndex);
+    id_ = (id_ & 0xFFFF'FF00'FFFF'FFFF) | ((uint64_t)samplerIndex << 32ull);
   }
 
   void SetColorSpace(uint32_t colorSpace)
   {
-    id_ = (id_ & 0x0000FFFFFFFFFFFF) | ((uint64_t)colorSpace << 48ull);
+    id_ = (id_ & 0xFFFF'00FF'FFFF'FFFF) | ((uint64_t)colorSpace << 40ull);
+  }
+
+  void SetAlphaIsOne(bool alphaIsOne)
+  {
+    id_ = (id_& 0xFFF0'FFFF'FFFF'FFFF) | ((uint64_t)alphaIsOne << 48ull);
   }
 
   operator ImTextureID() const

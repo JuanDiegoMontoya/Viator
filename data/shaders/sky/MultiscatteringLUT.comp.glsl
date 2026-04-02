@@ -79,7 +79,7 @@ RaymarchResult integrate_scattered_luminance(vec3 world_position, vec3 world_dir
         /* uv coordinates later used to sample transmittance texture */
         vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top);
 
-        vec3 transmittance_to_sun = texture(transmittanceTexture, transmittanceSampler, trans_texture_uv).rgb;
+        vec3 transmittance_to_sun = texture(transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
 
         MediumSample m_sample = sample_medium(uniforms.sky, new_position);
         vec3 medium_scattering = m_sample.mie_scattering + m_sample.rayleigh_scattering;

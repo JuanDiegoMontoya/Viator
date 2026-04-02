@@ -14,6 +14,7 @@ layout(push_constant, scalar) uniform PushConstants
   float maxDisplayNits;
   vec2 scale;
   vec2 translation;
+  uint alphaIsOne;
 } pc;
 
 layout(set = 0, binding = 3) uniform texture2D textures[];
@@ -96,5 +97,5 @@ void main()
   // Assumes tint and texture are in the same color space
   vec4 color_raw = In.Color * texture(sampler2D(textures[pc.textureIndex], samplers[pc.samplerIndex]), In.UV);
   fColor.rgb = ConvertTextureToOutputColorSpace(color_raw.rgb, pc.textureColorSpace, pc.displayColorSpace);
-  fColor.a = color_raw.a;
+  fColor.a = bool(pc.alphaIsOne) ? 1.0 : color_raw.a;
 }

@@ -208,6 +208,7 @@ struct ImGuiPushConstants
   float maxDisplayNits{};
   float scale[2]{};
   float translation[2]{};
+  uint32_t alphaIsOne{};
 };
 
 bool ImGui_ImplFvog_LoadFunctions(PFN_vkVoidFunction (*loader_func)(const char* function_name, void* user_data), void* user_data)
@@ -461,6 +462,7 @@ void ImGui_ImplFvog_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comman
         }
 
         pushConstants.textureColorSpace = textureSampler.GetColorSpace();
+        pushConstants.alphaIsOne        = textureSampler.GetAlphaIsOne();
 
         vkCmdPushConstants(command_buffer, Fvog::GetDevice().defaultPipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(pushConstants), &pushConstants);
 

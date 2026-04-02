@@ -4,40 +4,6 @@
 #include "SkyUtil.h.glsl"
 #include "SkyShared.h.glsl"
 
-/* ============================= PHASE FUNCTIONS ============================ */
-float cornette_shanks_mie_phase_function(float g, float cos_theta)
-{
-    float k = 3.0 / (8.0 * M_PI) * (1.0 - g * g) / (2.0 + g * g);
-    return k * (1.0 + cos_theta * cos_theta) / pow(1.0 + g * g - 2.0 * g * -cos_theta, 1.5);
-}
-#define TAU (2 * M_PI)
-float klein_nishina_phase(float cos_theta, float e)
-{
-    return e / (TAU * (e * (1.0 - cos_theta) + 1.0) * log(2.0 * e + 1.0));
-}
-
-float rayleigh_phase(float cos_theta)
-{
-    float factor = 3.0 / (16.0 * M_PI);
-    return factor * (1.0 + cos_theta * cos_theta);
-}
-// https://research.nvidia.com/labs/rtr/approximate-mie/publications/approximate-mie.pdf
-float draine_phase(float alpha, float g, float cos_theta)
-{
-    return (1.0 / (4.0 * M_PI)) *
-           ((1.0 - (g * g)) / pow((1.0 + (g * g) - (2.0 * g * cos_theta)), 3.0 / 2.0)) *
-           ((1.0 + (alpha * cos_theta * cos_theta)) / (1.0 + (alpha * (1.0 / 3.0) * (1.0 + (2.0 * g * g)))));
-}
-
-float hg_draine_phase(float cos_theta, float diameter)
-{
-    const float g_hg = exp(-(0.0990567 / (diameter - 1.67154)));
-    const float g_d = exp(-(2.20679 / (diameter + 3.91029)) - 0.428934);
-    const float alpha = exp(3.62489 - (0.599085 / (diameter + 5.52825)));
-    const float w_d = exp(-(0.599085 / (diameter - 0.641583)) - 0.665888);
-    return (1 - w_d) * draine_phase(0, g_hg, cos_theta) + w_d * draine_phase(alpha, g_d, cos_theta);
-}
-/* ========================================================================== */
 
 vec3 get_multiple_scattering(vec3 world_position, float view_zenith_cos_angle)
 {
@@ -49,7 +15,7 @@ vec3 get_multiple_scattering(vec3 world_position, float view_zenith_cos_angle)
     uv = vec2(from_unit_to_subuv(uv.x, multiscattering_texture_size.x),
               from_unit_to_subuv(uv.y, multiscattering_texture_size.y));
 
-    return texture(multiscatteringTexture, multiscatteringTransmittanceSampler, uv).rgb;
+    return texture(multiscatteringTexture, gLinearClampSampler, uv).rgb;
 }
 
 vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, vec3 sun_direction, int sample_count)
@@ -118,7 +84,7 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
 
         /* uv coordinates later used to sample transmittance texture */
         vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top);
-        vec3 transmittance_to_sun = texture(transmittanceTexture, multiscatteringTransmittanceSampler, trans_texture_uv).rgb;
+        vec3 transmittance_to_sun = texture(transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
 
         vec3 phase_times_scattering = m_sample.mie_scattering * mie_phase_value + m_sample.rayleigh_scattering * rayleigh_phase_value;
 

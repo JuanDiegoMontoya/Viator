@@ -13,6 +13,7 @@
 #include "techniques/ao/ScreenSpaceGI.h"
 #include "techniques/shadows/CascadedShadowMaps.h"
 #include "techniques/volumetric/RayMarchedClouds.h"
+#include "techniques/Sky.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -175,10 +176,6 @@ private:
   PipelineManager::ComputePipelineKey perPixelPathtracerPipeline;
   PipelineManager::ComputePipelineKey tonemapPipeline;
 
-  PipelineManager::ComputePipelineKey skyTransmittancePipeline;
-  PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
-  PipelineManager::ComputePipelineKey skyViewPipeline;
-
   std::optional<Fvog::NDeviceBuffer<Temp::ObjectUniforms>> meshUniformz;
   std::optional<Fvog::NDeviceBuffer<Debug::Line>> lineVertexBuffer;
   std::optional<Fvog::NDeviceBuffer<GpuLight>> lightBuffer;
@@ -192,12 +189,7 @@ private:
   std::optional<Fvog::TypedBuffer<GBuffer_t>> gBufferBuffer;
 
   // Sky
-  std::optional<Fvog::Texture> transmittanceLut;
-  std::optional<Fvog::Texture> multiscatteringLut;
-  std::optional<Fvog::Texture> skyViewLut;
-  std::optional<Fvog::TextureView> transmittanceLutView;
-  std::optional<Fvog::TextureView> multiscatteringLutView;
-  std::optional<Fvog::TextureView> skyViewLutView;
+  std::unique_ptr<Techniques::Sky> sky_ = Techniques::Sky::Create();
   SkyParameters skyParameters = InitSkyParameters();
 
   Fvog::TypedBuffer<float> exposureBuffer;

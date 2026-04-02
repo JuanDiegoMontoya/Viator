@@ -475,33 +475,6 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
       },
   });
 
-  skyTransmittancePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-    .name = "Sky Transmittance LUT",
-    .shaderModuleInfo =
-      PipelineManager::ShaderModuleCreateInfo{
-        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-        .path  = GetShaderDirectory() / "sky/TransmittanceLUT.comp.glsl",
-      },
-  });
-
-  skyMultiscatteringPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-    .name = "Sky Multiscattering LUT",
-    .shaderModuleInfo =
-      PipelineManager::ShaderModuleCreateInfo{
-        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-        .path  = GetShaderDirectory() / "sky/MultiscatteringLUT.comp.glsl",
-      },
-  });
-
-  skyViewPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-    .name = "Sky View LUT",
-    .shaderModuleInfo =
-      PipelineManager::ShaderModuleCreateInfo{
-        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-        .path  = GetShaderDirectory() / "sky/SkyViewLUT.comp.glsl",
-      },
-  });
-
   noiseTexture = LoadImageFile(GetTextureDirectory() / "bluenoise256.png", false);
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
   backgroundTexture = LoadImageFile(GetTextureDirectory() / "background.png", false);
@@ -541,37 +514,6 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
       .usage    = Fvog::TextureUsage::GENERAL,
     },
     "Fog color and density volume");
-
-  transmittanceLut = Fvog::Texture(
-    {
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
-      .extent   = {256, 64, 1},
-      .usage    = Fvog::TextureUsage::GENERAL,
-    },
-    "Transmittance LUT");
-
-  multiscatteringLut = Fvog::Texture(
-    {
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
-      .extent   = {32, 32, 1},
-      .usage    = Fvog::TextureUsage::GENERAL,
-    },
-    "Multiscattering LUT");
-
-  skyViewLut = Fvog::Texture(
-    {
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format   = Fvog::Format::R16G16B16A16_SFLOAT,
-      .extent   = {256, 192, 1},
-      .usage    = Fvog::TextureUsage::GENERAL,
-    },
-    "Sky View LUT");
-
-  transmittanceLutView   = transmittanceLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
-  multiscatteringLutView = multiscatteringLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
-  skyViewLutView         = skyViewLut->CreateSwizzleView({.a = VK_COMPONENT_SWIZZLE_ONE});
 
   gBufferBuffer.emplace();
 
@@ -1084,6 +1026,14 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   skyParameters.sunColor = sunColor;
   skyParameters.sunBrightness = sunBrightness; // Intended to be used with solid_angle_mapping_PDF(radians(0.5))
 
+  sky_->EnsureResources(commandBuffer,
+    {
+      .transmittanceLutExtent     = {256, 64},
+      .multiscatteringLutExtent   = {32, 32},
+      .skyViewLutExtent           = {256, 192},
+      .aerialPerspectiveLutExtent = {1, 1, 1},
+    });
+
   auto weatherGpuParams = Fvog::GetDevice().AllocTransient<WeatherGpuParams_t>();
   *weatherGpuParams = weather_;
 
@@ -1106,8 +1056,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .alphaHashScale         = 0,
       .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
       .sky                    = skyParameters,
-      .skyViewLut             = skyViewLut.value().ImageView().GetTexture2D(),
-      .transmittanceLut       = transmittanceLut.value().ImageView().GetTexture2D(),
+      .skyViewLut             = sky_->GetSkyViewLut().ImageView().GetTexture2D(),
+      .transmittanceLut       = sky_->GetTransmittanceLut().ImageView().GetTexture2D(),
       .linearSampler          = linearClampSampler,
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
@@ -1119,37 +1069,17 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .dt                     = static_cast<float>(dt),
     });
 
-  ctx.ImageBarrierDiscard(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(multiscatteringLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(skyViewLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetMultiscatteringLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetSkyViewLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectivelut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
 
-  ctx.BindComputePipeline(skyTransmittancePipeline.GetPipeline());
-  TransmittancePush transmittancePush;
-  transmittancePush.globalUniformsIndexTransmittance = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
-  transmittancePush.transmittanceImage = transmittanceLut.value().ImageView().GetImage2D();
-  ctx.SetPushConstants(transmittancePush);
-  ctx.DispatchInvocations(transmittanceLut.value().GetCreateInfo().extent);
-  
-  ctx.BindComputePipeline(skyMultiscatteringPipeline.GetPipeline());
-  MultiscatteringPush multiscatteringPush;
-  multiscatteringPush.globalUniformsIndexMultiscattering = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
-  multiscatteringPush.transmittanceTexture = transmittanceLut.value().ImageView().GetTexture2D();
-  multiscatteringPush.transmittanceSampler = linearClampSampler;
-  multiscatteringPush.multiscatteringImage = multiscatteringLut.value().ImageView().GetImage2D();
-  ctx.SetPushConstants(multiscatteringPush);
-  ctx.ImageBarrier(transmittanceLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-  ctx.DispatchInvocations(multiscatteringLut.value().GetCreateInfo().extent);
-
-  ctx.BindComputePipeline(skyViewPipeline.GetPipeline());
-  SkyViewPush skyViewPush;
-  skyViewPush.globalUniformsIndexSkyView = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index;
-  skyViewPush.transmittanceTexture = transmittanceLut.value().ImageView().GetTexture2D();
-  skyViewPush.multiscatteringTexture = multiscatteringLut.value().ImageView().GetTexture2D();
-  skyViewPush.multiscatteringTransmittanceSampler = linearClampSampler;
-  skyViewPush.skyViewImage = skyViewLut.value().ImageView().GetImage2D();
-  ctx.SetPushConstants(skyViewPush);
-  ctx.ImageBarrier(multiscatteringLut.value(), VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-  ctx.DispatchInvocations(skyViewLut.value().GetCreateInfo().extent);
+  sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+  ctx.Barrier();
+  sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+  ctx.Barrier();
+  sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+  //sky_->ComputeAerialPerspectiveLut(commandBuffer, {});
 
   auto drawCalls       = std::vector<GpuMesh*>();
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();

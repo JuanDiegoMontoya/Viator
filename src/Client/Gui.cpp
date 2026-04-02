@@ -2204,13 +2204,19 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           {
             static float scale0 = 1;
             ImGui::SliderFloat("Transmittance##0", &scale0, 0, 1);
-            ImGui::Image(ImTextureSampler(transmittanceLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
+            auto textureSampler = ImTextureSampler(sky_->GetTransmittanceLut().ImageView().GetSampledResourceHandle().index);
+            textureSampler.SetAlphaIsOne(true);
+            ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
+            
             static float scale1 = 1;
             ImGui::SliderFloat("Multiscattering##1", &scale1, 0, 1);
-            ImGui::Image(ImTextureSampler(multiscatteringLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
+            textureSampler.SetTextureIndex(sky_->GetMultiscatteringLut().ImageView().GetSampledResourceHandle().index);
+            ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
+            
             static float scale2 = 1;
             ImGui::SliderFloat("SkyView##2", &scale2, 0, 1);
-            ImGui::Image(ImTextureSampler(skyViewLutView.value().GetSampledResourceHandle().index), {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
+            textureSampler.SetTextureIndex(sky_->GetSkyViewLut().ImageView().GetSampledResourceHandle().index);
+            ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
           }
 
           ImGui::EndTabItem();

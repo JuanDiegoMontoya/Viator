@@ -391,4 +391,38 @@ vec3 getAtmosphereAlongRay(
     return atmosphere_scattering_illuminance;
 }
 
+/* ============================= PHASE FUNCTIONS ============================ */
+float cornette_shanks_mie_phase_function(float g, float cos_theta)
+{
+    float k = 3.0 / (8.0 * M_PI) * (1.0 - g * g) / (2.0 + g * g);
+    return k * (1.0 + cos_theta * cos_theta) / pow(1.0 + g * g - 2.0 * g * -cos_theta, 1.5);
+}
+float klein_nishina_phase(float cos_theta, float e)
+{
+    const float TAU = 2 * M_PI;
+    return e / (TAU * (e * (1.0 - cos_theta) + 1.0) * log(2.0 * e + 1.0));
+}
+
+float rayleigh_phase(float cos_theta)
+{
+    float factor = 3.0 / (16.0 * M_PI);
+    return factor * (1.0 + cos_theta * cos_theta);
+}
+// https://research.nvidia.com/labs/rtr/approximate-mie/publications/approximate-mie.pdf
+float draine_phase(float alpha, float g, float cos_theta)
+{
+    return (1.0 / (4.0 * M_PI)) *
+           ((1.0 - (g * g)) / pow((1.0 + (g * g) - (2.0 * g * cos_theta)), 3.0 / 2.0)) *
+           ((1.0 + (alpha * cos_theta * cos_theta)) / (1.0 + (alpha * (1.0 / 3.0) * (1.0 + (2.0 * g * g)))));
+}
+
+float hg_draine_phase(float cos_theta, float diameter)
+{
+    const float g_hg = exp(-(0.0990567 / (diameter - 1.67154)));
+    const float g_d = exp(-(2.20679 / (diameter + 3.91029)) - 0.428934);
+    const float alpha = exp(3.62489 - (0.599085 / (diameter + 5.52825)));
+    const float w_d = exp(-(0.599085 / (diameter - 0.641583)) - 0.665888);
+    return (1 - w_d) * draine_phase(0, g_hg, cos_theta) + w_d * draine_phase(alpha, g_d, cos_theta);
+}
+/* ========================================================================== */
 #endif //SKY_UTIL_H

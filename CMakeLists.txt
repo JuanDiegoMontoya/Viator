@@ -83,6 +83,8 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/shadows/CascadedShadowMaps.cpp
         src/Client/techniques/volumetric/RayMarchedClouds.h
         src/Client/techniques/volumetric/RayMarchedClouds.cpp
+        src/Client/techniques/Sky.h
+        src/Client/techniques/Sky.cpp
     )
 endif()
 
