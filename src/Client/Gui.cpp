@@ -2196,8 +2196,29 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
               paramsChanged = true;
             }
 
+            
             paramsChanged |= ImGui::DragFloat3("mie scatter", &skyParameters.mie_scattering[0], 0.001f, 0, 0.1f, "%.5f", ImGuiSliderFlags_NoRoundToFormat);
             paramsChanged |= ImGui::DragFloat3("rayleigh scatter", &skyParameters.rayleigh_scattering[0], 0.001f, 0, 0.1f, "%.5f", ImGuiSliderFlags_NoRoundToFormat);
+
+            auto DensityProfileUI = [&](const char* id, DensityProfileLayer& layer)
+            {
+              ImGui::PushID(id);
+              if (ImGui::TreeNode(id))
+              {
+                ImGui::DragFloat("Const term", &layer.const_term, 0.01f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+                ImGui::DragFloat("Exp scale", &layer.exp_scale, 0.01f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+                ImGui::DragFloat("Exp term", &layer.exp_term, 0.01f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+                ImGui::DragFloat("Layer width", &layer.layer_width, 0.01f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+                ImGui::DragFloat("Linear term", &layer.lin_term, 0.01f, 0, 0, "%.3f", ImGuiSliderFlags_NoRoundToFormat);
+                ImGui::TreePop();
+              }
+              ImGui::PopID();
+            };
+
+            DensityProfileUI("Mie 0", skyParameters.mie_density[0]);
+            //DensityProfileUI("Mie 1", skyParameters.mie_density[1]);
+            DensityProfileUI("Rayleigh 0", skyParameters.rayleigh_density[0]);
+            //DensityProfileUI("Rayleigh 1", skyParameters.rayleigh_density[1]);
           }
 
           if (ImGui::CollapsingHeader("Sky LUTs"))
