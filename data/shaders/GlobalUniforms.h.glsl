@@ -84,6 +84,9 @@ struct SkyParameters
   SkyParameters sky;                          \
   FVOG_SHARED Texture2D skyViewLut;           \
   FVOG_SHARED Texture2D transmittanceLut;     \
+  FVOG_SHARED Texture3D aerialPerspectiveTransmittance;\
+  FVOG_SHARED Texture3D aerialPerspectiveScattering;\
+  FVOG_MAT4 ae_clip_from_world;\
   FVOG_SHARED Sampler linearSampler;          \
   GBuffer gBuffer;                            \
   DebugDrawData debugDraw;                    \

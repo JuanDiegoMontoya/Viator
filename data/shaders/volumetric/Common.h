@@ -100,17 +100,6 @@ vec3 UnprojectUVGL(float depth, vec2 uv, mat4 invXProj)
   return UnprojectUVZO(depth, uv, invXProj);
 }
 
-float LinearizeDepthZO(float nonlinearZ, float zn, float zf)
-{
-  return zn / (zf + nonlinearZ * (zn - zf));
-}
-
-// the inverse of LinearizeDepthZO
-float InvertDepthZO(float linearZ, float zn, float zf)
-{
-  return (zn - zf * linearZ) / (linearZ * (zn - zf));
-}
-
 #define M_PI 3.1415926
 
 // Henyey-Greenstein phase function for anisotropic in-scattering

@@ -2,6 +2,8 @@
 #include "Client/Fvog/BasicTypes2.h"
 #include "Client/Fvog/detail/VkFwd.h"
 
+#include "glm/mat4x4.hpp"
+
 #include <memory>
 
 namespace Fvog
@@ -27,18 +29,21 @@ namespace Techniques
   struct SkyComputeMultiscatteringLutParams
   {
     uint32_t globalUniformsBufferIndex;
-    
   };
 
   struct SkyComputeSkyViewLutParams
   {
     uint32_t globalUniformsBufferIndex;
-
   };
 
   struct SkyComputeAerialPerspectiveLutParams
   {
-    
+    uint32_t globalUniformsBufferIndex;
+    float zNear{};
+    float zFar{};
+    float aspectRatio{};
+    float fovy{};
+    glm::mat4 view_from_world{};
   };
 
   class Sky
@@ -56,9 +61,11 @@ namespace Techniques
     virtual void ComputeSkyViewLut(VkCommandBuffer cmd, const SkyComputeSkyViewLutParams& params)                     = 0;
     virtual void ComputeAerialPerspectiveLut(VkCommandBuffer cmd, const SkyComputeAerialPerspectiveLutParams& params) = 0;
 
-    virtual Fvog::Texture& GetTransmittanceLut()     = 0;
-    virtual Fvog::Texture& GetMultiscatteringLut()   = 0;
-    virtual Fvog::Texture& GetSkyViewLut()           = 0;
-    virtual Fvog::Texture& GetAerialPerspectivelut() = 0;
+    virtual Fvog::Texture& GetTransmittanceLut()               = 0;
+    virtual Fvog::Texture& GetMultiscatteringLut()             = 0;
+    virtual Fvog::Texture& GetSkyViewLut()                     = 0;
+    virtual Fvog::Texture& GetAerialPerspectiveTransmittance() = 0;
+    virtual Fvog::Texture& GetAerialPerspectiveScattering()    = 0;
+    virtual glm::mat4 GetAerialPerspectiveClipFromWorld()      = 0;
   };
 }

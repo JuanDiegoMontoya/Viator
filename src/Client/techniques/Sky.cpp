@@ -5,6 +5,8 @@
 #include "Game/Assets.h"
 #include "shaders/sky/SkyShared.h.glsl"
 
+#include "glm/gtc/matrix_transform.hpp"
+
 #include "vulkan/vulkan_core.h"
 
 namespace Techniques
@@ -42,6 +44,15 @@ namespace Techniques
               .path  = GetShaderDirectory() / "sky/SkyViewLUT.comp.glsl",
             },
         });
+
+        aerialPerspectivePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+          .name = "Aerial Perspective LUT Pipeline",
+          .shaderModuleInfo =
+            PipelineManager::ShaderModuleCreateInfo{
+              .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+              .path  = GetShaderDirectory() / "sky/AerialPerspectiveLUT.comp.glsl",
+            },
+        });
       }
 
       void EnsureResources(VkCommandBuffer cmd, const SkyResourceExtents& extents) override
@@ -51,21 +62,33 @@ namespace Techniques
         EnsureTexture(ctx, multiscatteringLut, extents.multiscatteringLutExtent, Fvog::Format::R16G16B16A16_SFLOAT, "Sky: Multiple Scattering LUT");
         EnsureTexture(ctx, skyViewLut, extents.skyViewLutExtent, Fvog::Format::R16G16B16A16_SFLOAT, "Sky: Sky View LUT");
 
-        if (!aerialPerspectiveLut || aerialPerspectiveLut->GetCreateInfo().extent != extents.aerialPerspectiveLutExtent)
+        if (!aerialPerspectiveTransmittance || aerialPerspectiveTransmittance->GetCreateInfo().extent != extents.aerialPerspectiveLutExtent)
         {
-          aerialPerspectiveLut = Fvog::Texture({
+          aerialPerspectiveTransmittance = Fvog::Texture({
             .viewType    = VK_IMAGE_VIEW_TYPE_3D,
             .format      = Fvog::Format::R16G16B16A16_SFLOAT,
             .extent      = extents.aerialPerspectiveLutExtent,
             .usage       = Fvog::TextureUsage::GENERAL,
-          }, "Sky: Aerial Perspective LUT");
+          }, "Sky: Aerial Perspective Transmittance");
+        }
+
+        if (!aerialPerspectiveScattering || aerialPerspectiveScattering->GetCreateInfo().extent != extents.aerialPerspectiveLutExtent)
+        {
+          aerialPerspectiveScattering = Fvog::Texture(
+            {
+              .viewType = VK_IMAGE_VIEW_TYPE_3D,
+              .format   = Fvog::Format::R16G16B16A16_SFLOAT,
+              .extent   = extents.aerialPerspectiveLutExtent,
+              .usage    = Fvog::TextureUsage::GENERAL,
+            },
+            "Sky: Aerial Perspective Scattering");
         }
       }
 
       void ComputeTransmittanceLut(VkCommandBuffer cmd, const SkyComputeTransmittanceLutParams& params) override
       {
         auto ctx = Fvog::Context(cmd);
-        auto marker = ctx.MakeScopedDebugMarker("Sky: compute transmittance LUT");
+        auto marker = ctx.MakeScopedDebugMarker("Compute transmittance LUT");
 
         ctx.BindComputePipeline(skyTransmittancePipeline.GetPipeline());
         ctx.SetPushConstants(TransmittancePush{
@@ -78,7 +101,7 @@ namespace Techniques
       void ComputeMultiscatteringLut(VkCommandBuffer cmd, const SkyComputeMultiscatteringLutParams& params) override
       {
         auto ctx    = Fvog::Context(cmd);
-        auto marker = ctx.MakeScopedDebugMarker("Sky: compute multiple scattering LUT");
+        auto marker = ctx.MakeScopedDebugMarker("Compute multiple scattering LUT");
 
         ctx.BindComputePipeline(skyMultiscatteringPipeline.GetPipeline());
         ctx.SetPushConstants(MultiscatteringPush{
@@ -92,21 +115,40 @@ namespace Techniques
       void ComputeSkyViewLut(VkCommandBuffer cmd, const SkyComputeSkyViewLutParams& params) override
       {
         auto ctx    = Fvog::Context(cmd);
-        auto marker = ctx.MakeScopedDebugMarker("Sky: compute sky view LUT");
+        auto marker = ctx.MakeScopedDebugMarker("Compute sky view LUT");
 
         ctx.BindComputePipeline(skyViewPipeline.GetPipeline());
         ctx.SetPushConstants(SkyViewPush{
-          .globalUniformsIndexSkyView = params.globalUniformsBufferIndex,
-          .transmittanceTexture       = transmittanceLut.value().ImageView().GetTexture2D(),
-          .multiscatteringTexture     = multiscatteringLut.value().ImageView().GetTexture2D(),
-          .skyViewImage               = skyViewLut.value().ImageView().GetImage2D(),
+          .globalUniformsIndex    = params.globalUniformsBufferIndex,
+          .transmittanceTexture   = transmittanceLut.value().ImageView().GetTexture2D(),
+          .multiscatteringTexture = multiscatteringLut.value().ImageView().GetTexture2D(),
+          .skyViewImage           = skyViewLut.value().ImageView().GetImage2D(),
         });
         ctx.DispatchInvocations(skyViewLut.value().GetCreateInfo().extent);
       }
 
-      void ComputeAerialPerspectiveLut([[maybe_unused]] VkCommandBuffer cmd, [[maybe_unused]] const SkyComputeAerialPerspectiveLutParams& params) override
+      void ComputeAerialPerspectiveLut(VkCommandBuffer cmd, const SkyComputeAerialPerspectiveLutParams& params) override
       {
-        ASSERT(false);
+        ASSERT(aerialPerspectiveScattering->GetCreateInfo().extent == aerialPerspectiveTransmittance->GetCreateInfo().extent);
+        auto ctx    = Fvog::Context(cmd);
+        auto marker = ctx.MakeScopedDebugMarker("Compute aerial perspective LUT");
+
+        const auto clip_from_view = glm::perspective(params.fovy, params.aspectRatio, params.zNear, params.zFar);
+        clip_from_world = clip_from_view * params.view_from_world;
+        const auto world_from_clip = glm::inverse(clip_from_world);
+
+        ctx.BindComputePipeline(aerialPerspectivePipeline.GetPipeline());
+        ctx.SetPushConstants(AerialPerspectivePush{
+          .globalUniformsIndex            = params.globalUniformsBufferIndex,
+          .world_from_clip                = world_from_clip,
+          .transmittanceTexture           = transmittanceLut.value().ImageView().GetTexture2D(),
+          .multiscatteringTexture         = multiscatteringLut.value().ImageView().GetTexture2D(),
+          .aerialPerspectiveTransmittance = aerialPerspectiveTransmittance.value().ImageView().GetImage3D(),
+          .aerialPerspectiveScattering    = aerialPerspectiveScattering.value().ImageView().GetImage3D(),
+        });
+        const auto extent = aerialPerspectiveScattering.value().GetCreateInfo().extent;
+        //ctx.DispatchInvocations(extent.width, extent.height, 1);
+        ctx.DispatchInvocations(extent);
       }
 
       Fvog::Texture& GetTransmittanceLut() override
@@ -124,11 +166,20 @@ namespace Techniques
         return skyViewLut.value();
       }
 
-      Fvog::Texture& GetAerialPerspectivelut() override
+      Fvog::Texture& GetAerialPerspectiveTransmittance() override
       {
-        return aerialPerspectiveLut.value();
+        return aerialPerspectiveTransmittance.value();
+      }
+      
+      Fvog::Texture& GetAerialPerspectiveScattering() override
+      {
+        return aerialPerspectiveScattering.value();
       }
 
+      glm::mat4 GetAerialPerspectiveClipFromWorld() override
+      {
+        return clip_from_world;
+      }
     private:
       static void EnsureTexture(const Fvog::Context& ctx, std::optional<Fvog::Texture>& texture, Fvog::Extent2D extent, Fvog::Format format, std::string name)
       {
@@ -144,11 +195,15 @@ namespace Techniques
       std::optional<Fvog::Texture> transmittanceLut;
       std::optional<Fvog::Texture> multiscatteringLut;
       std::optional<Fvog::Texture> skyViewLut;
-      std::optional<Fvog::Texture> aerialPerspectiveLut;
+      std::optional<Fvog::Texture> aerialPerspectiveTransmittance;
+      std::optional<Fvog::Texture> aerialPerspectiveScattering;
 
       PipelineManager::ComputePipelineKey skyTransmittancePipeline;
       PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
       PipelineManager::ComputePipelineKey skyViewPipeline;
+      PipelineManager::ComputePipelineKey aerialPerspectivePipeline;
+
+      glm::mat4 clip_from_world = glm::mat4(1);
     };
   }
 

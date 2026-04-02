@@ -64,6 +64,18 @@ float InfRevZ_To_ViewZ(float z_ndc, float near)
   return -near / max(1e-5, z_ndc);
 }
 
+// For non-reverse projections
+float LinearizeDepthZO(float nonlinearZ, float zn, float zf)
+{
+  return zn / (zf + nonlinearZ * (zn - zf));
+}
+
+// The inverse of LinearizeDepthZO, also for non-reverse projections
+float InvertDepthZO(float linearZ, float zn, float zf)
+{
+  return (zn - zf * linearZ) / (linearZ * (zn - zf));
+}
+
 float Remap(float val, float start1, float end1, float start2, float end2)
 {
   return (val - start1) / (end1 - start1) * (end2 - start2) + start2;

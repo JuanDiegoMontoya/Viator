@@ -1031,7 +1031,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .transmittanceLutExtent     = {256, 64},
       .multiscatteringLutExtent   = {32, 32},
       .skyViewLutExtent           = {256, 192},
-      .aerialPerspectiveLutExtent = {1, 1, 1},
+      .aerialPerspectiveLutExtent = {190, 90, 128},
     });
 
   auto weatherGpuParams = Fvog::GetDevice().AllocTransient<WeatherGpuParams_t>();
@@ -1058,6 +1058,9 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .sky                    = skyParameters,
       .skyViewLut             = sky_->GetSkyViewLut().ImageView().GetTexture2D(),
       .transmittanceLut       = sky_->GetTransmittanceLut().ImageView().GetTexture2D(),
+      .aerialPerspectiveTransmittance = sky_->GetAerialPerspectiveTransmittance().ImageView().GetTexture3D(),
+      .aerialPerspectiveScattering = sky_->GetAerialPerspectiveScattering().ImageView().GetTexture3D(),
+      .ae_clip_from_world = sky_->GetAerialPerspectiveClipFromWorld(), // TODO: this matrix lags one frame behind the viewer
       .linearSampler          = linearClampSampler,
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
@@ -1072,14 +1075,26 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(sky_->GetMultiscatteringLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(sky_->GetSkyViewLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectivelut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveTransmittance(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveScattering(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
 
-  sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
-  ctx.Barrier();
-  sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
-  ctx.Barrier();
-  sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
-  //sky_->ComputeAerialPerspectiveLut(commandBuffer, {});
+  {
+    auto marker2 = ctx.MakeScopedDebugMarker("Sky");
+    sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+    ctx.Barrier();
+    sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+    ctx.Barrier();
+    sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+    sky_->ComputeAerialPerspectiveLut(commandBuffer,
+      {
+        .globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+        .zNear = 100,
+        .zFar  = 500'000,
+        .aspectRatio = aspectRatio,
+        .fovy = (float)cameraFovyRadians.Get(),
+        .view_from_world = view_from_world,
+      });
+  }
 
   auto drawCalls       = std::vector<GpuMesh*>();
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();
