@@ -45,7 +45,7 @@ void main()
   }
   else
   {
-    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
+    radiance = Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
     gl_FragDepth = FAR_DEPTH;
     hit.positionWorld = rayPos + rayDir; // For computing accurate sky motion vectors.
   }

@@ -61,10 +61,10 @@ int Cloud_GetRayStartsAndEndsForSphereClouds(in vec3 rayOrigin,
   );
 
   const float cameraRayToEarth = ray_sphere_intersect_nearest(
-    rayOrigin * M_TO_KM_SCALE + vec3(0, globalUniforms2.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+    rayOrigin * M_TO_KM_SCALE + vec3(0, globalUniforms2.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
     rayDirection,
     vec3(0.0),
-    globalUniforms2.sky.atmosphere_bottom
+    globalUniforms2.sky.config.atmosphere_bottom
   );
 
   const float altitude = length(rayOrigin + atmosphereOffset);
@@ -233,8 +233,13 @@ void main()
   
   for (int r = 0; r < numRays; r++)
   {
-    const float actualRayLength = min(10000, abs(rayEndT[r] - rayStartT[r]));
-    //const float actualRayLength = abs(rayEndT[r] - rayStartT[r]);
+    float actualRayLength = abs(rayEndT[r] - rayStartT[r]);
+    // Very long ray steps will overestimate transmittance (which is computed before scattering) 
+    // leading to darkening when inside the cloud layer. Simple fix: limit the ray length in that case.
+    if (rayOrigin.y > weather.cloudBottomAltitude && rayOrigin.y < weather.cloudBottomAltitude + weather.cloudHeight)
+    {
+      actualRayLength = min(20000, actualRayLength);
+    }
     const uint numSteps = uint(mix(pc.numRayMarchStepsMin, pc.numRayMarchStepsMax, smoothstep(pc.distForMinRayStepCount, pc.distForMaxRayStepCount, actualRayLength)));
     //const uint numSteps = pc.numRayMarchSteps;
 
@@ -261,23 +266,23 @@ void main()
       }
 
       {
-        const vec3 transmittanceToSun = getTransmittanceAlongRay(globalUniforms2.sky, globalUniforms2.transmittanceLut, globalUniforms2.linearSampler, globalUniforms2.sky.sunDir, curPos);
+        const vec3 transmittanceToSun = Sky_GetTransmittanceAlongRay(globalUniforms2.sky, globalUniforms2.sky.config.sunDir, curPos);
         const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
-            curPos * M_TO_KM_SCALE + vec3(0, globalUniforms2.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
-            globalUniforms2.sky.sunDir,
+            curPos * M_TO_KM_SCALE + vec3(0, globalUniforms2.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+            globalUniforms2.sky.config.sunDir,
             vec3(0.0),
-            globalUniforms2.sky.atmosphere_bottom
+            globalUniforms2.sky.config.atmosphere_bottom
         );
         const bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
         
-        vec3 skylight_internal = getAtmosphereAlongRay(globalUniforms2.sky, globalUniforms2.skyViewLut, globalUniforms2.linearSampler, globalUniforms2.sky.sunDir, curPos);
-        vec3 sunlight_internal = globalUniforms2.sky.sunColor * globalUniforms2.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+        vec3 skylight_internal = Sky_GetScatteringAlongRay(globalUniforms2.sky, globalUniforms2.sky.config.sunDir, curPos);
+        vec3 sunlight_internal = globalUniforms2.sky.config.sunColor * globalUniforms2.sky.config.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
         
         const float sunSelfShadowDist = 100;
         const int sunSelfShadowSteps = 1;
         if (sunSelfShadowSteps > 0)
         {
-          const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps, 0.5);
+          const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.config.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps, 0.5);
           float selfShadow = beer(densityToSun);
           selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
           skylight_internal *= selfShadow;
@@ -315,6 +320,7 @@ void main()
     }
   }
 
+  // If the ray missed, for the sake of calculating decent motion vectors, guess a distance.
   if (hitT == 0)
   {
     hitT = 1500;

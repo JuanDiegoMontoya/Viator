@@ -190,7 +190,7 @@ private:
 
   // Sky
   std::unique_ptr<Techniques::Sky> sky_ = Techniques::Sky::Create();
-  SkyParameters skyParameters = InitSkyParameters();
+  SkyConfig skyParameters = InitSkyConfig();
 
   Fvog::TypedBuffer<float> exposureBuffer;
   Fvog::NDeviceBuffer<shared::TonemapUniforms> tonemapUniformBuffer;

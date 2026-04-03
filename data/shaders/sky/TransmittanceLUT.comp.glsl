@@ -4,6 +4,11 @@
 #include "SkyUtil.h.glsl"
 #include "SkyShared.h.glsl"
 
+FVOG_DECLARE_ARGUMENTS(PushConstants)
+{
+    TransmittanceGpuParams pc;
+};
+
 vec3 integrate_transmittance(vec3 world_position, vec3 world_direction, uint sample_count)
 {
     /* The length of ray between position and nearest atmosphere top boundary */
@@ -11,7 +16,7 @@ vec3 integrate_transmittance(vec3 world_position, vec3 world_direction, uint sam
         world_position,
         world_direction,
         vec3(0.0, 0.0, 0.0),
-        uniforms.sky.atmosphere_top);
+        pc.uniforms.sky.config.atmosphere_top);
 
     float integration_step = integration_length / float(sample_count);
 
@@ -22,7 +27,7 @@ vec3 integrate_transmittance(vec3 world_position, vec3 world_direction, uint sam
     {
         /* Move along the world direction ray to new position */
         vec3 new_pos = world_position + i * integration_step * world_direction;
-        vec3 atmosphere_extinction = sample_medium(uniforms.sky, new_pos).medium_extinction;
+        vec3 atmosphere_extinction = sample_medium(pc.uniforms.sky.config, new_pos).medium_extinction;
         optical_depth += atmosphere_extinction * integration_step;
     }
     return optical_depth;
@@ -31,13 +36,13 @@ vec3 integrate_transmittance(vec3 world_position, vec3 world_direction, uint sam
 layout(local_size_x = 8, local_size_y = 8) in;
 void main()
 {
-    const ivec2 transmittance_image_size = imageSize(transmittanceImage).xy;
+    const ivec2 transmittance_image_size = imageSize(pc.transmittanceImage).xy;
 
     if (all(lessThan(gl_GlobalInvocationID.xy, transmittance_image_size)))
     {
         vec2 uv = vec2(gl_GlobalInvocationID.xy) / vec2(transmittance_image_size);
 
-        TransmittanceParams mapping = uv_to_transmittance_lut_params(uv, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top);
+        TransmittanceParams mapping = uv_to_transmittance_lut_params(uv, pc.uniforms.sky.config.atmosphere_bottom, pc.uniforms.sky.config.atmosphere_top);
 
         vec3 world_position = vec3(0.0, 0.0, mapping.height);
         vec3 world_direction = vec3(
@@ -46,6 +51,6 @@ void main()
             mapping.zenith_cos_angle);
 
         vec3 transmittance = exp(-integrate_transmittance(world_position, world_direction, 2));
-        imageStore(transmittanceImage, ivec2(gl_GlobalInvocationID.xy), vec4(transmittance, 0.0));
+        imageStore(pc.transmittanceImage, ivec2(gl_GlobalInvocationID.xy), vec4(transmittance, 0.0));
     }
 }

@@ -3,6 +3,7 @@
 
 #include "../GlobalUniforms.h.glsl"
 #include "../Math.h.glsl"
+//#include "SkyParams.shared.h"
 
 #define PLANET_RADIUS_OFFSET (0.01f)
 #define BASE_HEIGHT_OFFSET (3.0f)
@@ -279,7 +280,7 @@ struct MediumSample
 /// @param params - buffer reference to the atmosphere parameters buffer
 /// @param position - position in the world where the sample is to be taken
 /// @return atmosphere extinction at the desired position
-MediumSample sample_medium(SkyParameters params, vec3 position)
+MediumSample sample_medium(SkyConfig params, vec3 position)
 {
     const float above_surface_height = length(position) - params.atmosphere_bottom;
 
@@ -298,15 +299,9 @@ MediumSample sample_medium(SkyParameters params, vec3 position)
     return MediumSample(mie_scattering, ray_scattering, medium_extinction);
 }
 
-vec3 getTransmittanceAlongRay(
-    SkyParameters params,
-    Texture2D transmittance,
-    Sampler lin_clamp_sampler,
-    vec3 ray,
-    vec3 world_position
-)
+vec3 Sky_GetTransmittanceAlongRay(SkyData sky, vec3 ray, vec3 world_position)
 {
-    const vec3 z_up_pos = world_position.xzy * vec3(1.0, -1.0, 1.0) * M_TO_KM_SCALE + vec3(0.0, 0.0, params.atmosphere_bottom + BASE_HEIGHT_OFFSET);
+    const vec3 z_up_pos = world_position.xzy * vec3(1.0, -1.0, 1.0) * M_TO_KM_SCALE + vec3(0.0, 0.0, sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET);
     const float height = length(z_up_pos);
     
     const vec3 z_up_ray = ray.xzy * vec3(1.0, -1.0, 1.0);
@@ -316,26 +311,20 @@ vec3 getTransmittanceAlongRay(
 
     const vec2 transmittance_texture_uv = transmittance_lut_to_uv(
             transmittance_lut_params,
-            params.atmosphere_bottom,
-            params.atmosphere_top
+            sky.config.atmosphere_bottom,
+            sky.config.atmosphere_top
         );
         
-    const vec3 transmittance_to_sun = texture(transmittance, lin_clamp_sampler, transmittance_texture_uv).rgb;
+    const vec3 transmittance_to_sun = texture(sky.luts.transmittanceLut, gLinearClampSampler, transmittance_texture_uv).rgb;
     return transmittance_to_sun;
 }
 
-vec3 getAtmosphereAlongRay(
-    SkyParameters params,
-    Texture2D sky,
-    Sampler lin_sampler,
-    vec3 ray,
-    vec3 world_position
-)
+vec3 Sky_GetScatteringAlongRay(SkyData sky, vec3 ray, vec3 world_position)
 {
-    const ivec2 sky_view_texture_size = textureSize(sky, 0);
-    const vec3 z_up_sun_dir = params.sunDir.xzy * vec3(1.0, -1.0, 1.0);
+    const ivec2 sky_view_texture_size = textureSize(sky.luts.skyViewLut, 0);
+    const vec3 z_up_sun_dir = sky.config.sunDir.xzy * vec3(1.0, -1.0, 1.0);
     const vec3 z_up_ray = ray.xzy * vec3(1.0, -1.0, 1.0);
-    const vec3 z_up_pos = world_position.xzy * vec3(1.0, -1.0, 1.0) * M_TO_KM_SCALE + vec3(0.0, 0.0, params.atmosphere_bottom + BASE_HEIGHT_OFFSET);
+    const vec3 z_up_pos = world_position.xzy * vec3(1.0, -1.0, 1.0) * M_TO_KM_SCALE + vec3(0.0, 0.0, sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET);
 
     const float height = length(z_up_pos);
     const mat3x3 basis = build_orthonormal_basis(z_up_pos / height);
@@ -354,14 +343,14 @@ vec3 getAtmosphereAlongRay(
         vec3(0.0, 0.0, height),
         rotated_ray,
         vec3(0.0),
-        params.atmosphere_bottom
+        sky.config.atmosphere_bottom
     );
 
     const float top_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
         vec3(0.0, 0.0, height),
         rotated_ray,
         vec3(0.0),
-        params.atmosphere_top
+        sky.config.atmosphere_top
     );
 
     const bool intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
@@ -375,16 +364,16 @@ vec3 getAtmosphereAlongRay(
         vec2 sky_uv = skyview_lut_params_to_uv(
             intersects_ground,
             SkyviewParams(view_zenith_angle, light_view_angle),
-            params.atmosphere_bottom,
-            params.atmosphere_top,
+            sky.config.atmosphere_bottom,
+            sky.config.atmosphere_top,
             sky_view_texture_size,
             height
         );
 
-        const vec4 unitless_atmosphere_illuminance_mult = texture(sky, lin_sampler, sky_uv).rgba;
+        const vec4 unitless_atmosphere_illuminance_mult = texture(sky.luts.skyViewLut, gLinearClampSampler, sky_uv).rgba;
         const vec3 unitless_atmosphere_illuminance = unitless_atmosphere_illuminance_mult.rgb * unitless_atmosphere_illuminance_mult.a;
-        const vec3 sun_color_weighed_atmosphere_illuminance = params.sunColor * unitless_atmosphere_illuminance * 0.5;
-        atmosphere_scattering_illuminance = sun_color_weighed_atmosphere_illuminance * params.sunBrightness;
+        const vec3 sun_color_weighed_atmosphere_illuminance = sky.config.sunColor * unitless_atmosphere_illuminance * 0.5;
+        atmosphere_scattering_illuminance = sun_color_weighed_atmosphere_illuminance * sky.config.sunBrightness;
         //atmosphere_scattering_illuminance = vec3(sky_uv.y, 0.0f, 0.0f);
     }
 

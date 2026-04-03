@@ -14,6 +14,11 @@ const float uniformPhase = 1.0 / (4.0 * M_PI);
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = uint(SPHERE_SAMPLES)) in;
 
+FVOG_DECLARE_ARGUMENTS(PushConstants)
+{
+    MultiscatteringGpuParams pc;
+};
+
 shared vec3 multiscatt_shared[2];
 shared vec3 luminance_shared[2];
 
@@ -28,9 +33,9 @@ RaymarchResult integrate_scattered_luminance(vec3 world_position, vec3 world_dir
     RaymarchResult result = RaymarchResult(vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
     vec3 planet_zero = vec3(0.0, 0.0, 0.0);
     float planet_intersection_distance = ray_sphere_intersect_nearest(
-        world_position, world_direction, planet_zero, uniforms.sky.atmosphere_bottom);
+        world_position, world_direction, planet_zero, pc.uniforms.sky.config.atmosphere_bottom);
     float atmosphere_intersection_distance = ray_sphere_intersect_nearest(
-        world_position, world_direction, planet_zero, uniforms.sky.atmosphere_top);
+        world_position, world_direction, planet_zero, pc.uniforms.sky.config.atmosphere_top);
 
     float integration_length;
     /* ============================= CALCULATE INTERSECTIONS ============================ */
@@ -77,11 +82,11 @@ RaymarchResult integrate_scattered_luminance(vec3 world_position, vec3 world_dir
         TransmittanceParams transmittance_lut_params = TransmittanceParams(length(new_position), dot(sun_direction, up_vector));
 
         /* uv coordinates later used to sample transmittance texture */
-        vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top);
+        vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, pc.uniforms.sky.config.atmosphere_bottom, pc.uniforms.sky.config.atmosphere_top);
 
-        vec3 transmittance_to_sun = texture(transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
+        vec3 transmittance_to_sun = texture(pc.transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
 
-        MediumSample m_sample = sample_medium(uniforms.sky, new_position);
+        MediumSample m_sample = sample_medium(pc.uniforms.sky.config, new_position);
         vec3 medium_scattering = m_sample.mie_scattering + m_sample.rayleigh_scattering;
         vec3 medium_extinction = m_sample.medium_extinction;
 
@@ -89,7 +94,7 @@ RaymarchResult integrate_scattered_luminance(vec3 world_position, vec3 world_dir
         vec3 trans_increase_over_integration_step = exp(-(medium_extinction * integration_step));
         /* Check if current position is in earth's shadow */
         float earth_intersection_distance = ray_sphere_intersect_nearest(
-            new_position, sun_direction, planet_zero + PLANET_RADIUS_OFFSET * up_vector, uniforms.sky.atmosphere_bottom);
+            new_position, sun_direction, planet_zero + PLANET_RADIUS_OFFSET * up_vector, pc.uniforms.sky.config.atmosphere_bottom);
         float in_earth_shadow = earth_intersection_distance == -1.0 ? 1.0 : 0.0;
 
         /* Light arriving from the sun to this point */
@@ -127,7 +132,7 @@ void main()
 {
     const float sample_count = 20;
 
-    const ivec2 multiscattering_image_size = imageSize(multiscatteringImage);
+    const ivec2 multiscattering_image_size = imageSize(pc.multiscatteringImage);
     vec2 uv = (vec2(gl_GlobalInvocationID.xy) + vec2(0.5, 0.5)) / vec2(multiscattering_image_size);
     uv = vec2(from_subuv_to_unit(uv.x, multiscattering_image_size.x),
               from_subuv_to_unit(uv.y, multiscattering_image_size.y));
@@ -141,9 +146,9 @@ void main()
         sun_cos_zenith_angle);
 
     float view_height =
-        uniforms.sky.atmosphere_bottom +
+        pc.uniforms.sky.config.atmosphere_bottom +
         clamp(uv.y + PLANET_RADIUS_OFFSET, 0.0, 1.0) *
-             (uniforms.sky.atmosphere_top - uniforms.sky.atmosphere_bottom - PLANET_RADIUS_OFFSET);
+             (pc.uniforms.sky.config.atmosphere_top - pc.uniforms.sky.config.atmosphere_bottom - PLANET_RADIUS_OFFSET);
 
     vec3 world_position = vec3(0.0, 0.0, view_height);
 
@@ -209,6 +214,6 @@ void main()
         const vec3 sum_of_all_multiscattering_events_contribution = vec3(1.0 / (1.0 - r.x), 1.0 / (1.0 - r.y), 1.0 / (1.0 - r.z));
         vec3 lum = luminance_sum * sum_of_all_multiscattering_events_contribution;
 
-        imageStore(multiscatteringImage, ivec2(gl_GlobalInvocationID.xy), vec4(lum, 1.0));
+        imageStore(pc.multiscatteringImage, ivec2(gl_GlobalInvocationID.xy), vec4(lum, 1.0));
     }
 }

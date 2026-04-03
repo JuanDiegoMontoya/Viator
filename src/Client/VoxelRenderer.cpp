@@ -1037,6 +1037,15 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
   auto weatherGpuParams = Fvog::GetDevice().AllocTransient<WeatherGpuParams_t>();
   *weatherGpuParams = weather_;
 
+  const auto skyData = sky_->GetSkyData({
+    .skyConfig       = skyParameters,
+    .zNear           = 100,
+    .zFar            = 500'000,
+    .aspectRatio     = aspectRatio,
+    .fovy            = (float)cameraFovyRadians.Get(),
+    .view_from_world = view_from_world,
+  });
+
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
       .viewProj               = clip_from_world,
@@ -1055,12 +1064,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .flags                  = 0,
       .alphaHashScale         = 0,
       .frameNumber            = uint32_t(Fvog::GetDevice().frameNumber),
-      .sky                    = skyParameters,
-      .skyViewLut             = sky_->GetSkyViewLut().ImageView().GetTexture2D(),
-      .transmittanceLut       = sky_->GetTransmittanceLut().ImageView().GetTexture2D(),
-      .aerialPerspectiveTransmittance = sky_->GetAerialPerspectiveTransmittance().ImageView().GetTexture3D(),
-      .aerialPerspectiveScattering = sky_->GetAerialPerspectiveScattering().ImageView().GetTexture3D(),
-      .ae_clip_from_world = sky_->GetAerialPerspectiveClipFromWorld(), // TODO: this matrix lags one frame behind the viewer
+      .sky                    = skyData,
       .linearSampler          = linearClampSampler,
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
@@ -1080,20 +1084,12 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
 
   {
     auto marker2 = ctx.MakeScopedDebugMarker("Sky");
-    sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+    sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
     ctx.Barrier();
-    sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
+    sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
     ctx.Barrier();
-    sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index});
-    sky_->ComputeAerialPerspectiveLut(commandBuffer,
-      {
-        .globalUniformsBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .zNear = 100,
-        .zFar  = 500'000,
-        .aspectRatio = aspectRatio,
-        .fovy = (float)cameraFovyRadians.Get(),
-        .view_from_world = view_from_world,
-      });
+    sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+    sky_->ComputeAerialPerspectiveLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
   }
 
   auto drawCalls       = std::vector<GpuMesh*>();

@@ -1,5 +1,6 @@
 #include "Sky.h"
 #include "Client/PipelineManager.h"
+#include "Client/Fvog/Device.h"
 #include "Client/Fvog/Rendering2.h"
 #include "Client/Fvog/Texture2.h"
 #include "Game/Assets.h"
@@ -85,16 +86,43 @@ namespace Techniques
         }
       }
 
+      SkyData GetSkyData(const SkyGetSkyDataParams& params) override
+      {
+        const auto clip_from_view  = glm::perspective(params.fovy, params.aspectRatio, params.zNear, params.zFar);
+        const auto clip_from_world = clip_from_view * params.view_from_world;
+        const auto world_from_clip = glm::inverse(clip_from_world);
+
+        return SkyData{
+          .config = params.skyConfig,
+          .luts =
+            SkyLuts{
+              .transmittanceLut               = transmittanceLut.value().ImageView().GetTexture2D(),
+              .multiscatteringLut             = multiscatteringLut.value().ImageView().GetTexture2D(),
+              .skyViewLut                     = skyViewLut.value().ImageView().GetTexture2D(),
+              .aerialPerspectiveTransmittance = aerialPerspectiveTransmittance.value().ImageView().GetTexture3D(),
+              .aerialPerspectiveScattering    = aerialPerspectiveScattering.value().ImageView().GetTexture3D(),
+            },
+          .ae_clip_from_world = clip_from_world,
+          .ae_world_from_clip = world_from_clip,
+          .ae_zNear           = params.zNear,
+          .ae_zFar            = params.zFar,
+        };
+      }
+
       void ComputeTransmittanceLut(VkCommandBuffer cmd, const SkyComputeTransmittanceLutParams& params) override
       {
         auto ctx = Fvog::Context(cmd);
         auto marker = ctx.MakeScopedDebugMarker("Compute transmittance LUT");
 
+        auto gpuParams = Fvog::GetDevice().AllocTransient<TransmittanceGpuParams_t>();
+
+        *gpuParams = {
+          .uniforms           = params.globalUniformsPtr,
+          .transmittanceImage = transmittanceLut.value().ImageView().GetImage2D(),
+        };
+
         ctx.BindComputePipeline(skyTransmittancePipeline.GetPipeline());
-        ctx.SetPushConstants(TransmittancePush{
-          .globalUniformsIndexTransmittance = params.globalUniformsBufferIndex,
-          .transmittanceImage               = transmittanceLut.value().ImageView().GetImage2D(),
-        });
+        ctx.SetPushConstants(gpuParams);
         ctx.DispatchInvocations(transmittanceLut.value().GetCreateInfo().extent);
       }
 
@@ -103,12 +131,16 @@ namespace Techniques
         auto ctx    = Fvog::Context(cmd);
         auto marker = ctx.MakeScopedDebugMarker("Compute multiple scattering LUT");
 
+        auto gpuParams = Fvog::GetDevice().AllocTransient<MultiscatteringGpuParams_t>();
+
+        *gpuParams = {
+          .uniforms             = params.globalUniformsPtr,
+          .transmittanceTexture = transmittanceLut.value().ImageView().GetTexture2D(),
+          .multiscatteringImage = multiscatteringLut.value().ImageView().GetImage2D(),
+        };
+
         ctx.BindComputePipeline(skyMultiscatteringPipeline.GetPipeline());
-        ctx.SetPushConstants(MultiscatteringPush{
-          .globalUniformsIndexMultiscattering = params.globalUniformsBufferIndex,
-          .transmittanceTexture               = transmittanceLut.value().ImageView().GetTexture2D(),
-          .multiscatteringImage               = multiscatteringLut.value().ImageView().GetImage2D(),
-        });
+        ctx.SetPushConstants(gpuParams);
         ctx.DispatchInvocations(multiscatteringLut.value().GetCreateInfo().extent);
       }
 
@@ -117,13 +149,17 @@ namespace Techniques
         auto ctx    = Fvog::Context(cmd);
         auto marker = ctx.MakeScopedDebugMarker("Compute sky view LUT");
 
-        ctx.BindComputePipeline(skyViewPipeline.GetPipeline());
-        ctx.SetPushConstants(SkyViewPush{
-          .globalUniformsIndex    = params.globalUniformsBufferIndex,
+        auto gpuParams = Fvog::GetDevice().AllocTransient<SkyViewGpuParams_t>();
+
+        *gpuParams = {
+          .uniforms               = params.globalUniformsPtr,
           .transmittanceTexture   = transmittanceLut.value().ImageView().GetTexture2D(),
           .multiscatteringTexture = multiscatteringLut.value().ImageView().GetTexture2D(),
           .skyViewImage           = skyViewLut.value().ImageView().GetImage2D(),
-        });
+        };
+
+        ctx.BindComputePipeline(skyViewPipeline.GetPipeline());
+        ctx.SetPushConstants(gpuParams);
         ctx.DispatchInvocations(skyViewLut.value().GetCreateInfo().extent);
       }
 
@@ -133,21 +169,20 @@ namespace Techniques
         auto ctx    = Fvog::Context(cmd);
         auto marker = ctx.MakeScopedDebugMarker("Compute aerial perspective LUT");
 
-        const auto clip_from_view = glm::perspective(params.fovy, params.aspectRatio, params.zNear, params.zFar);
-        clip_from_world = clip_from_view * params.view_from_world;
-        const auto world_from_clip = glm::inverse(clip_from_world);
+        auto gpuParams = Fvog::GetDevice().AllocTransient<AerialPerspectiveGpuParams_t>();
 
-        ctx.BindComputePipeline(aerialPerspectivePipeline.GetPipeline());
-        ctx.SetPushConstants(AerialPerspectivePush{
-          .globalUniformsIndex            = params.globalUniformsBufferIndex,
-          .world_from_clip                = world_from_clip,
+        *gpuParams = {
+          .uniforms                       = params.globalUniformsPtr,
           .transmittanceTexture           = transmittanceLut.value().ImageView().GetTexture2D(),
           .multiscatteringTexture         = multiscatteringLut.value().ImageView().GetTexture2D(),
           .aerialPerspectiveTransmittance = aerialPerspectiveTransmittance.value().ImageView().GetImage3D(),
           .aerialPerspectiveScattering    = aerialPerspectiveScattering.value().ImageView().GetImage3D(),
-        });
+        };
+
+        ctx.BindComputePipeline(aerialPerspectivePipeline.GetPipeline());
+        ctx.SetPushConstants(gpuParams);
         const auto extent = aerialPerspectiveScattering.value().GetCreateInfo().extent;
-        //ctx.DispatchInvocations(extent.width, extent.height, 1);
+        //ctx.DispatchInvocations(extent.width, extent.height, 1); // TODO: 2D dispatch.
         ctx.DispatchInvocations(extent);
       }
 
@@ -176,10 +211,6 @@ namespace Techniques
         return aerialPerspectiveScattering.value();
       }
 
-      glm::mat4 GetAerialPerspectiveClipFromWorld() override
-      {
-        return clip_from_world;
-      }
     private:
       static void EnsureTexture(const Fvog::Context& ctx, std::optional<Fvog::Texture>& texture, Fvog::Extent2D extent, Fvog::Format format, std::string name)
       {
@@ -202,8 +233,6 @@ namespace Techniques
       PipelineManager::ComputePipelineKey skyMultiscatteringPipeline;
       PipelineManager::ComputePipelineKey skyViewPipeline;
       PipelineManager::ComputePipelineKey aerialPerspectivePipeline;
-
-      glm::mat4 clip_from_world = glm::mat4(1);
     };
   }
 

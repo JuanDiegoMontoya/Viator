@@ -57,19 +57,17 @@ void main()
       radiance *= hit.transmission;
 
       // Sun
-      const float NoL = max(0, dot(hit.flatNormalWorld, uniforms.sky.sunDir));
-      const vec3 transmittanceToSun = getTransmittanceAlongRay(
+      const float NoL = max(0, dot(hit.flatNormalWorld, uniforms.sky.config.sunDir));
+      const vec3 transmittanceToSun = Sky_GetTransmittanceAlongRay(
         v_globalUniforms.sky,
-        v_globalUniforms.transmittanceLut,
-        v_globalUniforms.linearSampler,
-        v_globalUniforms.sky.sunDir,
+        v_globalUniforms.sky.config.sunDir,
         hit.positionWorld);
 
       const float bottom_atmosphere_intersection_distance =
-        ray_sphere_intersect_nearest(hit.positionWorld * M_TO_KM_SCALE + vec3(0, uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
-          uniforms.sky.sunDir,
+        ray_sphere_intersect_nearest(hit.positionWorld * M_TO_KM_SCALE + vec3(0, uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+          uniforms.sky.config.sunDir,
           vec3(0.0),
-          uniforms.sky.atmosphere_bottom);
+          uniforms.sky.config.atmosphere_bottom);
 
       bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 #if 0 // Ray traced shadow
@@ -78,8 +76,8 @@ void main()
       float sunVisibility = SampleCascadedShadowMap(hit.positionWorld, uniforms.sunShadowMap);
 #endif
       sunVisibility *= SampleCascadedBeerShadowMap(hit.positionWorld, uniforms.beerShadowMap);
-      vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, hit.positionWorld);
-      vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
+      vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, hit.positionWorld);
+      vec3 sun_light = uniforms.sky.config.sunColor * uniforms.sky.config.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
       vec3 sunlight_internal = albedo * NoL * sun_light * sunVisibility;
 
       radiance += float(!view_ray_intersects_ground) * (sunlight_internal + skylight_internal);
@@ -110,7 +108,7 @@ void main()
   }
   else
   {
-    radiance = getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, args.linearSampler, rayDir, rayPos);
+    radiance = Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
     // This is a giant hack. The attenuation here should be a function of ray direction, not position.
     // This will cause overshadowing when a small cloud is above a probe. Likewise, it
     // causes undershadowing when a small gap in a sky full of clouds is above a probe.

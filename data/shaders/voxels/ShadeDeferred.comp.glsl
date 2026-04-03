@@ -46,30 +46,28 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
     irradianceIS *= textureLod(ambientOcclusion, samplerr, uv, 0).x;
   }
   
-  const vec3 transmittanceToSun = getTransmittanceAlongRay(
+  const vec3 transmittanceToSun = Sky_GetTransmittanceAlongRay(
     v_globalUniforms.sky,
-    v_globalUniforms.transmittanceLut,
-    v_globalUniforms.linearSampler,
-    v_globalUniforms.sky.sunDir,
+    v_globalUniforms.sky.config.sunDir,
     positionWS);
 
   const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
-      positionWS * M_TO_KM_SCALE + vec3(0, uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
-      uniforms.sky.sunDir,
+      positionWS * M_TO_KM_SCALE + vec3(0, uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+      uniforms.sky.config.sunDir,
       vec3(0.0),
-      uniforms.sky.atmosphere_bottom
+      uniforms.sky.config.atmosphere_bottom
   );
 
   bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 
-  const vec3 sun_light = uniforms.sky.sunColor * uniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+  const vec3 sun_light = uniforms.sky.config.sunColor * uniforms.sky.config.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
 
-  const float NoL = max(0, dot(normalWS, uniforms.sky.sunDir));
+  const float NoL = max(0, dot(normalWS, uniforms.sky.config.sunDir));
   vec3 sunVisibility;
   // Apply high quality shadows only to primary
   if (applyAo)
   {
-    sunVisibility = TraceSunRay(positionWS + normalWS * 1e-3, uniforms.sky.sunDir);
+    sunVisibility = TraceSunRay(positionWS + normalWS * 1e-3, uniforms.sky.config.sunDir);
   }
   else
   {
@@ -77,7 +75,7 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   }
   sunVisibility *= vec3(SampleCascadedBeerShadowMap(positionWS, uniforms.beerShadowMap));
   const vec3 sunlightIS = float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL / M_PI * sunVisibility;
-  const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, uniforms.sky.sunDir, positionWS);
+  const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, positionWS);
   
   return sunlightIS + skylightIS + irradianceIS;
 }
@@ -94,7 +92,7 @@ vec3 CalcRadianceFromPointSpecular(vec3 positionWS, vec3 normalWS, vec3 viewDirW
     return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false));
   }
 
-  return hit.transmission * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
+  return hit.transmission * Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
 }
 
 // eta = initial ior / next ior
@@ -114,7 +112,7 @@ vec3 CalcRadianceFromPointRefract(vec3 positionWS, vec3 normalWS, vec3 viewDirWS
     return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false));
   }
 
-  return hit.transmission * getAtmosphereAlongRay(uniforms.sky, uniforms.skyViewLut, uniforms.linearSampler, rayDir, rayPos);
+  return hit.transmission * Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
 }
 
 

@@ -120,14 +120,14 @@ void main()
   
   // Shadow
   //vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
-  vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos2), globalUniforms.sky.sunDir));
-  const vec3 transmittanceToSun = getTransmittanceAlongRay(globalUniforms.sky, globalUniforms.transmittanceLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, uniforms.viewPos);
+  vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos2), globalUniforms.sky.config.sunDir));
+  const vec3 transmittanceToSun = Sky_GetTransmittanceAlongRay(globalUniforms.sky, globalUniforms.sky.config.sunDir, uniforms.viewPos);
   
   const float bottom_atmosphere_intersection_distance = ray_sphere_intersect_nearest(
-      wPos * M_TO_KM_SCALE + vec3(0, globalUniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
-      globalUniforms.sky.sunDir,
+      wPos * M_TO_KM_SCALE + vec3(0, globalUniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+      globalUniforms.sky.config.sunDir,
       vec3(0.0),
-      globalUniforms.sky.atmosphere_bottom
+      globalUniforms.sky.config.atmosphere_bottom
   );
 
   bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
@@ -137,18 +137,18 @@ void main()
   float sunVisibility = SampleCascadedShadowMap(wPos, globalUniforms.sunShadowMap);
 #endif
   sunVisibility *= SampleCascadedBeerShadowMap(wPos, globalUniforms.beerShadowMap);
-  vec3 skylight_internal = fogColor * sunVisibility * getAtmosphereAlongRay(globalUniforms.sky, globalUniforms.skyViewLut, globalUniforms.linearSampler, globalUniforms.sky.sunDir, wPos);
-	vec3 sunlight_internal = sunVisibility * globalUniforms.sky.sunColor * globalUniforms.sky.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
+  vec3 skylight_internal = fogColor * sunVisibility * Sky_GetScatteringAlongRay(globalUniforms.sky, globalUniforms.sky.config.sunDir, wPos);
+	vec3 sunlight_internal = sunVisibility * globalUniforms.sky.config.sunColor * globalUniforms.sky.config.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5));
 
   if (uniforms.sunSelfShadowSteps > 0)
   {
-    float selfShadow = beer(DensityToLight(wPos + globalUniforms.sky.sunDir * uniforms.sunSelfShadowDist, wPos, uniforms.sunSelfShadowSteps).w);
+    float selfShadow = beer(DensityToLight(wPos + globalUniforms.sky.config.sunDir * uniforms.sunSelfShadowDist, wPos, uniforms.sunSelfShadowSteps).w);
     skylight_internal *= selfShadow;
     sunlight_internal *= selfShadow;
   }
 
   // Vibes-driven lerp between phase functions to smoothen abrupt lighting change when the sun is on the horizon.
-  phase = mix(vec3(1 / (4 * M_PI)), phase, smoothstep(-0.03, 0.06, dot(globalUniforms.sky.sunDir, vec3(0, 1, 0))));
+  phase = mix(vec3(1 / (4 * M_PI)), phase, smoothstep(-0.03, 0.06, dot(globalUniforms.sky.config.sunDir, vec3(0, 1, 0))));
   //phase = vec3(1 / (4 * M_PI));
   light += phase * (float(!view_ray_intersects_ground) * sunlight_internal + skylight_internal);
 

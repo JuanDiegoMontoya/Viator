@@ -4,27 +4,31 @@
 #include "SkyUtil.h.glsl"
 #include "SkyShared.h.glsl"
 
+FVOG_DECLARE_ARGUMENTS(PushConstants)
+{
+    SkyViewGpuParams pc;
+};
 
 vec3 get_multiple_scattering(vec3 world_position, float view_zenith_cos_angle)
 {
-    const ivec2 multiscattering_texture_size = textureSize(multiscatteringTexture, 0);
+    const ivec2 multiscattering_texture_size = textureSize(pc.multiscatteringTexture, 0);
     vec2 uv = clamp(vec2(view_zenith_cos_angle * 0.5 + 0.5,
-                        (length(world_position) - uniforms.sky.atmosphere_bottom) /
-                        (uniforms.sky.atmosphere_top - uniforms.sky.atmosphere_bottom)),
+                        (length(world_position) - pc.uniforms.sky.config.atmosphere_bottom) /
+                        (pc.uniforms.sky.config.atmosphere_top - pc.uniforms.sky.config.atmosphere_bottom)),
                     0.0, 1.0);
     uv = vec2(from_unit_to_subuv(uv.x, multiscattering_texture_size.x),
               from_unit_to_subuv(uv.y, multiscattering_texture_size.y));
 
-    return texture(multiscatteringTexture, gLinearClampSampler, uv).rgb;
+    return texture(pc.multiscatteringTexture, gLinearClampSampler, uv).rgb;
 }
 
 vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, vec3 sun_direction, int sample_count)
 {
     vec3 planet_zero = vec3(0.0, 0.0, 0.0);
     float planet_intersection_distance = ray_sphere_intersect_nearest(
-        world_position, world_direction, planet_zero, uniforms.sky.atmosphere_bottom);
+        world_position, world_direction, planet_zero, pc.uniforms.sky.config.atmosphere_bottom);
     float atmosphere_intersection_distance = ray_sphere_intersect_nearest(
-        world_position, world_direction, planet_zero, uniforms.sky.atmosphere_top);
+        world_position, world_direction, planet_zero, pc.uniforms.sky.config.atmosphere_top);
 
     float integration_length;
     /* ============================= CALCULATE INTERSECTIONS ============================ */
@@ -76,20 +80,20 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
 
         /* Position shift */
         vec3 new_position = world_position + integration_step * world_direction;
-        MediumSample m_sample = sample_medium(uniforms.sky, new_position);
+        MediumSample m_sample = sample_medium(pc.uniforms.sky.config, new_position);
         vec3 medium_extinction = m_sample.medium_extinction;
 
         vec3 up_vector = normalize(new_position);
         TransmittanceParams transmittance_lut_params = TransmittanceParams(length(new_position), dot(sun_direction, up_vector));
 
         /* uv coordinates later used to sample transmittance texture */
-        vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top);
-        vec3 transmittance_to_sun = texture(transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
+        vec2 trans_texture_uv = transmittance_lut_to_uv(transmittance_lut_params, pc.uniforms.sky.config.atmosphere_bottom, pc.uniforms.sky.config.atmosphere_top);
+        vec3 transmittance_to_sun = texture(pc.transmittanceTexture, gLinearClampSampler, trans_texture_uv).rgb;
 
         vec3 phase_times_scattering = m_sample.mie_scattering * mie_phase_value + m_sample.rayleigh_scattering * rayleigh_phase_value;
 
         float earth_intersection_distance = ray_sphere_intersect_nearest(
-            new_position, sun_direction, planet_zero, uniforms.sky.atmosphere_bottom);
+            new_position, sun_direction, planet_zero, pc.uniforms.sky.config.atmosphere_bottom);
         float in_earth_shadow = earth_intersection_distance == -1.0 ? 1.0 : 0.0;
 
         vec3 multiscattered_luminance = get_multiple_scattering(new_position, dot(sun_direction, up_vector));
@@ -109,6 +113,7 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
         if (medium_extinction.b == 0.0) { sun_light_integ.b = 0.0; }
 
         accum_light += accum_transmittance * sun_light_integ;
+        //accum_light += cloudShadow;
         accum_transmittance *= trans_increase_over_integration_step;
     }
     return accum_light;
@@ -117,21 +122,21 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
 layout(local_size_x = 8, local_size_y = 8) in;
 void main()
 {
-    const ivec2 sky_view_image_size = imageSize(skyViewImage);
+    const ivec2 sky_view_image_size = imageSize(pc.skyViewImage);
     if (all(lessThan(gl_GlobalInvocationID.xy, sky_view_image_size.xy)))
     {
-        const vec3 z_up_world_pos = uniforms.cameraPos.xzy * vec3(1.0, -1.0, 1.0);;
-        const vec3 z_up_sun_dir = uniforms.sky.sunDir.xzy * vec3(1.0, -1.0, 1.0);;
+        const vec3 z_up_world_pos = pc.uniforms.cameraPos.xzy * vec3(1.0, -1.0, 1.0);;
+        const vec3 z_up_sun_dir = pc.uniforms.sky.config.sunDir.xzy * vec3(1.0, -1.0, 1.0);;
 
         vec3 world_position = z_up_world_pos * M_TO_KM_SCALE;
-        world_position.z += uniforms.sky.atmosphere_bottom + BASE_HEIGHT_OFFSET;
+        world_position.z += pc.uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET;
         const float camera_height = length(world_position);
 
         vec2 uv = vec2(gl_GlobalInvocationID.xy) / sky_view_image_size.xy;
         SkyviewParams skyview_params = uv_to_skyview_lut_params(
             uv,
-            uniforms.sky.atmosphere_bottom,
-            uniforms.sky.atmosphere_top,
+            pc.uniforms.sky.config.atmosphere_bottom,
+            pc.uniforms.sky.config.atmosphere_top,
             sky_view_image_size,
             camera_height);
 
@@ -157,16 +162,16 @@ void main()
             sin(skyview_params.light_view_angle) * sin(skyview_params.view_zenith_angle),
             cos(skyview_params.view_zenith_angle));
 
-        if (!move_to_top_atmosphere(world_position, world_direction, uniforms.sky.atmosphere_bottom, uniforms.sky.atmosphere_top))
+        if (!move_to_top_atmosphere(world_position, world_direction, pc.uniforms.sky.config.atmosphere_bottom, pc.uniforms.sky.config.atmosphere_top))
         {
             /* No intersection with the atmosphere */
-            imageStore(skyViewImage, ivec2(gl_GlobalInvocationID.xy), vec4(0.0, 0.0, 0.0, 1.0));
+            imageStore(pc.skyViewImage, ivec2(gl_GlobalInvocationID.xy), vec4(0.0, 0.0, 0.0, 1.0));
             return;
         }
 
         const vec3 luminance = integrate_scattered_luminance(world_position, world_direction, local_sun_direction, 50);
         const vec3 inv_luminance = 1.0 / max(luminance, vec3(1.0 / 1048576.0));
         const float inv_mult = min(1048576.0, max(inv_luminance.x, max(inv_luminance.y, inv_luminance.z)));
-        imageStore(skyViewImage, ivec2(gl_GlobalInvocationID.xy), vec4(luminance * inv_mult, 1.0/inv_mult));
+        imageStore(pc.skyViewImage, ivec2(gl_GlobalInvocationID.xy), vec4(luminance * inv_mult, 1.0/inv_mult));
     }
 }

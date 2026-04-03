@@ -2192,7 +2192,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             static bool paramsChanged = true;
             if (ImGui::Button("Reset##sky_parameters"))
             {
-              skyParameters = InitSkyParameters();
+              skyParameters = InitSkyConfig();
               paramsChanged = true;
             }
 

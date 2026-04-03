@@ -1,6 +1,7 @@
 #pragma once
 #include "Client/Fvog/BasicTypes2.h"
 #include "Client/Fvog/detail/VkFwd.h"
+#include "shaders/sky/SkyParams.shared.h"
 
 #include "glm/mat4x4.hpp"
 
@@ -23,22 +24,27 @@ namespace Techniques
 
   struct SkyComputeTransmittanceLutParams
   {
-    uint32_t globalUniformsBufferIndex;
+    VkDeviceAddress globalUniformsPtr;
   };
 
   struct SkyComputeMultiscatteringLutParams
   {
-    uint32_t globalUniformsBufferIndex;
+    VkDeviceAddress globalUniformsPtr;
   };
 
   struct SkyComputeSkyViewLutParams
   {
-    uint32_t globalUniformsBufferIndex;
+    VkDeviceAddress globalUniformsPtr;
   };
 
   struct SkyComputeAerialPerspectiveLutParams
   {
-    uint32_t globalUniformsBufferIndex;
+    VkDeviceAddress globalUniformsPtr;
+  };
+
+  struct SkyGetSkyDataParams
+  {
+    SkyConfig skyConfig;
     float zNear{};
     float zFar{};
     float aspectRatio{};
@@ -56,6 +62,7 @@ namespace Techniques
     // Ensures resources exist with the specified sizes.
     // Call at least once before invoking any of the Compute* functions.
     virtual void EnsureResources(VkCommandBuffer cmd, const SkyResourceExtents& extents)                              = 0;
+    virtual SkyData GetSkyData(const SkyGetSkyDataParams& params)                                                     = 0;
     virtual void ComputeTransmittanceLut(VkCommandBuffer cmd, const SkyComputeTransmittanceLutParams& params)         = 0;
     virtual void ComputeMultiscatteringLut(VkCommandBuffer cmd, const SkyComputeMultiscatteringLutParams& params)     = 0;
     virtual void ComputeSkyViewLut(VkCommandBuffer cmd, const SkyComputeSkyViewLutParams& params)                     = 0;
@@ -66,6 +73,5 @@ namespace Techniques
     virtual Fvog::Texture& GetSkyViewLut()                     = 0;
     virtual Fvog::Texture& GetAerialPerspectiveTransmittance() = 0;
     virtual Fvog::Texture& GetAerialPerspectiveScattering()    = 0;
-    virtual glm::mat4 GetAerialPerspectiveClipFromWorld()      = 0;
   };
 }
