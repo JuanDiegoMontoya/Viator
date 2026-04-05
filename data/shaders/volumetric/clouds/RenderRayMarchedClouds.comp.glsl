@@ -1,4 +1,5 @@
 #include "RayMarchedClouds.shared.h"
+#include "../../sky/SkyParams.shared.h"
 
 FVOG_DECLARE_ARGUMENTS(RayMarchedCloudsRenderPushConstants)
 {
@@ -284,7 +285,7 @@ void main()
         {
           const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.config.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps, 0.5);
           float selfShadow = beer(densityToSun);
-          selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
+          //selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
           skylight_internal *= selfShadow;
           sunlight_internal *= selfShadow;
         }
@@ -336,6 +337,14 @@ void main()
   const vec4 posClip    = pc.clip_from_world_unjittered * vec4(hitPos, 1.0);
   const vec4 posClipOld = pc.clip_from_world_old_unjittered * vec4(hitPosOld, 1.0);
   const vec2 motionUV   = ((posClipOld.xy / posClipOld.w) - (posClip.xy / posClip.w)) * 0.5;
+
+  if (hitT < 1e10)
+  {
+    vec3 trans2;
+    vec3 scattering2;
+    Sky_GetAerialPerspective(globalUniforms2.sky, hitPos, trans2, scattering2);
+    accumScattering = accumScattering * trans2 + scattering2;
+  }
 
   accumScattering = min(vec3(65500), accumScattering);
   transmittance = min(65500, transmittance);

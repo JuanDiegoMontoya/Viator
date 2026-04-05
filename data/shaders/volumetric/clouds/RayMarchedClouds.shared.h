@@ -4,6 +4,7 @@
 #include "../../Resources.h.glsl"
 #define DDGI_NO_PUSH_CONSTANTS
 #include "../../ddgi/ProbeCommon.shared.h"
+#include "../../GlobalUniforms.h.glsl"
 
 FVOG_DECLARE_BUFFER_REFERENCE_2(RayMarchedCloudsRenderGpuParams)
 {
@@ -52,6 +53,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(UpscaleCloudsGpuParams)
 
 FVOG_DECLARE_BUFFER_REFERENCE_2(RayMarchedCloudsCompositeGpuParams)
 {
+  GlobalUniformsPtr uniforms;
   FVOG_SHARED Texture2D inOpaqueRadiance;
   FVOG_SHARED Texture2D inCloudRadianceTransmittance;
   FVOG_SHARED Image2D outRadiance;

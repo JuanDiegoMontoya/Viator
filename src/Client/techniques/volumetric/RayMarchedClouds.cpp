@@ -212,6 +212,7 @@ namespace Techniques
 
       void Composite(VkCommandBuffer cmd, const RayMarchedCloudsCompositeParams& params) override
       {
+        ASSERT(params.globalUniforms != 0);
         ASSERT(params.gRadianceIn);
         ASSERT(params.gRadianceOut);
         ASSERT(highResCloudRadianceTransmittance_.has_value());
@@ -223,11 +224,14 @@ namespace Techniques
 
         ctx.BindComputePipeline(compositeCloudsPipeline_.GetPipeline());
         auto gpuParams = Fvog::GetDevice().AllocTransient<RayMarchedCloudsCompositeGpuParams_t>();
-        *gpuParams     = {
-              .inOpaqueRadiance             = params.gRadianceIn->ImageView().GetTexture2D(),
-              .inCloudRadianceTransmittance = highResCloudRadianceTransmittance_->ImageView().GetTexture2D(),
-              .outRadiance                  = params.gRadianceOut->ImageView().GetImage2D(),
+
+        *gpuParams = {
+          .uniforms                     = params.globalUniforms,
+          .inOpaqueRadiance             = params.gRadianceIn->ImageView().GetTexture2D(),
+          .inCloudRadianceTransmittance = highResCloudRadianceTransmittance_->ImageView().GetTexture2D(),
+          .outRadiance                  = params.gRadianceOut->ImageView().GetImage2D(),
         };
+
         ctx.SetPushConstants(gpuParams);
         ctx.DispatchInvocations(outputResolution.width, outputResolution.height, 1);
       }

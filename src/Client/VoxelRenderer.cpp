@@ -1622,8 +1622,9 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       ctx.Barrier();
       rayMarchedClouds_->Composite(commandBuffer,
         {
-          .gRadianceIn  = &frame.sceneColorInternalRes.value(),
-          .gRadianceOut = &frame.sceneColorInternalRes.value(),
+          .globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+          .gRadianceIn    = &frame.sceneColorInternalRes.value(),
+          .gRadianceOut   = &frame.sceneColorInternalRes.value(),
         });
       ctx.Barrier();
     }

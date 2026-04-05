@@ -113,7 +113,6 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
         if (medium_extinction.b == 0.0) { sun_light_integ.b = 0.0; }
 
         accum_light += accum_transmittance * sun_light_integ;
-        //accum_light += cloudShadow;
         accum_transmittance *= trans_increase_over_integration_step;
     }
     return accum_light;
@@ -125,8 +124,8 @@ void main()
     const ivec2 sky_view_image_size = imageSize(pc.skyViewImage);
     if (all(lessThan(gl_GlobalInvocationID.xy, sky_view_image_size.xy)))
     {
-        const vec3 z_up_world_pos = pc.uniforms.cameraPos.xzy * vec3(1.0, -1.0, 1.0);;
-        const vec3 z_up_sun_dir = pc.uniforms.sky.config.sunDir.xzy * vec3(1.0, -1.0, 1.0);;
+        const vec3 z_up_world_pos = pc.uniforms.cameraPos.xzy * vec3(1.0, -1.0, 1.0);
+        const vec3 z_up_sun_dir = pc.uniforms.sky.config.sunDir.xzy * vec3(1.0, -1.0, 1.0);
 
         vec3 world_position = z_up_world_pos * M_TO_KM_SCALE;
         world_position.z += pc.uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET;

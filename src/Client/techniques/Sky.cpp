@@ -88,7 +88,8 @@ namespace Techniques
 
       SkyData GetSkyData(const SkyGetSkyDataParams& params) override
       {
-        const auto clip_from_view  = glm::perspective(params.fovy, params.aspectRatio, params.zNear, params.zFar);
+        auto clip_from_view  = glm::perspectiveRH_ZO(params.fovy, params.aspectRatio, params.zNear, params.zFar);
+        clip_from_view[1][1] *= -1;
         const auto clip_from_world = clip_from_view * params.view_from_world;
         const auto world_from_clip = glm::inverse(clip_from_world);
 

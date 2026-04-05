@@ -233,5 +233,14 @@ void main()
     realFinalRadiance = finalRadianceOpaque;
   }
 
+  if (depth != FAR_DEPTH)
+  {
+    // TODO: TEMP. Scattering will be double counted if opaque stuff appears behind clouds.
+    // The incorrectness might be subtle enough to ignore, however.
+    vec3 transmittance, scattering;
+    Sky_GetAerialPerspective(uniforms.sky, positionWorld, transmittance, scattering);
+    realFinalRadiance = realFinalRadiance * transmittance + scattering;
+  }
+  
   imageStore(sceneColor, gid, vec4(realFinalRadiance, 1));
 }

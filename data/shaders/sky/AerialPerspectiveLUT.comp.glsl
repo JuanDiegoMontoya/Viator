@@ -106,12 +106,10 @@ vec3 integrate_scattered_luminance(vec3 world_position, vec3 world_direction, ve
 
         vec3 shadowPos = new_position - vec3(0, pc.uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0);
         shadowPos /= M_TO_KM_SCALE;
-        shadowPos *= vec3(1, -1, 1);
-        shadowPos = shadowPos.xzy; // Y-up conversion
         float cloudShadow = 1;
         //cloudShadow = SampleCascadedBeerShadowMap(shadowPos, pc.uniforms.beerShadowMap);
-        // also sample the regular CSM here to get shadows from opaque stuff
-        sun_light *= cloudShadow * cloudShadow;
+        //cloudShadow *= SampleCascadedShadowMap(shadowPos, pc.uniforms.sunShadowMap);
+        sun_light *= cloudShadow;
 
         /* TODO: This probably should be a texture lookup*/
         vec3 trans_increase_over_integration_step = exp(-(medium_extinction * d_int_step));
@@ -144,14 +142,16 @@ void main()
   const vec3 uv                      = (gid + 0.5) / outResolution;
   const float z                      = Sky_EncodeAerialPerspectiveNdcZ(pc.uniforms.sky, uv.z);
   const vec3 rayEndPos               = UnprojectUV_ZO(z, uv.xy, pc.uniforms.sky.ae_world_from_clip);
+  const vec3 rayMidPos               = UnprojectUV_ZO(0.1, uv.xy, pc.uniforms.sky.ae_world_from_clip);
   const vec3 rayStartPos             = pc.uniforms.cameraPos.xyz;
-  const vec3 rayDir                  = normalize(rayEndPos - rayStartPos);
+  const vec3 rayDir                  = normalize(rayMidPos - rayStartPos);
   const vec3 sunDir                  = pc.uniforms.sky.config.sunDir;
   const int sampleCount              = 50;
   const float max_integration_length = distance(rayStartPos, rayEndPos) * M_TO_KM_SCALE;
+  const vec3 rayOrigin               = rayStartPos * M_TO_KM_SCALE + vec3(0, pc.uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0);
 
   vec3 transmittance;
-  vec3 scattering = integrate_scattered_luminance(rayStartPos * M_TO_KM_SCALE + vec3(0, pc.uniforms.sky.config.atmosphere_bottom + BASE_HEIGHT_OFFSET, 0),
+  vec3 scattering = integrate_scattered_luminance(rayOrigin,
     rayDir,
     sunDir,
     sampleCount,

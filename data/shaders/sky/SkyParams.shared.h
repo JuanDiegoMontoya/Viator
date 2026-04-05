@@ -82,18 +82,19 @@ inline SkyConfig InitSkyConfig()
 }
 
 #else
+#include "../Math.h.glsl"
 
 float Sky_EncodeAerialPerspectiveNdcZ(SkyData sky, float z_ndc)
 {
-  //z_ndc = pow(z_ndc, 3);
-  //z_ndc = InvertDepthZO(z_ndc, sky.ae_zNear, sky.ae_zFar);
+  z_ndc = pow(z_ndc, 3);
+  z_ndc = InvertDepthZO(z_ndc, sky.ae_zNear, sky.ae_zFar);
   return z_ndc;
 }
 
 float Sky_DecodeAerialPerspectiveNdcZ(SkyData sky, float z_ndc)
 {
-  //z_ndc = LinearizeDepthZO(z_ndc, sky.ae_zNear, sky.ae_zFar);
-  //z_ndc = pow(z_ndc, 1.0 / 3);
+  z_ndc = LinearizeDepthZO(z_ndc, sky.ae_zNear, sky.ae_zFar);
+  z_ndc = pow(z_ndc, 1.0 / 3);
   return z_ndc;
 }
 

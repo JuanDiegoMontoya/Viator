@@ -46,6 +46,7 @@ namespace Techniques
 
   struct RayMarchedCloudsCompositeParams
   {
+    VkDeviceAddress globalUniforms{};
     Fvog::Texture* gRadianceIn{};
     Fvog::Texture* gRadianceOut{};
   };
