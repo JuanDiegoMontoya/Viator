@@ -983,6 +983,7 @@ namespace Fvog
 
   VkDeviceAddress Device::TransientAllocations::Allocate(size_t size)
   {
+    DEBUG_ASSERT(size > 0);
     for (auto& [block, buffer] : arenas)
     {
       auto alloc = VmaVirtualAllocation{};
@@ -996,6 +997,7 @@ namespace Fvog
           .end           = uintptr_t(buffer.GetMappedMemory()) + offset + size,
           .deviceAddress = address,
         });
+        DEBUG_ASSERT(mappings.mappings.back().begin != mappings.mappings.back().end);
         return address;
       }
       ASSERT(ret == VK_ERROR_OUT_OF_DEVICE_MEMORY, "Unexpected error allocating transient memory");

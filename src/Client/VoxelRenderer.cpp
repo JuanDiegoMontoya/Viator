@@ -255,7 +255,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };
   head_->guiCallback_ = [this](DeltaTime dt, World& world, VkCommandBuffer cmd) { OnGui(dt, world, cmd); };
 
-  const auto gBufferFormats = std::vector{Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneMotionFormat, Frame::gReactiveMaskFormat};
+  const auto formats = {Frame::sceneAlbedoFormat, Frame::sceneNormalFormat, Frame::sceneIlluminanceFormat, Frame::sceneMotionFormat, Frame::gReactiveMaskFormat};
+  const auto gBufferFormats = std::ranges::to<std::vector>(formats);
 
   voxelsPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Render voxels",
@@ -523,6 +524,12 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   debugAabbBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug AABB Buffer");
   debugRectBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug Rect Buffer");
   debugLineBuffer.emplace(Fvog::TypedBufferCreateInfo{.count = 100'000}, "Debug Line Buffer");
+
+  particles_ = Techniques::Particles::Create({
+    .renderer       = this,
+    .gBufferFormats = formats,
+    .gDepthFormat   = frame.sceneDepthFormat,
+  });
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
@@ -1076,6 +1083,14 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .dt                     = static_cast<float>(dt),
     });
 
+  {
+    ctx.Barrier();
+    auto marker2 = ctx.MakeScopedDebugMarker("Particle logic");
+    particles_->Spawn(commandBuffer, {.frameNumber = frameNumber});
+    ctx.Barrier();
+    particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+  }
+
   ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(sky_->GetMultiscatteringLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
   ctx.ImageBarrierDiscard(sky_->GetSkyViewLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1365,7 +1380,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
     };
 
     ctx.BeginRendering({
-      .name             = "Render voxels",
+      .name             = "Render opaque",
       .colorAttachments = colorAttachments,
       .depthAttachment  = depthAttachment,
     });
@@ -1394,6 +1409,12 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
         ctx.BindIndexBuffer(mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
         ctx.DrawIndexed((uint32_t)mesh->indices.size(), 1, 0, 0, (uint32_t)i);
       }
+
+      particles_->Render(commandBuffer,
+        {
+          .globalUniforms  = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+          .view_from_world = view_from_world,
+        });
 
       if (!lines.empty())
       {
@@ -1869,6 +1890,21 @@ Fvog::Texture& VoxelRenderer::GetOrEmplaceCachedTexture(const std::string& name,
   auto texture = LoadImageFile(GetAssetDirectory() / "voxels" / "textures" / (name + ".png"), srgb);
 
   return stringToTexture.emplace(name, std::move(texture)).first->second;
+}
+
+void VoxelRenderer::RegisterParticleArchetype(std::string name, const Game2::Render::ParticleArchetype& archetype)
+{
+  particles_->RegisterArchetype(std::move(name), archetype);
+}
+
+void VoxelRenderer::SpawnParticles(std::span<const Game2::Render::Particle> particles)
+{
+  particles_->PushSingleParticles(particles);
+}
+
+void VoxelRenderer::SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos)
+{
+  particles_->PushParticleArchetypes(archetypeSpawnInfos);
 }
 
 void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)

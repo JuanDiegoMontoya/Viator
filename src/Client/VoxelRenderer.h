@@ -14,6 +14,7 @@
 #include "techniques/shadows/CascadedShadowMaps.h"
 #include "techniques/volumetric/RayMarchedClouds.h"
 #include "techniques/Sky.h"
+#include "techniques/Particles.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -98,6 +99,13 @@ public:
 
   void CreateRenderingMaterials(const World& world);
 
+  // TODO: This really needs to be refactored into a dedicated cached resource abstraction.
+  Fvog::Texture& GetOrEmplaceCachedTexture(const std::string& name, bool srgb);
+
+  void RegisterParticleArchetype(std::string name, const Game2::Render::ParticleArchetype& archetype);
+  void SpawnParticles(std::span<const Game2::Render::Particle> particles);
+  void SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos);
+
 private:
   bool needsHeightmapInit = false; // TODO: TEMP
 
@@ -117,8 +125,6 @@ private:
   void OnRender(double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex);
   void RenderGame(double dt, World& world, VkCommandBuffer commandBuffer);
   void OnGui(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
-
-  Fvog::Texture& GetOrEmplaceCachedTexture(const std::string& name, bool srgb);
 
   struct Frame
   {
@@ -461,6 +467,8 @@ private:
     .cloudTemporalOffset        = {},
     .earthSizeFactor            = 1.0f / 10.0f,
   };
+
+  std::unique_ptr<Techniques::Particles> particles_;
 };
 
 struct ImFont;

@@ -42,6 +42,9 @@ public:
   void VariableUpdatePre(DeltaTime dt, World& world) override;
   void VariableUpdatePost(DeltaTime dt, World& world) override;
   void CreateRenderingMaterials(const World& world) override;
+  void RegisterParticleArchetype(std::string name, const Game2::Render::ParticleArchetype& archetype) override;
+  void SpawnParticles(std::span<const Game2::Render::Particle> particles) override;
+  void SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos) override;
   Audio* GetAudio() override;
 
   struct CreateInfo

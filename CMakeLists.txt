@@ -85,6 +85,8 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/volumetric/RayMarchedClouds.cpp
         src/Client/techniques/Sky.h
         src/Client/techniques/Sky.cpp
+        src/Client/techniques/Particles.h
+        src/Client/techniques/Particles.cpp
     )
 endif()
 
@@ -200,6 +202,7 @@ add_executable(frogRender
     src/Game/CVar.h
     src/Game/CVar.cpp
     src/Game/CVarInternal.h
+    src/Game/Rendering/Particle.h
 )
 
 if (NOT GAME_ENABLE_ASAN)

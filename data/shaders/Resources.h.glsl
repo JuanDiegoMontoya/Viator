@@ -35,9 +35,13 @@
 #define FVOG_DECLARE_ARGUMENTS(name) \
   struct name
 
-#define FVOG_DECLARE_BUFFER_REFERENCE_2(typeName) \
-  using typeName = VkDeviceAddress; \
-  struct typeName ## _t
+#define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) \
+  using typename = VkDeviceAddress; \
+  struct typename ## _t
+  
+#define FVOG_DECLARE_BUFFER_REFERENCE_3(typename, align) \
+  using typename = VkDeviceAddress; \
+  struct alignas(align) typename ## _t
 
 #else // GLSL
 
@@ -79,6 +83,9 @@
 #extension GL_EXT_debug_printf : enable                   // printf
 #extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_spirv_intrinsics : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
 
 #ifdef FROGRENDER_RAYTRACING_ENABLE
 #extension GL_EXT_ray_tracing : require
@@ -137,6 +144,9 @@
   layout(buffer_reference, buffer_reference_align = 8, scalar) buffer typename
 
 #define FVOG_DECLARE_BUFFER_REFERENCE_2(typename) FVOG_DECLARE_BUFFER_REFERENCE(typename)
+
+#define FVOG_DECLARE_BUFFER_REFERENCE_3(typename, align) \
+  layout(buffer_reference, buffer_reference_align = align, scalar) buffer typename
 
 // Qualifiers can be put in the block name
 #define FVOG_DECLARE_STORAGE_BUFFERS(blockname) \

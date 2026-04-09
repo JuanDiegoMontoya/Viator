@@ -384,6 +384,21 @@ void PlayerHead::CreateRenderingMaterials(const World& world)
   voxelRenderer_->CreateRenderingMaterials(world);
 }
 
+void PlayerHead::RegisterParticleArchetype(std::string name, const Game2::Render::ParticleArchetype& archetype)
+{
+  voxelRenderer_->RegisterParticleArchetype(std::move(name), archetype);
+}
+
+void PlayerHead::SpawnParticles(std::span<const Game2::Render::Particle> particles)
+{
+  voxelRenderer_->SpawnParticles(particles);
+}
+
+void PlayerHead::SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos)
+{
+  voxelRenderer_->SpawnParticleArchetypes(archetypeSpawnInfos);
+}
+
 Audio* PlayerHead::GetAudio()
 {
   static auto nullAudio = std::make_unique<NullAudio>();

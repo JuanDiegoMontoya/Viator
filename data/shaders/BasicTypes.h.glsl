@@ -20,4 +20,9 @@ struct DrawIndirectCommand
   FVOG_UINT32 firstInstance;
 };
 
+struct DispatchIndirectCommand
+{
+  FVOG_UINT32 x, y, z;
+};
+
 #endif // BASIC_TYPES_H

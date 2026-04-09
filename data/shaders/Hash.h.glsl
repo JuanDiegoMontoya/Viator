@@ -29,6 +29,15 @@ float PCG_RandFloat(inout uint state, float min_, float max_)
   return f * (max_ - min_) + min_;
 }
 
+vec3 PCG_RandVec3(inout uint state, vec3 min_, vec3 max_)
+{
+  return vec3(
+    PCG_RandFloat(state, min_.x, max_.x),
+    PCG_RandFloat(state, min_.y, max_.y),
+    PCG_RandFloat(state, min_.z, max_.z)
+  );
+}
+
 float PCG_RandFloat(inout uint state)
 {
   return PCG_RandFloat(state, 0, 1);

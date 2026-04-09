@@ -17,6 +17,7 @@
 #include "Game/Globals.h"
 #include "Client/GUI/Console.h"
 #include "Game/CVar.h"
+#include "Game/Rendering/Particle.h"
 
 #include "Game/Physics/Physics.h" // TODO: remove
 #include "Jolt/Physics/Collision/Shape/BoxShape.h"
@@ -2385,6 +2386,39 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
           ImGui::DragFloat("Cloud time offset", &weather_.cloudTemporalOffset, 1, 0, 0, "%.2f");
           ImGui::SliderFloat("Earth scale", &weather_.earthSizeFactor, 1.0f / 10000.0f, 1.0f, "%.4f", ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_NoRoundToFormat);
           ImGui::EndDisabled();
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Particles"))
+        {
+          if (ImGui::Button("Spawn test particles"))
+          {
+            if (const auto* transform = world.TryGetLocalPlayerTransform())
+            {
+              auto& rng         = world.globals->game->rng;
+              const auto pos    = transform->position + GetForward(transform->rotation) * 5.0f;
+              for (int i = 0; i < 100; i++)
+              {
+                const auto offset   = glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1));
+                const auto particle = Game2::Render::Particle{
+                  .baseColorTexture              = "cassiterite_albedo",
+                  .baseColorFactor               = {rng.RandFloat(), rng.RandFloat(), rng.RandFloat(), 1},
+                  .position                      = pos + offset,
+                  .velocity                      = {rng.RandFloat(-1, 1), rng.RandFloat(), rng.RandFloat(-1, 1)},
+                  .acceleration                  = {0, -5, 0},
+                  .isSolid                       = false,
+                  .spawnParticleOnHit            = false,
+                  .particleArchetypeToSpawnOnHit = "",
+                  .initialScale                  = glm::vec2(.25f),
+                  .currentScale                  = glm::vec2(.25f),
+                  .finalScale                    = glm::vec2(.25f),
+                  .initialLife                   = 2 + rng.RandFloat(),
+                  .lifeRemaining                 = 2,
+                };
+                world.globals->head->SpawnParticles(std::span{&particle, 1});
+              }
+            }
+          }
           ImGui::EndTabItem();
         }
 

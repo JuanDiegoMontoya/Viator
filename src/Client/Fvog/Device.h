@@ -30,6 +30,11 @@ namespace Fvog
       return &**this;
     }
 
+    T* Get()
+    {
+      return &**this;
+    }
+
     VkDeviceAddress ptr{};
   };
 
