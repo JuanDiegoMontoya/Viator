@@ -68,7 +68,7 @@ private:
   friend class VoxelRenderer; // TODO: HACK
   // Create swapchain size-dependent resources
   std::function<void(uint32_t newWidth, uint32_t newHeight)> framebufferResizeCallback_;
-  std::function<void(float dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)> renderCallback_;
+  std::function<void(DeltaTime dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)> renderCallback_;
   std::function<void(DeltaTime dt, World& world, VkCommandBuffer commandBuffer)> guiCallback_;
 
   // destroyList will be the last object to be automatically destroyed after the destructor returns
@@ -106,7 +106,6 @@ private:
   void RemakeSwapchain(uint32_t newWidth, uint32_t newHeight);
   void Draw(DeltaTime dt);
   World* worldThisFrame_{};
-  double timeOfLastDraw = 0;
   
   bool swapchainOk = true;
   std::unique_ptr<VoxelRenderer> voxelRenderer_;

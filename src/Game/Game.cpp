@@ -575,7 +575,7 @@ void Game::Run()
       previousTimestamp = currentTimestamp;
 
       auto dt = DeltaTime{
-        .game     = static_cast<float>(realDeltaTime * timeScale),
+        .game     = static_cast<float>(realDeltaTime * timeScale * (world_->globals->game->gameState == GameState::GAME)),
         .real     = static_cast<float>(realDeltaTime),
         .fraction = float(fixedUpdateAccum / tickDuration),
       };

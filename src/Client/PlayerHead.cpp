@@ -724,10 +724,6 @@ void PlayerHead::Draw(DeltaTime dt)
   ZoneScoped;
   auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
 
-  auto prevTime  = timeOfLastDraw;
-  timeOfLastDraw = glfwGetTime();
-  auto dtDraw    = timeOfLastDraw - prevTime;
-
   Fvog::GetDevice().frameNumber++;
   auto& currentFrameData = Fvog::GetDevice().GetCurrentFrameData();
 
@@ -811,7 +807,7 @@ void PlayerHead::Draw(DeltaTime dt)
       if (renderCallback_)
       {
         TracyVkZone(tracyVkContext_, commandBuffer, "OnRender");
-        renderCallback_((float)dtDraw, *worldThisFrame_, commandBuffer, swapchainImageIndex);
+        renderCallback_(dt, *worldThisFrame_, commandBuffer, swapchainImageIndex);
       }
     }
     {

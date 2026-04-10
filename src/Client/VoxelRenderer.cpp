@@ -251,7 +251,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   g_meshes.emplace("bow", LoadObjFile(GetAssetDirectory() / "models/bow.obj"));
   g_meshes.emplace("arrow", LoadObjFile(GetAssetDirectory() / "models/arrow.obj"));
 
-  head_->renderCallback_ = [this](float dt, World& world, VkCommandBuffer cmd, uint32_t swapchainImageIndex) { OnRender(dt, world, cmd, swapchainImageIndex); };
+  head_->renderCallback_ = [this](DeltaTime dt, World& world, VkCommandBuffer cmd, uint32_t swapchainImageIndex)
+  { OnRender(dt, world, cmd, swapchainImageIndex); };
   head_->framebufferResizeCallback_ = [this](uint32_t newWidth, uint32_t newHeight) { OnFramebufferResize(newWidth, newHeight); };
   head_->guiCallback_ = [this](DeltaTime dt, World& world, VkCommandBuffer cmd) { OnGui(dt, world, cmd); };
 
@@ -777,7 +778,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneColorTonemapped = Fvog::CreateTexture2D(outputExtent, Frame::sceneColorTonemappedFormat, Fvog::TextureUsage::GENERAL, "Scene color tonemapped");
 }
 
-void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)
+void VoxelRenderer::OnRender(DeltaTime dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)
 {
   ZoneScoped;
   TracyVkZone(head_->tracyVkContext_, commandBuffer, "OnRender");
@@ -864,7 +865,7 @@ void VoxelRenderer::OnRender([[maybe_unused]] double dt, World& world, VkCommand
   ctx.ImageBarrier(head_->swapchainImages_[swapchainImageIndex], VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 }
 
-void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkCommandBuffer commandBuffer)
+void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer commandBuffer)
 {
   auto ctx = Fvog::Context(commandBuffer);
 
@@ -1079,8 +1080,8 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
-      .time                   = static_cast<float>(time += dt),
-      .dt                     = static_cast<float>(dt),
+      .time                   = static_cast<float>(time += dt.game),
+      .dt                     = static_cast<float>(dt.game),
     });
 
   {
@@ -1630,7 +1631,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
           .frameNumber         = frameNumber,
           .zNear               = (float)cameraNearPlane.Get(),
         });
-      weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt;
+      weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt.game;
       ctx.Barrier();
       rayMarchedClouds_->Upscale(commandBuffer,
         {
@@ -1752,7 +1753,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       {
         .image           = frame.sceneColorInternalRes.value(),
         .exposureBuffer  = exposureBuffer,
-        .deltaTime       = float(dt),
+        .deltaTime       = float(dt.game),
         .adjustmentSpeed = 1,
         .targetLuminance = 0.2140f,
         .logMinLuminance = -15.0f,
@@ -1816,7 +1817,7 @@ void VoxelRenderer::RenderGame([[maybe_unused]] double dt, World& world, VkComma
       .renderSize                 = {renderInternalWidth, renderInternalHeight},
       .enableSharpening           = fsr2Sharpness != 0,
       .sharpness                  = fsr2Sharpness,
-      .frameTimeDelta             = static_cast<float>(dt * 1000.0),
+      .frameTimeDelta             = static_cast<float>(dt.real * 1000.0),
       .preExposure                = 1,
       .reset                      = false,
       .cameraNear                 = std::numeric_limits<float>::max(),

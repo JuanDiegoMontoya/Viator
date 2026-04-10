@@ -122,8 +122,8 @@ private:
   void ShowEditor(DeltaTime dt, World& world, EditorMode mode);
   bool ShowSettingsWindow(World& world);
   void OnFramebufferResize(uint32_t newWidth, uint32_t newHeight);
-  void OnRender(double dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex);
-  void RenderGame(double dt, World& world, VkCommandBuffer commandBuffer);
+  void OnRender(DeltaTime dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex);
+  void RenderGame(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
   void OnGui(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
 
   struct Frame
