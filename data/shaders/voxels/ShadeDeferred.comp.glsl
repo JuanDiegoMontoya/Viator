@@ -150,7 +150,10 @@ void main()
   {
     normalTranslucent = vec3(0, 1, 0);
   }
-  normalTranslucent = normalize(normalTranslucent + .05 * Simplex_Fbm(vec3(0, 1, 0) * uniforms.frameNumber * .01 + 2 * positionTranslucentWS, 3));
+  if (depthTranslucent < 1e30)
+  {
+    normalTranslucent = normalize(normalTranslucent + .05 * Simplex_Fbm(vec3(0, 1, 0) * uniforms.frameNumber * .01 + 2 * positionTranslucentWS, 3));
+  }
 
   vec3 transmission = vec3(1);
   const float opaqueToCameraDist = depth == FAR_DEPTH ? 1e99 : distance(positionWorld, uniforms.cameraPos.xyz);
@@ -198,17 +201,16 @@ void main()
   {
     const vec3 avgLuminance = SampleAverageLuminance(positionWorld, uniforms.linearSampler, ddgi);
     const float artisticLightScale = 2; // Makes sprites "pop" a little more from their surroundings.
-    imageStore(sceneColor, gid, vec4(artisticLightScale * albedo_internal * avgLuminance, 0.0));
-    return;
+    finalRadianceOpaque = transmission * (radiance_internal + artisticLightScale * albedo_internal * avgLuminance);
   }
 
   // Spelunker potion effect
-  if (bool(applySpelunkerEffect))
+  if (bool(applySpelunkerEffect) && depth != FAR_DEPTH)
   {
     if (special != 0)
     {
       // Ores behind walls
-      if (special == 1)
+      if (special == 1 && false)
       {
         float noise = Simplex_Noise(vec3(0.2 * uv, sin(Simplex_Noise(vec3(0.5 * uv * 5, 0.5 * float(uniforms.frameNumber) / 120)))));
         vec3 colorA = vec3(.8, .3, .1);
@@ -241,6 +243,6 @@ void main()
     Sky_GetAerialPerspective(uniforms.sky, positionWorld, transmittance, scattering);
     realFinalRadiance = realFinalRadiance * transmittance + scattering;
   }
-  
+
   imageStore(sceneColor, gid, vec4(realFinalRadiance, 1));
 }

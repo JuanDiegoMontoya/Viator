@@ -394,7 +394,7 @@ endif()
 target_link_libraries(frogRender
     PRIVATE
     ${libraries_for_head}
-    glm
+    glm::glm
     Tracy::TracyClient
     VulkanMemoryAllocator # VMA is headless builds because its virtual allocator is used in server logic
     EnTT

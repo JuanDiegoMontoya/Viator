@@ -155,6 +155,7 @@ vec3 color_convert_src_to_dst(vec3 color_src, uint src_color_space, uint dst_col
 // https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html#TRANSFER_SRGB
 vec3 color_sRGB_EOTF(vec3 srgb_nonlinear)
 {
+  srgb_nonlinear = max(srgb_nonlinear, vec3(0));
   bvec3 cutoff = lessThanEqual(srgb_nonlinear, vec3(0.04045));
   vec3 higher = pow((srgb_nonlinear + vec3(0.055)) / vec3(1.055), vec3(2.4));
   vec3 lower = srgb_nonlinear / vec3(12.92);
