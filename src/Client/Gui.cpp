@@ -2391,31 +2391,71 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
         if (ImGui::BeginTabItem("Particles"))
         {
-          if (ImGui::Button("Spawn test particles"))
+          if (const auto* transform = world.TryGetLocalPlayerTransform())
           {
-            if (const auto* transform = world.TryGetLocalPlayerTransform())
+            auto& rng      = world.globals->game->rng;
+            const auto pos = transform->position + GetForward(transform->rotation) * 5.0f;
+
+            if (ImGui::Button("Spawn test particles"))
+            if (gameState == GameState::GAME)
             {
-              auto& rng         = world.globals->game->rng;
-              const auto pos    = transform->position + GetForward(transform->rotation) * 5.0f;
-              for (int i = 0; i < 100; i++)
+              for (int i = 0; i < 3000; i++)
               {
-                const auto offset   = glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1));
+                const auto offset   = glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1)) * 50.0f;
                 const auto particle = Game2::Render::Particle{
-                  .baseColorTexture              = "cassiterite_albedo",
+                  .baseColorTexture              = "coin",
                   .baseColorFactor               = {rng.RandFloat(), rng.RandFloat(), rng.RandFloat(), 1},
                   .position                      = pos + offset,
                   .velocity                      = {rng.RandFloat(-1, 1), rng.RandFloat(), rng.RandFloat(-1, 1)},
                   .acceleration                  = {0, -5, 0},
-                  .isSolid                       = false,
-                  .spawnParticleOnHit            = false,
-                  .particleArchetypeToSpawnOnHit = "",
-                  .initialScale                  = glm::vec2(.25f),
-                  .currentScale                  = glm::vec2(.25f),
-                  .finalScale                    = glm::vec2(.25f),
-                  .initialLife                   = 2 + rng.RandFloat(),
-                  .lifeRemaining                 = 2,
+                  .isSolid                       = true,
+                  .spawnParticleOnHit            = true,
+                  .particleArchetypeToSpawnOnHit = "test",
+                  .initialScale                  = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
+                  .currentScale                  = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
+                  .finalScale                    = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
+                  .initialLife                   = 3,
+                  .lifeRemaining                 = 2 + rng.RandFloat(),
                 };
                 world.globals->head->SpawnParticles(std::span{&particle, 1});
+              }
+            }
+
+            static float speed = 4;
+            static float life  = 3;
+            ImGui::SliderFloat("speed", &speed, 0, 10);
+            ImGui::SliderFloat("life", &life, 0, 10);
+            if (ImGui::Button("Pew pew"))
+            {
+              const auto particle = Game2::Render::Particle{
+                .baseColorTexture              = "coin",
+                .baseColorFactor               = {1, 1, 1, 1},
+                .position                      = transform->position,
+                .velocity                      = GetForward(transform->rotation) * speed,
+                .acceleration                  = {0, 0, 0},
+                .isSolid                       = true,
+                .spawnParticleOnHit            = true,
+                .particleArchetypeToSpawnOnHit = "test",
+                .initialScale                  = glm::vec2(0.1f),
+                .currentScale                  = glm::vec2(0.1f),
+                .finalScale                    = glm::vec2(0.1f),
+                .initialLife                   = life,
+                .lifeRemaining                 = life,
+              };
+              world.globals->head->SpawnParticles(std::span{&particle, 1});
+            }
+
+            if (ImGui::Button("Spawn test archetype"))
+            {
+              for (int i = 0; i < 1000; i++)
+              {
+                auto archetype = Game2::Render::ParticleArchetypeSpawnInfo{
+                  .archetypeName = "test",
+                  .count         = 10,
+                  .positionWS    = pos,
+                  .velocity      = {},
+                };
+                world.globals->head->SpawnParticleArchetypes(std::span(&archetype, 1));
               }
             }
           }

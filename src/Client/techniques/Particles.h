@@ -38,7 +38,6 @@ namespace Techniques
   struct ParticlesRenderParams
   {
     VkDeviceAddress globalUniforms{};
-    glm::mat4 view_from_world{};
   };
 
   class Particles
@@ -53,8 +52,8 @@ namespace Techniques
     virtual void PushSingleParticles(std::span<const Game2::Render::Particle> singleParticles)                          = 0;
     virtual void PushParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos) = 0;
 
-    virtual void Spawn(VkCommandBuffer cmd, const ParticlesSpawnParams& params)     = 0;
-    virtual void Update(VkCommandBuffer cmd, const ParticlesUpdateParams& params)   = 0;
-    virtual void Render(VkCommandBuffer cmd, const ParticlesRenderParams& params)   = 0;
+    virtual void Spawn(VkCommandBuffer cmd, const ParticlesSpawnParams& params)   = 0;
+    virtual void Update(VkCommandBuffer cmd, const ParticlesUpdateParams& params) = 0;
+    virtual void Render(VkCommandBuffer cmd, const ParticlesRenderParams& params) = 0;
   };
 }

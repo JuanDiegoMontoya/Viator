@@ -9,8 +9,6 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleRenderGpuParams)
   GlobalUniformsPtr uniforms;
   ParticleList particleList;
   IntList liveParticles;
-  FVOG_VEC3 cameraRight;
-  FVOG_VEC3 cameraUp;
 };
 
 FVOG_DECLARE_ARGUMENTS(ParticleRenderArgs)

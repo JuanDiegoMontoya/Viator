@@ -1,11 +1,6 @@
 #include "Particles.shared.h"
 #include "../BasicTypes.h.glsl"
 
-FVOG_DECLARE_BUFFER_REFERENCE_2(DispatchIndirectCommandPtr)
-{
-  DispatchIndirectCommand data;
-};
-
 FVOG_DECLARE_BUFFER_REFERENCE_2(WriteUpdateDispatchParamsGpuParams)
 {
   DispatchIndirectCommandPtr dispatchCommand;

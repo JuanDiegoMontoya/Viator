@@ -31,6 +31,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
   FVOG_MAT4 proj;                             \
   FVOG_MAT4 invProj;                          \
   FVOG_MAT4 view;                             \
+  FVOG_MAT4 oldView;                          \
   FVOG_MAT4 invView;                          \
   FVOG_VEC4 cameraPos;                        \
   FVOG_UINT32 meshletCount;                   \
@@ -47,6 +48,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
   CascadedShadowMapInfoPtr sunShadowMap;      \
   CascadedBeerShadowMapInfoPtr beerShadowMap; \
   WeatherGpuParams weatherParams;             \
+  uint64_t voxelsPtr;                         \
   FVOG_FLOAT time;                            \
   FVOG_FLOAT dt
 

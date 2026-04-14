@@ -1054,6 +1054,29 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     .view_from_world = view_from_world,
   });
 
+  auto voxelsPtr = VkDeviceAddress{};
+
+  if (world.globals->grid->numTopLevelBricks_ > 0)
+  {
+    auto& grid = *world.globals->grid;
+    
+    auto voxelsGpu = Fvog::GetDevice().AllocTransient<Voxels>();
+
+    *voxelsGpu = {
+      .topLevelBricksDims         = grid.TopLevelBricksDims(),
+      .topLevelBrickPtrsBaseIndex = grid.TopLevelBrickPtrsBaseIndex(),
+      .dimensions                 = grid.Dimensions(),
+      .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
+      .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
+      .voxelSampler               = voxelSampler,
+      .numLights                  = 0,
+      .lightBufferIdx             = 0,
+      .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+    };
+
+    voxelsPtr = voxelsGpu.ptr;
+  }
+
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
       .viewProj               = clip_from_world,
@@ -1064,6 +1087,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .proj                   = clip_from_view,
       .invProj                = glm::inverse(clip_from_view),
       .view                   = view_from_world,
+      .oldView                = view_from_world_old,
       .invView                = glm::inverse(view_from_world),
       .cameraPos              = glm::vec4(position, 0),
       .meshletCount           = 0,
@@ -1080,6 +1104,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
+      .voxelsPtr              = voxelsPtr,
       .time                   = static_cast<float>(time += dt.game),
       .dt                     = static_cast<float>(dt.game),
     });
@@ -1411,11 +1436,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         ctx.DrawIndexed((uint32_t)mesh->indices.size(), 1, 0, 0, (uint32_t)i);
       }
 
-      particles_->Render(commandBuffer,
-        {
-          .globalUniforms  = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-          .view_from_world = view_from_world,
-        });
+      particles_->Render(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
 
       if (!lines.empty())
       {

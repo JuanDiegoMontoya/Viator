@@ -9,6 +9,7 @@
 #include "shaders/particles/ParticleUpdate.comp.glsl"
 #include "shaders/particles/WriteUpdateDispatchParams.comp.glsl"
 #include "shaders/particles/WriteRenderParticleCommand.comp.glsl"
+#include "shaders/particles/GarbageCollectParticles.comp.glsl"
 
 #include "Game/Rendering/Particle.h"
 #include "Client/Fvog/Buffer2.h"
@@ -39,7 +40,7 @@ namespace Techniques
             },
         });
 
-        writeDispatchParams = GetPipelineManager().EnqueueCompileComputePipeline({
+        writeUpdateDispatchParams = GetPipelineManager().EnqueueCompileComputePipeline({
           .name = "[Particles] Write dispatch params pipeline",
           .shaderModuleInfo =
             PipelineManager::ShaderModuleCreateInfo{
@@ -54,6 +55,15 @@ namespace Techniques
             PipelineManager::ShaderModuleCreateInfo{
               .stage = Fvog::PipelineStage::COMPUTE_SHADER,
               .path  = GetShaderDirectory() / "particles/ParticleUpdate.comp.glsl",
+            },
+        });
+
+        garbageCollectParticles = GetPipelineManager().EnqueueCompileComputePipeline({
+          .name = "[Particles] Garbage collection pipeline",
+          .shaderModuleInfo =
+            PipelineManager::ShaderModuleCreateInfo{
+              .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+              .path  = GetShaderDirectory() / "particles/GarbageCollectParticles.comp.glsl",
             },
         });
 
@@ -91,7 +101,12 @@ namespace Techniques
         });
 
         drawCommand.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Particle draw command");
-        dispatchCommand.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Particle update dispatch command");
+        updateDispatchCommand.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Particle update dispatch command");
+        spawnIndirectDispatchCommand.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR},
+          "Particle spawn indirect dispatch command");
+        indirectSpawnedParticles.emplace(Fvog::TypedBufferCreateInfo{.count = maxIndirectParticlesPerFrame, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR},
+          "Indirect spawned particles");
+        indirectSpawnedParticleVector.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Indirect spawned particle vector");
         particles.emplace(Fvog::TypedBufferCreateInfo{.count = maxParticles, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Particles");
         particleList.emplace(Fvog::TypedBufferCreateInfo{.flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Particle list");
         thisFrameLiveParticles.emplace(Fvog::TypedBufferCreateInfo{.count = maxParticles, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR}, "Live particles 1");
@@ -110,10 +125,44 @@ namespace Techniques
             ctx.TeenyBufferUpdate(thisFrameLiveParticleList.value(), ::IntList_t{.size = 0, .values = thisFrameLiveParticles.value().GetDeviceAddress()});
             ctx.TeenyBufferUpdate(nextFrameLiveParticleList.value(), ::IntList_t{.size = 0, .values = nextFrameLiveParticles.value().GetDeviceAddress()});
             ctx.TeenyBufferUpdate(freeParticleList.value(), ::ParticleList_t{.size = maxParticles, .particles = freeParticles.value().GetDeviceAddress()});
+            ctx.TeenyBufferUpdate(indirectSpawnedParticleVector.value(),
+              ::ParticleVector_t{
+                .size      = 0,
+                .capacity  = maxIndirectParticlesPerFrame,
+                .particles = indirectSpawnedParticles.value().GetDeviceAddress(),
+              });
+            ctx.TeenyBufferUpdate(spawnIndirectDispatchCommand.value(), ::DispatchIndirectCommand{0, 1, 1});
 
             auto indices = std::vector<int32_t>(maxParticles);
             std::ranges::iota(std::ranges::views::reverse(indices), 0);
             freeParticles->UpdateDataExpensive(cmd, indices);
+          });
+
+        // TEMP
+        ParticlesImpl::RegisterArchetype("test",
+          {
+            .prototype =
+              Game2::Render::Particle{
+                .baseColorTexture              = "error_8",
+                .baseColorFactor               = {1, 1, 1, 1},
+                .position                      = {},
+                .velocity                      = {},
+                .acceleration                  = {0, -5, 0},
+                .isSolid                       = true,
+                .spawnParticleOnHit            = false,
+                .particleArchetypeToSpawnOnHit = "test",
+                .initialScale                  = {.1f, .1f},
+                .currentScale                  = {.1f, .1f},
+                .finalScale                    = {.1f, .1f},
+                .initialLife                   = 2,
+                .lifeRemaining                 = 2,
+              },
+            .positionOffsetMin = {},
+            .positionOffsetMax = {},
+            .velocityMin       = {-.4f, 0.8f, -.4f},
+            .velocityMax       = {.4f, 2.0f, .4f},
+            .accelerationMin   = {},
+            .accelerationMax   = {},
           });
       }
 
@@ -123,7 +172,9 @@ namespace Techniques
       {
         DEBUG_ASSERT(!nameToParticleArchetype.contains(name));
 
-        const auto archetypeGpu = ::ParticleArchetype{
+        auto& archetypeGpu = nameToParticleArchetype.try_emplace(std::move(name), std::make_pair(numArchetypes, ::ParticleArchetype{})).first->second.second;
+
+        archetypeGpu = {
           .prototype         = GameParticleToRenderParticle(archetype.prototype),
           .positionOffsetMin = archetype.positionOffsetMin,
           .positionOffsetMax = archetype.positionOffsetMax,
@@ -132,8 +183,6 @@ namespace Techniques
           .accelerationMin   = archetype.accelerationMin,
           .accelerationMax   = archetype.accelerationMax,
         };
-
-        nameToParticleArchetype.emplace(std::move(name), std::make_pair(numArchetypes, archetypeGpu));
 
         Fvog::GetDevice().ImmediateSubmit(
           [&](VkCommandBuffer cmd)
@@ -184,10 +233,11 @@ namespace Techniques
           auto gpuParams = Fvog::GetDevice().AllocTransient<ParticleSpawnGpuParams_t>();
 
           *gpuParams = {
-            .spawnSingleParticlesMode = 0,
+            .spawnParticlesMode       = PARTICLE_SPAWN_MODE_ARCHETYPE,
             .singleParticlesToSpawn   = {},
             .archetypesToSpawn        = archetypeListGpu.ptr,
-            .archetypeList            = particleArchetypes.value().GetDeviceAddress(),
+            .indirectParticlesToSpawn = {},
+            .archetypes               = particleArchetypes.value().GetDeviceAddress(),
             .particles                = particleList.value().GetDeviceAddress(),
             .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
             .freeParticles            = freeParticleList.value().GetDeviceAddress(),
@@ -216,10 +266,11 @@ namespace Techniques
           auto gpuParams = Fvog::GetDevice().AllocTransient<ParticleSpawnGpuParams_t>();
 
           *gpuParams = {
-            .spawnSingleParticlesMode = 1,
+            .spawnParticlesMode       = PARTICLE_SPAWN_MODE_SINGLE,
             .singleParticlesToSpawn   = particleToSpawnList.ptr,
             .archetypesToSpawn        = {},
-            .archetypeList            = particleArchetypes.value().GetDeviceAddress(),
+            .indirectParticlesToSpawn = {},
+            .archetypes               = particleArchetypes.value().GetDeviceAddress(),
             .particles                = particleList.value().GetDeviceAddress(),
             .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
             .freeParticles            = freeParticleList.value().GetDeviceAddress(),
@@ -228,6 +279,42 @@ namespace Techniques
 
           ctx.SetPushConstants(gpuParams);
           ctx.DispatchInvocations((uint32_t)particlesToSpawn.size(), 1, 1);
+        }
+
+        // Indirect particles
+        {
+          auto gpuParams = Fvog::GetDevice().AllocTransient<ParticleSpawnGpuParams_t>();
+
+          *gpuParams = {
+            .spawnParticlesMode       = PARTICLE_SPAWN_MODE_INDIRECT,
+            .singleParticlesToSpawn   = {},
+            .archetypesToSpawn        = {},
+            .indirectParticlesToSpawn = indirectSpawnedParticleVector.value().GetDeviceAddress(),
+            .archetypes               = particleArchetypes.value().GetDeviceAddress(),
+            .particles                = particleList.value().GetDeviceAddress(),
+            .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
+            .freeParticles            = freeParticleList.value().GetDeviceAddress(),
+            .frameNumber              = params.frameNumber,
+          };
+
+          ctx.SetPushConstants(gpuParams);
+          ctx.DispatchIndirect(spawnIndirectDispatchCommand.value());
+
+          ctx.Barrier();
+
+          spawnIndirectDispatchCommand.value().FillData(cmd,
+            {
+              .offset = offsetof(::DispatchIndirectCommand, x),
+              .size   = sizeof(::DispatchIndirectCommand::x),
+              .data   = 0,
+            });
+
+          indirectSpawnedParticleVector.value().FillData(cmd,
+            {
+              .offset = offsetof(::ParticleVector_t, size),
+              .size   = sizeof(::ParticleVector_t::size),
+              .data   = 0,
+            });
         }
 
         singleParticlesToSpawn_.clear();
@@ -244,11 +331,11 @@ namespace Techniques
           auto gpuParams = Fvog::GetDevice().AllocTransient<WriteUpdateDispatchParamsGpuParams_t>();
 
           *gpuParams = {
-            .dispatchCommand  = dispatchCommand.value().GetDeviceAddress(),
+            .dispatchCommand  = updateDispatchCommand.value().GetDeviceAddress(),
             .liveParticleList = thisFrameLiveParticleList.value().GetDeviceAddress(),
           };
 
-          ctx.BindComputePipeline(writeDispatchParams.GetPipeline());
+          ctx.BindComputePipeline(writeUpdateDispatchParams.GetPipeline());
           ctx.SetPushConstants(gpuParams);
           ctx.Dispatch(1, 1, 1);
         }
@@ -262,19 +349,37 @@ namespace Techniques
           auto gpuParams = Fvog::GetDevice().AllocTransient<ParticlesUpdateGpuParams_t>();
 
           *gpuParams = {
-            .particles              = particleList.value().GetDeviceAddress(),
-            .thisFrameLiveParticles = thisFrameLiveParticleList.value().GetDeviceAddress(),
-            .nextFrameLiveParticles = nextFrameLiveParticleList.value().GetDeviceAddress(),
-            .freeParticles          = freeParticleList.value().GetDeviceAddress(),
-            .globalUniforms         = params.globalUniforms,
+            .particles                    = particleList.value().GetDeviceAddress(),
+            .indirectParticles            = indirectSpawnedParticleVector.value().GetDeviceAddress(),
+            .spawnIndirectDispatchCommand = spawnIndirectDispatchCommand.value().GetDeviceAddress(),
+            .thisFrameLiveParticles       = thisFrameLiveParticleList.value().GetDeviceAddress(),
+            .nextFrameLiveParticles       = nextFrameLiveParticleList.value().GetDeviceAddress(),
+            .freeParticles                = freeParticleList.value().GetDeviceAddress(),
+            .uniforms                     = params.globalUniforms,
+            .archetypes                   = particleArchetypes.value().GetDeviceAddress(),
           };
 
           ctx.BindComputePipeline(updateParticles.GetPipeline());
           ctx.SetPushConstants(gpuParams);
-          ctx.DispatchIndirect(dispatchCommand.value());
+          ctx.DispatchIndirect(updateDispatchCommand.value());
         } 
 
         ctx.Barrier();
+
+        // Free dead particles
+        {
+          auto gpuParams = Fvog::GetDevice().AllocTransient<GarbageCollectParticlesGpuParams_t>();
+
+          *gpuParams = {
+            .liveParticles = thisFrameLiveParticleList.value().GetDeviceAddress(),
+            .freeParticles = freeParticleList.value().GetDeviceAddress(),
+            .particles     = particleList.value().GetDeviceAddress(),
+          };
+
+          ctx.BindComputePipeline(garbageCollectParticles.GetPipeline());
+          ctx.SetPushConstants(gpuParams);
+          ctx.DispatchIndirect(updateDispatchCommand.value()); // Operates on the same domain as Update.
+        }
 
         // Write indirect draw command
         {
@@ -302,8 +407,6 @@ namespace Techniques
           .uniforms      = params.globalUniforms,
           .particleList  = particleList.value().GetDeviceAddress(),
           .liveParticles = thisFrameLiveParticleList.value().GetDeviceAddress(),
-          .cameraRight   = {params.view_from_world[0][0], params.view_from_world[1][0], params.view_from_world[2][0]},
-          .cameraUp      = {params.view_from_world[0][1], params.view_from_world[1][1], params.view_from_world[2][1]},
         };
 
         ctx.SetPushConstants(gpuParams);
@@ -346,9 +449,12 @@ namespace Techniques
       VoxelRenderer& renderer_;
 
       std::optional<Fvog::TypedBuffer<DrawIndirectCommand>> drawCommand;
-      std::optional<Fvog::TypedBuffer<DispatchIndirectCommand>> dispatchCommand;
+      std::optional<Fvog::TypedBuffer<DispatchIndirectCommand>> spawnIndirectDispatchCommand;
+      std::optional<Fvog::TypedBuffer<DispatchIndirectCommand>> updateDispatchCommand;
       std::optional<Fvog::TypedBuffer<::Particle>> particles;
       std::optional<Fvog::TypedBuffer<::ParticleList_t>> particleList;
+      std::optional<Fvog::TypedBuffer<::Particle>> indirectSpawnedParticles;
+      std::optional<Fvog::TypedBuffer<::ParticleVector_t>> indirectSpawnedParticleVector;
       std::optional<Fvog::TypedBuffer<int32_t>> thisFrameLiveParticles;
       std::optional<Fvog::TypedBuffer<::IntList_t>> thisFrameLiveParticleList;
       std::optional<Fvog::TypedBuffer<int32_t>> nextFrameLiveParticles;
@@ -358,12 +464,14 @@ namespace Techniques
       std::optional<Fvog::TypedBuffer<::ParticleArchetype>> particleArchetypes;
 
       PipelineManager::ComputePipelineKey spawnParticles;
-      PipelineManager::ComputePipelineKey writeDispatchParams;
+      PipelineManager::ComputePipelineKey writeUpdateDispatchParams;
       PipelineManager::ComputePipelineKey updateParticles;
+      PipelineManager::ComputePipelineKey garbageCollectParticles;
       PipelineManager::ComputePipelineKey writeDrawCommand;
       PipelineManager::GraphicsPipelineKey renderParticles;
 
       static constexpr uint32_t maxParticles  = 1'000'000;
+      static constexpr uint32_t maxIndirectParticlesPerFrame = 10'000;
       static constexpr uint32_t maxArchetypes = 1000;
       uint32_t numArchetypes                  = 0;
       std::unordered_map<std::string, std::pair<uint32_t, ::ParticleArchetype>> nameToParticleArchetype;

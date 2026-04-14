@@ -16,6 +16,11 @@ struct Voxels
   FVOG_UINT32 globalUniformsIndex;
 };
 
+FVOG_DECLARE_BUFFER_REFERENCE_3(VoxelsPtr, 4)
+{
+  Voxels data;
+};
+
 #define VOXEL_IS_INVISIBLE        (1 << 0)
 #define VOXEL_IS_SUBGRID          (1 << 1)
 #define VOXEL_IS_ANIMATED_SUBGRID (1 << 2)
@@ -286,7 +291,7 @@ bool GetOccupancyAt(ivec3 voxelCoord)
   return bool(BOTTOM_LEVEL_BRICKS[bottomLevelBrickPtr.bottomLevelBrickIndexOrVoxelIfAllSame].occupancy.bitmask[localVoxelIndex / 32u] & (1u << localVoxelIndex % 32u));
 }
 
-#define TRANSLUCENCY_MODE_ALL                    0  // Trace opaque and translucent voxels normally.
+#define TRANSLUCENCY_MODE_ALL                    0 // Trace opaque and translucent voxels normally.
 #define TRANSLUCENCY_MODE_TRANSLUCENT_ONLY       1 // Trace only translucent surfaces.
 #define TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY 2 // Stop when hitting first translucent surface.
 #define TRANSLUCENCY_MODE_ALL_OPAQUE             3 // Treat all surfaces as though they are opaque.
@@ -316,6 +321,7 @@ float gTopLevelBricksTraversed    = 0;
 float gBottomLevelBricksTraversed = 0;
 float gVoxelsTraversed            = 0;
 float gSubGridVoxelsTraversed     = 0;
+bool gDebugFlag = false;
 
 #define EPSILON 1e-5
 
@@ -388,6 +394,38 @@ uint vx_GetSubGridIndex(GpuVoxelMaterial material, ivec3 voxelPosition)
   }
 
   return material.subGridOrAnimatedSubGridInfoIndex;
+}
+
+bool vx_GetSolidAt(vec3 positionWS)
+{
+  const ivec3 voxelPosition = ivec3(floor(positionWS));
+  const voxel_t voxel = GetVoxelAt(voxelPosition);
+
+  if (voxel == 0)
+  {
+    return false;
+  }
+
+  GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+  if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
+  {
+    const uint subGridIndex = vx_GetSubGridIndex(material, voxelPosition);
+    const ivec3 subGridDims = SUBGRIDS[subGridIndex].dimensions;
+
+    const ivec3 subvoxelPos = ivec3(positionWS * subGridDims) % subGridDims;
+    const uint subVoxelIndex = FlattenSubGridCoord(subGridIndex, subvoxelPos);
+    const uint8_t subVoxel = SUBVOXELS[SUBGRIDS[subGridIndex].gridBase + subVoxelIndex];
+    const int subVoxelMaterialIndex = subVoxel - 1;
+
+    if (subVoxelMaterialIndex == 0)
+    {
+      return false;
+    }
+
+    return SUBGRIDS[subGridIndex].materials[subVoxelMaterialIndex].density < 0;
+  }
+
+  return material.density < 0;
 }
 
 // Ray position in [0, subGrid.dimensions)

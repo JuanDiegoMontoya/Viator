@@ -8,6 +8,7 @@ struct Particle
   FVOG_SHARED Texture2D baseColorTexture;
   FVOG_VEC4 baseColorFactor;
   FVOG_VEC3 position;
+  FVOG_VEC3 positionOld;
   FVOG_VEC3 velocity;
   FVOG_VEC3 acceleration;
   FVOG_BOOL32 isSolid; // Collides with voxels.
@@ -52,10 +53,11 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleList)
   ParticlePtr particles;
 };
 
-FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleArchetypeList)
+FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleVector)
 {
   FVOG_INT32 size;
-  ParticleArchetypePtr archetypes;
+  FVOG_INT32 capacity;
+  ParticlePtr particles;
 };
 
 FVOG_DECLARE_BUFFER_REFERENCE_2(IntList)
@@ -64,8 +66,130 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(IntList)
   IntPtr values;
 };
 
+struct ParticleArchetypeSpawnInfo
+{
+  FVOG_UINT32 archetypeIndex;
+  FVOG_INT32 count;
+  FVOG_VEC3 positionWS;
+  FVOG_VEC3 velocity;
+};
+
 #ifndef __cplusplus
+#define PARTICLE_SPAWN_LOCAL_SIZE 64
 #define PARTICLE_UPDATE_LOCAL_SIZE 128
+#include "../Hash.h.glsl"
+#include "../BasicTypes.h.glsl"
+
+bool SpawnSingleParticle(
+  Particle particle,
+  IntList liveParticles,
+  IntList freeParticles,
+  ParticleList particles)
+{
+  const int alloc = atomicAdd(liveParticles.size, 1);
+  const bool overflowed = alloc >= particles.size;
+
+  if (overflowed && subgroupElect())
+  {
+    atomicExchange(liveParticles.size, particles.size);
+  }
+
+  if (overflowed)
+  {
+    return false;
+  }
+
+  const int free = int(atomicAdd(freeParticles.size, -1)) - 1;
+  const int myParticleIndex = freeParticles.values[free].data;
+  liveParticles.values[alloc].data = myParticleIndex;
+  particles.particles[myParticleIndex].data = particle;
+  return true;
+}
+
+Particle Particle_CreateFromArchetype(inout uint seed, ParticleArchetype archetype)
+{
+  Particle particle = archetype.prototype;
+
+  particle.position += PCG_RandVec3(seed, archetype.positionOffsetMin, archetype.positionOffsetMax);
+  particle.velocity += PCG_RandVec3(seed, archetype.velocityMin, archetype.velocityMax);
+  particle.acceleration += PCG_RandVec3(seed, archetype.accelerationMin, archetype.accelerationMax);
+
+  return particle;
+}
+
+Particle Particle_CreateFromSpawnInfo(inout uint seed, ParticleArchetype archetype, ParticleArchetypeSpawnInfo spawnInfo)
+{
+  Particle particle = Particle_CreateFromArchetype(seed, archetype);
+
+  particle.position += spawnInfo.positionWS;
+  particle.velocity += spawnInfo.velocity;
+
+  return particle;
+}
+
+void SpawnArchetype(
+  int gid,
+  uint frameNumber,
+  ParticleArchetype archetype,
+  IntList liveParticles,
+  IntList freeParticles,
+  ParticleList particles,
+  ParticleArchetypeSpawnInfo spawnInfo)
+{
+  const int baseAlloc = atomicAdd(liveParticles.size, spawnInfo.count);
+  const int allocated = max(0, min(spawnInfo.count, particles.size - baseAlloc));
+  const bool overflowed = allocated < spawnInfo.count;
+
+  if (overflowed && subgroupElect())
+  {
+    atomicExchange(liveParticles.size, particles.size);
+  }
+
+  if (allocated <= 0)
+  {
+    return;
+  }
+
+  const int baseFree = int(atomicAdd(freeParticles.size, -allocated)) - 1;
+
+  uint seed = PCG_Hash(gid) ^ PCG_Hash(frameNumber);
+  for (int i = 0; i < allocated; i++)
+  {
+    Particle particle = Particle_CreateFromSpawnInfo(seed, archetype, spawnInfo);
+
+    const int myParticleIndex = freeParticles.values[baseFree - i].data;
+
+    liveParticles.values[baseAlloc + i].data = myParticleIndex;
+    particles.particles[myParticleIndex].data = particle;
+  }
+}
+
+bool SpawnParticleIndirect(Particle particle, ParticleVector indirectParticles, DispatchIndirectCommandPtr dispatch)
+{
+  const int alloc = atomicAdd(indirectParticles.size, 1);
+  const bool overflowed = alloc >= indirectParticles.capacity;
+
+  if (overflowed && subgroupElect())
+  {
+    atomicExchange(indirectParticles.size, indirectParticles.capacity);
+  }
+
+  if (overflowed)
+  {
+    return false;
+  }
+
+  const uint localGroups = (alloc + 1 + PARTICLE_SPAWN_LOCAL_SIZE - 1) / PARTICLE_SPAWN_LOCAL_SIZE;
+  const uint groups = subgroupMax(localGroups);
+  if (subgroupElect())
+  {
+    atomicMax(dispatch.data.x, groups);
+  }
+
+  indirectParticles.particles[alloc].data = particle;
+  return true;
+}
+
 #endif
 
 #endif // PARTICLES_H_GLSL
