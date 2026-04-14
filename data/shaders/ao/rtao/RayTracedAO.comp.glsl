@@ -58,7 +58,10 @@ void main()
   for (uint i = 0; i < numRays; i++)
   {
     const vec2 xi = fract(noise + Hammersley(i, numRays));
-    const vec3 rayDir = map_to_unit_hemisphere_cosine_weighted(xi, normal);
+    // Without this, very rarely (one in a million), some pixels will generate cursed directions that somehow trigger UB in vx_TraceRaySubGrid.
+    // I truly don't know what is going on, but only this shader seems to be affected.
+    const float HACK_EPSILON = 1e-3;
+    const vec3 rayDir = normalize(HACK_EPSILON + map_to_unit_hemisphere_cosine_weighted(xi, normal));
 
     // Miss, increase visibility
     HitSurfaceParameters hit;

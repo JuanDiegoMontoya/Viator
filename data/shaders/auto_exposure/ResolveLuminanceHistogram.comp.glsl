@@ -59,9 +59,15 @@ void main()
     const uint numBlackPixels = currentBucketCount;
     const float log2MeanLuminance = Remap(float(sh_scratch[0]) / max(float(d_autoExposure.numPixels) - numBlackPixels, 1.0), 1.0, NUM_BUCKETS, d_autoExposure.logMinLuminance, d_autoExposure.logMaxLuminance);
     // Lerp in linear space (lerping in log space seems to cause visually nonuniform adaptation in different lighting conditions)
-    const float exposureTarget = log2(d_autoExposure.targetLuminance / exp2(log2MeanLuminance));
+    float exposureTarget = log2(d_autoExposure.targetLuminance / exp2(log2MeanLuminance));
+    const float oldExposure = d_exposureBuffer.exposure;
+    
+    if (isnan(exposureTarget))
+    {
+      exposureTarget = oldExposure;
+    }
     // Framerate-independent exponential decay
     const float alpha = clamp(1 - exp(-d_autoExposure.deltaTime * d_autoExposure.adjustmentSpeed), 0.0, 1.0);
-    d_exposureBuffer.exposure = mix(d_exposureBuffer.exposure, exposureTarget, alpha);
+    d_exposureBuffer.exposure = mix(oldExposure, exposureTarget, alpha);
   }
 }
