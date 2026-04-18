@@ -981,6 +981,10 @@ namespace Fvog
     return {};
   }
 
+  Device::TransientAllocations::TransientAllocations() = default;
+
+  Device::TransientAllocations::~TransientAllocations() = default;
+
   VkDeviceAddress Device::TransientAllocations::Allocate(size_t size)
   {
     DEBUG_ASSERT(size > 0);
@@ -991,10 +995,10 @@ namespace Fvog
       const auto ret = vmaVirtualAllocate(block, detail::Address(VmaVirtualAllocationCreateInfo{.size = size, .alignment = 8}), &alloc, &offset);
       if (ret == VK_SUCCESS)
       {
-        const auto address = buffer.GetDeviceAddress() + offset;
+        const auto address = buffer->GetDeviceAddress() + offset;
         mappings.mappings.push_back({
-          .begin         = uintptr_t(buffer.GetMappedMemory()) + offset,
-          .end           = uintptr_t(buffer.GetMappedMemory()) + offset + size,
+          .begin         = uintptr_t(buffer->GetMappedMemory()) + offset,
+          .end           = uintptr_t(buffer->GetMappedMemory()) + offset + size,
           .deviceAddress = address,
         });
         DEBUG_ASSERT(mappings.mappings.back().begin != mappings.mappings.back().end);
@@ -1012,7 +1016,8 @@ namespace Fvog
                           }),
       &block);
     arenas.emplace_back(block,
-      Buffer({.size = allocSize, .flag = BufferFlagThingy::NO_DESCRIPTOR | BufferFlagThingy::MAP_SEQUENTIAL_WRITE_DEVICE}, "Transient allocation buffer"));
+      std::make_unique<Buffer>(BufferCreateInfo{.size = allocSize, .flag = BufferFlagThingy::NO_DESCRIPTOR | BufferFlagThingy::MAP_SEQUENTIAL_WRITE_DEVICE},
+        "Transient allocation buffer"));
     return Allocate(size);
   }
 

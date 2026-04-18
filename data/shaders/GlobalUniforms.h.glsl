@@ -2,7 +2,7 @@
 #define GLOBAL_UNIFORMS_H
 
 #include "Resources.h.glsl"
-#include "Debug/DebugCommon.h.glsl"
+#include "debug/DebugCommon.h.glsl"
 #include "voxels/RayTracedVoxelsShadowCommon.h.glsl"
 #include "volumetric/clouds/BeerShadowMap.h.glsl"
 #include "volumetric/clouds/WeatherGpuParams.shared.h"

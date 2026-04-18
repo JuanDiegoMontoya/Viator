@@ -4,6 +4,7 @@
 #include "vulkan/vulkan_core.h"
 #include "detail/VmaFwd.h"
 #include "VkBootstrap.h"
+#include "Core/ClassImplMacros.h"
 
 #include <deque>
 #include <functional>
@@ -70,11 +71,14 @@ namespace Fvog
 
     struct TransientAllocations
     {
+      TransientAllocations();
+      ~TransientAllocations();
+      DEFAULT_MOVE(TransientAllocations);
       VkDeviceAddress Allocate(size_t size);
       void Reset();
 
       MemoryMappings mappings;
-      std::vector<std::pair<VmaVirtualBlock, Buffer>> arenas;
+      std::vector<std::pair<VmaVirtualBlock, std::unique_ptr<Buffer>>> arenas;
     };
 
     // Everything is public :(

@@ -15,7 +15,7 @@
 #include "Game/World.h"
 #include "Game/Prefab.h"
 #include "Game/Globals.h"
-#include "Client/GUI/Console.h"
+#include "Client/Gui/Console.h"
 #include "Game/CVar.h"
 #include "Game/Rendering/Particle.h"
 
@@ -631,7 +631,7 @@ namespace
       {
         Networking::CallRPC("UpdateSimpleScriptableCodeRPC"_hs, world, parent, script.code);
       }
-      ImGui::PushFont(GuiHelper::GetStandardFont());
+      ImGui::PopFont();
     }
     ImGui::End();
   }

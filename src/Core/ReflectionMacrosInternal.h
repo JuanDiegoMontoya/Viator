@@ -7,10 +7,10 @@
 
 #define REFLECT_TYPE(T)    \
   REGISTER_OBJECT_TYPE(T); \
-  auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
+  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
 
 #define REFLECT_NON_OBJECT_TYPE(T)    \
-  auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
+  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
 
 #define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
   REGISTER_OBJECT_TYPE(T);                                                                          \

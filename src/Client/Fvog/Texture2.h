@@ -154,65 +154,65 @@ namespace Fvog
       return imageView_;
     }
 
-    [[nodiscard]] DescriptorInfo::ResourceHandle GetSampledResourceHandle() noexcept
+    [[nodiscard]] DescriptorInfo::ResourceHandle GetSampledResourceHandle()
     {
       return sampledDescriptorInfo_.value().GpuResource();
     }
 
-    [[nodiscard]] DescriptorInfo::ResourceHandle GetStorageResourceHandle() noexcept
+    [[nodiscard]] DescriptorInfo::ResourceHandle GetStorageResourceHandle()
     {
       return storageDescriptorInfo_.value().GpuResource();
     }
 
-    [[nodiscard]] shared::Texture1D GetTexture1D() noexcept
+    [[nodiscard]] shared::Texture1D GetTexture1D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_1D);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Texture2D GetTexture2D() noexcept
+    [[nodiscard]] shared::Texture2D GetTexture2D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::UTexture2D GetUTexture2D() noexcept
+    [[nodiscard]] shared::UTexture2D GetUTexture2D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Texture2DArray GetTexture2DArray() noexcept
+    [[nodiscard]] shared::Texture2DArray GetTexture2DArray()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Texture3D GetTexture3D() noexcept
+    [[nodiscard]] shared::Texture3D GetTexture3D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
       return {sampledDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Image2D GetImage2D() noexcept
+    [[nodiscard]] shared::Image2D GetImage2D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Image3D GetImage3D() noexcept
+    [[nodiscard]] shared::Image3D GetImage3D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::UImage2D GetUImage2D() noexcept
+    [[nodiscard]] shared::UImage2D GetUImage2D()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D);
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 
-    [[nodiscard]] shared::Image2DArray GetImage2DArray() noexcept
+    [[nodiscard]] shared::Image2DArray GetImage2DArray()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
       return {storageDescriptorInfo_.value().GpuResource().index};

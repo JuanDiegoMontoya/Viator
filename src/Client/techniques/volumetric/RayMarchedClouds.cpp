@@ -133,7 +133,7 @@ namespace Techniques
 
         auto gpuParams = Fvog::GetDevice().AllocTransient<RayMarchedCloudsRenderGpuParams_t>();
 
-        *gpuParams = {
+        *gpuParams = RayMarchedCloudsRenderGpuParams_t{
           .gDepth                         = params.gDepth->ImageView().GetTexture2D(),
           .outMotionVectors               = lowResCloudMotionVectors_.value().ImageView().GetImage2D(),
           .outRadianceTransmittance       = lowResCloudRadianceTransmittance_.value().ImageView().GetImage2D(),

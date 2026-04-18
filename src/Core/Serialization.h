@@ -50,7 +50,7 @@ namespace Core::Serialization
   T DeserializeObjectStream(std::stringstream& stream)
   {
     auto meta = DeserializeObjectStream(stream, entt::resolve<T>());
-    auto object = meta.try_cast<T>();
+    auto object = meta.template try_cast<T>();
     ASSERT(object);
     return std::move(*object); // Required for non-copyable types.
   }

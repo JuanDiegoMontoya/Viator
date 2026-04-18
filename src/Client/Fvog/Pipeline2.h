@@ -263,8 +263,6 @@ namespace Fvog
     RayTracingPipeline(const RayTracingPipeline&) = delete;
     RayTracingPipeline& operator=(const RayTracingPipeline&) = delete;
 
-    bool operator==(const RayTracingPipeline&) const = default;
-
     [[nodiscard]] VkPipeline Handle() const
     {
       return pipeline_;

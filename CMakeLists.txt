@@ -205,6 +205,8 @@ add_executable(frogRender
     src/Game/Rendering/Particle.h
 )
 
+target_compile_features(frogRender PUBLIC cxx_std_23)
+
 if (NOT GAME_ENABLE_ASAN)
     set(EDIT_AND_CONTINUE_FLAGS "/ZI /INCREMENTAL") # Flags incompatible with /fsanitize=address
 else()
@@ -214,8 +216,8 @@ endif()
 target_compile_options(frogRender
     PRIVATE
     $<$<OR:$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
-    -Wall
-    -Wextra
+    #-Wall
+    #-Wextra
     -Wpedantic
     -pedantic-errors
     -Wno-missing-field-initializers
@@ -235,9 +237,9 @@ target_compile_options(frogRender
     -Wno-newline-eof
     -Wno-format-nonliteral
     -Wunused-variable
-    -ftime-trace # Emit flamegraph traces (viewable in chrome://tracing and speedscope.app) for each TU.
     -march=native # zstd requires BMI2 for precisely one function
-    -fproc-stat-report # Print memory and execution time for each compilation step.
+    #-ftime-trace # Emit flamegraph traces (viewable in chrome://tracing and speedscope.app) for each TU.
+    #-fproc-stat-report # Print memory and execution time for each compilation step.
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
     -DFROG_DEBUG
     -DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_DEBUG
