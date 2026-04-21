@@ -305,7 +305,13 @@ private:
   float sunShadowFrustumSideLength = 100;
   float sunShadowFrustumDepth      = 1000;
   int sunShadowNumCascades         = 5;
-  Techniques::CascadedShadowMap cascadedShadowMap_;
+  Techniques::CascadedShadowMap sunShadowMap_;
+
+  glm::ivec2 skyShadowResolution   = {256, 256};
+  float skyShadowFrustumSideLength = 100;
+  float skyShadowFrustumDepth      = 1000;
+  int skyShadowNumCascades         = 3;
+  Techniques::CascadedShadowMap skyShadowMap_;
 
   uint32_t renderInternalWidth{};
   uint32_t renderInternalHeight{};

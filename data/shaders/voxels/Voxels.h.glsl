@@ -399,6 +399,12 @@ uint vx_GetSubGridIndex(GpuVoxelMaterial material, ivec3 voxelPosition)
 bool vx_GetSolidAt(vec3 positionWS)
 {
   const ivec3 voxelPosition = ivec3(floor(positionWS));
+  const bool isInMap = all(greaterThanEqual(voxelPosition, vec3(0))) && all(lessThan(voxelPosition, ivec3(g_voxels.dimensions)));
+  if (!isInMap)
+  {
+    return false;
+  }
+  
   const voxel_t voxel = GetVoxelAt(voxelPosition);
 
   if (voxel == 0)
@@ -903,7 +909,8 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
               t = oldT;
             }
           }
-          else if ((density < 0 && translucencyMode == TRANSLUCENCY_MODE_ALL) || (density >= 0 && translucencyMode == TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY))
+          else if ((density < 0 && translucencyMode == TRANSLUCENCY_MODE_ALL) ||
+                   (density >= 0 && translucencyMode == TRANSLUCENCY_MODE_FIRST_TRANSLUCENT_ONLY) || translucencyMode == TRANSLUCENCY_MODE_ALL_OPAQUE)
           {
             hit.positionWorld   = hitWorldPos;
             hit.texCoords       = vx_GetTexCoords(normal, uvw);

@@ -1101,7 +1101,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .gBuffer                = gBufferBuffer->GetDeviceAddress(),
       .debugDraw              = debugRenderingInfo.value().GetDeviceAddress(),
       .blueNoise              = noiseTexture->ImageView().GetTexture2D(),
-      .sunShadowMap           = cascadedShadowMap_.GetShadowInfoBufferAddress(),
+      .sunShadowMap           = sunShadowMap_.GetShadowInfoBufferAddress(),
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
       .voxelsPtr              = voxelsPtr,
@@ -1112,7 +1112,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   {
     ctx.Barrier();
     auto marker2 = ctx.MakeScopedDebugMarker("Particle logic");
-    particles_->Spawn(commandBuffer, {.frameNumber = frameNumber});
+    particles_->Spawn(commandBuffer, {.frameNumber = frameNumber, .skyShadowMap = skyShadowMap_.GetShadowInfoBufferAddress()});
     ctx.Barrier();
     particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
   }
@@ -1276,7 +1276,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
       const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
       ctx.Barrier();
-      cascadedShadowMap_.RenderTerrainShadowMap(commandBuffer,
+      sunShadowMap_.RenderTerrainShadowMap(commandBuffer,
         {
           .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
           .numCascades           = uint32_t(sunShadowNumCascades),
@@ -1285,6 +1285,17 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
           .lightDirection        = sunDirection,
           .frustumDepth          = sunShadowFrustumDepth,
           .baseFrustumSideLength = sunShadowFrustumSideLength,
+        });
+
+      skyShadowMap_.RenderTerrainShadowMap(commandBuffer,
+        {
+          .shadowResolution      = {uint32_t(skyShadowResolution.x), uint32_t(skyShadowResolution.y)},
+          .numCascades           = uint32_t(skyShadowNumCascades),
+          .voxels                = voxels,
+          .playerPos             = playerPosition,
+          .lightDirection        = {0, -1, 0},
+          .frustumDepth          = skyShadowFrustumDepth,
+          .baseFrustumSideLength = skyShadowFrustumSideLength,
         });
 
       rayMarchedClouds_->RenderBeerShadowMap(commandBuffer,

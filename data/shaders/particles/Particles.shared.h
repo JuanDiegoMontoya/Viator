@@ -2,17 +2,31 @@
 #define PARTICLES_H_GLSL
 
 #include "../Resources.h.glsl"
+#include "../voxels/RayTracedVoxelsShadowCommon.h.glsl"
+#include "../volumetric/clouds/BeerShadowMap.h.glsl"
+
+#define PARTICLE_BEHAVIOR_SOLID                        (1 << 0)
+#define PARTICLE_BEHAVIOR_SPAWN_ARCHETYPE_ON_COLLISION (1 << 1)
+#define PARTICLE_BEHAVIOR_USE_SKY_SHADOW_MAP           (1 << 2)
+#define PARTICLE_BEHAVIOR_USE_BEER_SHADOW_MAP          (1 << 3)
+#define PARTICLE_BEHAVIOR_USE_BASE_COLOR_TEXTURE       (1 << 4)
+#define PARTICLE_BEHAVIOR_DESTROY_ON_COLLISION         (1 << 5)
+#define PARTICLE_BEHAVIOR_FORCE_UP_POS_Y               (1 << 6)
+#define PARTICLE_BEHAVIOR_FORCE_UP_POS_Z               (1 << 7)
+#define PARTICLE_BEHAVIOR_FORCE_RIGHT_POS_X            (1 << 8)
+#define PARTICLE_BEHAVIOR_COLLIDE_WITH_TRANSLUCENT     (1 << 9)
 
 struct Particle
 {
+  FVOG_UINT32 behaviorFlags;
   FVOG_SHARED Texture2D baseColorTexture;
-  FVOG_VEC4 baseColorFactor;
+  FVOG_UINT32 initialBaseColorFactor;
+  FVOG_UINT32 currentBaseColorFactor;
+  FVOG_UINT32 finalBaseColorFactor;
   FVOG_VEC3 position;
   FVOG_VEC3 positionOld;
   FVOG_VEC3 velocity;
   FVOG_VEC3 acceleration;
-  FVOG_BOOL32 isSolid; // Collides with voxels.
-  FVOG_BOOL32 spawnParticleOnHit;
   FVOG_UINT32 particleArchetypeToSpawnOnHit;
   FVOG_VEC2 initialScale;
   FVOG_VEC2 currentScale;

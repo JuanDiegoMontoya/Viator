@@ -27,6 +27,8 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleSpawnGpuParams)
   IntList liveParticles;
   IntList freeParticles;
   FVOG_UINT32 frameNumber;
+  CascadedShadowMapInfoPtr skyShadowMap;
+  CascadedBeerShadowMapInfoPtr skyBeerShadowMap;
 };
 
 FVOG_DECLARE_ARGUMENTS(ParticleSpawnArgs)
@@ -38,10 +40,36 @@ FVOG_DECLARE_ARGUMENTS(ParticleSpawnArgs)
 
 #include "../Hash.h.glsl"
 
+void SpawnSingleParticleWithBehavior(inout uint seed, Particle particle)
+{
+  float spawnChance = 1;
+
+  if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_USE_SKY_SHADOW_MAP))
+  {
+    spawnChance *= SampleCascadedShadowMap(particle.position, pc.skyShadowMap);
+  }
+
+  if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_USE_BEER_SHADOW_MAP))
+  {
+    spawnChance *= SampleCascadedBeerShadowMap(particle.position, pc.skyBeerShadowMap);
+  }
+
+  if (spawnChance < 1)
+  {
+    if (PCG_RandFloat(seed) > spawnChance)
+    {
+      return;
+    }
+  }
+
+  SpawnSingleParticle(particle, pc.liveParticles, pc.freeParticles, pc.particles);
+}
+
 layout(local_size_x = PARTICLE_SPAWN_LOCAL_SIZE) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
+  uint seed = PCG_Hash(gid) ^ PCG_Hash(pc.frameNumber);
   
   if (pc.spawnParticlesMode == PARTICLE_SPAWN_MODE_SINGLE)
   {
@@ -51,7 +79,7 @@ void main()
     }
 
     const Particle particle = pc.singleParticlesToSpawn.particles[gid].data;
-    SpawnSingleParticle(particle, pc.liveParticles, pc.freeParticles, pc.particles);
+    SpawnSingleParticleWithBehavior(seed, particle);
   }
   else if (pc.spawnParticlesMode == PARTICLE_SPAWN_MODE_ARCHETYPE)
   {
@@ -62,15 +90,25 @@ void main()
 
     const ParticleArchetypeSpawnInfo spawnInfo = pc.archetypesToSpawn.spawnInfos[gid].data;
     const ParticleArchetype archetype = pc.archetypes[spawnInfo.archetypeIndex].data;
-    SpawnArchetype(
-      gid,
-      pc.frameNumber,
-      archetype,
-      pc.liveParticles,
-      pc.freeParticles,
-      pc.particles,
-      spawnInfo
-    );
+
+    if (bool(archetype.prototype.behaviorFlags & PARTICLE_BEHAVIOR_USE_SKY_SHADOW_MAP) || bool(archetype.prototype.behaviorFlags & PARTICLE_BEHAVIOR_USE_BEER_SHADOW_MAP))
+    {
+      const Particle particle = Particle_CreateFromSpawnInfo(seed, archetype, spawnInfo);
+      SpawnSingleParticleWithBehavior(seed, particle);
+    }
+    else
+    {
+      // More efficient batched spawning.
+      SpawnArchetype(
+        gid,
+        pc.frameNumber,
+        archetype,
+        pc.liveParticles,
+        pc.freeParticles,
+        pc.particles,
+        spawnInfo
+      );
+    }
   }
   else if (pc.spawnParticlesMode == PARTICLE_SPAWN_MODE_INDIRECT)
   {
@@ -80,7 +118,7 @@ void main()
     }
 
     const Particle particle = pc.indirectParticlesToSpawn.particles[gid].data;
-    SpawnSingleParticle(particle, pc.liveParticles, pc.freeParticles, pc.particles);
+    SpawnSingleParticleWithBehavior(seed, particle);
   }
 }
 

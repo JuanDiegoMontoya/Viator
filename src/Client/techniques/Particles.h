@@ -28,6 +28,8 @@ namespace Techniques
   struct ParticlesSpawnParams
   {
     uint32_t frameNumber{};
+    VkDeviceAddress skyShadowMap{};
+    VkDeviceAddress skyBeerShadowMap{};
   };
 
   struct ParticlesUpdateParams

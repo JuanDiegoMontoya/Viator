@@ -41,7 +41,7 @@ void main()
   bool hadCollision = false;
 
   // TODO: Update other attributes.
-  if (bool(particle.isSolid))
+  if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_SOLID))
   {
 #if 0 // Simple block collision logic with incorrect reflection vector.
     if (vx_GetSolidAt(particle.position))
@@ -55,8 +55,10 @@ void main()
     if (speed > 1e-3)
     {
       const vec3 rayDir = particle.velocity / speed;
+
+      const uint mode = bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_COLLIDE_WITH_TRANSLUCENT) ? TRANSLUCENCY_MODE_ALL_OPAQUE : TRANSLUCENCY_MODE_ALL;
       HitSurfaceParameters hit;
-      if (vx_TraceRaySimple(particle.position, rayDir, speed * dt, hit))
+      if (vx_TraceRaySimple(particle.position, rayDir, speed * dt, hit, mode))
       {
         particle.velocity = reflect(rayDir, normalize(hit.flatNormalWorld)) * speed;
         ASSERT(abs(length(particle.velocity) - speed) < 1e-3);
@@ -72,12 +74,17 @@ void main()
     }
 #endif
   
-    if (hadCollision && bool(particle.spawnParticleOnHit))
+    if (hadCollision && bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_SPAWN_ARCHETYPE_ON_COLLISION))
     { 
       uint seed = PCG_Hash(gid) ^ PCG_Hash(pc.uniforms.frameNumber);
       Particle newParticle = Particle_CreateFromArchetype(seed, pc.archetypes[particle.particleArchetypeToSpawnOnHit].data);
       newParticle.position += particle.position;
       SpawnParticleIndirect(newParticle, pc.indirectParticles, pc.spawnIndirectDispatchCommand);
+    }
+
+    if (hadCollision && bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_DESTROY_ON_COLLISION))
+    {
+      particle.lifeRemaining = 0;
     }
   }
 
@@ -93,6 +100,10 @@ void main()
 
   if (particle.lifeRemaining > 0)
   {
+    const float timeAlpha           = particle.lifeRemaining / particle.initialLife;
+    particle.currentScale           = mix(particle.finalScale, particle.initialScale, timeAlpha);
+    particle.currentBaseColorFactor = packUnorm4x8(mix(unpackUnorm4x8(particle.finalBaseColorFactor), unpackUnorm4x8(particle.initialBaseColorFactor), timeAlpha));
+
     const int index = atomicAdd(pc.nextFrameLiveParticles.size, 1);
     pc.nextFrameLiveParticles.values[index].data = particleIndex;
     pc.particles.particles[particleIndex].data = particle;

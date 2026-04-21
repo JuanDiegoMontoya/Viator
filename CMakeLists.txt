@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.5)
 
 project(Frogfood)
 
-set(CMAKE_CXX_STANDARD 23)
-
 option(FROGRENDER_FSR2_ENABLE "Enable FidelityFX Super Resolution 2. Windows only!" FALSE)
 option(GAME_HEADLESS "Build the game without graphics or input." FALSE)
 option(GAME_COMPILE_TESTS "Compile the game's tests." TRUE)

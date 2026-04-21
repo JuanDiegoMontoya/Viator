@@ -2393,31 +2393,34 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         {
           if (const auto* transform = world.TryGetLocalPlayerTransform())
           {
+            using Game2::Render::ParticleFlag;
             auto& rng      = world.globals->game->rng;
             const auto pos = transform->position + GetForward(transform->rotation) * 5.0f;
 
-            if (ImGui::Button("Spawn test particles"))
-            if (gameState == GameState::GAME)
+            static bool spam = false;
+            ImGui::Checkbox("spam", &spam);
+            if (ImGui::Button("Spawn test particles") || spam)
             {
-              for (int i = 0; i < 3000; i++)
+              if (gameState == GameState::GAME)
               {
-                const auto offset   = glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1)) * 50.0f;
-                const auto particle = Game2::Render::Particle{
-                  .baseColorTexture              = "coin",
-                  .baseColorFactor               = {rng.RandFloat(), rng.RandFloat(), rng.RandFloat(), 1},
-                  .position                      = pos + offset,
-                  .velocity                      = {rng.RandFloat(-1, 1), rng.RandFloat(), rng.RandFloat(-1, 1)},
-                  .acceleration                  = {0, -5, 0},
-                  .isSolid                       = true,
-                  .spawnParticleOnHit            = true,
-                  .particleArchetypeToSpawnOnHit = "test",
-                  .initialScale                  = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
-                  .currentScale                  = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
-                  .finalScale                    = glm::vec2(rng.RandFloat(0.05f, 0.15f), rng.RandFloat(0.05f, 0.15f)),
-                  .initialLife                   = 3,
-                  .lifeRemaining                 = 2 + rng.RandFloat(),
-                };
-                world.globals->head->SpawnParticles(std::span{&particle, 1});
+                for (int i = 0; i < 3000; i++)
+                {
+                  const auto offset   = glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1)) * 50.0f;
+                  const auto particle = Game2::Render::Particle{
+                    .flags                         = ParticleFlag::Solid | ParticleFlag::UseSkyShadowMap | ParticleFlag::DestroyOnCollision | ParticleFlag::ForceUpPosY | ParticleFlag::CollideWithTranslucent,
+                    .baseColorTexture              = "rain",
+                    .initialBaseColorFactor        = {1, 1, 1, 1},
+                    .finalBaseColorFactor          = {1, 1, 1, 1},
+                    .position                      = pos + offset,
+                    .velocity                      = {rng.RandFloat(-1, 1), -10, rng.RandFloat(-1, 1)},
+                    .acceleration                  = {0, 0, 0},
+                    .particleArchetypeToSpawnOnHit = "rain_impact",
+                    .initialScale                  = glm::vec2(0.01f, 0.05f),
+                    .finalScale                    = glm::vec2(0.01f, 0.05f),
+                    .life                          = 2 + rng.RandFloat(),
+                  };
+                  world.globals->head->SpawnParticles(std::span{&particle, 1});
+                }
               }
             }
 
@@ -2428,19 +2431,17 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             if (ImGui::Button("Pew pew"))
             {
               const auto particle = Game2::Render::Particle{
+                .flags                         = ParticleFlag::Solid | ParticleFlag::UseSkyShadowMap,
                 .baseColorTexture              = "coin",
-                .baseColorFactor               = {1, 1, 1, 1},
+                .initialBaseColorFactor        = {1, 1, 1, 1},
+                .finalBaseColorFactor          = {1, 1, 1, 1},
                 .position                      = transform->position,
                 .velocity                      = GetForward(transform->rotation) * speed,
                 .acceleration                  = {0, 0, 0},
-                .isSolid                       = true,
-                .spawnParticleOnHit            = true,
                 .particleArchetypeToSpawnOnHit = "test",
                 .initialScale                  = glm::vec2(0.1f),
-                .currentScale                  = glm::vec2(0.1f),
                 .finalScale                    = glm::vec2(0.1f),
-                .initialLife                   = life,
-                .lifeRemaining                 = life,
+                .life                          = life,
               };
               world.globals->head->SpawnParticles(std::span{&particle, 1});
             }

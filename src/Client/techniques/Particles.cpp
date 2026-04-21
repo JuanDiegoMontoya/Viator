@@ -18,6 +18,8 @@
 #include "Game/Assets.h"
 #include "shaders/Config.shared.h"
 
+#include "glm/packing.hpp"
+
 #include <numeric>
 #include <ranges>
 #include <unordered_map>
@@ -143,24 +145,46 @@ namespace Techniques
           {
             .prototype =
               Game2::Render::Particle{
+                .flags                         = Game2::Render::ParticleFlag::Solid,
                 .baseColorTexture              = "error_8",
-                .baseColorFactor               = {1, 1, 1, 1},
+                .initialBaseColorFactor        = {1, 1, 1, 1},
+                .finalBaseColorFactor          = {1, 1, 1, 1},
                 .position                      = {},
                 .velocity                      = {},
                 .acceleration                  = {0, -5, 0},
-                .isSolid                       = true,
-                .spawnParticleOnHit            = false,
-                .particleArchetypeToSpawnOnHit = "test",
+                .particleArchetypeToSpawnOnHit = {},
                 .initialScale                  = {.1f, .1f},
-                .currentScale                  = {.1f, .1f},
-                .finalScale                    = {.1f, .1f},
-                .initialLife                   = 2,
-                .lifeRemaining                 = 2,
+                .finalScale                    = {.0f, .0f},
+                .life                          = 2,
               },
             .positionOffsetMin = {},
             .positionOffsetMax = {},
             .velocityMin       = {-.4f, 0.8f, -.4f},
             .velocityMax       = {.4f, 2.0f, .4f},
+            .accelerationMin   = {},
+            .accelerationMax   = {},
+          });
+
+        ParticlesImpl::RegisterArchetype("rain_impact",
+          {
+            .prototype =
+              Game2::Render::Particle{
+                .flags                         = Game2::Render::ParticleFlag::ForceRightPosX | Game2::Render::ParticleFlag::ForceUpPosZ,
+                .baseColorTexture              = "rain_impact",
+                .initialBaseColorFactor        = {1, 1, 1, 1},
+                .finalBaseColorFactor          = {1, 1, 1, 0},
+                .position                      = {},
+                .velocity                      = {},
+                .acceleration                  = {0, 0, 0},
+                .particleArchetypeToSpawnOnHit = {},
+                .initialScale                  = {.0f, .0f},
+                .finalScale                    = {.1f, .1f},
+                .life                          = 0.3f,
+              },
+            .positionOffsetMin = {},
+            .positionOffsetMax = {},
+            .velocityMin       = {},
+            .velocityMax       = {},
             .accelerationMin   = {},
             .accelerationMax   = {},
           });
@@ -216,12 +240,17 @@ namespace Techniques
           auto archetypesToSpawn = std::vector<::ParticleArchetypeSpawnInfo>();
           for (const auto& info : particleArchetypesToSpawn_)
           {
-            archetypesToSpawn.push_back(::ParticleArchetypeSpawnInfo{
-              .archetypeIndex = GetArchetypeIndex(info.archetypeName),
-              .count          = info.count,
-              .positionWS     = info.positionWS,
-              .velocity       = info.velocity,
-            });
+            // Split spawns into smaller batches so they can be processed by multiple GPU threads.
+            constexpr int BATCH_SIZE = 20;
+            for (int remaining = info.count; remaining > 0; remaining -= BATCH_SIZE)
+            {
+              archetypesToSpawn.push_back(::ParticleArchetypeSpawnInfo{
+                .archetypeIndex = GetArchetypeIndex(info.archetypeName),
+                .count          = glm::min(remaining, BATCH_SIZE),
+                .positionWS     = info.positionWS,
+                .velocity       = info.velocity,
+              });
+            }
           }
 
           auto spawnInfosGpu = Fvog::GetDevice().AllocTransient<::ParticleArchetypeSpawnInfo>(archetypesToSpawn.size());
@@ -242,6 +271,8 @@ namespace Techniques
             .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
             .freeParticles            = freeParticleList.value().GetDeviceAddress(),
             .frameNumber              = params.frameNumber,
+            .skyShadowMap             = params.skyShadowMap,
+            .skyBeerShadowMap         = params.skyBeerShadowMap,
           };
 
           ctx.SetPushConstants(gpuParams);
@@ -275,6 +306,8 @@ namespace Techniques
             .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
             .freeParticles            = freeParticleList.value().GetDeviceAddress(),
             .frameNumber              = params.frameNumber,
+            .skyShadowMap             = params.skyShadowMap,
+            .skyBeerShadowMap         = params.skyBeerShadowMap,
           };
 
           ctx.SetPushConstants(gpuParams);
@@ -295,6 +328,8 @@ namespace Techniques
             .liveParticles            = thisFrameLiveParticleList.value().GetDeviceAddress(),
             .freeParticles            = freeParticleList.value().GetDeviceAddress(),
             .frameNumber              = params.frameNumber,
+            .skyShadowMap             = params.skyShadowMap,
+            .skyBeerShadowMap         = params.skyBeerShadowMap,
           };
 
           ctx.SetPushConstants(gpuParams);
@@ -429,20 +464,26 @@ namespace Techniques
 
       ::Particle GameParticleToRenderParticle(const Game2::Render::Particle& particle)
       {
+        uint32_t behaviorFlags = particle.flags.flags;
+        behaviorFlags |= particle.baseColorTexture ? PARTICLE_BEHAVIOR_USE_BASE_COLOR_TEXTURE : 0;
+        behaviorFlags |= particle.particleArchetypeToSpawnOnHit ? PARTICLE_BEHAVIOR_SPAWN_ARCHETYPE_ON_COLLISION : 0;
+
         return {
-          .baseColorTexture              = renderer_.GetOrEmplaceCachedTexture(particle.baseColorTexture, true).ImageView().GetTexture2D(),
-          .baseColorFactor               = particle.baseColorFactor,
+          .behaviorFlags = behaviorFlags,
+          .baseColorTexture =
+            particle.baseColorTexture ? renderer_.GetOrEmplaceCachedTexture(*particle.baseColorTexture, true).ImageView().GetTexture2D() : shared::Texture2D{},
+          .initialBaseColorFactor        = glm::packUnorm4x8(particle.initialBaseColorFactor),
+          .currentBaseColorFactor        = glm::packUnorm4x8(particle.initialBaseColorFactor),
+          .finalBaseColorFactor          = glm::packUnorm4x8(particle.finalBaseColorFactor),
           .position                      = particle.position,
           .velocity                      = particle.velocity,
           .acceleration                  = particle.acceleration,
-          .isSolid                       = particle.isSolid,
-          .spawnParticleOnHit            = particle.spawnParticleOnHit,
-          .particleArchetypeToSpawnOnHit = particle.spawnParticleOnHit ? GetArchetypeIndex(particle.particleArchetypeToSpawnOnHit) : 0u,
+          .particleArchetypeToSpawnOnHit = particle.particleArchetypeToSpawnOnHit ? GetArchetypeIndex(*particle.particleArchetypeToSpawnOnHit) : 0u,
           .initialScale                  = particle.initialScale,
-          .currentScale                  = particle.currentScale,
+          .currentScale                  = particle.initialScale,
           .finalScale                    = particle.finalScale,
-          .initialLife                   = particle.initialLife,
-          .lifeRemaining                 = particle.lifeRemaining,
+          .initialLife                   = particle.life,
+          .lifeRemaining                 = particle.life,
         };
       }
 
