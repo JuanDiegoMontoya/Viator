@@ -479,9 +479,9 @@ namespace Techniques
           .velocity                      = particle.velocity,
           .acceleration                  = particle.acceleration,
           .particleArchetypeToSpawnOnHit = particle.particleArchetypeToSpawnOnHit ? GetArchetypeIndex(*particle.particleArchetypeToSpawnOnHit) : 0u,
-          .initialScale                  = particle.initialScale,
-          .currentScale                  = particle.initialScale,
-          .finalScale                    = particle.finalScale,
+          .initialScale                  = glm::packHalf2x16(particle.initialScale),
+          .currentScale                  = glm::packHalf2x16(particle.initialScale),
+          .finalScale                    = glm::packHalf2x16(particle.finalScale),
           .initialLife                   = particle.life,
           .lifeRemaining                 = particle.life,
         };

@@ -28,9 +28,9 @@ struct Particle
   FVOG_VEC3 velocity;
   FVOG_VEC3 acceleration;
   FVOG_UINT32 particleArchetypeToSpawnOnHit;
-  FVOG_VEC2 initialScale;
-  FVOG_VEC2 currentScale;
-  FVOG_VEC2 finalScale;
+  FVOG_UINT32 initialScale;
+  FVOG_UINT32 currentScale;
+  FVOG_UINT32 finalScale;
   FVOG_FLOAT initialLife;
   FVOG_FLOAT lifeRemaining;
 };

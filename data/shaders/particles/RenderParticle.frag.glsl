@@ -16,7 +16,7 @@ void main()
   const ivec2 size = textureSize(pc.uniforms.blueNoise, 0);
   const ivec2 posSS = ivec2(gl_FragCoord.xy);
   const float noiseSample = texelFetch(pc.uniforms.blueNoise, posSS % size, 0).r;
-  if (noiseSample >= alpha)
+  if (alpha < 1 && noiseSample >= alpha)
   //if (albedo.a < 0.5)
   {
     discard;

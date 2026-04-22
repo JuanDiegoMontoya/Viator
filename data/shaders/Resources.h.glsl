@@ -17,6 +17,11 @@
 #define FVOG_VEC3 glm::vec3
 #define FVOG_VEC4 glm::vec4
 
+#define FVOG_FLOAT16 int16_t
+#define FVOG_F16VEC2 glm::i16vec2
+#define FVOG_F16VEC3 glm::i16vec3
+#define FVOG_F16VEC4 glm::i16vec4
+
 #define FVOG_INT32 int32_t
 #define FVOG_IVEC2 glm::ivec2
 #define FVOG_IVEC3 glm::ivec3
@@ -52,6 +57,11 @@
 #define FVOG_VEC3 vec3
 #define FVOG_VEC4 vec4
 
+#define FVOG_FLOAT16 float16_t
+#define FVOG_F16VEC2 f16vec2
+#define FVOG_F16VEC3 f16vec3
+#define FVOG_F16VEC4 f16vec4
+
 #define FVOG_INT32 int
 #define FVOG_IVEC2 ivec2
 #define FVOG_IVEC3 ivec3
@@ -86,6 +96,7 @@
 #extension GL_KHR_shader_subgroup_basic : require
 #extension GL_KHR_shader_subgroup_ballot : require
 #extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_EXT_shader_16bit_storage : require
 
 #ifdef FROGRENDER_RAYTRACING_ENABLE
 #extension GL_EXT_ray_tracing : require

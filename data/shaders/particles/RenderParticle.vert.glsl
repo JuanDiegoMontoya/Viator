@@ -54,15 +54,17 @@ void main()
     rightOld = vec3(1, 0, 0);
   }
 
+  const vec2 scale = unpackHalf2x16(particle.currentScale);
+
   const vec3 posWS =
     particle.position +
-    right * posOS.x * particle.currentScale.x +
-    up * posOS.y * particle.currentScale.y;
+    right * posOS.x * scale.x +
+    up * posOS.y * scale.y;
 
   const vec3 posWS_old =
     particle.positionOld +
-    rightOld * posOS.x * particle.currentScale.x +
-    upOld * posOS.y * particle.currentScale.y;
+    rightOld * posOS.x * scale.x +
+    upOld * posOS.y * scale.y;
 
   o_posCS_unjittered = pc.uniforms.viewProjUnjittered * vec4(posWS, 1);
   o_posCS_old = pc.uniforms.oldViewProjUnjittered * vec4(posWS_old, 1);

@@ -101,7 +101,7 @@ void main()
   if (particle.lifeRemaining > 0)
   {
     const float timeAlpha           = particle.lifeRemaining / particle.initialLife;
-    particle.currentScale           = mix(particle.finalScale, particle.initialScale, timeAlpha);
+    particle.currentScale           = packHalf2x16(mix(unpackHalf2x16(particle.finalScale), unpackHalf2x16(particle.initialScale), timeAlpha));
     particle.currentBaseColorFactor = packUnorm4x8(mix(unpackUnorm4x8(particle.finalBaseColorFactor), unpackUnorm4x8(particle.initialBaseColorFactor), timeAlpha));
 
     const int index = atomicAdd(pc.nextFrameLiveParticles.size, 1);
