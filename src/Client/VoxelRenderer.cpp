@@ -1039,7 +1039,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .transmittanceLutExtent     = {256, 64},
       .multiscatteringLutExtent   = {32, 32},
       .skyViewLutExtent           = {256, 192},
-      .aerialPerspectiveLutExtent = {190, 90, 128},
+      .aerialPerspectiveLutExtent = skyEnableAerialPerspective.Get() != 0 ? Fvog::Extent3D{190, 90, 128} : Fvog::Extent3D{1, 1, 1},
     });
 
   auto weatherGpuParams = Fvog::GetDevice().AllocTransient<WeatherGpuParams_t>();
@@ -1130,7 +1130,16 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
     ctx.Barrier();
     sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-    sky_->ComputeAerialPerspectiveLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+    if (skyEnableAerialPerspective.Get() != 0)
+    {
+      sky_->ComputeAerialPerspectiveLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+    }
+    else
+    {
+      auto marker3 = ctx.MakeScopedDebugMarker("Clear aerial perspective LUTs");
+      ctx.ClearTexture(sky_->GetAerialPerspectiveTransmittance(), {.color = {1.0f, 1.0f, 1.0f, 1.0f}});
+      ctx.ClearTexture(sky_->GetAerialPerspectiveScattering(), {});
+    }
   }
 
   auto drawCalls       = std::vector<GpuMesh*>();

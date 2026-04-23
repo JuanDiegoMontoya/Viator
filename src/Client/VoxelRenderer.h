@@ -460,6 +460,15 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float skyEnableAerialPerspective = {
+    "r.sky.aerialPerspective",
+    "- WIP sky \"fog\" effect that makes distant objects and clouds blend smoothly with the sky.",
+    0,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,
