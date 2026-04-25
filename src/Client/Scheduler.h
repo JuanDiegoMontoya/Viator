@@ -8,7 +8,7 @@
 class Scheduler
 {
 public:
-  static std::unique_ptr<Scheduler> Create();
+  [[nodiscard]] static std::unique_ptr<Scheduler> Create();
 
   virtual ~Scheduler() = default;
 

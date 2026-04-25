@@ -188,7 +188,7 @@ namespace
     }
   };
 
-  DirectedAcyclicGraph DirectedAcyclicGraph::CloneWithoutPayload() const
+  [[nodiscard]] DirectedAcyclicGraph DirectedAcyclicGraph::CloneWithoutPayload() const
   {
     auto clone = IncompleteDirectedAcyclicGraph();
     clone.nodes.reserve(nodes.size());
@@ -412,14 +412,25 @@ TEST_CASE("DirectedAcyclicGraph")
 TEST_CASE("Scheduler")
 {
   auto scheduler = Scheduler::Create();
-  auto str       = std::string();
 
-  scheduler->AddPass("B", [&] { str += "B"; }, "A");
-  scheduler->AddPass("A", [&] { str += "A"; });
+  SUBCASE("Simple schedule")
+  {
+    auto str = std::string();
 
-  auto beginCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "begin"; };
-  auto endCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "end"; };
-  scheduler->Execute({.onPassBegin = beginCallback, .onPassEnd = endCallback, .userData = &str});
+    scheduler->AddPass("B", [&] { str += "B"; }, "A");
+    scheduler->AddPass("A", [&] { str += "A"; });
 
-  CHECK_EQ(str, "beginAendbeginBend");
+    auto beginCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "begin"; };
+    auto endCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "end"; };
+    scheduler->Execute({.onPassBegin = beginCallback, .onPassEnd = endCallback, .userData = &str});
+
+    CHECK_EQ(str, "beginAendbeginBend");
+  }
+
+  SUBCASE("Ensure that a schedule with no callbacks doesn't crash")
+  {
+    scheduler->AddPass("A", nullptr);
+    scheduler->AddPass("B", nullptr, "A");
+    scheduler->Execute({});
+  }
 }
