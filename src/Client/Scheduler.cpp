@@ -212,17 +212,59 @@ namespace
   class SchedulerImpl : public Scheduler
   {
   public:
-    void Execute() override
+    void Execute(ExecuteParams params) override
     {
-      auto nodes = graph.Complete().GetTopologicallySortedNodes();
-      for (const auto& node : nodes)
+      auto completedGraph = graph.Complete();
+      auto nodes          = completedGraph.GetTopologicallySortedNodes();
+      std::unordered_set<const DirectedAcyclicGraph::Node*> complete;
+      std::unordered_set<const DirectedAcyclicGraph::Node*> pending;
+
+      auto FlushPending = [&]
       {
-        node->payload();
+        complete.insert_range(pending);
+        pending.clear();
+        if (params.onPassEnd)
+        {
+          params.onPassEnd(params.userData);
+        }
+        if (params.onPassBegin)
+        {
+          params.onPassBegin(params.userData);
+        }
+      };
+
+      if (params.onPassBegin)
+      {
+        params.onPassBegin(params.userData);
+      }
+
+      for (const auto* node : nodes)
+      {
+        for (const auto* parent : node->parents)
+        {
+          if (!complete.contains(parent))
+          {
+            FlushPending();
+            break;
+          }
+        }
+
+        if (node->payload)
+        {
+          node->payload();
+        }
+
+        pending.emplace(node);
+      }
+
+      if (params.onPassEnd)
+      {
+        params.onPassEnd(params.userData);
       }
     }
 
   protected:
-    void AddPass(std::string_view id, std::function<void()> callback) override
+    void AddPassInternal(std::string_view id, std::function<void()> callback) override
     {
       [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::string(id), IncompleteDirectedAcyclicGraph::Node{.payload = std::move(callback)});
       DEBUG_ASSERT(success);
@@ -244,7 +286,7 @@ namespace
     IncompleteDirectedAcyclicGraph graph;
   };
 
-  bool IsTopologicallySorted(std::span<DirectedAcyclicGraph::Node* const> nodes)
+  [[nodiscard]] bool IsTopologicallySorted(std::span<DirectedAcyclicGraph::Node* const> nodes)
   {
     auto visited = std::unordered_set<const DirectedAcyclicGraph::Node*>();
 
@@ -365,4 +407,19 @@ TEST_CASE("DirectedAcyclicGraph")
     CHECK(sorted.size() == dag.nodes.size());
     CHECK(IsTopologicallySorted(sorted));
   }
+}
+
+TEST_CASE("Scheduler")
+{
+  auto scheduler = Scheduler::Create();
+  auto str       = std::string();
+
+  scheduler->AddPass("B", [&] { str += "B"; }, "A");
+  scheduler->AddPass("A", [&] { str += "A"; });
+
+  auto beginCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "begin"; };
+  auto endCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "end"; };
+  scheduler->Execute({.onPassBegin = beginCallback, .onPassEnd = endCallback, .userData = &str});
+
+  CHECK_EQ(str, "beginAendbeginBend");
 }

@@ -3,6 +3,7 @@
 #include <string_view>
 #include <utility>
 #include <memory>
+#include <any>
 
 class Scheduler
 {
@@ -14,13 +15,20 @@ public:
   template<typename... Ts>
   void AddPass(std::string_view id, std::function<void()> callback, Ts... dependencies)
   {
-    AddPass(id, std::move(callback));
+    AddPassInternal(id, std::move(callback));
     (AddDependency(id, std::forward<Ts>(dependencies)), ...);
   }
 
-  virtual void Execute() = 0;
+  struct ExecuteParams
+  {
+    std::function<void(std::any& userData)> onPassBegin;
+    std::function<void(std::any& userData)> onPassEnd;
+    std::any userData;
+  };
+
+  virtual void Execute(ExecuteParams params) = 0;
 
 protected:
-  virtual void AddPass(std::string_view id, std::function<void()> callback) = 0;
+  virtual void AddPassInternal(std::string_view id, std::function<void()> callback) = 0;
   virtual void AddDependency(std::string_view childId, std::string_view parentId) = 0;
 };
