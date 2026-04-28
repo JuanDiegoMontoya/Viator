@@ -9,6 +9,9 @@
 #include <unordered_map>
 #include <stack>
 #include <ranges>
+#include <sstream>
+#include <stdexcept>
+#include <format>
 
 namespace
 {
@@ -159,14 +162,14 @@ namespace
 
     std::unordered_map<std::string, Node> nodes;
 
-    [[nodiscard]] DirectedAcyclicGraph Complete()
+    [[nodiscard]] DirectedAcyclicGraph Complete() const
     {
       auto dag = DirectedAcyclicGraph{};
       dag.nodes.reserve(nodes.size());
 
       for (auto& [id, node] : nodes)
       {
-        dag.Insert(id, std::move(node.payload));
+        dag.Insert(id, node.payload);
       }
 
       for (const auto& [id, node] : nodes)
@@ -177,13 +180,15 @@ namespace
         for (const auto& parentId : node.parents)
         {
           auto* parentNode = dag.Find(parentId);
-          ASSERT(parentNode);
+          if (!parentNode)
+          {
+            throw std::logic_error(std::format("Parent {} with doesn't exist in the graph.", parentId));
+          }
           childNode->parents.push_back(parentNode);
           parentNode->children.push_back(childNode);
         }
       }
 
-      nodes.clear();
       return dag;
     }
   };
@@ -255,12 +260,36 @@ namespace
         }
 
         pending.emplace(node);
+
+#if 0
+        FlushPending();
+#endif
       }
 
       if (params.onPassEnd)
       {
         params.onPassEnd(params.userData);
       }
+    }
+
+    std::string GenerateDotGraph() override
+    {
+      auto stream = std::stringstream();
+
+      stream << "digraph Schedule {\n";
+
+      const auto dag = graph.Complete();
+      for (const auto& node : dag.nodes)
+      {
+        for (const auto* child : node->children)
+        {
+          stream << '\t' << node->id << " -> " << child->id << ";\n";
+        }
+      }
+
+      stream << "}";
+
+      return stream.str();
     }
 
   protected:
@@ -432,5 +461,11 @@ TEST_CASE("Scheduler")
     scheduler->AddPass("A", nullptr);
     scheduler->AddPass("B", nullptr, "A");
     scheduler->Execute({});
+  }
+
+  SUBCASE("Ensure that a schedule with an unknown dependency throws")
+  {
+    scheduler->AddPass("A", nullptr, "Fake");
+    CHECK_THROWS(scheduler->Execute({}));
   }
 }

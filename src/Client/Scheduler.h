@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <string_view>
+#include <string>
 #include <utility>
 #include <memory>
 #include <any>
@@ -27,6 +28,8 @@ public:
   };
 
   virtual void Execute(ExecuteParams params) = 0;
+
+  [[nodiscard]] virtual std::string GenerateDotGraph() = 0;
 
 protected:
   virtual void AddPassInternal(std::string_view id, std::function<void()> callback) = 0;
