@@ -16,6 +16,7 @@
 #include "Core/Image.h"
 #include "Game/VoxLoader.h"
 #include "Game/Globals.h"
+#include "Client/Scheduler.h"
 
 #include "shaders/Config.shared.h"
 #include "shaders/voxels/PerPixelPathtracer.shared.h"
@@ -39,6 +40,7 @@
 #include <memory>
 #include <numeric>
 #include <type_traits>
+#include <fstream>
 
 namespace
 {
@@ -867,6 +869,7 @@ void VoxelRenderer::OnRender(DeltaTime dt, World& world, VkCommandBuffer command
 
 void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer commandBuffer)
 {
+  auto scheduler = Scheduler::Create();
   auto ctx = Fvog::Context(commandBuffer);
 
   if (world.globals->grid->numTopLevelBricks_ > 0)
@@ -1112,34 +1115,53 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   {
     ctx.Barrier();
     auto marker2 = ctx.MakeScopedDebugMarker("Particle logic");
-    particles_->Spawn(commandBuffer, {.frameNumber = frameNumber, .skyShadowMap = skyShadowMap_.GetShadowInfoBufferAddress()});
-    ctx.Barrier();
-    particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+    scheduler->AddPass("ParticlesSpawn",
+      [&] { particles_->Spawn(commandBuffer, {.frameNumber = frameNumber, .skyShadowMap = skyShadowMap_.GetShadowInfoBufferAddress()}); });
+    scheduler->AddPass("ParticlesUpdate", [&] { particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); }, "ParticlesSpawn");
   }
 
-  ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(sky_->GetMultiscatteringLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(sky_->GetSkyViewLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveTransmittance(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveScattering(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+  scheduler->AddPass("ClearSkyTextures",
+    [&]
+    {
+      ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(sky_->GetMultiscatteringLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(sky_->GetSkyViewLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveTransmittance(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(sky_->GetAerialPerspectiveScattering(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
+    });
 
   {
-    auto marker2 = ctx.MakeScopedDebugMarker("Sky");
-    sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-    ctx.Barrier();
-    sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-    ctx.Barrier();
-    sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-    if (skyEnableAerialPerspective.Get() != 0)
-    {
-      sky_->ComputeAerialPerspectiveLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-    }
-    else
-    {
-      auto marker3 = ctx.MakeScopedDebugMarker("Clear aerial perspective LUTs");
-      ctx.ClearTexture(sky_->GetAerialPerspectiveTransmittance(), {.color = {1.0f, 1.0f, 1.0f, 1.0f}});
-      ctx.ClearTexture(sky_->GetAerialPerspectiveScattering(), {});
-    }
+    scheduler->AddPass("SkyComputeTransmittanceLut",
+      [&] { sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
+      "ClearSkyTextures");
+    scheduler->AddPass("SkyComputeMultiscatteringLut",
+      [&] { sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
+      "SkyComputeTransmittanceLut");
+    scheduler->AddPass("SkyComputeSkyViewLut",
+      [&] { sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
+      "SkyComputeTransmittanceLut",
+      "SkyComputeMultiscatteringLut");
+
+    scheduler->AddPass(
+      "SkyComputeAerialPerspectiveLut",
+      [&]
+      {
+        if (skyEnableAerialPerspective.Get() != 0)
+        {
+          sky_->ComputeAerialPerspectiveLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+        }
+        else
+        {
+          auto marker3 = ctx.MakeScopedDebugMarker("Clear aerial perspective LUTs");
+          ctx.ClearTexture(sky_->GetAerialPerspectiveTransmittance(), {.color = {1.0f, 1.0f, 1.0f, 1.0f}});
+          ctx.ClearTexture(sky_->GetAerialPerspectiveScattering(), {});
+        }
+      },
+      "SkyComputeSkyViewLut",
+      "SkyComputeTransmittanceLut",
+      "SkyComputeMultiscatteringLut");
+
+    scheduler->AddPass("AllSky", nullptr, "SkyComputeSkyViewLut", "SkyComputeTransmittanceLut", "SkyComputeMultiscatteringLut", "SkyComputeAerialPerspectiveLut");
   }
 
   auto drawCalls       = std::vector<GpuMesh*>();
@@ -1211,356 +1233,410 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     lights.emplace_back(light);
   }
 
-  if (world.globals->grid->numTopLevelBricks_ > 0)
-  {
-    auto lines           = std::vector<Debug::Line>();
-    const auto& ecsLines = world.globals->debugLines;
-    lines.insert(lines.end(), ecsLines.begin(), ecsLines.end());
+  auto lines           = std::vector<Debug::Line>();
+  const auto& ecsLines = world.globals->debugLines;
+  lines.insert(lines.end(), ecsLines.begin(), ecsLines.end());
 #ifdef JPH_DEBUG_RENDERER
-    const auto* debugRenderer = dynamic_cast<const Physics::DebugRenderer*>(JPH::DebugRenderer::sInstance);
-    assert(debugRenderer);
-    auto physicsLines = debugRenderer->GetLines();
-    lines.insert(lines.end(), physicsLines.begin(), physicsLines.end());
+  const auto* debugRenderer = dynamic_cast<const Physics::DebugRenderer*>(JPH::DebugRenderer::sInstance);
+  assert(debugRenderer);
+  auto physicsLines = debugRenderer->GetLines();
+  lines.insert(lines.end(), physicsLines.begin(), physicsLines.end());
 #endif
-    if (!meshUniformzVec.empty())
+  if (!meshUniformzVec.empty())
+  {
+    if (!meshUniformz || meshUniformz->Size() < meshUniformzVec.size() * sizeof(Temp::ObjectUniforms))
     {
-      if (!meshUniformz || meshUniformz->Size() < meshUniformzVec.size() * sizeof(Temp::ObjectUniforms))
-      {
-        meshUniformz.emplace((uint32_t)meshUniformzVec.size(), "Mesh Uniforms");
-      }
-      meshUniformz->UpdateData(commandBuffer, meshUniformzVec);
+      meshUniformz.emplace((uint32_t)meshUniformzVec.size(), "Mesh Uniforms");
     }
+    meshUniformz->UpdateData(commandBuffer, meshUniformzVec);
+  }
 
-    if (!lines.empty())
+  if (!lines.empty())
+  {
+    if (!lineVertexBuffer || lineVertexBuffer->Size() < lines.size() * sizeof(Debug::Line))
     {
-      if (!lineVertexBuffer || lineVertexBuffer->Size() < lines.size() * sizeof(Debug::Line))
-      {
-        lineVertexBuffer.emplace((uint32_t)lines.size(), "Debug Lines");
-      }
-      lineVertexBuffer->UpdateData(commandBuffer, lines);
+      lineVertexBuffer.emplace((uint32_t)lines.size(), "Debug Lines");
     }
+    lineVertexBuffer->UpdateData(commandBuffer, lines);
+  }
 
-    if (!billboards.empty())
+  if (!billboards.empty())
+  {
+    if (!billboardInstanceBuffer || billboardInstanceBuffer->Size() < billboards.size() * sizeof(Temp::BillboardInstance))
     {
-      if (!billboardInstanceBuffer || billboardInstanceBuffer->Size() < billboards.size() * sizeof(Temp::BillboardInstance))
-      {
-        billboardInstanceBuffer.emplace((uint32_t)billboards.size(), "Billboards");
-      }
-      billboardInstanceBuffer->UpdateData(commandBuffer, billboards);
+      billboardInstanceBuffer.emplace((uint32_t)billboards.size(), "Billboards");
     }
+    billboardInstanceBuffer->UpdateData(commandBuffer, billboards);
+  }
 
-    if (!lights.empty())
+  if (!lights.empty())
+  {
+    if (!lightBuffer || lightBuffer->Size() < lights.size() * sizeof(GpuLight))
     {
-      if (!lightBuffer || lightBuffer->Size() < lights.size() * sizeof(GpuLight))
-      {
-        lightBuffer.emplace((uint32_t)lights.size(), "Lights");
-      }
-      lightBuffer->UpdateData(commandBuffer, lights);
+      lightBuffer.emplace((uint32_t)lights.size(), "Lights");
     }
+    lightBuffer->UpdateData(commandBuffer, lights);
+  }
 
-    if (!billboardSprites.empty())
+  if (!billboardSprites.empty())
+  {
+    if (!billboardSpriteInstanceBuffer || billboardSpriteInstanceBuffer->Size() < billboardSprites.size() * sizeof(Temp::BillboardSpriteInstance))
     {
-      if (!billboardSpriteInstanceBuffer || billboardSpriteInstanceBuffer->Size() < billboardSprites.size() * sizeof(Temp::BillboardSpriteInstance))
-      {
-        billboardSpriteInstanceBuffer.emplace((uint32_t)billboardSprites.size(), "Billboard Sprites");
-      }
-      billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
+      billboardSpriteInstanceBuffer.emplace((uint32_t)billboardSprites.size(), "Billboard Sprites");
     }
+    billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
+  }
 
-    auto& grid        = *world.globals->grid;
-    const auto voxels = Voxels{
-      .topLevelBricksDims         = grid.TopLevelBricksDims(),
-      .topLevelBrickPtrsBaseIndex = grid.TopLevelBrickPtrsBaseIndex(),
-      .dimensions                 = grid.Dimensions(),
-      .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
-      .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
-      .voxelSampler               = voxelSampler,
-      .numLights                  = (uint32_t)lights.size(),
-      .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
-      .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-    };
+  auto& grid        = *world.globals->grid;
+  const auto voxels = Voxels{
+    .topLevelBricksDims         = grid.TopLevelBricksDims(),
+    .topLevelBrickPtrsBaseIndex = grid.TopLevelBrickPtrsBaseIndex(),
+    .dimensions                 = grid.Dimensions(),
+    .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
+    .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
+    .voxelSampler               = voxelSampler,
+    .numLights                  = (uint32_t)lights.size(),
+    .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
+    .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+  };
 
-    if (enableSunShadowPass.Get() != 0)
-    {
-      const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
-      const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
-      ctx.Barrier();
-      sunShadowMap_.RenderTerrainShadowMap(commandBuffer,
+  if (enableSunShadowPass.Get() != 0)
+  {
+    ctx.Barrier();
+    scheduler->AddPass("ShadowMaps",
+      [&]
+      {
+        const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
+        const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
+        sunShadowMap_.RenderTerrainShadowMap(commandBuffer,
+          {
+            .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
+            .numCascades           = uint32_t(sunShadowNumCascades),
+            .voxels                = voxels,
+            .playerPos             = playerPosition,
+            .lightDirection        = sunDirection,
+            .frustumDepth          = sunShadowFrustumDepth,
+            .baseFrustumSideLength = sunShadowFrustumSideLength,
+          });
+
+        skyShadowMap_.RenderTerrainShadowMap(commandBuffer,
+          {
+            .shadowResolution      = {uint32_t(skyShadowResolution.x), uint32_t(skyShadowResolution.y)},
+            .numCascades           = uint32_t(skyShadowNumCascades),
+            .voxels                = voxels,
+            .playerPos             = playerPosition,
+            .lightDirection        = {0, -1, 0},
+            .frustumDepth          = skyShadowFrustumDepth,
+            .baseFrustumSideLength = skyShadowFrustumSideLength,
+          });
+
+        rayMarchedClouds_->RenderBeerShadowMap(commandBuffer,
+          {
+            .globalUniforms        = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+            .renderWidth           = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+            .renderHeight          = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+            .numCascades           = static_cast<uint32_t>(cloudCbsmNumCascades.Get()),
+            .sunPosition           = playerPosition,
+            .sunDirection          = sunDirection,
+            .numRayMarchSteps      = static_cast<uint32_t>(cloudCbsmRayMarchSteps.Get()),
+            .frustumDepth          = static_cast<float>(cloudCbsmFrustumDepth.Get()),
+            .baseFrustumSideLength = static_cast<float>(cloudCbsmFrustumSideLength.Get()),
+            .time                  = static_cast<float>(time),
+            .historyWeight         = static_cast<float>(cloudCbsmHistoryWeight.Get()),
+            .jitterScale           = static_cast<float>(cloudCbsmJitterScale.Get()),
+          });
+      });
+  }
+
+  // DDGI- good candidate for async compute or overlapped work.
+  if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
+  {
+    scheduler->AddPass("DdgiUpdateArguments",
+      [&]
+      {
+        // Successive cascades are 2x the scale of the previous.
+        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
         {
-          .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
-          .numCascades           = uint32_t(sunShadowNumCascades),
-          .voxels                = voxels,
-          .playerPos             = playerPosition,
-          .lightDirection        = sunDirection,
-          .frustumDepth          = sunShadowFrustumDepth,
-          .baseFrustumSideLength = sunShadowFrustumSideLength,
-        });
-
-      skyShadowMap_.RenderTerrainShadowMap(commandBuffer,
-        {
-          .shadowResolution      = {uint32_t(skyShadowResolution.x), uint32_t(skyShadowResolution.y)},
-          .numCascades           = uint32_t(skyShadowNumCascades),
-          .voxels                = voxels,
-          .playerPos             = playerPosition,
-          .lightDirection        = {0, -1, 0},
-          .frustumDepth          = skyShadowFrustumDepth,
-          .baseFrustumSideLength = skyShadowFrustumSideLength,
-        });
-
-      rayMarchedClouds_->RenderBeerShadowMap(commandBuffer,
-        {
-          .globalUniforms          = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-          .renderWidth             = static_cast<uint32_t>(cloudCbsmResolution.Get()),
-          .renderHeight            = static_cast<uint32_t>(cloudCbsmResolution.Get()),
-          .numCascades             = static_cast<uint32_t>(cloudCbsmNumCascades.Get()),
-          .sunPosition             = playerPosition,
-          .sunDirection            = sunDirection,
-          .numRayMarchSteps        = static_cast<uint32_t>(cloudCbsmRayMarchSteps.Get()),
-          .frustumDepth            = static_cast<float>(cloudCbsmFrustumDepth.Get()),
-          .baseFrustumSideLength   = static_cast<float>(cloudCbsmFrustumSideLength.Get()),
-          .time                    = static_cast<float>(time),
-          .historyWeight           = static_cast<float>(cloudCbsmHistoryWeight.Get()),
-          .jitterScale             = static_cast<float>(cloudCbsmJitterScale.Get()),
-        });
-      ctx.Barrier();
-    }
-
-    // DDGI- good candidate for async compute or overlapped work.
-    if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
-    {
-      auto marker = ctx.MakeScopedDebugMarker("DDGI");
-
-      // Successive cascades are 2x the scale of the previous.
-      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-      {
-        ddgi.args.gridInfo[i].baseGridScale = ddgi.args.gridInfo[0].baseGridScale * float(glm::exp2(i));
-      }
-
-      DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
-      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-      {
-        if (!ddgiDebugFreezeGrid_)
-        {
-          ddgi.args.gridInfo[i].probeInfosIndex = ddgi.probeDataBuffers[i].value().GetResourceHandle().index;
-          ddgi.args.gridInfo[i].oldGridOffset   = ddgi.args.gridInfo[i].gridOffset;
-          const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
-                                       ddgi.args.gridInfo[i].baseGridScale;
-          ddgi.args.gridInfo[i].gridOffset         = glm::floor(offset);
-          ddgi.args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+          ddgi.args.gridInfo[i].baseGridScale = ddgi.args.gridInfo[0].baseGridScale * float(glm::exp2(i));
         }
-        tempGridInfos[i] = ddgi.args.gridInfo[i];
-      }
-      ddgi.args = DDGIArgs{
-        .voxels                     = voxels,
-        .internalColorSpace         = tonemapUniforms.shadingInternalColorSpace,
-        .noiseTexture               = noiseTexture->ImageView().GetTexture2D(),
-        .samples                    = 1,
-        .bounces                    = 2,
-        .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .showCascadeIndexAsColor    = ddgiDebugShowCascadeIndexAsColor_,
-        //.gridInfo                   = ddgi.args.gridInfo,
-        .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2DArray(),
-        .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2DArray(),
-        .packedProbeRawDepth        = ddgi.packedProbeRawDepth->ImageView().GetImage2DArray(),
-        .packedProbeDepthMoments    = ddgi.packedProbeDepthMoments->ImageView().GetImage2DArray(),
-        .packedProbeRadianceTex     = ddgi.packedProbeRadiance->ImageView().GetTexture2DArray(),
-        .packedProbeIrradianceTex   = ddgi.packedProbeIrradiance->ImageView().GetTexture2DArray(),
-        .packedProbeRawDepthTex     = ddgi.packedProbeRawDepth->ImageView().GetTexture2DArray(),
-        .packedProbeDepthMomentsTex = ddgi.packedProbeDepthMoments->ImageView().GetTexture2DArray(),
-        .linearSampler              = linearClampSampler,
+
+        DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
+        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+        {
+          if (!ddgiDebugFreezeGrid_)
+          {
+            ddgi.args.gridInfo[i].probeInfosIndex = ddgi.probeDataBuffers[i].value().GetResourceHandle().index;
+            ddgi.args.gridInfo[i].oldGridOffset   = ddgi.args.gridInfo[i].gridOffset;
+            const auto offset = 1.0f + (position - glm::vec3(glm::vec3(ddgi.args.gridInfo[i].gridResolution) * ddgi.args.gridInfo[i].baseGridScale / 2.0f)) /
+                                         ddgi.args.gridInfo[i].baseGridScale;
+            ddgi.args.gridInfo[i].gridOffset         = glm::floor(offset);
+            ddgi.args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+          }
+          tempGridInfos[i] = ddgi.args.gridInfo[i];
+        }
+        ddgi.args = DDGIArgs{
+          .voxels                  = voxels,
+          .internalColorSpace      = tonemapUniforms.shadingInternalColorSpace,
+          .noiseTexture            = noiseTexture->ImageView().GetTexture2D(),
+          .samples                 = 1,
+          .bounces                 = 2,
+          .globalUniformsIndex     = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .showCascadeIndexAsColor = ddgiDebugShowCascadeIndexAsColor_,
+          //.gridInfo                   = ddgi.args.gridInfo,
+          .packedProbeRadiance        = ddgi.packedProbeRadiance->ImageView().GetImage2DArray(),
+          .packedProbeIrradiance      = ddgi.packedProbeIrradiance->ImageView().GetImage2DArray(),
+          .packedProbeRawDepth        = ddgi.packedProbeRawDepth->ImageView().GetImage2DArray(),
+          .packedProbeDepthMoments    = ddgi.packedProbeDepthMoments->ImageView().GetImage2DArray(),
+          .packedProbeRadianceTex     = ddgi.packedProbeRadiance->ImageView().GetTexture2DArray(),
+          .packedProbeIrradianceTex   = ddgi.packedProbeIrradiance->ImageView().GetTexture2DArray(),
+          .packedProbeRawDepthTex     = ddgi.packedProbeRawDepth->ImageView().GetTexture2DArray(),
+          .packedProbeDepthMomentsTex = ddgi.packedProbeDepthMoments->ImageView().GetTexture2DArray(),
+          .linearSampler              = linearClampSampler,
+        };
+
+        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+        {
+          ddgi.args.gridInfo[i] = tempGridInfos[i];
+        }
+
+        ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
+      });
+
+    scheduler->AddPass("DdgiResetNewProbes",
+      [&]
+      {
+        const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.y * ddgi.args.gridInfo[0].gridResolution.z;
+        ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+        ctx.BindComputePipeline(ddgi.resetNewProbesPipeline.GetPipeline());
+        ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+      },
+      "DdgiUpdateArguments");
+
+    scheduler->AddPass(
+      "DdgiTraceRays",
+      [&]
+      {
+        // As long as probe validity is unused here, a barrier is not needed.
+        const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
+        ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+        ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
+        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
+      },
+      "DdgiResetNewProbes",
+      "ShadowMaps",
+      "AllSky");
+
+    scheduler->AddPass(
+      "DdgiConvolveIrradiance",
+      [&]
+      {
+        const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
+        ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+        ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
+        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+      },
+      "DdgiTraceRays");
+
+    scheduler->AddPass(
+      "DdgiDownsampleDepth",
+      [&]
+      {
+        const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
+        ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+        ctx.BindComputePipeline(ddgi.downsampleDepthPipeline.GetPipeline());
+        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+      },
+      "DdgiTraceRays");
+
+    scheduler->AddPass("IndirectLighting", nullptr, "DdgiDownsampleDepth", "DdgiConvolveIrradiance");
+  }
+
+  scheduler->AddPass("RenderOpaque",
+    [&]
+    {
+      auto albedoAttachment = Fvog::RenderColorAttachment{
+        .texture = frame.gAlbedo.value().ImageView(),
+        .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      };
+      auto normalAttachment = Fvog::RenderColorAttachment{
+        .texture = frame.gNormal.value().ImageView(),
+        .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      };
+      auto radianceAttachment = Fvog::RenderColorAttachment{
+        .texture = frame.gRadiance.value().ImageView(),
+        .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      };
+      auto motionAttachment = Fvog::RenderColorAttachment{
+        .texture = frame.gMotion.value().ImageView(),
+        .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      };
+      auto reactiveMaskAttachment = Fvog::RenderColorAttachment{
+        .texture = frame.gReactiveMask.value().ImageView(),
+        .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      };
+      Fvog::RenderColorAttachment colorAttachments[] = {albedoAttachment, normalAttachment, radianceAttachment, motionAttachment, reactiveMaskAttachment};
+      auto depthAttachment                           = Fvog::RenderDepthStencilAttachment{
+                                  .texture    = frame.gDepth.value().ImageView(),
+                                  .loadOp     = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                  .clearValue = {.depth = FAR_DEPTH},
       };
 
-      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-      {
-        ddgi.args.gridInfo[i] = tempGridInfos[i];
-      }
-
-      ddgi.argsBuffer->UpdateData(commandBuffer, ddgi.args);
-
-      ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-
-      ctx.BindComputePipeline(ddgi.resetNewProbesPipeline.GetPipeline());
-      const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.y * ddgi.args.gridInfo[0].gridResolution.z;
-      ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
-
-      // As long as probe validity is unused here, a barrier is not needed.
-      ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
-      const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
-      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
-
-      ctx.Barrier();
-
-      ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
-      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-
-      // No barrier is needed here
-      ctx.BindComputePipeline(ddgi.downsampleDepthPipeline.GetPipeline());
-      ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-    }
-
-    auto albedoAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.gAlbedo.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
-    auto normalAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.gNormal.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
-    auto radianceAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.gRadiance.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
-    auto motionAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.gMotion.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
-    auto reactiveMaskAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.gReactiveMask.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    };
-    Fvog::RenderColorAttachment colorAttachments[] = {albedoAttachment, normalAttachment, radianceAttachment, motionAttachment, reactiveMaskAttachment};
-    auto depthAttachment = Fvog::RenderDepthStencilAttachment{
-      .texture = frame.gDepth.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .clearValue = {.depth = FAR_DEPTH},
-    };
-
-    ctx.BeginRendering({
-      .name             = "Render opaque",
-      .colorAttachments = colorAttachments,
-      .depthAttachment  = depthAttachment,
-    });
-    {
-      // Voxels
-      TracyVkZone(head_->tracyVkContext_, commandBuffer, "Voxels");
-      ctx.BindGraphicsPipeline(voxelsPipeline.GetPipeline());
-      ctx.SetPushConstants(Temp::PushConstants{
-        .voxels = voxels,
-        .uniformBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+      ctx.BeginRendering({
+        .name             = "Render opaque",
+        .colorAttachments = colorAttachments,
+        .depthAttachment  = depthAttachment,
       });
-      ctx.Draw(3, 1, 0, 0);
-    }
-    {
-      // Meshes
-      TracyVkZone(head_->tracyVkContext_, commandBuffer, "Meshes");
-      ctx.BindGraphicsPipeline(meshPipeline.GetPipeline());
-      ctx.SetPushConstants(Temp::MeshArgs{
-        .objects      = meshUniformz->GetDeviceBuffer().GetDeviceAddress(),
-        .frame        = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-      });
-
-      for (size_t i = 0; i < drawCalls.size(); i++)
       {
-        const auto& mesh = drawCalls[i];
-        ctx.BindIndexBuffer(mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-        ctx.DrawIndexed((uint32_t)mesh->indices.size(), 1, 0, 0, (uint32_t)i);
-      }
-
-      particles_->Render(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
-
-      if (!lines.empty())
-      {
-        ctx.BindGraphicsPipeline(debugLinesPipeline.GetPipeline());
-        ctx.SetPushConstants(DebugLinesPushConstants{
-          .vertexBufferIndex   = lineVertexBuffer->GetDeviceBuffer().GetResourceHandle().index,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .useGpuVertexBuffer  = 0,
+        // Voxels
+        TracyVkZone(head_->tracyVkContext_, commandBuffer, "Voxels");
+        ctx.BindGraphicsPipeline(voxelsPipeline.GetPipeline());
+        ctx.SetPushConstants(Temp::PushConstants{
+          .voxels             = voxels,
+          .uniformBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         });
-        ctx.Draw(uint32_t(lines.size() * 2), 1, 0, 0);
+        ctx.Draw(3, 1, 0, 0);
       }
-
-      if (!billboards.empty())
       {
-        ctx.BindGraphicsPipeline(billboardsPipeline.GetPipeline());
-        ctx.SetPushConstants(BillboardPushConstants{
-          .billboardsIndex     = billboardInstanceBuffer->GetDeviceBuffer().GetResourceHandle().index,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .cameraRight         = {view_from_world[0][0], view_from_world[1][0], view_from_world[2][0]},
-          .cameraUp            = {view_from_world[0][1], view_from_world[1][1], view_from_world[2][1]},
-          .texSampler          = voxelSampler,
+        // Meshes
+        TracyVkZone(head_->tracyVkContext_, commandBuffer, "Meshes");
+        ctx.BindGraphicsPipeline(meshPipeline.GetPipeline());
+        ctx.SetPushConstants(Temp::MeshArgs{
+          .objects = meshUniformz->GetDeviceBuffer().GetDeviceAddress(),
+          .frame   = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
         });
-        ctx.Draw(uint32_t(billboards.size() * 6), 1, 0, 0);
-      }
 
-      if (!billboardSprites.empty())
-      {
-        ctx.BindGraphicsPipeline(billboardSpritesPipeline.GetPipeline());
-        ctx.SetPushConstants(BillboardPushConstants{
-          .billboardsIndex     = billboardSpriteInstanceBuffer->GetDeviceBuffer().GetResourceHandle().index,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .cameraRight         = {view_from_world[0][0], view_from_world[1][0], view_from_world[2][0]},
-          .cameraUp            = {view_from_world[0][1], view_from_world[1][1], view_from_world[2][1]},
-          .texSampler          = voxelSampler,
-        });
-        ctx.Draw(uint32_t(billboardSprites.size() * 6), 1, 0, 0);
-      }
-
-      // GPU-driven debug shapes
-      {
-        // GPU debug lines
-        // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, aabbDrawCommand), 1, 0);
-        // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, rectDrawCommand), 1, 0);
-        ctx.BindGraphicsPipeline(debugLinesPipeline.GetPipeline());
-        ctx.SetPushConstants(DebugLinesPushConstants{
-          .vertexBufferIndex   = debugLineBuffer->GetResourceHandle().index,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .useGpuVertexBuffer  = 1,
-        });
-        ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, lineDrawCommand), 1, 0);
-
-        // GPU debug meshes
-        // ctx.DrawIndirect();
-      }
-    }
-    ctx.EndRendering();
-
-    ctx.ImageBarrier(*frame.gAlbedo, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gNormal, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gRadiance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_GENERAL);
-
-    // Indirect illuminance
-    if (giMethod_ == GIMethod::PerPixelPathTracing)
-    {
-      ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
-      ctx.SetPushConstants(PerPixelPathtracerArguments{
-        .voxels              = voxels,
-        .gDepth              = frame.gDepth->ImageView().GetTexture2D(),
-        .gNormal             = frame.gNormal->ImageView().GetTexture2D(),
-        .gIndirectIrradiance = frame.gIlluminance->ImageView().GetImage2D(),
-        .internalColorSpace  = COLOR_SPACE_sRGB_LINEAR,
-        .uniformBufferIndex  = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .noiseTexture        = noiseTexture->ImageView().GetTexture2D(),
-        .samples             = uint32_t(pathTracerSamples),
-        .bounces             = uint32_t(pathTracerBounces),
-      });
-      ctx.DispatchInvocations(frame.gIlluminance->GetCreateInfo().extent);
-
-      // Denoise. Issues barriers internally.
-      bilateral_.DenoiseIlluminance(
+        for (size_t i = 0; i < drawCalls.size(); i++)
         {
-          .sceneAlbedo              = &frame.gAlbedo.value(),
-          .sceneNormal              = &frame.gNormal.value(),
-          .sceneDepth               = &frame.gDepth.value(),
-          .sceneIlluminance         = &frame.gIlluminance.value(),
-          .sceneIlluminancePingPong = &frame.gIlluminancePingPong.value(),
-          .clip_from_view           = clip_from_view,
-          .world_from_clip          = glm::inverse(clip_from_world),
-          .cameraPos                = position,
-        },
-        commandBuffer);
-    }
-    
-    ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+          const auto& mesh = drawCalls[i];
+          ctx.BindIndexBuffer(mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+          ctx.DrawIndexed((uint32_t)mesh->indices.size(), 1, 0, 0, (uint32_t)i);
+        }
 
-    const bool applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0;
-    if (applySpelunkerEffect)
+        particles_->Render(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+
+        if (!lines.empty())
+        {
+          ctx.BindGraphicsPipeline(debugLinesPipeline.GetPipeline());
+          ctx.SetPushConstants(DebugLinesPushConstants{
+            .vertexBufferIndex   = lineVertexBuffer->GetDeviceBuffer().GetResourceHandle().index,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .useGpuVertexBuffer  = 0,
+          });
+          ctx.Draw(uint32_t(lines.size() * 2), 1, 0, 0);
+        }
+
+        if (!billboards.empty())
+        {
+          ctx.BindGraphicsPipeline(billboardsPipeline.GetPipeline());
+          ctx.SetPushConstants(BillboardPushConstants{
+            .billboardsIndex     = billboardInstanceBuffer->GetDeviceBuffer().GetResourceHandle().index,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .cameraRight         = {view_from_world[0][0], view_from_world[1][0], view_from_world[2][0]},
+            .cameraUp            = {view_from_world[0][1], view_from_world[1][1], view_from_world[2][1]},
+            .texSampler          = voxelSampler,
+          });
+          ctx.Draw(uint32_t(billboards.size() * 6), 1, 0, 0);
+        }
+
+        if (!billboardSprites.empty())
+        {
+          ctx.BindGraphicsPipeline(billboardSpritesPipeline.GetPipeline());
+          ctx.SetPushConstants(BillboardPushConstants{
+            .billboardsIndex     = billboardSpriteInstanceBuffer->GetDeviceBuffer().GetResourceHandle().index,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .cameraRight         = {view_from_world[0][0], view_from_world[1][0], view_from_world[2][0]},
+            .cameraUp            = {view_from_world[0][1], view_from_world[1][1], view_from_world[2][1]},
+            .texSampler          = voxelSampler,
+          });
+          ctx.Draw(uint32_t(billboardSprites.size() * 6), 1, 0, 0);
+        }
+
+        // GPU-driven debug shapes
+        {
+          // GPU debug lines
+          // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, aabbDrawCommand), 1, 0);
+          // ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, rectDrawCommand), 1, 0);
+          ctx.BindGraphicsPipeline(debugLinesPipeline.GetPipeline());
+          ctx.SetPushConstants(DebugLinesPushConstants{
+            .vertexBufferIndex   = debugLineBuffer->GetResourceHandle().index,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .useGpuVertexBuffer  = 1,
+          });
+          ctx.DrawIndirect(debugRenderingInfo.value(), offsetof(DebugDrawData_t, lineDrawCommand), 1, 0);
+
+          // GPU debug meshes
+          // ctx.DrawIndirect();
+        }
+      }
+      ctx.EndRendering();
+
+      ctx.ImageBarrier(*frame.gAlbedo, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ctx.ImageBarrier(*frame.gNormal, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ctx.ImageBarrier(*frame.gRadiance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
+      ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_GENERAL);
+    },
+    "AllSky",
+    "ParticlesUpdate");
+
+  // Indirect illuminance
+  if (giMethod_ == GIMethod::PerPixelPathTracing)
+  {
+    scheduler->AddPass(
+      "PathTracing",
+      [&]
+      {
+        ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
+        ctx.SetPushConstants(PerPixelPathtracerArguments{
+          .voxels              = voxels,
+          .gDepth              = frame.gDepth->ImageView().GetTexture2D(),
+          .gNormal             = frame.gNormal->ImageView().GetTexture2D(),
+          .gIndirectIrradiance = frame.gIlluminance->ImageView().GetImage2D(),
+          .internalColorSpace  = COLOR_SPACE_sRGB_LINEAR,
+          .uniformBufferIndex  = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .noiseTexture        = noiseTexture->ImageView().GetTexture2D(),
+          .samples             = uint32_t(pathTracerSamples),
+          .bounces             = uint32_t(pathTracerBounces),
+        });
+        ctx.DispatchInvocations(frame.gIlluminance->GetCreateInfo().extent);
+
+        // Denoise. Issues barriers internally.
+        bilateral_.DenoiseIlluminance(
+          {
+            .sceneAlbedo              = &frame.gAlbedo.value(),
+            .sceneNormal              = &frame.gNormal.value(),
+            .sceneDepth               = &frame.gDepth.value(),
+            .sceneIlluminance         = &frame.gIlluminance.value(),
+            .sceneIlluminancePingPong = &frame.gIlluminancePingPong.value(),
+            .clip_from_view           = clip_from_view,
+            .world_from_clip          = glm::inverse(clip_from_world),
+            .cameraPos                = position,
+          },
+          commandBuffer);
+      },
+      "RenderOpaque",
+      "ShadowMaps");
+
+    scheduler->AddPass("IndirectLighting", nullptr, "PathTracing");
+  }
+
+  scheduler->AddPass("FrameGIlluminance", [&] { ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL); }, "IndirectLighting");
+
+  scheduler->AddPass(
+    "gSpecial",
+    [&]
     {
-      ctx.ImageBarrierDiscard(*frame.gSpecial, VK_IMAGE_LAYOUT_GENERAL);
-    }
+      if (Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0)
+      {
+        ctx.ImageBarrierDiscard(*frame.gSpecial, VK_IMAGE_LAYOUT_GENERAL);
+      }
+    },
+    "RenderOpaque");
 
-    // Translucency pass
+  // Translucency pass
+  scheduler->AddPass(
+    "TranslucentVoxels",
+    [&]
     {
       ctx.BindComputePipeline(translucentVoxelsPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
@@ -1573,43 +1649,60 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .giMethod           = uint32_t(giMethod_),
       });
       ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
-    }
+    },
+    "RenderOpaque");
 
-    // Spelunker effect, if active
-    if (applySpelunkerEffect)
+  // Spelunker effect, if active
+  scheduler->AddPass(
+    "SpelunkerEffect",
+    [&]
     {
-      auto voxels2              = voxels;
-      voxels2.materialBufferIdx = voxelMaterialBufferSpelunker->GetResourceHandle().index;
+      if (Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0)
+      {
+        auto voxels2              = voxels;
+        voxels2.materialBufferIdx = voxelMaterialBufferSpelunker->GetResourceHandle().index;
 
-      ctx.BindComputePipeline(spelunkerEffectPipeline.GetPipeline());
-      ctx.SetPushConstants(ShadingPushConstants{
-        .voxels               = voxels2,
-        .sceneColor           = frame.sceneColorInternalRes->ImageView().GetImage2D(),
-        .internalColorSpace   = COLOR_SPACE_sRGB_LINEAR,
-        .uniformBufferIndex   = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-        .ddgi                 = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
-        .samplerr             = linearClampSampler,
-        .giMethod             = uint32_t(giMethod_),
-      });
-      ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
-    }
+        ctx.BindComputePipeline(spelunkerEffectPipeline.GetPipeline());
+        ctx.SetPushConstants(ShadingPushConstants{
+          .voxels             = voxels2,
+          .sceneColor         = frame.sceneColorInternalRes->ImageView().GetImage2D(),
+          .internalColorSpace = COLOR_SPACE_sRGB_LINEAR,
+          .uniformBufferIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+          .ddgi               = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+          .samplerr           = linearClampSampler,
+          .giMethod           = uint32_t(giMethod_),
+        });
+        ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
+      }
+    },
+    "IndirectLighting",
+    "gSpecial");
 
-    Fvog::Texture* aoTexture = &whiteTexture_.value();
-    if (giMethod_ == GIMethod::DDGI && enableAo_)
+  Fvog::Texture* aoTexture = &whiteTexture_.value();
+  scheduler->AddPass(
+    "AmbientOcclusion",
+    [&]
     {
-      aoParams_.voxels          = voxels;
-      aoParams_.inputDepth      = &frame.gDepth.value();
-      aoParams_.inputNormal     = &frame.gNormal.value();
-      aoParams_.outputSize      = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
-      aoParams_.frameNumber     = uint32_t(Fvog::GetDevice().frameNumber);
-      aoParams_.clip_from_view  = clip_from_view;
-      aoParams_.world_from_clip = glm::inverse(clip_from_world);
-      aoParams_.cameraPosWS     = position;
+      if (giMethod_ == GIMethod::DDGI && enableAo_)
+      {
+        aoParams_.voxels          = voxels;
+        aoParams_.inputDepth      = &frame.gDepth.value();
+        aoParams_.inputNormal     = &frame.gNormal.value();
+        aoParams_.outputSize      = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
+        aoParams_.frameNumber     = uint32_t(Fvog::GetDevice().frameNumber);
+        aoParams_.clip_from_view  = clip_from_view;
+        aoParams_.world_from_clip = glm::inverse(clip_from_world);
+        aoParams_.cameraPosWS     = position;
 
-      aoTexture = &ao_.ComputeAO(commandBuffer, aoParams_);
-    }
+        aoTexture = &ao_.ComputeAO(commandBuffer, aoParams_);
+      }
+    },
+    "RenderOpaque");
 
-    // Shade image.
+  // Shade image.
+  scheduler->AddPass(
+    "ShadeDeferred",
+    [&]
     {
       auto marker = ctx.MakeScopedDebugMarker("Shade deferred");
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
@@ -1621,298 +1714,394 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .ddgi                 = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
         .samplerr             = linearClampSampler,
         .giMethod             = uint32_t(giMethod_),
-        .applySpelunkerEffect = applySpelunkerEffect,
+        .applySpelunkerEffect = Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0,
         .ambientOcclusion     = aoTexture->ImageView().GetTexture2D(),
       });
       ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
-    }
+    },
+    "AmbientOcclusion",
+    "SpelunkerEffect",
+    "RenderOpaque",
+    "TranslucentVoxels",
+    "FrameGIlluminance",
+    "ShadowMaps",
+    "AllSky");
 
-    ctx.Barrier();
-
-    if (enableSsgi_)
+  scheduler->AddPass(
+    "SSGI",
+    [&]
     {
-      ssgiParams_.inputAlbedo           = &frame.gAlbedo.value();
-      ssgiParams_.inputDepth            = &frame.gDepth.value();
-      ssgiParams_.inputNormal           = &frame.gNormal.value();
-      ssgiParams_.inputDiffuseLuminance = &frame.sceneColorInternalRes.value();
-      ssgiParams_.outputSize            = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
-      ssgiParams_.frameNumber           = uint32_t(Fvog::GetDevice().frameNumber);
-      ssgiParams_.view_from_world       = view_from_world;
-      ssgiParams_.clip_from_view        = clip_from_view;
-      ssgiParams_.debugDraw             = debugRenderingInfo->GetDeviceAddress();
-
-      auto& sceneColorWithSSGI = ssgi_.Dispatch(commandBuffer, ssgiParams_);
-      std::swap(sceneColorWithSSGI, frame.sceneColorInternalRes.value());
-    }
-
-    ctx.Barrier();
-    ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
-    ctx.ImageBarrier(frame.gDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-
-    {
-      auto marker2 = ctx.MakeScopedDebugMarker("Clouds");
-      rayMarchedClouds_->Render(commandBuffer,
-        {
-          .gDepth              = &frame.gDepth.value(),
-          .renderWidth         = uint32_t(renderInternalWidth * cloudsUpscaleRatio.Get()),
-          .renderHeight        = uint32_t(renderInternalHeight * cloudsUpscaleRatio.Get()),
-          .upscaleWidth        = renderInternalWidth,
-          .clip_from_view      = clip_from_view,
-          .view_from_world     = view_from_world,
-          .clip_from_view_old  = clip_from_view_old,
-          .view_from_world_old = view_from_world_old,
-          .distForMinRaySteps  = (float)cloudsDistForMinRayStepCount.Get(),
-          .distForMaxRaySteps  = (float)cloudsDistForMaxRayStepCount.Get(),
-          .numRayMarchStepsMin = uint32_t(cloudsNumRayMarchStepsMin.Get()),
-          .numRayMarchStepsMax = uint32_t(cloudsNumRayMarchStepsMax.Get()),
-          .sunDirection        = skyParameters.sunDir,
-          .sunIntensity        = skyParameters.sunColor * skyParameters.sunBrightness,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .ddgi                = ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress(),
-          .frameNumber         = frameNumber,
-          .zNear               = (float)cameraNearPlane.Get(),
-        });
-      weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt.game;
-      ctx.Barrier();
-      rayMarchedClouds_->Upscale(commandBuffer,
-        {
-          .gDepth        = &frame.gDepth.value(),
-          .gDepthPrev    = &frame.gDepthPrev.value(),
-          .upscaleWidth  = renderInternalWidth,
-          .upscaleHeight = renderInternalHeight,
-          .zNear         = (float)cameraNearPlane.Get(),
-        });
-      ctx.Barrier();
-      rayMarchedClouds_->Composite(commandBuffer,
-        {
-          .globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-          .gRadianceIn    = &frame.sceneColorInternalRes.value(),
-          .gRadianceOut   = &frame.sceneColorInternalRes.value(),
-        });
-      ctx.Barrier();
-    }
-
-    if (!debugDisableFog)
-    {
-      auto markerFog = ctx.MakeScopedDebugMarker("Froxel fog");
-
-      ctx.ImageBarrierDiscard(inScatteringAndTransmittanceVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
-      ctx.ImageBarrierDiscard(fogColorAndDensityVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
-      const auto nearVolume            = 1.5f;
-      const auto farVolume             = 1000.0f;
-      const auto clip_from_view_volume = glm::perspectiveZO((float)cameraFovyRadians.Get(), aspectRatio, nearVolume, farVolume);
-      fog_.UpdateUniforms(commandBuffer, world,
-        {
-          .viewPos           = position,
-          .time              = 0,
-          .invViewProjScene  = glm::inverse(clip_from_world),
-          .viewProjVolume    = clip_from_view_volume * view_from_world,
-          .invViewProjVolume = glm::inverse(clip_from_view_volume * view_from_world),
-          //.sunViewProj                          =,
-          //.sunDir                               =,
-          .volumeNearPlane      = nearVolume,
-          .volumeFarPlane       = farVolume,
-          .useScatteringTexture = false,
-          .anisotropyG          = 0,
-          .noiseOffsetScale     = 1,
-          .frog                 = false,
-          .groundFogDensity     = 0.25f,
-          //.sunColor                             =,
-          .inSceneLuminance                     = frame.sceneColorInternalRes->ImageView().GetTexture2D(),
-          .gDepth                               = frame.gDepth->ImageView().GetTexture2D(),
-          .inScatteringAndTransmittanceVolume   = inScatteringAndTransmittanceVolume->ImageView().GetTexture3D(),
-          .fogDensityVolume                     = fogColorAndDensityVolume->ImageView().GetTexture3D(),
-          .blueNoise                            = noiseTexture->ImageView().GetTexture2D(),
-          .inScatteringAndTransmittanceVolumeRW = inScatteringAndTransmittanceVolume->ImageView().GetImage3D(),
-          .fogDensityVolumeRW                   = fogColorAndDensityVolume->ImageView().GetImage3D(),
-          .outSceneLuminance                    = frame.sceneColorInternalRes->ImageView().GetImage2D(),
-          .linearSampler                        = linearClampSampler,
-          //.mieScattering                        = ,
-          .globalSurfaceHeight = globalSurfaceHeightImage->ImageView().GetTexture2D(),
-          .globalSurfaceFog = globalSurfaceFogImage->ImageView().GetTexture2D(),
-          .globalFog = globalFogImage->ImageView().GetTexture3D(),
-          .ddgi   = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
-          .voxels = voxels,
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .sunSelfShadowSteps = sunSelfShadowSteps,
-          .sunSelfShadowDist = sunSelfShadowDist,
-        });
-      fog_.InjectFog(commandBuffer, fogColorAndDensityVolume.value());
-      fog_.MarchVolume(commandBuffer, fogColorAndDensityVolume.value(), inScatteringAndTransmittanceVolume.value());
-      fog_.ApplyDeferred(commandBuffer, frame.sceneColorInternalRes.value(), frame.gDepth.value(), frame.sceneColorInternalRes.value(), inScatteringAndTransmittanceVolume.value());
-    }
-    ctx.Barrier();
-  }
-
-  // DDGI debug probes.
-  if (ddgiDebugView_ != DDGIDebugView::None)
-  {
-    //auto marker = ctx.MakeScopedDebugMarker("DDGI Debug Probes");
-    auto sceneColorAttachment = Fvog::RenderColorAttachment{
-      .texture = frame.sceneColorInternalRes.value().ImageView(),
-      .loadOp  = VK_ATTACHMENT_LOAD_OP_LOAD,
-    };
-    auto depthAttachment = Fvog::RenderDepthStencilAttachment{
-      .texture    = frame.gDepth.value().ImageView(),
-      .loadOp     = VK_ATTACHMENT_LOAD_OP_LOAD,
-    };
-    ctx.BeginRendering({
-      .name             = "DDGI Debug Probes",
-      .colorAttachments = {&sceneColorAttachment, 1},
-      .depthAttachment  = depthAttachment,
-    });
-
-    ctx.BindGraphicsPipeline(ddgi.debugProbesPipeline.GetPipeline());
-    const auto& icosphere_3 = g_meshes.at("icosphere_3");
-    for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
-    {
-      if (ddgiDebugShowOnlyThisCascade_ < 0 || ddgiDebugShowOnlyThisCascade_ == cascade)
+      if (enableSsgi_)
       {
-        ctx.SetPushConstants(DebugProbesArguments{
-          .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
-          .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
-          .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
-          .samplerr            = linearClampSampler,
-          .debugMode           = uint32_t(ddgiDebugView_),
-          .probeSize           = ddgiDebugProbeSize_,
-          .cascade             = cascade,
-        });
-        ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-        const auto& res = ddgi.args.gridInfo[cascade].gridResolution;
-        ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+        ssgiParams_.inputAlbedo           = &frame.gAlbedo.value();
+        ssgiParams_.inputDepth            = &frame.gDepth.value();
+        ssgiParams_.inputNormal           = &frame.gNormal.value();
+        ssgiParams_.inputDiffuseLuminance = &frame.sceneColorInternalRes.value();
+        ssgiParams_.outputSize            = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
+        ssgiParams_.frameNumber           = uint32_t(Fvog::GetDevice().frameNumber);
+        ssgiParams_.view_from_world       = view_from_world;
+        ssgiParams_.clip_from_view        = clip_from_view;
+        ssgiParams_.debugDraw             = debugRenderingInfo->GetDeviceAddress();
+
+        auto& sceneColorWithSSGI = ssgi_.Dispatch(commandBuffer, ssgiParams_);
+        std::swap(sceneColorWithSSGI, frame.sceneColorInternalRes.value());
       }
-    }
+    },
+    "ShadeDeferred",
+    "IndirectLighting");
 
-    ctx.EndRendering();
+  if (giMethod_ == GIMethod::None)
+  {
+    scheduler->AddPass("IndirectLighting", nullptr);
   }
 
-  ctx.Barrier();
-
-  {
-    ZoneScopedN("Auto Exposure");
-    autoExposure_.Apply(commandBuffer,
-      {
-        .image           = frame.sceneColorInternalRes.value(),
-        .exposureBuffer  = exposureBuffer,
-        .deltaTime       = float(dt.game),
-        .adjustmentSpeed = 1,
-        .targetLuminance = 0.2140f,
-        .logMinLuminance = -15.0f,
-        .logMaxLuminance = 15.0f,
-      });
-  }
-
-  ctx.Barrier();
-
-  #ifdef FROGRENDER_FSR2_ENABLE
-  if (fsr2Enable.Get() != 0)
-  {
-    auto marker = ctx.MakeScopedDebugMarker("FSR 2");
-
-    ctx.ImageBarrier(*frame.sceneColorInternalRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gMotion, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrier(*frame.gReactiveMask, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    ctx.ImageBarrierDiscard(*frame.sceneColorOutputRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    float jitterX{};
-    float jitterY{};
-    ffxFsr2GetJitterOffset(&jitterX, &jitterY, (int32_t)Fvog::GetDevice().frameNumber, ffxFsr2GetJitterPhaseCount(renderInternalWidth, renderOutputWidth));
-
-    FfxFsr2DispatchDescription dispatchDesc{
-      .commandList                = ffxGetCommandListVK(commandBuffer),
-      .color                      = ffxGetTextureResourceVK(&fsr2Context,
-        frame.sceneColorInternalRes->Image(),
-        frame.sceneColorInternalRes->ImageView(),
-        renderInternalWidth,
-        renderInternalHeight,
-        Fvog::detail::FormatToVk(frame.sceneColorInternalRes->GetCreateInfo().format)),
-      .depth                      = ffxGetTextureResourceVK(&fsr2Context,
-        frame.gDepth->Image(),
-        frame.gDepth->ImageView(),
-        renderInternalWidth,
-        renderInternalHeight,
-        Fvog::detail::FormatToVk(frame.gDepth->GetCreateInfo().format)),
-      .motionVectors              = ffxGetTextureResourceVK(&fsr2Context,
-        frame.gMotion->Image(),
-        frame.gMotion->ImageView(),
-        renderInternalWidth,
-        renderInternalHeight,
-        Fvog::detail::FormatToVk(frame.gMotion->GetCreateInfo().format)),
-      .exposure                   = {},
-      .reactive                   = ffxGetTextureResourceVK(&fsr2Context,
-        frame.gReactiveMask->Image(),
-        frame.gReactiveMask->ImageView(),
-        renderInternalWidth,
-        renderInternalHeight,
-        Fvog::detail::FormatToVk(frame.gReactiveMask->GetCreateInfo().format)),
-      .transparencyAndComposition = {},
-      .output                     = ffxGetTextureResourceVK(&fsr2Context,
-        frame.sceneColorOutputRes->Image(),
-        frame.sceneColorOutputRes->ImageView(),
-        renderOutputWidth,
-        renderOutputHeight,
-        Fvog::detail::FormatToVk(frame.sceneColorOutputRes->GetCreateInfo().format)),
-      .jitterOffset               = {jitterX, jitterY},
-      .motionVectorScale          = {float(renderInternalWidth), float(renderInternalHeight)},
-      .renderSize                 = {renderInternalWidth, renderInternalHeight},
-      .enableSharpening           = fsr2Sharpness != 0,
-      .sharpness                  = fsr2Sharpness,
-      .frameTimeDelta             = static_cast<float>(dt.real * 1000.0),
-      .preExposure                = 1,
-      .reset                      = false,
-      .cameraNear                 = std::numeric_limits<float>::max(),
-      .cameraFar                  = (float)cameraNearPlane.Get(),
-      .cameraFovAngleVertical     = (float)cameraFovyRadians.Get(),
-      .viewSpaceToMetersFactor    = 1,
-    };
-
-    if (auto err = ffxFsr2ContextDispatch(&fsr2Context, &dispatchDesc); err != FFX_OK)
+  scheduler->AddPass(
+    "PrepSceneColor",
+    [&]
     {
-      spdlog::error("FSR 2 dispatch error: {}", err);
-    }
+      ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrier(frame.gDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+    },
+    "ShadeDeferred",
+    "SSGI");
 
-    // Re-apply states that application assumes
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Fvog::GetDevice().defaultPipelineLayout, 0, 1, &Fvog::GetDevice().descriptorSet_, 0, nullptr);
-    *frame.sceneColorOutputRes->currentLayout = VK_IMAGE_LAYOUT_GENERAL;
-  }
-#endif
-
-  ctx.Barrier();
-
-  if (enableBloom)
   {
-    ZoneScopedN("Bloom");
-    bloom_.Apply(commandBuffer,
+    scheduler->AddPass(
+      "RayMarchedClouds",
+      [&]
       {
-        .target                      = fsr2Enable.Get() ? frame.sceneColorOutputRes.value() : frame.sceneColorInternalRes.value(),
-        .scratchTexture              = frame.sceneColorBloomScratch.value(),
-        .passes                      = 6,
-        .strength                    = 1.0f / 16.0f,
-        .width                       = 1,
-        .useLowPassFilterOnFirstPass = true,
-      });
+        rayMarchedClouds_->Render(commandBuffer,
+          {
+            .gDepth              = &frame.gDepth.value(),
+            .renderWidth         = uint32_t(renderInternalWidth * cloudsUpscaleRatio.Get()),
+            .renderHeight        = uint32_t(renderInternalHeight * cloudsUpscaleRatio.Get()),
+            .upscaleWidth        = renderInternalWidth,
+            .clip_from_view      = clip_from_view,
+            .view_from_world     = view_from_world,
+            .clip_from_view_old  = clip_from_view_old,
+            .view_from_world_old = view_from_world_old,
+            .distForMinRaySteps  = (float)cloudsDistForMinRayStepCount.Get(),
+            .distForMaxRaySteps  = (float)cloudsDistForMaxRayStepCount.Get(),
+            .numRayMarchStepsMin = uint32_t(cloudsNumRayMarchStepsMin.Get()),
+            .numRayMarchStepsMax = uint32_t(cloudsNumRayMarchStepsMax.Get()),
+            .sunDirection        = skyParameters.sunDir,
+            .sunIntensity        = skyParameters.sunColor * skyParameters.sunBrightness,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .ddgi                = ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress(),
+            .frameNumber         = frameNumber,
+            .zNear               = (float)cameraNearPlane.Get(),
+          });
+        weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt.game;
+      },
+      "RenderOpaque",
+      "PrepSceneColor",
+      "IndirectLighting",
+      "AllSky");
+
+    scheduler->AddPass(
+      "RayMarchedCloudsUpscale",
+      [&]
+      {
+        rayMarchedClouds_->Upscale(commandBuffer,
+          {
+            .gDepth        = &frame.gDepth.value(),
+            .gDepthPrev    = &frame.gDepthPrev.value(),
+            .upscaleWidth  = renderInternalWidth,
+            .upscaleHeight = renderInternalHeight,
+            .zNear         = (float)cameraNearPlane.Get(),
+          });
+      },
+      "RayMarchedClouds");
+
+    scheduler->AddPass(
+      "RayMarchedCloudsComposite",
+      [&]
+      {
+        rayMarchedClouds_->Composite(commandBuffer,
+          {
+            .globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+            .gRadianceIn    = &frame.sceneColorInternalRes.value(),
+            .gRadianceOut   = &frame.sceneColorInternalRes.value(),
+          });
+      },
+      "RayMarchedCloudsUpscale");
   }
 
-  ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
-  ctx.ImageBarrierDiscard(frame.sceneColorTonemapped.value(), VK_IMAGE_LAYOUT_GENERAL);
+  scheduler->AddPass(
+    "Fog",
+    [&]
+    {
+      if (!debugDisableFog)
+      {
+        ctx.ImageBarrierDiscard(inScatteringAndTransmittanceVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
+        ctx.ImageBarrierDiscard(fogColorAndDensityVolume.value(), VK_IMAGE_LAYOUT_GENERAL);
+        const auto nearVolume            = 1.5f;
+        const auto farVolume             = 1000.0f;
+        const auto clip_from_view_volume = glm::perspectiveZO((float)cameraFovyRadians.Get(), aspectRatio, nearVolume, farVolume);
+        fog_.UpdateUniforms(commandBuffer,
+          world,
+          {
+            .viewPos           = position,
+            .time              = 0,
+            .invViewProjScene  = glm::inverse(clip_from_world),
+            .viewProjVolume    = clip_from_view_volume * view_from_world,
+            .invViewProjVolume = glm::inverse(clip_from_view_volume * view_from_world),
+            //.sunViewProj                          =,
+            //.sunDir                               =,
+            .volumeNearPlane      = nearVolume,
+            .volumeFarPlane       = farVolume,
+            .useScatteringTexture = false,
+            .anisotropyG          = 0,
+            .noiseOffsetScale     = 1,
+            .frog                 = false,
+            .groundFogDensity     = 0.25f,
+            //.sunColor                             =,
+            .inSceneLuminance                     = frame.sceneColorInternalRes->ImageView().GetTexture2D(),
+            .gDepth                               = frame.gDepth->ImageView().GetTexture2D(),
+            .inScatteringAndTransmittanceVolume   = inScatteringAndTransmittanceVolume->ImageView().GetTexture3D(),
+            .fogDensityVolume                     = fogColorAndDensityVolume->ImageView().GetTexture3D(),
+            .blueNoise                            = noiseTexture->ImageView().GetTexture2D(),
+            .inScatteringAndTransmittanceVolumeRW = inScatteringAndTransmittanceVolume->ImageView().GetImage3D(),
+            .fogDensityVolumeRW                   = fogColorAndDensityVolume->ImageView().GetImage3D(),
+            .outSceneLuminance                    = frame.sceneColorInternalRes->ImageView().GetImage2D(),
+            .linearSampler                        = linearClampSampler,
+            //.mieScattering                        = ,
+            .globalSurfaceHeight = globalSurfaceHeightImage->ImageView().GetTexture2D(),
+            .globalSurfaceFog    = globalSurfaceFogImage->ImageView().GetTexture2D(),
+            .globalFog           = globalFogImage->ImageView().GetTexture3D(),
+            .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+            .voxels              = voxels,
+            .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+            .sunSelfShadowSteps  = sunSelfShadowSteps,
+            .sunSelfShadowDist   = sunSelfShadowDist,
+          });
+        fog_.InjectFog(commandBuffer, fogColorAndDensityVolume.value());
+        fog_.MarchVolume(commandBuffer, fogColorAndDensityVolume.value(), inScatteringAndTransmittanceVolume.value());
+        fog_.ApplyDeferred(commandBuffer,
+          frame.sceneColorInternalRes.value(),
+          frame.gDepth.value(),
+          frame.sceneColorInternalRes.value(),
+          inScatteringAndTransmittanceVolume.value());
+      }
+    },
+    "IndirectLighting",
+    "RayMarchedCloudsComposite",
+    "AllSky");
 
-  // Tonemap
-  {
-    ZoneScopedN("Tonemap");
-    ctx.BindComputePipeline(tonemapPipeline.GetPipeline());
-    ctx.SetPushConstants(shared::TonemapArguments{
-      .sceneColor         = (fsr2Enable.Get() ? frame.sceneColorOutputRes : frame.sceneColorInternalRes)->ImageView().GetTexture2D(),
-      .noise = noiseTexture->ImageView().GetTexture2D(),
-      .nearestSampler = nearestSampler,
-      .linearClampSampler = linearClampSampler,
-      .exposure = exposureBuffer,
-      .tonemapUniforms = tonemapUniformBuffer.GetDeviceBuffer(),
-      .outputImage = frame.sceneColorTonemapped->ImageView().GetImage2D(),
-      .tonyMcMapface = tonyMcMapfaceLut->ImageView().GetTexture3D(),
-    });
-    ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
-  }
+  scheduler->AddPass("DdgiDebugProbes",
+    [&]
+    {
+      if (ddgiDebugView_ != DDGIDebugView::None)
+      {
+        auto sceneColorAttachment = Fvog::RenderColorAttachment{
+          .texture = frame.sceneColorInternalRes.value().ImageView(),
+          .loadOp  = VK_ATTACHMENT_LOAD_OP_LOAD,
+        };
+        auto depthAttachment = Fvog::RenderDepthStencilAttachment{
+          .texture = frame.gDepth.value().ImageView(),
+          .loadOp  = VK_ATTACHMENT_LOAD_OP_LOAD,
+        };
+        ctx.BeginRendering({
+          .name             = "DDGI Debug Probes",
+          .colorAttachments = {&sceneColorAttachment, 1},
+          .depthAttachment  = depthAttachment,
+        });
+
+        ctx.BindGraphicsPipeline(ddgi.debugProbesPipeline.GetPipeline());
+        const auto& icosphere_3 = g_meshes.at("icosphere_3");
+        for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
+        {
+          if (ddgiDebugShowOnlyThisCascade_ < 0 || ddgiDebugShowOnlyThisCascade_ == cascade)
+          {
+            ctx.SetPushConstants(DebugProbesArguments{
+              .vertexBuffer        = icosphere_3.vertexBuffer.value().GetDeviceAddress(),
+              .ddgi                = ddgi.argsBuffer.value().GetDeviceBuffer().GetDeviceAddress(),
+              .globalUniformsIndex = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
+              .samplerr            = linearClampSampler,
+              .debugMode           = uint32_t(ddgiDebugView_),
+              .probeSize           = ddgiDebugProbeSize_,
+              .cascade             = cascade,
+            });
+            ctx.BindIndexBuffer(icosphere_3.indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+            const auto& res = ddgi.args.gridInfo[cascade].gridResolution;
+            ctx.DrawIndexed(uint32_t(icosphere_3.indices.size()), res.x * res.y * res.z, 0, 0, 0);
+          }
+        }
+
+        ctx.EndRendering();
+      }
+    },
+    "IndirectLighting",
+    "Fog");
+
+  scheduler->AddPass("AutoExposure",
+    [&]
+    {
+      ZoneScopedN("Auto Exposure");
+      autoExposure_.Apply(commandBuffer,
+        {
+          .image           = frame.sceneColorInternalRes.value(),
+          .exposureBuffer  = exposureBuffer,
+          .deltaTime       = float(dt.game),
+          .adjustmentSpeed = 1,
+          .targetLuminance = 0.2140f,
+          .logMinLuminance = -15.0f,
+          .logMaxLuminance = 15.0f,
+        });
+    },
+    "DdgiDebugProbes");
+
+  scheduler->AddPass(
+    "TAAU",
+    [&]
+    {
+#ifdef FROGRENDER_FSR2_ENABLE
+      if (fsr2Enable.Get() != 0)
+      {
+        auto marker = ctx.MakeScopedDebugMarker("FSR 2");
+
+        ctx.ImageBarrier(*frame.sceneColorInternalRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ctx.ImageBarrier(*frame.gMotion, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ctx.ImageBarrier(*frame.gReactiveMask, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        ctx.ImageBarrierDiscard(*frame.sceneColorOutputRes, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        float jitterX{};
+        float jitterY{};
+        ffxFsr2GetJitterOffset(&jitterX, &jitterY, (int32_t)Fvog::GetDevice().frameNumber, ffxFsr2GetJitterPhaseCount(renderInternalWidth, renderOutputWidth));
+
+        FfxFsr2DispatchDescription dispatchDesc{
+          .commandList                = ffxGetCommandListVK(commandBuffer),
+          .color                      = ffxGetTextureResourceVK(&fsr2Context,
+            frame.sceneColorInternalRes->Image(),
+            frame.sceneColorInternalRes->ImageView(),
+            renderInternalWidth,
+            renderInternalHeight,
+            Fvog::detail::FormatToVk(frame.sceneColorInternalRes->GetCreateInfo().format)),
+          .depth                      = ffxGetTextureResourceVK(&fsr2Context,
+            frame.gDepth->Image(),
+            frame.gDepth->ImageView(),
+            renderInternalWidth,
+            renderInternalHeight,
+            Fvog::detail::FormatToVk(frame.gDepth->GetCreateInfo().format)),
+          .motionVectors              = ffxGetTextureResourceVK(&fsr2Context,
+            frame.gMotion->Image(),
+            frame.gMotion->ImageView(),
+            renderInternalWidth,
+            renderInternalHeight,
+            Fvog::detail::FormatToVk(frame.gMotion->GetCreateInfo().format)),
+          .exposure                   = {},
+          .reactive                   = ffxGetTextureResourceVK(&fsr2Context,
+            frame.gReactiveMask->Image(),
+            frame.gReactiveMask->ImageView(),
+            renderInternalWidth,
+            renderInternalHeight,
+            Fvog::detail::FormatToVk(frame.gReactiveMask->GetCreateInfo().format)),
+          .transparencyAndComposition = {},
+          .output                     = ffxGetTextureResourceVK(&fsr2Context,
+            frame.sceneColorOutputRes->Image(),
+            frame.sceneColorOutputRes->ImageView(),
+            renderOutputWidth,
+            renderOutputHeight,
+            Fvog::detail::FormatToVk(frame.sceneColorOutputRes->GetCreateInfo().format)),
+          .jitterOffset               = {jitterX, jitterY},
+          .motionVectorScale          = {float(renderInternalWidth), float(renderInternalHeight)},
+          .renderSize                 = {renderInternalWidth, renderInternalHeight},
+          .enableSharpening           = fsr2Sharpness != 0,
+          .sharpness                  = fsr2Sharpness,
+          .frameTimeDelta             = static_cast<float>(dt.real * 1000.0),
+          .preExposure                = 1,
+          .reset                      = false,
+          .cameraNear                 = std::numeric_limits<float>::max(),
+          .cameraFar                  = (float)cameraNearPlane.Get(),
+          .cameraFovAngleVertical     = (float)cameraFovyRadians.Get(),
+          .viewSpaceToMetersFactor    = 1,
+        };
+
+        if (auto err = ffxFsr2ContextDispatch(&fsr2Context, &dispatchDesc); err != FFX_OK)
+        {
+          spdlog::error("FSR 2 dispatch error: {}", err);
+        }
+
+        // Re-apply states that application assumes
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Fvog::GetDevice().defaultPipelineLayout, 0, 1, &Fvog::GetDevice().descriptorSet_, 0, nullptr);
+        *frame.sceneColorOutputRes->currentLayout = VK_IMAGE_LAYOUT_GENERAL;
+      }
+#endif
+    },
+    "AutoExposure");
+
+  scheduler->AddPass(
+    "Bloom",
+    [&]
+    {
+      if (enableBloom)
+      {
+        ZoneScopedN("Bloom");
+        bloom_.Apply(commandBuffer,
+          {
+            .target                      = fsr2Enable.Get() ? frame.sceneColorOutputRes.value() : frame.sceneColorInternalRes.value(),
+            .scratchTexture              = frame.sceneColorBloomScratch.value(),
+            .passes                      = 6,
+            .strength                    = 1.0f / 16.0f,
+            .width                       = 1,
+            .useLowPassFilterOnFirstPass = true,
+          });
+      }
+    },
+    "TAAU");
+
+  scheduler->AddPass(
+    "Tonemap",
+    [&]
+    {
+      ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
+      ctx.ImageBarrierDiscard(frame.sceneColorTonemapped.value(), VK_IMAGE_LAYOUT_GENERAL);
+
+      // Tonemap
+      {
+        ZoneScopedN("Tonemap");
+        ctx.BindComputePipeline(tonemapPipeline.GetPipeline());
+        ctx.SetPushConstants(shared::TonemapArguments{
+          .sceneColor         = (fsr2Enable.Get() ? frame.sceneColorOutputRes : frame.sceneColorInternalRes)->ImageView().GetTexture2D(),
+          .noise              = noiseTexture->ImageView().GetTexture2D(),
+          .nearestSampler     = nearestSampler,
+          .linearClampSampler = linearClampSampler,
+          .exposure           = exposureBuffer,
+          .tonemapUniforms    = tonemapUniformBuffer.GetDeviceBuffer(),
+          .outputImage        = frame.sceneColorTonemapped->ImageView().GetImage2D(),
+          .tonyMcMapface      = tonyMcMapfaceLut->ImageView().GetTexture3D(),
+        });
+        ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
+      }
+    },
+    "Bloom");
+
+  //{
+  //  auto file = std::ofstream("renderer.dot", std::ios::out | std::ios::binary | std::ios::trunc);
+  //  file << scheduler->GenerateDotGraph();
+  //}
+  //__debugbreak();
+
+  scheduler->Execute({
+    .onPassBegin =
+      [&](std::any&)
+    {
+      // vkCmdBeginDebugUtilsLabelEXT(commandBuffer,
+      //   Fvog::detail::Address(VkDebugUtilsLabelEXT{
+      //     .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+      //     .pLabelName = "pass",
+      //     .color      = {1, 1, 1, 1},
+      //   }));
+    },
+    .onPassEnd =
+      [&](std::any&)
+    {
+      ctx.Barrier();
+      // vkCmdEndDebugUtilsLabelEXT(commandBuffer);
+    },
+    .userData = {},
+  });
 
   std::swap(frame.gDepth, frame.gDepthPrev);
   clip_from_world_old            = clip_from_world;
