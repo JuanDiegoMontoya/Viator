@@ -12,6 +12,8 @@
 #include "shaders/volumetric/clouds/BlurBeerShadowMap.comp.glsl"
 
 #include "glm/integer.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/epsilon.hpp"
 #include "imgui.h"
 #include "spdlog/spdlog.h"
 

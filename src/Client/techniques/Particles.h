@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <span>
+#include <string>
 
 class VoxelRenderer;
 
