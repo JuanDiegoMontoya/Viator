@@ -4,7 +4,6 @@
 #include <string>
 #include <utility>
 #include <memory>
-#include <any>
 
 class Scheduler
 {
@@ -22,9 +21,10 @@ public:
 
   struct ExecuteParams
   {
-    std::function<void(std::any& userData)> onPassBegin;
-    std::function<void(std::any& userData)> onPassEnd;
-    std::any userData;
+    std::function<void(const char* nodeId)> nodePrologue;
+    std::function<void()> nodeEpilogue;
+    std::function<void()> onPassBegin;
+    std::function<void()> onPassEnd;
   };
 
   virtual void Execute(ExecuteParams params) = 0;

@@ -2082,26 +2082,38 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   //  file << scheduler->GenerateDotGraph();
   //}
   //__debugbreak();
-
-  scheduler->Execute({
-    .onPassBegin =
-      [&](std::any&)
-    {
-      // vkCmdBeginDebugUtilsLabelEXT(commandBuffer,
-      //   Fvog::detail::Address(VkDebugUtilsLabelEXT{
-      //     .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-      //     .pLabelName = "pass",
-      //     .color      = {1, 1, 1, 1},
-      //   }));
-    },
-    .onPassEnd =
-      [&](std::any&)
-    {
-      ctx.Barrier();
-      // vkCmdEndDebugUtilsLabelEXT(commandBuffer);
-    },
-    .userData = {},
-  });
+  
+  {
+    scheduler->Execute({
+      .nodePrologue =
+        [&](const char* nodeId)
+      {
+        vkCmdBeginDebugUtilsLabelEXT(commandBuffer,
+          Fvog::detail::Address(VkDebugUtilsLabelEXT{
+            .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+            .pLabelName = nodeId,
+            .color      = {1, 1, 1, 1},
+          }));
+      },
+      .nodeEpilogue = [&] { vkCmdEndDebugUtilsLabelEXT(commandBuffer); },
+      .onPassBegin =
+        [&]
+      {
+        //vkCmdBeginDebugUtilsLabelEXT(commandBuffer,
+        //  Fvog::detail::Address(VkDebugUtilsLabelEXT{
+        //    .sType      = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        //    .pLabelName = "pass",
+        //    .color      = {.7f, .7f, 1, 1},
+        //  }));
+      },
+      .onPassEnd =
+        [&]
+      {
+        ctx.Barrier();
+        //vkCmdEndDebugUtilsLabelEXT(commandBuffer);
+      },
+    });
+  }
 
   std::swap(frame.gDepth, frame.gDepthPrev);
   clip_from_world_old            = clip_from_world;

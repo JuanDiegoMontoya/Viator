@@ -1,6 +1,8 @@
 #include "Scheduler.h"
-
 #include "Core/Assert2.h"
+
+#include "tracy/Tracy.hpp"
+#include "ankerl/unordered_dense.h"
 
 #include <vector>
 #include <memory>
@@ -15,26 +17,47 @@
 
 namespace
 {
+  template<typename K, typename T>
+  using unordered_map = ankerl::unordered_dense::pmr::map<K, T>;
+
+  template<typename K>
+  using unordered_set = ankerl::unordered_dense::pmr::set<K>;
+
   struct DirectedAcyclicGraph
   {
+    explicit DirectedAcyclicGraph(std::pmr::polymorphic_allocator<>& allocator) : allocator(&allocator), idToNode(allocator), nodes(allocator)
+    {
+      idToNode.reserve(100);
+      nodes.reserve(100);
+    }
+
     struct Node
     {
-      std::string id;
+      explicit Node(std::pmr::polymorphic_allocator<>& allocator) : id(allocator), parents(allocator), children(allocator) {}
+
+      std::pmr::string id;
       std::function<void()> payload;
 
-      std::vector<Node*> parents;
-      std::vector<Node*> children;
+      std::pmr::vector<Node*> parents;
+      std::pmr::vector<Node*> children;
     };
+
+    using UniquePtrToNode = std::unique_ptr<Node, decltype([](Node* p) { std::destroy_at(p); })>;
 
     void Insert(std::string_view id, std::function<void()> payload)
     {
-      auto newNode = std::make_unique<DirectedAcyclicGraph::Node>(DirectedAcyclicGraph::Node{.id = std::string(id), .payload = std::move(payload)});
+      ZoneScoped;
+      auto node    = DirectedAcyclicGraph::Node(*allocator);
+      node.id      = std::pmr::string(id, *allocator);
+      node.payload = std::move(payload);
+      auto newNode = UniquePtrToNode(allocator->new_object<DirectedAcyclicGraph::Node>(std::move(node)));
       idToNode.emplace(id, newNode.get());
       nodes.push_back(std::move(newNode));
     }
 
     void AddDependency(std::string_view childId, std::string_view parentId)
     {
+      ZoneScoped;
       auto* childNode = Find(childId);
       ASSERT(childNode);
       auto* parentNode = Find(parentId);
@@ -45,7 +68,7 @@ namespace
 
     [[nodiscard]] Node* Find(std::string_view id)
     {
-      if (auto it = idToNode.find(std::string(id)); it != idToNode.end())
+      if (auto it = idToNode.find(std::pmr::string(id, *allocator)); it != idToNode.end())
       {
         return it->second;
       }
@@ -95,13 +118,15 @@ namespace
 
     [[nodiscard]] DirectedAcyclicGraph CloneWithoutPayload() const;
 
-    [[nodiscard]] std::vector<Node*> GetTopologicallySortedNodes() const
+    [[nodiscard]] std::pmr::vector<Node*> GetTopologicallySortedNodes() const
     {
+      ZoneScoped;
       auto clone      = CloneWithoutPayload();
-      auto sorted     = std::vector<Node*>();
-      auto parentless = std::unordered_set<Node*>();
+      auto sorted     = std::pmr::vector<Node*>(*allocator);
+      auto parentless = unordered_set<Node*>(*allocator);
 
       sorted.reserve(nodes.size());
+      parentless.reserve(nodes.size());
 
       for (auto& node : clone.nodes)
       {
@@ -138,33 +163,41 @@ namespace
       }
 
       // Convert node pointers from the clone graph to pointers to actual graph.
-      auto sortedFinal = std::vector<Node*>();
+      auto sortedFinal = std::pmr::vector<Node*>(*allocator);
       sortedFinal.reserve(nodes.size());
       for (auto* node : sorted)
       {
         sortedFinal.push_back(idToNode.at(node->id));
       }
-
+      
       return sortedFinal;
     }
 
-    std::unordered_map<std::string, Node*> idToNode;
-    std::vector<std::unique_ptr<Node>> nodes;
+    std::pmr::polymorphic_allocator<>* allocator;
+    unordered_map<std::pmr::string, Node*> idToNode;
+    std::pmr::vector<UniquePtrToNode> nodes;
   };
 
   struct IncompleteDirectedAcyclicGraph
   {
+    explicit IncompleteDirectedAcyclicGraph(std::pmr::polymorphic_allocator<>& allocator) : allocator(&allocator), nodes(allocator)
+    {
+      nodes.reserve(100);
+    }
+
     struct Node
     {
       std::function<void()> payload;
-      std::vector<std::string> parents;
+      std::vector<std::pmr::string> parents;
     };
 
-    std::unordered_map<std::string, Node> nodes;
+    std::pmr::polymorphic_allocator<>* allocator;
+    unordered_map<std::pmr::string, Node> nodes;
 
     [[nodiscard]] DirectedAcyclicGraph Complete() const
     {
-      auto dag = DirectedAcyclicGraph{};
+      ZoneScoped;
+      auto dag = DirectedAcyclicGraph{*allocator};
       dag.nodes.reserve(nodes.size());
 
       for (auto& [id, node] : nodes)
@@ -195,7 +228,8 @@ namespace
 
   [[nodiscard]] DirectedAcyclicGraph DirectedAcyclicGraph::CloneWithoutPayload() const
   {
-    auto clone = IncompleteDirectedAcyclicGraph();
+    ZoneScoped;
+    auto clone = IncompleteDirectedAcyclicGraph(*allocator);
     clone.nodes.reserve(nodes.size());
 
     for (const auto& node : nodes)
@@ -217,30 +251,39 @@ namespace
   class SchedulerImpl : public Scheduler
   {
   public:
+    explicit SchedulerImpl() : graph(allocator) {}
+
     void Execute(ExecuteParams params) override
     {
+      ZoneScoped;
       auto completedGraph = graph.Complete();
       auto nodes          = completedGraph.GetTopologicallySortedNodes();
-      std::unordered_set<const DirectedAcyclicGraph::Node*> complete;
-      std::unordered_set<const DirectedAcyclicGraph::Node*> pending;
+      auto complete       = unordered_set<const DirectedAcyclicGraph::Node*>(allocator);
+      auto pending        = unordered_set<const DirectedAcyclicGraph::Node*>(allocator);
+
+      complete.reserve(nodes.size());
+      pending.reserve(nodes.size());
 
       auto FlushPending = [&]
       {
-        complete.insert_range(pending);
+        for (const auto* element : pending)
+        {
+          complete.insert(element);
+        }
         pending.clear();
         if (params.onPassEnd)
         {
-          params.onPassEnd(params.userData);
+          params.onPassEnd();
         }
         if (params.onPassBegin)
         {
-          params.onPassBegin(params.userData);
+          params.onPassBegin();
         }
       };
 
       if (params.onPassBegin)
       {
-        params.onPassBegin(params.userData);
+        params.onPassBegin();
       }
 
       for (const auto* node : nodes)
@@ -256,19 +299,26 @@ namespace
 
         if (node->payload)
         {
+          if (params.nodePrologue)
+          {
+            params.nodePrologue(node->id.c_str());
+          }
           node->payload();
+          if (params.nodeEpilogue)
+          {
+            params.nodeEpilogue();
+          }
+          pending.emplace(node);
         }
-
-        pending.emplace(node);
-
-#if 0
-        FlushPending();
-#endif
+        else
+        {
+          complete.emplace(node);
+        }
       }
 
       if (params.onPassEnd)
       {
-        params.onPassEnd(params.userData);
+        params.onPassEnd();
       }
     }
 
@@ -295,13 +345,15 @@ namespace
   protected:
     void AddPassInternal(std::string_view id, std::function<void()> callback) override
     {
-      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::string(id), IncompleteDirectedAcyclicGraph::Node{.payload = std::move(callback)});
+      ZoneScoped;
+      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::pmr::string(id), IncompleteDirectedAcyclicGraph::Node{.payload = std::move(callback)});
       DEBUG_ASSERT(success);
     }
 
     void AddDependency(std::string_view childId, std::string_view parentId) override
     {
-      auto it = graph.nodes.find(std::string(childId));
+      ZoneScoped;
+      auto it = graph.nodes.find(std::pmr::string(childId));
       DEBUG_ASSERT(it != graph.nodes.end());
       if (it == graph.nodes.end())
       {
@@ -312,12 +364,18 @@ namespace
     }
 
   private:
+    static constexpr int bufferSize                       = 1'000'000;
+    std::unique_ptr<std::byte[]> buffer                   = std::make_unique<std::byte[]>(bufferSize);
+    std::pmr::monotonic_buffer_resource arena             = {buffer.get(), bufferSize};
+    std::pmr::unsynchronized_pool_resource memoryResource = std::pmr::unsynchronized_pool_resource{&arena};
+    std::pmr::polymorphic_allocator<> allocator           = {&memoryResource};
     IncompleteDirectedAcyclicGraph graph;
   };
 
   [[nodiscard]] bool IsTopologicallySorted(std::span<DirectedAcyclicGraph::Node* const> nodes)
   {
-    auto visited = std::unordered_set<const DirectedAcyclicGraph::Node*>();
+    ZoneScoped;
+    auto visited = unordered_set<const DirectedAcyclicGraph::Node*>();
 
     for (auto* node : nodes)
     {
@@ -338,6 +396,7 @@ namespace
 
 std::unique_ptr<Scheduler> Scheduler::Create()
 {
+  ZoneScoped;
   return std::make_unique<SchedulerImpl>();
 }
 
@@ -346,7 +405,9 @@ std::unique_ptr<Scheduler> Scheduler::Create()
 
 TEST_CASE("DirectedAcyclicGraph")
 {
-  auto dag = DirectedAcyclicGraph();
+  ZoneScoped;
+  auto allocator = std::pmr::polymorphic_allocator<>();
+  auto dag = DirectedAcyclicGraph(allocator);
 
   SUBCASE("Basic cycle detection")
   {
@@ -449,9 +510,9 @@ TEST_CASE("Scheduler")
     scheduler->AddPass("B", [&] { str += "B"; }, "A");
     scheduler->AddPass("A", [&] { str += "A"; });
 
-    auto beginCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "begin"; };
-    auto endCallback = [](std::any& any) { *std::any_cast<std::string*>(any) += "end"; };
-    scheduler->Execute({.onPassBegin = beginCallback, .onPassEnd = endCallback, .userData = &str});
+    auto beginCallback = [&] { str += "begin"; };
+    auto endCallback = [&] { str += "end"; };
+    scheduler->Execute({.onPassBegin = beginCallback, .onPassEnd = endCallback});
 
     CHECK_EQ(str, "beginAendbeginBend");
   }
