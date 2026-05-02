@@ -165,11 +165,8 @@ namespace Fvog
     void EndRendering() const;
     void ImageBarrier(const Texture& texture, VkImageLayout newLayout) const;
     void ImageBarrier(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT) const;
-    void Barriers(std::span<const std::variant<GlobalBarrier, struct ImageBarrier>> barriers);
     // Image barrier from UNDEFINED (discard image contents)
     void ImageBarrierDiscard(const Texture& texture, VkImageLayout newLayout) const;
-    void BufferBarrier(const Buffer& buffer) const;
-    void BufferBarrier(VkBuffer buffer) const;
     // Everything->everything barrier
     void Barrier() const;
 
