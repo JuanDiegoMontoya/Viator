@@ -3,6 +3,7 @@
 #include "Client/Fvog/Texture2.h"
 #include "Client/Fvog/Pipeline2.h"
 #include "Client/PipelineManager.h"
+#include "Client/Scheduler.h"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ao/rtao/Upscale.comp.glsl"
 
@@ -38,7 +39,8 @@ namespace Techniques
       uint32_t upscaleFactor = 2;
     };
 
-    [[nodiscard]] Fvog::Texture& ComputeAO(VkCommandBuffer commandBuffer, const ComputeParams& params);
+    void ComputeAO(Scheduler& scheduler, VkCommandBuffer commandBuffer, const ComputeParams& params);
+    [[nodiscard]] Fvog::Texture& GetAOTexture();
 
   private:
     PipelineManager::ComputePipelineKey rtaoPipeline_;
@@ -46,5 +48,6 @@ namespace Techniques
     std::optional<Fvog::Texture> aoLowResTexture_;
     std::optional<Fvog::Texture> aoOutputTexture_;
     Fvog::NDeviceBuffer<FilterParams_t> upscaleUniforms_;
+    Fvog::Texture* aoTextureToReturn{};
   };
 }

@@ -23,6 +23,7 @@ namespace
   template<typename K>
   using unordered_set = ankerl::unordered_dense::pmr::set<K>;
 
+  template<typename Payload>
   struct DirectedAcyclicGraph
   {
     explicit DirectedAcyclicGraph(std::pmr::polymorphic_allocator<>& allocator) : allocator(&allocator), idToNode(allocator), nodes(allocator)
@@ -36,7 +37,7 @@ namespace
       explicit Node(std::pmr::polymorphic_allocator<>& allocator) : id(allocator), parents(allocator), children(allocator) {}
 
       std::pmr::string id;
-      std::function<void()> payload;
+      Payload payload;
 
       std::pmr::vector<Node*> parents;
       std::pmr::vector<Node*> children;
@@ -44,7 +45,7 @@ namespace
 
     using UniquePtrToNode = std::unique_ptr<Node, decltype([](Node* p) { std::destroy_at(p); })>;
 
-    void Insert(std::string_view id, std::function<void()> payload)
+    void Insert(std::string_view id, Payload payload)
     {
       ZoneScoped;
       auto node    = DirectedAcyclicGraph::Node(*allocator);
@@ -178,6 +179,7 @@ namespace
     std::pmr::vector<UniquePtrToNode> nodes;
   };
 
+  template<typename Payload>
   struct IncompleteDirectedAcyclicGraph
   {
     explicit IncompleteDirectedAcyclicGraph(std::pmr::polymorphic_allocator<>& allocator) : allocator(&allocator), nodes(allocator)
@@ -187,17 +189,17 @@ namespace
 
     struct Node
     {
-      std::function<void()> payload;
+      Payload payload;
       std::vector<std::pmr::string> parents;
     };
 
     std::pmr::polymorphic_allocator<>* allocator;
     unordered_map<std::pmr::string, Node> nodes;
 
-    [[nodiscard]] DirectedAcyclicGraph Complete() const
+    [[nodiscard]] DirectedAcyclicGraph<Payload> Complete() const
     {
       ZoneScoped;
-      auto dag = DirectedAcyclicGraph{*allocator};
+      auto dag = DirectedAcyclicGraph<Payload>{*allocator};
       dag.nodes.reserve(nodes.size());
 
       for (auto& [id, node] : nodes)
@@ -226,15 +228,16 @@ namespace
     }
   };
 
-  [[nodiscard]] DirectedAcyclicGraph DirectedAcyclicGraph::CloneWithoutPayload() const
+  template<typename Payload>
+  [[nodiscard]] DirectedAcyclicGraph<Payload> DirectedAcyclicGraph<Payload>::CloneWithoutPayload() const
   {
     ZoneScoped;
-    auto clone = IncompleteDirectedAcyclicGraph(*allocator);
+    auto clone = IncompleteDirectedAcyclicGraph<Payload>(*allocator);
     clone.nodes.reserve(nodes.size());
 
     for (const auto& node : nodes)
     {
-      auto newNode = IncompleteDirectedAcyclicGraph::Node();
+      auto newNode = IncompleteDirectedAcyclicGraph<Payload>::Node();
       newNode.parents.reserve(node->parents.size());
 
       for (const auto* parent : node->parents)
@@ -253,32 +256,41 @@ namespace
   public:
     explicit SchedulerImpl() : graph(allocator) {}
 
+    struct NodePayload
+    {
+      std::function<void()> callback;
+      int priority;
+    };
+
     void Execute(ExecuteParams params) override
     {
       ZoneScoped;
       auto completedGraph = graph.Complete();
       auto nodes          = completedGraph.GetTopologicallySortedNodes();
-      auto complete       = unordered_set<const DirectedAcyclicGraph::Node*>(allocator);
-      auto pending        = unordered_set<const DirectedAcyclicGraph::Node*>(allocator);
+      auto complete       = unordered_set<const DirectedAcyclicGraph<NodePayload>::Node*>(allocator);
+      auto pending        = std::pmr::vector<const DirectedAcyclicGraph<NodePayload>::Node*>(allocator);
 
       complete.reserve(nodes.size());
       pending.reserve(nodes.size());
 
       auto FlushPending = [&]
       {
-        for (const auto* element : pending)
+        std::ranges::sort(pending, std::ranges::greater{}, [](const auto& node) { return node->payload.priority; });
+        for (const auto* node : pending)
         {
-          complete.insert(element);
+          if (params.nodePrologue)
+          {
+            params.nodePrologue(node->id.c_str());
+          }
+          node->payload.callback();
+          if (params.nodeEpilogue)
+          {
+            params.nodeEpilogue();
+          }
+
+          complete.insert(node);
         }
         pending.clear();
-        if (params.onPassEnd)
-        {
-          params.onPassEnd();
-        }
-        if (params.onPassBegin)
-        {
-          params.onPassBegin();
-        }
       };
 
       if (params.onPassBegin)
@@ -293,28 +305,29 @@ namespace
           if (!complete.contains(parent))
           {
             FlushPending();
+            if (params.onPassEnd)
+            {
+              params.onPassEnd();
+            }
+            if (params.onPassBegin)
+            {
+              params.onPassBegin();
+            }
             break;
           }
         }
 
-        if (node->payload)
+        if (node->payload.callback)
         {
-          if (params.nodePrologue)
-          {
-            params.nodePrologue(node->id.c_str());
-          }
-          node->payload();
-          if (params.nodeEpilogue)
-          {
-            params.nodeEpilogue();
-          }
-          pending.emplace(node);
+          pending.push_back(node);
         }
         else
         {
           complete.emplace(node);
         }
       }
+
+      FlushPending();
 
       if (params.onPassEnd)
       {
@@ -343,10 +356,17 @@ namespace
     }
 
   protected:
-    void AddPassInternal(std::string_view id, std::function<void()> callback) override
+    void AddPassInternal(std::string_view id, int priority, std::function<void()> callback) override
     {
       ZoneScoped;
-      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::pmr::string(id), IncompleteDirectedAcyclicGraph::Node{.payload = std::move(callback)});
+      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::pmr::string(id),
+        IncompleteDirectedAcyclicGraph<NodePayload>::Node{
+          .payload =
+            {
+              .callback = std::move(callback),
+              .priority = priority,
+            },
+        });
       DEBUG_ASSERT(success);
     }
 
@@ -369,13 +389,14 @@ namespace
     std::pmr::monotonic_buffer_resource arena             = {buffer.get(), bufferSize};
     std::pmr::unsynchronized_pool_resource memoryResource = std::pmr::unsynchronized_pool_resource{&arena};
     std::pmr::polymorphic_allocator<> allocator           = {&memoryResource};
-    IncompleteDirectedAcyclicGraph graph;
+    IncompleteDirectedAcyclicGraph<NodePayload> graph;
   };
 
-  [[nodiscard]] bool IsTopologicallySorted(std::span<DirectedAcyclicGraph::Node* const> nodes)
+  template<typename Payload>
+  [[nodiscard]] bool IsTopologicallySorted(std::span<typename DirectedAcyclicGraph<Payload>::Node* const> nodes)
   {
     ZoneScoped;
-    auto visited = unordered_set<const DirectedAcyclicGraph::Node*>();
+    auto visited = unordered_set<const typename DirectedAcyclicGraph<Payload>::Node*>();
 
     for (auto* node : nodes)
     {
@@ -407,7 +428,7 @@ TEST_CASE("DirectedAcyclicGraph")
 {
   ZoneScoped;
   auto allocator = std::pmr::polymorphic_allocator<>();
-  auto dag = DirectedAcyclicGraph(allocator);
+  auto dag = DirectedAcyclicGraph<nullptr_t>(allocator);
 
   SUBCASE("Basic cycle detection")
   {
@@ -470,7 +491,7 @@ TEST_CASE("DirectedAcyclicGraph")
     REQUIRE(sorted.size() == 2);
     CHECK(sorted[0] == dag.idToNode.at("A"));
     CHECK(sorted[1] == dag.idToNode.at("B"));
-    CHECK(IsTopologicallySorted(sorted));
+    CHECK(IsTopologicallySorted<nullptr_t>(sorted));
   }
 
   SUBCASE("Advanced topological sort")
@@ -495,7 +516,7 @@ TEST_CASE("DirectedAcyclicGraph")
     dag.AddDependency("10", "3");
     auto sorted = dag.GetTopologicallySortedNodes();
     CHECK(sorted.size() == dag.nodes.size());
-    CHECK(IsTopologicallySorted(sorted));
+    CHECK(IsTopologicallySorted<nullptr_t>(sorted));
   }
 }
 
@@ -507,7 +528,7 @@ TEST_CASE("Scheduler")
   {
     auto str = std::string();
 
-    scheduler->AddPass("B", [&] { str += "B"; }, "A");
+    scheduler->AddPass("B", {"A"}, [&] { str += "B"; });
     scheduler->AddPass("A", [&] { str += "A"; });
 
     auto beginCallback = [&] { str += "begin"; };
@@ -519,14 +540,24 @@ TEST_CASE("Scheduler")
 
   SUBCASE("Ensure that a schedule with no callbacks doesn't crash")
   {
-    scheduler->AddPass("A", nullptr);
-    scheduler->AddPass("B", nullptr, "A");
+    scheduler->AddPass("A", {}, nullptr);
+    scheduler->AddPass("B", {"A"}, std::function<void()>(nullptr));
     scheduler->Execute({});
   }
 
   SUBCASE("Ensure that a schedule with an unknown dependency throws")
   {
-    scheduler->AddPass("A", nullptr, "Fake");
+    scheduler->AddPass("A", {"Fake"}, nullptr);
     CHECK_THROWS(scheduler->Execute({}));
+  }
+
+  SUBCASE("Ensure that node priority is respected")
+  {
+    auto str = std::string();
+    scheduler->AddPass("A", 0, [&] { str += "A"; });
+    scheduler->AddPass("B", 1, [&] { str += "B"; });
+    scheduler->AddPass("C", -1, [&] { str += "C"; });
+    scheduler->Execute({});
+    CHECK_EQ(str, "BAC");
   }
 }

@@ -238,29 +238,22 @@ namespace Techniques
         ctx.DispatchInvocations(outputResolution.width, outputResolution.height, 1);
       }
 
-      void RenderBeerShadowMap(VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) override
+      void RenderBeerShadowMap(Scheduler& scheduler, VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) override
       {
         ASSERT(params.numCascades <= BSM_MAX_CASCADES);
 
-        auto ctx    = Fvog::Context(cmd);
-        auto marker = ctx.MakeScopedDebugMarker("Clouds: render Beer shadow map");
-
-        constexpr auto format = Fvog::Format::R16G16B16A16_SFLOAT;
-
-        EnsureArrayTexture(ctx, beerShadowMap_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map");
-        EnsureArrayTexture(ctx, beerShadowMapHistory_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map 2");
-        EnsureArrayTexture(ctx, beerShadowMapPingPong_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map ping pong");
-
-        const auto up = glm::epsilonEqual(abs(glm::dot(params.sunDirection, glm::vec3(0, 1, 0))), 1.0f, 1e-3f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
-        const auto view_from_world = glm::lookAt(params.sunPosition, params.sunPosition + params.sunDirection, up);
+        auto ctx = Fvog::Context(cmd);
 
         auto beerShadowMapInfo = CascadedBeerShadowMapInfoPtr_t{
           .cascades        = {},
-          .shadowMapArray  = beerShadowMap_->ImageView().GetTexture2DArray(),
-          .shadowMapImages = beerShadowMap_->ImageView().GetImage2DArray(),
+          .shadowMapArray  = {},
+          .shadowMapImages = {},
           .numCascades     = params.numCascades,
           .frustumDepth    = params.frustumDepth,
         };
+
+        const auto up = glm::epsilonEqual(abs(glm::dot(params.sunDirection, glm::vec3(0, 1, 0))), 1.0f, 1e-3f) ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+        const auto view_from_world = glm::lookAt(params.sunPosition, params.sunPosition + params.sunDirection, up);
 
         for (uint32_t i = 0; i < params.numCascades; i++)
         {
@@ -272,62 +265,86 @@ namespace Techniques
           beerShadowMapInfo.cascades[i].world_from_clip = glm::inverse(clip_from_world);
         }
 
-        ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
-        ctx.Barrier();
+        scheduler.AddPass("UpdateBeerArgs",
+          [this, params, ctx, beerShadowMapInfo] mutable
+          {
+            constexpr auto format = Fvog::Format::R16G16B16A16_SFLOAT;
 
-        auto gpuParams = Fvog::GetDevice().AllocTransient<RenderBeerShadowMapGpuParams_t>();
+            EnsureArrayTexture(ctx, beerShadowMap_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map");
+            EnsureArrayTexture(ctx, beerShadowMapHistory_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map 2");
+            EnsureArrayTexture(ctx, beerShadowMapPingPong_, {params.renderWidth, params.renderHeight}, params.numCascades, format, "Clouds Beer shadow map ping pong");
 
-        *gpuParams = {
-          .cbsm             = beerShadowMapInfoBuffer_->GetDeviceAddress(),
-          .globalUniforms   = params.globalUniforms,
-          .numRayMarchSteps = params.numRayMarchSteps,
-          .time             = params.time,
-          .jitterScale      = params.jitterScale,
-        };
+            beerShadowMapInfo.shadowMapArray  = beerShadowMap_->ImageView().GetTexture2DArray();
+            beerShadowMapInfo.shadowMapImages = beerShadowMap_->ImageView().GetImage2DArray();
 
-        {
-          auto marker2 = ctx.MakeScopedDebugMarker("Render");
-          ctx.BindComputePipeline(renderBeerShadowMapPipeline_.GetPipeline());
-          ctx.SetPushConstants(gpuParams);
-          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
-          ctx.Barrier();
-        }
+            ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
+        });
 
-        {
-          auto marker2 = ctx.MakeScopedDebugMarker("Filter");
+        scheduler.AddPass("RenderBeerShadowMap",
+          {"UpdateBeerArgs"},
+          [this, params, ctx]
+          {
+            auto gpuParams = Fvog::GetDevice().AllocTransient<RenderBeerShadowMapGpuParams_t>();
 
-          ctx.BindComputePipeline(blurBeerShadowMapPipeline_.GetPipeline());
+            *gpuParams = {
+              .cbsm             = beerShadowMapInfoBuffer_->GetDeviceAddress(),
+              .globalUniforms   = params.globalUniforms,
+              .numRayMarchSteps = params.numRayMarchSteps,
+              .time             = params.time,
+              .jitterScale      = params.jitterScale,
+            };
 
-          auto blur0Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
+            auto marker2 = ctx.MakeScopedDebugMarker("Render");
+            ctx.BindComputePipeline(renderBeerShadowMapPipeline_.GetPipeline());
+            ctx.SetPushConstants(gpuParams);
+            ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+          });
 
-          *blur0Params = {
-            .inBeerShadowMap  = beerShadowMap_->ImageView().GetTexture2DArray(),
-            .outBeerShadowMap = beerShadowMapPingPong_->ImageView().GetImage2DArray(),
-            .doHorizontalPass = 0,
-            .historyWeight    = 0,
-          };
+        scheduler.AddPass("BlurBeerShadowMap0",
+          {"RenderBeerShadowMap"},
+          [this, params, ctx]
+          {
+            ctx.BindComputePipeline(blurBeerShadowMapPipeline_.GetPipeline());
+            auto blur0Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
 
-          ctx.SetPushConstants(blur0Params);
-          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
-          ctx.Barrier();
+            *blur0Params = {
+              .inBeerShadowMap  = beerShadowMap_->ImageView().GetTexture2DArray(),
+              .outBeerShadowMap = beerShadowMapPingPong_->ImageView().GetImage2DArray(),
+              .doHorizontalPass = 0,
+              .historyWeight    = 0,
+            };
 
-          auto blur1Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
+            ctx.SetPushConstants(blur0Params);
+            ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+          });
 
-          *blur1Params = {
-            .inBeerShadowMap        = beerShadowMapPingPong_->ImageView().GetTexture2DArray(),
-            .inBeerShadowMapHistory = beerShadowMapHistory_->ImageView().GetTexture2DArray(),
-            .outBeerShadowMap       = beerShadowMap_->ImageView().GetImage2DArray(),
-            .doHorizontalPass       = 1,
-            .historyWeight          = params.historyWeight,
-          };
-          ctx.SetPushConstants(blur1Params);
-          ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
-        }
+        scheduler.AddPass("BlurBeerShadowMap1",
+          {"BlurBeerShadowMap0"},
+          [this, params, ctx]
+          {
+            ctx.BindComputePipeline(blurBeerShadowMapPipeline_.GetPipeline());
+            auto blur1Params = Fvog::GetDevice().AllocTransient<BlurBeerShadowMapGpuParams_t>();
 
-        beerShadowMapInfo.shadowMapArray = beerShadowMapHistory_->ImageView().GetTexture2DArray();
-        beerShadowMapInfo.shadowMapImages = beerShadowMapHistory_->ImageView().GetImage2DArray();
-        ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
-        std::swap(beerShadowMap_, beerShadowMapHistory_);
+            *blur1Params = {
+              .inBeerShadowMap        = beerShadowMapPingPong_->ImageView().GetTexture2DArray(),
+              .inBeerShadowMapHistory = beerShadowMapHistory_->ImageView().GetTexture2DArray(),
+              .outBeerShadowMap       = beerShadowMap_->ImageView().GetImage2DArray(),
+              .doHorizontalPass       = 1,
+              .historyWeight          = params.historyWeight,
+            };
+            ctx.SetPushConstants(blur1Params);
+            ctx.DispatchInvocations(params.renderWidth, params.renderHeight, params.numCascades);
+          });
+
+        scheduler.AddPass("BeerShadowMap",
+          {"BlurBeerShadowMap1"},
+          [this, ctx, beerShadowMapInfo] mutable
+          {
+            beerShadowMapInfo.shadowMapArray = beerShadowMapHistory_->ImageView().GetTexture2DArray();
+            beerShadowMapInfo.shadowMapImages = beerShadowMapHistory_->ImageView().GetImage2DArray();
+            ctx.TeenyBufferUpdate(beerShadowMapInfoBuffer_.value(), beerShadowMapInfo);
+            std::swap(beerShadowMap_, beerShadowMapHistory_);
+          });
       }
 
       VkDeviceAddress GetCascadedBeerShadowMapInfoPtr() override

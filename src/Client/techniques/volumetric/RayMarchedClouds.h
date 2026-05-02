@@ -1,5 +1,6 @@
 #pragma once
 #include "Client/Fvog/detail/VkFwd.h"
+#include "Client/Scheduler.h"
 
 #include "glm/mat4x4.hpp"
 #include "glm/vec3.hpp"
@@ -76,7 +77,7 @@ namespace Techniques
     virtual void Render(VkCommandBuffer cmd, const RayMarchedCloudsRenderParams& params) = 0;
     virtual void Upscale(VkCommandBuffer cmd, const RayMarchedCloudsUpscaleParams& params) = 0;
     virtual void Composite(VkCommandBuffer cmd, const RayMarchedCloudsCompositeParams& params) = 0;
-    virtual void RenderBeerShadowMap(VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) = 0;
+    virtual void RenderBeerShadowMap(Scheduler& scheduler, VkCommandBuffer cmd, const RayMarchedCloudsRenderBeerShadowMapParams& params) = 0;
     virtual VkDeviceAddress GetCascadedBeerShadowMapInfoPtr() = 0;
   };
 }

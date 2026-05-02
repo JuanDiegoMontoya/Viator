@@ -1117,10 +1117,13 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     auto marker2 = ctx.MakeScopedDebugMarker("Particle logic");
     scheduler->AddPass("ParticlesSpawn",
       [&] { particles_->Spawn(commandBuffer, {.frameNumber = frameNumber, .skyShadowMap = skyShadowMap_.GetShadowInfoBufferAddress()}); });
-    scheduler->AddPass("ParticlesUpdate", [&] { particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); }, "ParticlesSpawn");
+    scheduler->AddPass("ParticlesUpdate",
+      {"ParticlesSpawn"},
+      [&] { particles_->Update(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); });
   }
 
   scheduler->AddPass("ClearSkyTextures",
+    -1,
     [&]
     {
       ctx.ImageBarrierDiscard(sky_->GetTransmittanceLut(), VkImageLayout::VK_IMAGE_LAYOUT_GENERAL);
@@ -1132,18 +1135,17 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
 
   {
     scheduler->AddPass("SkyComputeTransmittanceLut",
-      [&] { sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
-      "ClearSkyTextures");
+      {"ClearSkyTextures"},
+      [&] { sky_->ComputeTransmittanceLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); });
     scheduler->AddPass("SkyComputeMultiscatteringLut",
-      [&] { sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
-      "SkyComputeTransmittanceLut");
+      {"SkyComputeTransmittanceLut"},
+      [&] { sky_->ComputeMultiscatteringLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); });
     scheduler->AddPass("SkyComputeSkyViewLut",
-      [&] { sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); },
-      "SkyComputeTransmittanceLut",
-      "SkyComputeMultiscatteringLut");
+      {"SkyComputeTransmittanceLut", "SkyComputeMultiscatteringLut"},
+      [&] { sky_->ComputeSkyViewLut(commandBuffer, {.globalUniformsPtr = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()}); });
 
-    scheduler->AddPass(
-      "SkyComputeAerialPerspectiveLut",
+    scheduler->AddPass("SkyComputeAerialPerspectiveLut",
+      {"SkyComputeSkyViewLut", "SkyComputeTransmittanceLut", "SkyComputeMultiscatteringLut"},
       [&]
       {
         if (skyEnableAerialPerspective.Get() != 0)
@@ -1156,12 +1158,9 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
           ctx.ClearTexture(sky_->GetAerialPerspectiveTransmittance(), {.color = {1.0f, 1.0f, 1.0f, 1.0f}});
           ctx.ClearTexture(sky_->GetAerialPerspectiveScattering(), {});
         }
-      },
-      "SkyComputeSkyViewLut",
-      "SkyComputeTransmittanceLut",
-      "SkyComputeMultiscatteringLut");
+      });
 
-    scheduler->AddPass("AllSky", nullptr, "SkyComputeSkyViewLut", "SkyComputeTransmittanceLut", "SkyComputeMultiscatteringLut", "SkyComputeAerialPerspectiveLut");
+    scheduler->AddPass("AllSky", {"SkyComputeSkyViewLut", "SkyComputeTransmittanceLut", "SkyComputeMultiscatteringLut", "SkyComputeAerialPerspectiveLut"}, nullptr);
   }
 
   auto drawCalls       = std::vector<GpuMesh*>();
@@ -1303,49 +1302,53 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   if (enableSunShadowPass.Get() != 0)
   {
     ctx.Barrier();
-    scheduler->AddPass("ShadowMaps",
-      [&]
+    const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
+    const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
+
+    sunShadowMap_.RenderTerrainShadowMap(*scheduler,
+      "0",
+      commandBuffer,
       {
-        const auto playerPosition = world.GetRegistry().get<const RenderTransform>(player).transform.position;
-        const auto sunDirection   = -Math::SphericalToCartesian(sunElevation, sunAzimuth);
-        sunShadowMap_.RenderTerrainShadowMap(commandBuffer,
-          {
-            .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
-            .numCascades           = uint32_t(sunShadowNumCascades),
-            .voxels                = voxels,
-            .playerPos             = playerPosition,
-            .lightDirection        = sunDirection,
-            .frustumDepth          = sunShadowFrustumDepth,
-            .baseFrustumSideLength = sunShadowFrustumSideLength,
-          });
-
-        skyShadowMap_.RenderTerrainShadowMap(commandBuffer,
-          {
-            .shadowResolution      = {uint32_t(skyShadowResolution.x), uint32_t(skyShadowResolution.y)},
-            .numCascades           = uint32_t(skyShadowNumCascades),
-            .voxels                = voxels,
-            .playerPos             = playerPosition,
-            .lightDirection        = {0, -1, 0},
-            .frustumDepth          = skyShadowFrustumDepth,
-            .baseFrustumSideLength = skyShadowFrustumSideLength,
-          });
-
-        rayMarchedClouds_->RenderBeerShadowMap(commandBuffer,
-          {
-            .globalUniforms        = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
-            .renderWidth           = static_cast<uint32_t>(cloudCbsmResolution.Get()),
-            .renderHeight          = static_cast<uint32_t>(cloudCbsmResolution.Get()),
-            .numCascades           = static_cast<uint32_t>(cloudCbsmNumCascades.Get()),
-            .sunPosition           = playerPosition,
-            .sunDirection          = sunDirection,
-            .numRayMarchSteps      = static_cast<uint32_t>(cloudCbsmRayMarchSteps.Get()),
-            .frustumDepth          = static_cast<float>(cloudCbsmFrustumDepth.Get()),
-            .baseFrustumSideLength = static_cast<float>(cloudCbsmFrustumSideLength.Get()),
-            .time                  = static_cast<float>(time),
-            .historyWeight         = static_cast<float>(cloudCbsmHistoryWeight.Get()),
-            .jitterScale           = static_cast<float>(cloudCbsmJitterScale.Get()),
-          });
+        .shadowResolution      = {uint32_t(sunShadowResolution.x), uint32_t(sunShadowResolution.y)},
+        .numCascades           = uint32_t(sunShadowNumCascades),
+        .voxels                = voxels,
+        .playerPos             = playerPosition,
+        .lightDirection        = sunDirection,
+        .frustumDepth          = sunShadowFrustumDepth,
+        .baseFrustumSideLength = sunShadowFrustumSideLength,
       });
+
+    skyShadowMap_.RenderTerrainShadowMap(*scheduler,
+      "1",
+      commandBuffer,
+      {
+        .shadowResolution      = {uint32_t(skyShadowResolution.x), uint32_t(skyShadowResolution.y)},
+        .numCascades           = uint32_t(skyShadowNumCascades),
+        .voxels                = voxels,
+        .playerPos             = playerPosition,
+        .lightDirection        = {0, -1, 0},
+        .frustumDepth          = skyShadowFrustumDepth,
+        .baseFrustumSideLength = skyShadowFrustumSideLength,
+      });
+
+    rayMarchedClouds_->RenderBeerShadowMap(*scheduler,
+      commandBuffer,
+      {
+        .globalUniforms        = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+        .renderWidth           = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+        .renderHeight          = static_cast<uint32_t>(cloudCbsmResolution.Get()),
+        .numCascades           = static_cast<uint32_t>(cloudCbsmNumCascades.Get()),
+        .sunPosition           = playerPosition,
+        .sunDirection          = sunDirection,
+        .numRayMarchSteps      = static_cast<uint32_t>(cloudCbsmRayMarchSteps.Get()),
+        .frustumDepth          = static_cast<float>(cloudCbsmFrustumDepth.Get()),
+        .baseFrustumSideLength = static_cast<float>(cloudCbsmFrustumSideLength.Get()),
+        .time                  = static_cast<float>(time),
+        .historyWeight         = static_cast<float>(cloudCbsmHistoryWeight.Get()),
+        .jitterScale           = static_cast<float>(cloudCbsmJitterScale.Get()),
+      });
+
+    scheduler->AddPass("ShadowMaps", {"TerrainShadowMap0", "TerrainShadowMap1", "BeerShadowMap"}, nullptr);
   }
 
   // DDGI- good candidate for async compute or overlapped work.
@@ -1403,17 +1406,17 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       });
 
     scheduler->AddPass("DdgiResetNewProbes",
+      {"DdgiUpdateArguments"},
       [&]
       {
         const auto numProbes = ddgi.args.gridInfo[0].gridResolution.x * ddgi.args.gridInfo[0].gridResolution.y * ddgi.args.gridInfo[0].gridResolution.z;
         ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
         ctx.BindComputePipeline(ddgi.resetNewProbesPipeline.GetPipeline());
         ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
-      },
-      "DdgiUpdateArguments");
+      });
 
-    scheduler->AddPass(
-      "DdgiTraceRays",
+    scheduler->AddPass("DdgiTraceRays",
+      {"DdgiResetNewProbes", "ShadowMaps", "AllSky"},
       [&]
       {
         // As long as probe validity is unused here, a barrier is not needed.
@@ -1421,37 +1424,34 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
         ctx.BindComputePipeline(ddgi.traceRaysPipeline.GetPipeline());
         ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
-      },
-      "DdgiResetNewProbes",
-      "ShadowMaps",
-      "AllSky");
+      });
 
-    scheduler->AddPass(
-      "DdgiConvolveIrradiance",
+    scheduler->AddPass("DdgiConvolveIrradiance",
+      {"DdgiTraceRays"},
       [&]
       {
         const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
         ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
         ctx.BindComputePipeline(ddgi.convolveIrradiancePipeline.GetPipeline());
         ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-      },
-      "DdgiTraceRays");
+      });
 
-    scheduler->AddPass(
-      "DdgiDownsampleDepth",
+    scheduler->AddPass("DdgiDownsampleDepth",
+      {"DdgiTraceRays"},
       [&]
       {
         const auto extent = ddgi.packedProbeRadiance->GetCreateInfo().extent;
         ctx.SetPushConstants(ddgi.argsBuffer->GetDeviceBuffer().GetDeviceAddress());
         ctx.BindComputePipeline(ddgi.downsampleDepthPipeline.GetPipeline());
         ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-      },
-      "DdgiTraceRays");
+      });
 
-    scheduler->AddPass("IndirectLighting", nullptr, "DdgiDownsampleDepth", "DdgiConvolveIrradiance");
+    scheduler->AddPass("IndirectLighting", {"DdgiDownsampleDepth", "DdgiConvolveIrradiance"}, nullptr);
   }
 
   scheduler->AddPass("RenderOpaque",
+    {"AllSky", "ParticlesUpdate"},
+    -1,
     [&]
     {
       auto albedoAttachment = Fvog::RenderColorAttachment{
@@ -1575,15 +1575,13 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       ctx.ImageBarrier(*frame.gRadiance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ctx.ImageBarrier(*frame.gDepth, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL);
       ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_GENERAL);
-    },
-    "AllSky",
-    "ParticlesUpdate");
+    });
 
   // Indirect illuminance
   if (giMethod_ == GIMethod::PerPixelPathTracing)
   {
-    scheduler->AddPass(
-      "PathTracing",
+    scheduler->AddPass("PathTracing",
+      {"RenderOpaque", "ShadowMaps"},
       [&]
       {
         ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
@@ -1613,29 +1611,27 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .cameraPos                = position,
           },
           commandBuffer);
-      },
-      "RenderOpaque",
-      "ShadowMaps");
+      });
 
-    scheduler->AddPass("IndirectLighting", nullptr, "PathTracing");
+    scheduler->AddPass("IndirectLighting", {"PathTracing"}, nullptr);
   }
 
-  scheduler->AddPass("FrameGIlluminance", [&] { ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL); }, "IndirectLighting");
+  scheduler->AddPass("FrameGIlluminance", {"IndirectLighting"}, -1, [&] { ctx.ImageBarrier(*frame.gIlluminance, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL); });
 
-  scheduler->AddPass(
-    "gSpecial",
+  scheduler->AddPass("gSpecial",
+    {"RenderOpaque"},
+    -1,
     [&]
     {
       if (Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0)
       {
         ctx.ImageBarrierDiscard(*frame.gSpecial, VK_IMAGE_LAYOUT_GENERAL);
       }
-    },
-    "RenderOpaque");
+    });
 
   // Translucency pass
-  scheduler->AddPass(
-    "TranslucentVoxels",
+  scheduler->AddPass("TranslucentVoxels",
+    {"RenderOpaque"},
     [&]
     {
       ctx.BindComputePipeline(translucentVoxelsPipeline.GetPipeline());
@@ -1649,12 +1645,11 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .giMethod           = uint32_t(giMethod_),
       });
       ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
-    },
-    "RenderOpaque");
+    });
 
   // Spelunker effect, if active
-  scheduler->AddPass(
-    "SpelunkerEffect",
+  scheduler->AddPass("SpelunkerEffect",
+    {"IndirectLighting", "gSpecial"},
     [&]
     {
       if (Item::GetTotalEffectOnEntity(world, player, Item::EffectType::Spelunker, 0) > 0)
@@ -1674,37 +1669,33 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         });
         ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
       }
-    },
-    "IndirectLighting",
-    "gSpecial");
+    });
 
   Fvog::Texture* aoTexture = &whiteTexture_.value();
-  scheduler->AddPass(
-    "AmbientOcclusion",
-    [&]
-    {
-      if (giMethod_ == GIMethod::DDGI && enableAo_)
-      {
-        aoParams_.voxels          = voxels;
-        aoParams_.inputDepth      = &frame.gDepth.value();
-        aoParams_.inputNormal     = &frame.gNormal.value();
-        aoParams_.outputSize      = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
-        aoParams_.frameNumber     = uint32_t(Fvog::GetDevice().frameNumber);
-        aoParams_.clip_from_view  = clip_from_view;
-        aoParams_.world_from_clip = glm::inverse(clip_from_world);
-        aoParams_.cameraPosWS     = position;
+  if (giMethod_ == GIMethod::DDGI && enableAo_)
+  {
+    aoParams_.voxels          = voxels;
+    aoParams_.inputDepth      = &frame.gDepth.value();
+    aoParams_.inputNormal     = &frame.gNormal.value();
+    aoParams_.outputSize      = {frame.gAlbedo->GetCreateInfo().extent.width, frame.gAlbedo->GetCreateInfo().extent.height};
+    aoParams_.frameNumber     = uint32_t(Fvog::GetDevice().frameNumber);
+    aoParams_.clip_from_view  = clip_from_view;
+    aoParams_.world_from_clip = glm::inverse(clip_from_world);
+    aoParams_.cameraPosWS     = position;
 
-        aoTexture = &ao_.ComputeAO(commandBuffer, aoParams_);
-      }
-    },
-    "RenderOpaque");
+    ao_.ComputeAO(*scheduler, commandBuffer, aoParams_);
+    aoTexture = &ao_.GetAOTexture();
+  }
+  else
+  {
+    scheduler->AddPass("AmbientOcclusion", nullptr);
+  }
 
   // Shade image.
-  scheduler->AddPass(
-    "ShadeDeferred",
+  scheduler->AddPass("ShadeDeferred",
+    {"AmbientOcclusion", "SpelunkerEffect", "RenderOpaque", "TranslucentVoxels", "FrameGIlluminance", "ShadowMaps", "AllSky"},
     [&]
     {
-      auto marker = ctx.MakeScopedDebugMarker("Shade deferred");
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
       ctx.SetPushConstants(ShadingPushConstants{
         .voxels               = voxels,
@@ -1718,17 +1709,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .ambientOcclusion     = aoTexture->ImageView().GetTexture2D(),
       });
       ctx.DispatchInvocations(frame.sceneColorInternalRes->GetCreateInfo().extent);
-    },
-    "AmbientOcclusion",
-    "SpelunkerEffect",
-    "RenderOpaque",
-    "TranslucentVoxels",
-    "FrameGIlluminance",
-    "ShadowMaps",
-    "AllSky");
+    });
 
-  scheduler->AddPass(
-    "SSGI",
+  scheduler->AddPass("SSGI",
+    {"ShadeDeferred", "IndirectLighting"},
     [&]
     {
       if (enableSsgi_)
@@ -1746,28 +1730,25 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         auto& sceneColorWithSSGI = ssgi_.Dispatch(commandBuffer, ssgiParams_);
         std::swap(sceneColorWithSSGI, frame.sceneColorInternalRes.value());
       }
-    },
-    "ShadeDeferred",
-    "IndirectLighting");
+    });
 
   if (giMethod_ == GIMethod::None)
   {
     scheduler->AddPass("IndirectLighting", nullptr);
   }
 
-  scheduler->AddPass(
-    "PrepSceneColor",
+  scheduler->AddPass("PrepSceneColor",
+    {"ShadeDeferred", "SSGI"},
+    -1,
     [&]
     {
       ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
       ctx.ImageBarrier(frame.gDepth.value(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-    },
-    "ShadeDeferred",
-    "SSGI");
+    });
 
   {
-    scheduler->AddPass(
-      "RayMarchedClouds",
+    scheduler->AddPass("RayMarchedClouds",
+      {"RenderOpaque", "PrepSceneColor", "IndirectLighting", "AllSky"},
       [&]
       {
         rayMarchedClouds_->Render(commandBuffer,
@@ -1792,14 +1773,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .zNear               = (float)cameraNearPlane.Get(),
           });
         weather_.cloudHorizontalOffset += weather_.windVelocity * (float)dt.game;
-      },
-      "RenderOpaque",
-      "PrepSceneColor",
-      "IndirectLighting",
-      "AllSky");
+      });
 
-    scheduler->AddPass(
-      "RayMarchedCloudsUpscale",
+    scheduler->AddPass("RayMarchedCloudsUpscale",
+      {"RayMarchedClouds"},
       [&]
       {
         rayMarchedClouds_->Upscale(commandBuffer,
@@ -1810,11 +1787,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .upscaleHeight = renderInternalHeight,
             .zNear         = (float)cameraNearPlane.Get(),
           });
-      },
-      "RayMarchedClouds");
+      });
 
-    scheduler->AddPass(
-      "RayMarchedCloudsComposite",
+    scheduler->AddPass("RayMarchedCloudsComposite",
+      {"RayMarchedCloudsUpscale"},
       [&]
       {
         rayMarchedClouds_->Composite(commandBuffer,
@@ -1823,12 +1799,11 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .gRadianceIn    = &frame.sceneColorInternalRes.value(),
             .gRadianceOut   = &frame.sceneColorInternalRes.value(),
           });
-      },
-      "RayMarchedCloudsUpscale");
+      });
   }
 
-  scheduler->AddPass(
-    "Fog",
+  scheduler->AddPass("Fog",
+    {"IndirectLighting", "RayMarchedCloudsComposite", "AllSky"},
     [&]
     {
       if (!debugDisableFog)
@@ -1883,12 +1858,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
           frame.sceneColorInternalRes.value(),
           inScatteringAndTransmittanceVolume.value());
       }
-    },
-    "IndirectLighting",
-    "RayMarchedCloudsComposite",
-    "AllSky");
+    });
 
   scheduler->AddPass("DdgiDebugProbes",
+    {"IndirectLighting", "Fog"},
     [&]
     {
       if (ddgiDebugView_ != DDGIDebugView::None)
@@ -1930,11 +1903,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
 
         ctx.EndRendering();
       }
-    },
-    "IndirectLighting",
-    "Fog");
+    });
 
   scheduler->AddPass("AutoExposure",
+    {"DdgiDebugProbes"},
     [&]
     {
       ZoneScopedN("Auto Exposure");
@@ -1948,11 +1920,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
           .logMinLuminance = -15.0f,
           .logMaxLuminance = 15.0f,
         });
-    },
-    "DdgiDebugProbes");
+    });
 
-  scheduler->AddPass(
-    "TAAU",
+  scheduler->AddPass("TAAU",
+    {"AutoExposure"},
     [&]
     {
 #ifdef FROGRENDER_FSR2_ENABLE
@@ -2028,11 +1999,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         *frame.sceneColorOutputRes->currentLayout = VK_IMAGE_LAYOUT_GENERAL;
       }
 #endif
-    },
-    "AutoExposure");
+    });
 
-  scheduler->AddPass(
-    "Bloom",
+  scheduler->AddPass("Bloom",
+    {"TAAU"},
     [&]
     {
       if (enableBloom)
@@ -2048,11 +2018,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .useLowPassFilterOnFirstPass = true,
           });
       }
-    },
-    "TAAU");
+    });
 
-  scheduler->AddPass(
-    "Tonemap",
+  scheduler->AddPass("Tonemap",
+    {"Bloom"},
     [&]
     {
       ctx.ImageBarrier(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
@@ -2074,8 +2043,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         });
         ctx.DispatchInvocations(frame.sceneColorTonemapped->GetCreateInfo().extent);
       }
-    },
-    "Bloom");
+    });
 
   //{
   //  auto file = std::ofstream("renderer.dot", std::ios::out | std::ios::binary | std::ios::trunc);

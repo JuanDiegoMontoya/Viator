@@ -24,7 +24,7 @@ namespace Techniques
     });
   }
 
-  Fvog::Texture& RayTracedAO::ComputeAO(VkCommandBuffer commandBuffer, const ComputeParams& params)
+  void RayTracedAO::ComputeAO(Scheduler& scheduler, VkCommandBuffer commandBuffer, const ComputeParams& params)
   {
     ASSERT(params.inputDepth);
     ASSERT(params.inputNormal);
@@ -42,51 +42,72 @@ namespace Techniques
       aoLowResTexture_ = Fvog::CreateTexture2D(internalResolution, Fvog::Format::R16_UNORM, Fvog::TextureUsage::GENERAL, "AO low res Texture");
     }
 
-    ctx.ImageBarrierDiscard(aoLowResTexture_.value(), VK_IMAGE_LAYOUT_GENERAL);
-    ctx.ImageBarrierDiscard(aoOutputTexture_.value(), VK_IMAGE_LAYOUT_GENERAL);
+    scheduler.AddPass("PrepAO",
+      -1,
+      [=, this]
+      {
+        ctx.ImageBarrierDiscard(aoLowResTexture_.value(), VK_IMAGE_LAYOUT_GENERAL);
+        ctx.ImageBarrierDiscard(aoOutputTexture_.value(), VK_IMAGE_LAYOUT_GENERAL);
+      });
 
     // Generate raw AO
-    auto marker = ctx.MakeScopedDebugMarker("Ray Traced AO");
-    ctx.BindComputePipeline(rtaoPipeline_.GetPipeline());
-    ctx.SetPushConstants(RtaoArguments{
-      .voxels      = params.voxels,
-      .gDepth      = params.inputDepth->ImageView().GetTexture2D(),
-      .gNormal     = params.inputNormal->ImageView().GetTexture2D(),
-      .outputAo    = aoLowResTexture_.value().ImageView().GetImage2D(),
-      .numRays     = uint32_t(params.numRays),
-      .rayLength   = params.rayLength,
-      .frameNumber = params.frameNumber,
-    });
-    ctx.DispatchInvocations(aoLowResTexture_->GetCreateInfo().extent);
-    ctx.Barrier();
+    scheduler.AddPass("RenderRayTracedAO",
+      {"PrepAO", "RenderOpaque"},
+      [=, this]
+      {
+        ctx.BindComputePipeline(rtaoPipeline_.GetPipeline());
+        ctx.SetPushConstants(RtaoArguments{
+          .voxels      = params.voxels,
+          .gDepth      = params.inputDepth->ImageView().GetTexture2D(),
+          .gNormal     = params.inputNormal->ImageView().GetTexture2D(),
+          .outputAo    = aoLowResTexture_.value().ImageView().GetImage2D(),
+          .numRays     = uint32_t(params.numRays),
+          .rayLength   = params.rayLength,
+          .frameNumber = params.frameNumber,
+        });
+        ctx.DispatchInvocations(aoLowResTexture_->GetCreateInfo().extent);
+      });
 
     if (params.upscaleFactor == 1)
     {
-      return aoLowResTexture_.value();
+      aoTextureToReturn = &aoLowResTexture_.value();
+      scheduler.AddPass("AmbientOcclusion", {"RenderRayTracedAO"}, nullptr);
+      return;
     }
 
-    // Upscale to output resolution
-    ctx.BindComputePipeline(upscalePipeline_.GetPipeline());
-    upscaleUniforms_.UpdateData(commandBuffer,
-      FilterParams_t{
-        .proj                     = params.clip_from_view,
-        .invViewProj              = params.world_from_clip,
-        .viewPos                  = params.cameraPosWS,
-        .stepWidth                = params.stepWidth,
-        .targetDim                = {aoOutputTexture_->GetCreateInfo().extent.width, aoOutputTexture_->GetCreateInfo().extent.height},
-        .phiNormal                = params.phiNormal,
-        .phiDepth                 = params.phiDepth,
-        .rawAmbientOcclusion      = aoLowResTexture_->ImageView().GetTexture2D(),
-        .gNormal                  = params.inputNormal->ImageView().GetTexture2D(),
-        .gDepth                   = params.inputDepth->ImageView().GetTexture2D(),
-        .upscaledAmbientOcclusion = aoOutputTexture_->ImageView().GetImage2D(),
-      });
-    ctx.SetPushConstants(FilterUniforms{
-      .uniforms = upscaleUniforms_.GetDeviceBuffer().GetDeviceAddress(),
-    });
-    ctx.DispatchInvocations(aoOutputTexture_->GetCreateInfo().extent);
-    ctx.Barrier();
+    aoTextureToReturn = &aoOutputTexture_.value();
 
-    return aoOutputTexture_.value();
+    scheduler.AddPass("UpscaleAO",
+      {"RenderRayTracedAO"},
+      [=, this]
+      {
+        // Upscale to output resolution
+        ctx.BindComputePipeline(upscalePipeline_.GetPipeline());
+        upscaleUniforms_.UpdateData(commandBuffer,
+          FilterParams_t{
+            .proj                     = params.clip_from_view,
+            .invViewProj              = params.world_from_clip,
+            .viewPos                  = params.cameraPosWS,
+            .stepWidth                = params.stepWidth,
+            .targetDim                = {aoOutputTexture_->GetCreateInfo().extent.width, aoOutputTexture_->GetCreateInfo().extent.height},
+            .phiNormal                = params.phiNormal,
+            .phiDepth                 = params.phiDepth,
+            .rawAmbientOcclusion      = aoLowResTexture_->ImageView().GetTexture2D(),
+            .gNormal                  = params.inputNormal->ImageView().GetTexture2D(),
+            .gDepth                   = params.inputDepth->ImageView().GetTexture2D(),
+            .upscaledAmbientOcclusion = aoOutputTexture_->ImageView().GetImage2D(),
+          });
+        ctx.SetPushConstants(FilterUniforms{
+          .uniforms = upscaleUniforms_.GetDeviceBuffer().GetDeviceAddress(),
+        });
+        ctx.DispatchInvocations(aoOutputTexture_->GetCreateInfo().extent);
+      });
+
+    scheduler.AddPass("AmbientOcclusion", {"UpscaleAO"}, nullptr);
+  }
+
+  Fvog::Texture& RayTracedAO::GetAOTexture()
+  {
+    return *aoTextureToReturn;
   }
 } // namespace Techniques
