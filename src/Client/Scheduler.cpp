@@ -275,7 +275,7 @@ namespace
 
       auto FlushPending = [&]
       {
-        std::ranges::sort(pending, std::ranges::greater{}, [](const auto& node) { return node->payload.priority; });
+        std::ranges::stable_sort(pending, std::ranges::greater{}, [](const auto& node) { return node->payload.priority; });
         for (const auto* node : pending)
         {
           if (params.nodePrologue)
