@@ -1108,14 +1108,15 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
         }
 
         ImGui::BeginDisabled(head_->presentMode != VK_PRESENT_MODE_FIFO_KHR && head_->presentMode != VK_PRESENT_MODE_FIFO_RELAXED_KHR);
-        sGameSettingsModified |= ImGui::Checkbox("Frame pacing", &head_->enableFramePacing);
+        sGameSettingsModified |= ImGui::Checkbox("Reduce latency", &head_->enableFramePacing);
         ImGui::EndDisabled();
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal))
         {
           ImGui::SetTooltip("%s", "If enabled, delays input polling so that it occurs as close\n"
-                                  "to presentation as possible. This should reduce input latency.\n"
-                                  "Only available for FIFO and FIFO Relaxed present modes.");
+                                  "to presentation as possible. This reduces input latency, but\n"
+                                  "adds a risk of skipping frames. Only available for FIFO and \n"
+                                  "FIFO Relaxed present modes.");
         }
 
         ImGui::Text("Global Illumination Method");
