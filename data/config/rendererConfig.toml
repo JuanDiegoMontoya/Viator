@@ -4,6 +4,7 @@
 ambient_occlusion = true
 frame_pacing = true
 present_mode = 3
+triple_buffering = true
 
     [graphics.bloom]
     enable = true

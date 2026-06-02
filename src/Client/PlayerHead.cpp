@@ -638,9 +638,14 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo)
   {
     ZoneScopedN("Create Swapchain");
     Fvog::detail::CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceCapabilities_));
-    numSwapchainImages = surfaceCapabilities_.minImageCount;
-    swapchain_ =
-      MakeVkbSwapchain(Fvog::GetDevice().device_, windowFramebufferWidth, windowFramebufferHeight, presentMode, numSwapchainImages, VK_NULL_HANDLE, swapchainFormat_);
+    numSwapchainImages = glm::clamp(surfaceCapabilities_.minImageCount + numExtraSwapchainImages, surfaceCapabilities_.minImageCount, surfaceCapabilities_.maxImageCount);
+    swapchain_ = MakeVkbSwapchain(Fvog::GetDevice().device_,
+      windowFramebufferWidth,
+      windowFramebufferHeight,
+      presentMode,
+      numSwapchainImages,
+      VK_NULL_HANDLE,
+      swapchainFormat_);
     CleanupPerSwapchainImageData(perSwapchainImageData);
     perSwapchainImageData = MakePerSwapchainImageData(numSwapchainImages);
 
@@ -1017,8 +1022,14 @@ void PlayerHead::RemakeSwapchain([[maybe_unused]] uint32_t newWidth, [[maybe_unu
 
   {
     ZoneScopedN("Create New Swapchain");
-    swapchain_ =
-      MakeVkbSwapchain(Fvog::GetDevice().device_, windowFramebufferWidth, windowFramebufferHeight, presentMode, numSwapchainImages, oldSwapchain, swapchainFormat_);
+    numSwapchainImages = glm::clamp(surfaceCapabilities_.minImageCount + numExtraSwapchainImages, surfaceCapabilities_.minImageCount, surfaceCapabilities_.maxImageCount);
+    swapchain_ = MakeVkbSwapchain(Fvog::GetDevice().device_,
+      windowFramebufferWidth,
+      windowFramebufferHeight,
+      presentMode,
+      numSwapchainImages,
+      oldSwapchain,
+      swapchainFormat_);
     CleanupPerSwapchainImageData(perSwapchainImageData);
     perSwapchainImageData = MakePerSwapchainImageData(numSwapchainImages);
   }

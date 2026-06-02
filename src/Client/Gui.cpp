@@ -1003,6 +1003,7 @@ void VoxelRenderer::LoadGameSettings()
   enableAo_          = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
   head_->presentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->presentMode), 0, 3);
   head_->enableFramePacing = sGameSettings["graphics"]["frame_pacing"].value_or(false);
+  head_->numExtraSwapchainImages = (int)sGameSettings["graphics"]["triple_buffering"].value_or(true);
   head_->shouldRemakeSwapchainNextFrame = true;
 
   if (head_->audio_)
@@ -1107,6 +1108,20 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
           ImGui::EndCombo();
         }
 
+        bool tripleBuffering = head_->numExtraSwapchainImages != 0;
+        if (ImGui::Checkbox("Triple buffering", &tripleBuffering))
+        {
+          sGameSettingsModified = true;
+          head_->shouldRemakeSwapchainNextFrame = true;
+        }
+        head_->numExtraSwapchainImages = tripleBuffering ? 1 : 0;
+
+        if (ImGui::IsItemHovered())
+        {
+          ImGui::SetTooltip("%s", "Adds an extra swapchain image, which may increase the overall \n"
+                                  "frame rate, but increase input latency.");
+        }
+
         ImGui::BeginDisabled(head_->presentMode != VK_PRESENT_MODE_FIFO_KHR && head_->presentMode != VK_PRESENT_MODE_FIFO_RELAXED_KHR);
         sGameSettingsModified |= ImGui::Checkbox("Reduce latency", &head_->enableFramePacing);
         ImGui::EndDisabled();
@@ -1118,6 +1133,8 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
                                   "adds a risk of skipping frames. Only available for FIFO and \n"
                                   "FIFO Relaxed present modes.");
         }
+
+        ImGui::Spacing();
 
         ImGui::Text("Global Illumination Method");
         ImGui::Separator();

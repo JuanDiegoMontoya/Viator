@@ -116,6 +116,7 @@ private:
   float framePacingSleepDuration = 0;
   float lastFrameSleepDuration   = 0;
   float smoothGameTickDuration   = 0;
+  int numExtraSwapchainImages{};
 
   Game2::AutoCVar_float framePacingHeadroom = {
     "r.framePacing.headroom",
