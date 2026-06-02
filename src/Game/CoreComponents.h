@@ -11,7 +11,7 @@ struct DeltaTime
 {
   float game;     // Affected by game effects that scale the passage of time.
   float real;     // Real time, unaffected by gameplay, inexorably marching on.
-  float fraction; // For variable rate updates, fraction
+  float fraction; // The fraction of a game tick that has progressed since the last. Used for interpolation.
 };
 
 struct Name

@@ -20,6 +20,7 @@
 #include "VoxLoader.h"
 #include "World.h"
 #include "Core/Image.h"
+#include "Core/Timer.h"
 #include "Game/Audio.h"
 #include "Game/Scripting.h"
 #include "Physics/PhysicsUtils.h"
@@ -580,9 +581,16 @@ void Game::Run()
         .fraction = float(fixedUpdateAccum / tickDuration),
       };
 
+      bool willHaveGameTick = false;
+      if (world_->globals->game->gameState == GameState::GAME)
+      {
+        fixedUpdateAccum += realDeltaTime * timeScale;
+        willHaveGameTick = fixedUpdateAccum > tickDuration;
+      }
+
       if (head_)
       {
-        head_->VariableUpdatePre(dt, *world_);
+        head_->VariableUpdatePre(dt, *world_, willHaveGameTick);
       }
 
       //if (world_->IsServer())
@@ -600,13 +608,17 @@ void Game::Run()
 
       if (world_->globals->game->gameState == GameState::GAME)
       {
-        constexpr int MAX_TICKS = 4;
-        int accumTicks          = 0;
-        fixedUpdateAccum += realDeltaTime * timeScale;
-        while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
+        if (willHaveGameTick)
         {
-          fixedUpdateAccum -= tickDuration;
-          Tick(static_cast<float>(tickDuration));
+          constexpr int MAX_TICKS = 4;
+          int accumTicks          = 0;
+          auto timer = Timer::Create();
+          while (fixedUpdateAccum > tickDuration && accumTicks++ < MAX_TICKS)
+          {
+            fixedUpdateAccum -= tickDuration;
+            Tick(static_cast<float>(tickDuration));
+          }
+          head_->UpdateGameTickTiming(static_cast<float>(timer->Elapsed_s()));
         }
 
         dt.fraction = std::clamp(float(fixedUpdateAccum / tickDuration), 0.0f, 1.0f);
@@ -639,6 +651,8 @@ void Game::Run()
 void Game::Tick(float dt)
 {
   ZoneScoped;
+  ZoneColor(tracy::Color::DarkGreen);
+
   if (networking_)
   {
     SPDLOG_TRACE("networking_->ProcessMessages()");

@@ -1001,7 +1001,8 @@ void VoxelRenderer::LoadGameSettings()
   pathTracerBounces  = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
   enableBloom        = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
   enableAo_          = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
-  head_->presentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->presentMode), 0, 2);
+  head_->presentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->presentMode), 0, 3);
+  head_->enableFramePacing = sGameSettings["graphics"]["frame_pacing"].value_or(false);
   head_->shouldRemakeSwapchainNextFrame = true;
 
   if (head_->audio_)
@@ -1076,14 +1077,17 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
     {
       if (ImGui::BeginTabItem("Graphics"))
       {
-        constexpr auto items    = std::array{"Immediate", "Mailbox", "FIFO"};
-        constexpr auto tooltips = std::array{"Classic \"vsync off\" mode. Uncapped framerate, with tearing.",
-          "Uncapped framerate, without tearing.",
-          "Classic \"vsync on\" mode. Framerate is capped to the display refresh rate, without tearing."};
+        constexpr auto items    = std::array{"Immediate", "Mailbox", "FIFO", "FIFO Relaxed"};
+        constexpr auto tooltips = std::array{
+          "Classic \"vsync off\" mode. Uncapped framerate, with tearing.",
+          "Uncapped framerate, without tearing, but with more latency than Immediate.",
+          "Classic \"vsync on\" mode. Framerate is capped to the display refresh rate, without tearing.",
+          "Same as FIFO, except late frames will be presented immediately (with tearing), keeping latency relatively consistent."
+        };
         const auto presentMode = static_cast<int>(head_->presentMode);
         if (ImGui::BeginCombo("Present Mode", items[presentMode]))
         {
-          for (int i = 0; i < 3; i++)
+          for (int i = 0; i < 4; i++)
           {
             ImGui::BeginDisabled(!std::ranges::contains(head_->availablePresentModes_, static_cast<VkPresentModeKHR>(i)));
             if (ImGui::Selectable(items[i], i == presentMode))
@@ -1101,6 +1105,17 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
           }
 
           ImGui::EndCombo();
+        }
+
+        ImGui::BeginDisabled(head_->presentMode != VK_PRESENT_MODE_FIFO_KHR && head_->presentMode != VK_PRESENT_MODE_FIFO_RELAXED_KHR);
+        sGameSettingsModified |= ImGui::Checkbox("Frame pacing", &head_->enableFramePacing);
+        ImGui::EndDisabled();
+
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal))
+        {
+          ImGui::SetTooltip("%s", "If enabled, delays input polling so that it occurs as close\n"
+                                  "to presentation as possible. This should reduce input latency.\n"
+                                  "Only available for FIFO and FIFO Relaxed present modes.");
         }
 
         ImGui::Text("Global Illumination Method");
@@ -1175,6 +1190,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       graphics.insert_or_assign("bloom", bloom);
       graphics.insert_or_assign("ambient_occlusion", enableAo_);
       graphics.insert_or_assign("present_mode", head_->presentMode);
+      graphics.insert_or_assign("frame_pacing", head_->enableFramePacing);
       auto gi = toml::table();
       gi.insert_or_assign("method", giMethod_);
       graphics.insert_or_assign("gi", gi);

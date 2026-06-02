@@ -91,7 +91,7 @@ namespace Fvog
       VkCommandPool commandPool;
       VkCommandBuffer commandBuffer;
       uint64_t renderTimelineSemaphoreWaitValue{};
-      VkSemaphore swapchainSemaphore;
+      VkSemaphore acquireSemaphore;
       TransientAllocations transientAllocations;
     };
 

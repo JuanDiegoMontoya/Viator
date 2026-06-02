@@ -25,10 +25,14 @@ public:
   virtual ~Head() = default;
 
   // Before FixedUpdate
-  virtual void VariableUpdatePre(DeltaTime dt, World& world) = 0;
+  virtual void VariableUpdatePre(DeltaTime dt, World& world, bool willHaveGameTick) = 0;
 
   // After FixedUpdate
   virtual void VariableUpdatePost(DeltaTime dt, World& world) = 0;
+
+  // Call whenever there's at least one tick in the frame.
+  // This info is used to better estimate the frame time when frame pacing is enabled.
+  virtual void UpdateGameTickTiming([[maybe_unused]] float tickDuration_s) {}
 
   virtual void CreateRenderingMaterials([[maybe_unused]] const World& world) {}
 
@@ -45,7 +49,7 @@ class NullHead final : public Head
 public:
   NullHead();
   ~NullHead() override;
-  void VariableUpdatePre(DeltaTime, World&) override;
+  void VariableUpdatePre(DeltaTime, World&, bool) override;
   void VariableUpdatePost(DeltaTime, World&) override;
   Audio* GetAudio() override;
 

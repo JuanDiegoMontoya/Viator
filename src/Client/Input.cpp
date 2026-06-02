@@ -37,6 +37,7 @@ void InputSystem::VariableUpdatePre(DeltaTime, World& world, bool swapchainOk)
   }
   else
   {
+    ZoneScopedN("glfwWaitEvents");
     glfwWaitEvents();
     return;
   }

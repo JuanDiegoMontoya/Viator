@@ -328,7 +328,7 @@ namespace Fvog
 
       CheckVkResult(vkCreateSemaphore(device_, Address(VkSemaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      }), nullptr, &frame.swapchainSemaphore));
+      }), nullptr, &frame.acquireSemaphore));
     }
 
     // Immediate submit stuff (subject to change)
@@ -537,6 +537,7 @@ namespace Fvog
     {
       frame.transientAllocations = {};
     }
+    GetCurrentFrameData().renderTimelineSemaphoreWaitValue += 1000;
     FreeUnusedResources();
 
     vkDestroyPipelineLayout(device_, defaultPipelineLayout, nullptr);
@@ -548,7 +549,7 @@ namespace Fvog
     for (const auto& frame : frameData)
     {
       vkDestroyCommandPool(device_, frame.commandPool, nullptr);
-      vkDestroySemaphore(device_, frame.swapchainSemaphore, nullptr);
+      vkDestroySemaphore(device_, frame.acquireSemaphore, nullptr);
     }
 
     vkDestroySemaphore(device_, graphicsQueueTimelineSemaphore_, nullptr);
@@ -605,7 +606,7 @@ namespace Fvog
   {
     ZoneScoped;
     auto value = uint64_t{};
-
+    
     {
       ZoneScopedN("Get graphics queue semaphore value");
       value = GetCurrentFrameData().renderTimelineSemaphoreWaitValue;

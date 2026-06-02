@@ -2,7 +2,8 @@
 
 [graphics]
 ambient_occlusion = true
-present_mode = 2
+frame_pacing = true
+present_mode = 3
 
     [graphics.bloom]
     enable = true

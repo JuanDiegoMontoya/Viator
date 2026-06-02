@@ -5,6 +5,7 @@
 #include "Core/Reflection.h"
 #include "Game/Scripting.h"
 #include "Core/Serialization.h"
+#include "Core/Platform/PlatformInit.h"
 #include "Game/CVar.h"
 #ifdef GAME_HEADLESS
   #include "Game/Head.h"
@@ -85,6 +86,7 @@ int main(int argc, const char* const* argv)
 #ifdef TRACY_ENABLE
   TracySetProgramName("Viator");
 #endif
+  Core::Platform::Init();
   Core::Logging::Initialize();
   auto scripting = Scripting();
   Core::Reflection::Initialize(scripting);
@@ -150,10 +152,9 @@ int main(int argc, const char* const* argv)
   head = std::make_unique<NullHead>();
 #else
   head = std::make_unique<PlayerHead>(PlayerHead::CreateInfo{
-    .name        = "Gabagool",
-    .maximize    = false,
-    .decorate    = true,
-    .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+    .name     = "Gabagool",
+    .maximize = false,
+    .decorate = true,
   });
 #endif
 

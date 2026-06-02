@@ -10,7 +10,7 @@ NullHead::NullHead()
 
 NullHead::~NullHead() = default;
 
-void NullHead::VariableUpdatePre(DeltaTime, World&) {}
+void NullHead::VariableUpdatePre(DeltaTime, World&, bool) {}
 void NullHead::VariableUpdatePost(DeltaTime, World&) {}
 
 Audio* NullHead::GetAudio()

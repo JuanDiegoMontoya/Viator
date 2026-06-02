@@ -6,11 +6,6 @@
 #include "Game/Game.h"
 #include "Game/Assets.h"
 #include "Game/Globals.h"
-#include "stb_image.h"
-#include <GLFW/glfw3.h>
-#include <VkBootstrap.h>
-#include <glslang/Public/ShaderLang.h>
-#include <volk.h>
 
 #include "Fvog/Device.h"
 #include "Fvog/Buffer2.h"
@@ -23,6 +18,8 @@
 #include "PipelineManager.h"
 #include "VoxelRenderer.h"
 #include "PlayerAudio.h"
+#include "Core/Timer.h"
+#include "Core/Defer.h"
 
 #include "ImGui/imgui_impl_fvog.h"
 #include <imgui.h>
@@ -31,10 +28,18 @@
 
 #include <glm/gtc/constants.hpp>
 
+#include <volk.h>
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
 
 #include "spdlog/spdlog.h"
+
+#include "stb_image.h"
+#include "Core/Platform/Sleep.h"
+
+#include <GLFW/glfw3.h>
+#include <VkBootstrap.h>
+#include <glslang/Public/ShaderLang.h>
 
 #include <bit>
 #include <exception>
@@ -222,14 +227,14 @@ static auto MakePerSwapchainImageData(uint32_t count)
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
       }),
       nullptr,
-      &data.renderSemaphore));
+      &data.presentSemaphore));
 
     // TODO: gate behind compile-time switch
     vkSetDebugUtilsObjectNameEXT(Fvog::GetDevice().device_,
       Fvog::detail::Address(VkDebugUtilsObjectNameInfoEXT{
         .sType        = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
         .objectType   = VK_OBJECT_TYPE_SEMAPHORE,
-        .objectHandle = reinterpret_cast<uint64_t>(data.renderSemaphore),
+        .objectHandle = reinterpret_cast<uint64_t>(data.presentSemaphore),
         .pObjectName  = ("Render semaphore #" + std::to_string(i)).c_str(),
       }));
 
@@ -242,7 +247,7 @@ static void CleanupPerSwapchainImageData(std::span<PlayerHead::PerSwapchainImage
 {
   for (auto& data : datas)
   {
-    vkDestroySemaphore(Fvog::GetDevice().device_, data.renderSemaphore, nullptr);
+    vkDestroySemaphore(Fvog::GetDevice().device_, data.presentSemaphore, nullptr);
   }
 }
 
@@ -270,15 +275,65 @@ static auto MakeVkbSwapchain(const vkb::Device& device,
     .value();
 }
 
-void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world)
+void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world, bool willHaveGameTick)
 {
   ZoneScoped;
-  worldThisFrame_   = &world;
+  worldThisFrame_ = &world;
 
   if (audio_)
   {
     audio_->FreeUnusedResources();
   }
+
+  if (enableFramePacing && (presentMode == VK_PRESENT_MODE_FIFO_KHR || presentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR))
+  {
+    ZoneScopedN("Anti lag at home (sleep)");
+
+    // Based on https://codeberg.org/Games-by-Mason/mr_gpu/src/branch/main/src/ext/FramePacer.zig
+    const float refreshPeriod = 1.0f / videoMode->refreshRate;
+    const float overshootAmount = dt.real - refreshPeriod + static_cast<float>(framePacingOvershootTolerance.Get());
+    if (overshootAmount > 0 && lastFrameSleepDuration > 0.1f && overshootAmount < lastFrameSleepDuration)
+    {
+      ZoneColor(tracy::Color::Yellow);
+      ZoneTextF("Overshot previous frame due to sleep.\n"
+                "Frame time: %fms\n"
+                "Slept: %fms",
+        dt.real * 1000.0f,
+        lastFrameSleepDuration * 1000.0f);
+      framePacingSleepDuration *= static_cast<float>(framePacingOvershootScale.Get());
+    }
+
+    const float headroom      = static_cast<float>(framePacingHeadroom.Get()) / 1000.0f;
+    const auto sleepTime      = glm::min(lastFrameSlopTime + framePacingSleepDuration - headroom, refreshPeriod - headroom);
+    framePacingSleepDuration  = glm::max(glm::mix(framePacingSleepDuration, sleepTime, static_cast<float>(framePacingSmoothing.Get())), 0.0f);
+    // Reduce sleep if there will be a game tick this frame.
+    // The amount of reduction is based on an estimate from previous tick durations.
+    if (willHaveGameTick)
+    {
+      ZoneTextF("Compensating for tick(s) this frame with estimated duration %.3fms", smoothGameTickDuration * 1000);
+    }
+    const auto finalSleepTime = glm::max(framePacingSleepDuration - willHaveGameTick * smoothGameTickDuration, 0.0f);
+    lastFrameSleepDuration    = finalSleepTime;
+
+    TracyPlot("Slop (ms)", lastFrameSlopTime * 1000.0f);
+    TracyPlot("Sleep (ms)", finalSleepTime * 1000.0f);
+    Core::Platform::PreciseSleep(finalSleepTime);
+  }
+
+  {
+    // To minimize input latency, wait for the frame to become available *before* polling for input.
+    ZoneScopedN("vkWaitSemaphores (graphics queue)");
+    vkWaitSemaphores(Fvog::GetDevice().device_,
+      Fvog::detail::Address(VkSemaphoreWaitInfo{
+        .sType          = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores    = &Fvog::GetDevice().graphicsQueueTimelineSemaphore_,
+        .pValues        = &Fvog::GetDevice().GetCurrentFrameData().renderTimelineSemaphoreWaitValue,
+      }),
+      UINT64_MAX);
+    ZoneTextF("Frame index %u", Fvog::GetDevice().frameNumber % Fvog::Device::frameOverlap);
+  }
+
   inputSystem_->VariableUpdatePre(dt, world, swapchainOk);
 }
 
@@ -379,6 +434,11 @@ void PlayerHead::VariableUpdatePost(DeltaTime dt, World& world)
   }
 }
 
+void PlayerHead::UpdateGameTickTiming(float tickDuration_s)
+{
+  smoothGameTickDuration = glm::mix(smoothGameTickDuration, tickDuration_s, 0.1f);
+}
+
 void PlayerHead::CreateRenderingMaterials(const World& world)
 {
   voxelRenderer_->CreateRenderingMaterials(world);
@@ -399,6 +459,11 @@ void PlayerHead::SpawnParticleArchetypes(std::span<const Game2::Render::Particle
   voxelRenderer_->SpawnParticleArchetypes(archetypeSpawnInfos);
 }
 
+void PlayerHead::SetWeather(const Weather::State& state)
+{
+  voxelRenderer_->SetWeather(state);
+}
+
 Audio* PlayerHead::GetAudio()
 {
   static auto nullAudio = std::make_unique<NullAudio>();
@@ -409,7 +474,7 @@ Audio* PlayerHead::GetAudio()
   return audio_.get();
 }
 
-PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.presentMode)
+PlayerHead::PlayerHead(const CreateInfo& createInfo)
 {
   ZoneScoped;
 
@@ -440,11 +505,11 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   {
     throw std::runtime_error("No monitor detected");
   }
-  const GLFWvidmode* videoMode = glfwGetVideoMode(monitor);
+  videoMode = glfwGetVideoMode(monitor);
   {
     ZoneScopedN("Create Window");
     spdlog::info("Creating window");
-    window = glfwCreateWindow(static_cast<int>(videoMode->width * .75), static_cast<int>(videoMode->height * .75), createInfo.name.data(), nullptr, nullptr);
+    window = glfwCreateWindow(static_cast<int>(videoMode->width * .75), static_cast<int>(videoMode->height * .75), createInfo.name.c_str(), nullptr, nullptr);
     if (!window)
     {
       throw std::runtime_error("Failed to create window");
@@ -475,7 +540,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   glfwSetMonitorCallback(ApplicationAccess2::MonitorCallback);
   glfwSetDropCallback(window, ApplicationAccess2::PathDropCallback);
   glfwSetFramebufferSizeCallback(window, ApplicationAccess2::FramebufferResizeCallback);
-
+  
   // Load app icon
   {
     int x             = 0;
@@ -572,6 +637,8 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo) : presentMode(createInfo.pr
   // swapchain
   {
     ZoneScopedN("Create Swapchain");
+    Fvog::detail::CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceCapabilities_));
+    numSwapchainImages = surfaceCapabilities_.minImageCount;
     swapchain_ =
       MakeVkbSwapchain(Fvog::GetDevice().device_, windowFramebufferWidth, windowFramebufferHeight, presentMode, numSwapchainImages, VK_NULL_HANDLE, swapchainFormat_);
     CleanupPerSwapchainImageData(perSwapchainImageData);
@@ -724,7 +791,7 @@ void PlayerHead::Draw(DeltaTime dt)
   ZoneScoped;
   auto lock = std::scoped_lock(Fvog::GetDevice().copiumMutex_);
 
-  Fvog::GetDevice().frameNumber++;
+  auto _ = Defer([] { Fvog::GetDevice().frameNumber++; });
   auto& currentFrameData = Fvog::GetDevice().GetCurrentFrameData();
 
   {
@@ -737,6 +804,7 @@ void PlayerHead::Draw(DeltaTime dt)
         .pValues        = &currentFrameData.renderTimelineSemaphoreWaitValue,
       }),
       UINT64_MAX);
+    ZoneTextF("Frame index %u", Fvog::GetDevice().frameNumber % Fvog::Device::frameOverlap);
   }
   
   // Garbage collection
@@ -744,15 +812,18 @@ void PlayerHead::Draw(DeltaTime dt)
 
   uint32_t swapchainImageIndex{};
 
+  lastFrameSlopTime = 0;
+
   {
-    // https://gist.github.com/nanokatze/bb03a486571e13a7b6a8709368bd87cf#file-handling-window-resize-md
     ZoneScopedN("vkAcquireNextImage2KHR");
+    // https://gist.github.com/nanokatze/bb03a486571e13a7b6a8709368bd87cf#file-handling-window-resize-md
+    auto acquireTime = Timer::Create();
     if (auto acquireResult = vkAcquireNextImage2KHR(Fvog::GetDevice().device_,
           Fvog::detail::Address(VkAcquireNextImageInfoKHR{
             .sType      = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
             .swapchain  = swapchain_,
             .timeout    = static_cast<uint64_t>(-1),
-            .semaphore  = currentFrameData.swapchainSemaphore,
+            .semaphore  = currentFrameData.acquireSemaphore,
             .deviceMask = 1,
           }),
           &swapchainImageIndex);
@@ -769,6 +840,9 @@ void PlayerHead::Draw(DeltaTime dt)
     {
       return;
     }
+
+    lastFrameSlopTime += static_cast<float>(acquireTime->Elapsed_s());
+    ZoneTextF("Image index %u", swapchainImageIndex);
   }
 
   auto commandBuffer = currentFrameData.commandBuffer;
@@ -872,7 +946,7 @@ void PlayerHead::Draw(DeltaTime dt)
         },
         VkSemaphoreSubmitInfo{
           .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-          .semaphore = perSwapchainImageData[swapchainImageIndex].renderSemaphore,
+          .semaphore = perSwapchainImageData[swapchainImageIndex].presentSemaphore,
           .stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
         },
       };
@@ -884,7 +958,7 @@ void PlayerHead::Draw(DeltaTime dt)
           .waitSemaphoreInfoCount   = 1,
           .pWaitSemaphoreInfos      = Fvog::detail::Address(VkSemaphoreSubmitInfo{
                  .sType     = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                 .semaphore = currentFrameData.swapchainSemaphore,
+                 .semaphore = currentFrameData.acquireSemaphore,
                  .stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
           }),
           .commandBufferInfoCount   = 1,
@@ -902,11 +976,12 @@ void PlayerHead::Draw(DeltaTime dt)
 
     {
       ZoneScopedN("Present");
+      auto presentTimer = Timer::Create();
       if (auto presentResult = vkQueuePresentKHR(Fvog::GetDevice().graphicsQueue_,
             Fvog::detail::Address(VkPresentInfoKHR{
               .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
               .waitSemaphoreCount = 1,
-              .pWaitSemaphores    = &perSwapchainImageData[swapchainImageIndex].renderSemaphore,
+              .pWaitSemaphores    = &perSwapchainImageData[swapchainImageIndex].presentSemaphore,
               .swapchainCount     = 1,
               .pSwapchains        = &swapchain_.swapchain,
               .pImageIndices      = &swapchainImageIndex,
@@ -919,6 +994,8 @@ void PlayerHead::Draw(DeltaTime dt)
       {
         throw std::runtime_error("vkQueuePresent failed");
       }
+
+      lastFrameSlopTime += static_cast<float>(presentTimer->Elapsed_s());
     }
   }
 

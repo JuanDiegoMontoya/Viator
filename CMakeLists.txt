@@ -203,6 +203,13 @@ add_executable(frogRender
     src/Game/CVar.cpp
     src/Game/CVarInternal.h
     src/Game/Rendering/Particle.h
+    src/Core/Timer.h
+    src/Core/Timer.cpp
+    src/Core/Defer.h
+    src/Core/Platform/PlatformInit.h
+    src/Core/Platform/PlatformInit.cpp
+    src/Core/Platform/Sleep.h
+    src/Core/Platform/Sleep.cpp
 )
 
 target_compile_features(frogRender PUBLIC cxx_std_23)
