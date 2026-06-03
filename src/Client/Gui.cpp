@@ -1001,7 +1001,7 @@ void VoxelRenderer::LoadGameSettings()
   pathTracerBounces  = sGameSettings["graphics"]["pathtracer"]["bounces"].value_or(pathTracerBounces);
   enableBloom        = sGameSettings["graphics"]["bloom"]["enable"].value_or(enableBloom);
   enableAo_          = sGameSettings["graphics"]["ambient_occlusion"].value_or(enableAo_);
-  head_->presentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->presentMode), 0, 3);
+  head_->activePresentMode = (VkPresentModeKHR)glm::clamp(sGameSettings["graphics"]["present_mode"].value_or((int)head_->activePresentMode), 0, 3);
   head_->enableFramePacing = sGameSettings["graphics"]["frame_pacing"].value_or(false);
   head_->numExtraSwapchainImages = (int)sGameSettings["graphics"]["triple_buffering"].value_or(true);
   head_->shouldRemakeSwapchainNextFrame = true;
@@ -1085,7 +1085,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
           "Classic \"vsync on\" mode. Framerate is capped to the display refresh rate, without tearing.",
           "Same as FIFO, except late frames will be presented immediately (with tearing), keeping latency relatively consistent."
         };
-        const auto presentMode = static_cast<int>(head_->presentMode);
+        const auto presentMode = static_cast<int>(head_->activePresentMode);
         if (ImGui::BeginCombo("Present Mode", items[presentMode]))
         {
           for (int i = 0; i < 4; i++)
@@ -1094,7 +1094,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
             if (ImGui::Selectable(items[i], i == presentMode))
             {
               head_->shouldRemakeSwapchainNextFrame = true;
-              head_->presentMode                    = static_cast<VkPresentModeKHR>(i);
+              head_->activePresentMode                    = static_cast<VkPresentModeKHR>(i);
               sGameSettingsModified                 = true;
             }
             ImGui::EndDisabled();
@@ -1118,11 +1118,15 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 
         if (ImGui::IsItemHovered())
         {
+          // It should be noted that this isn't strictly describing triple buffering. However, desktop implementations
+          // have a surface minImageCount of 2, so this is true in practice. The assumption will be wrong on non-desktop GPUs.
+          // There are reports of minImageCounts of 1, 2, 3, and 4 for mobile devices on gpuinfo.org. Specifying it as an extra image
+          // and clamping to the device limits means that the behavior will be slightly misleading at worst.
           ImGui::SetTooltip("%s", "Adds an extra swapchain image, which may increase the overall \n"
                                   "frame rate, but increase input latency.");
         }
 
-        ImGui::BeginDisabled(head_->presentMode != VK_PRESENT_MODE_FIFO_KHR && head_->presentMode != VK_PRESENT_MODE_FIFO_RELAXED_KHR);
+        ImGui::BeginDisabled(head_->activePresentMode != VK_PRESENT_MODE_FIFO_KHR && head_->activePresentMode != VK_PRESENT_MODE_FIFO_RELAXED_KHR);
         sGameSettingsModified |= ImGui::Checkbox("Reduce latency", &head_->enableFramePacing);
         ImGui::EndDisabled();
 
@@ -1207,8 +1211,9 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
       bloom.insert_or_assign("enable", enableBloom);
       graphics.insert_or_assign("bloom", bloom);
       graphics.insert_or_assign("ambient_occlusion", enableAo_);
-      graphics.insert_or_assign("present_mode", head_->presentMode);
+      graphics.insert_or_assign("present_mode", head_->activePresentMode);
       graphics.insert_or_assign("frame_pacing", head_->enableFramePacing);
+      graphics.insert_or_assign("triple_buffering", static_cast<bool>(head_->numExtraSwapchainImages));
       auto gi = toml::table();
       gi.insert_or_assign("method", giMethod_);
       graphics.insert_or_assign("gi", gi);

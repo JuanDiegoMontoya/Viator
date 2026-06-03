@@ -259,7 +259,7 @@ static auto MakeVkbSwapchain(const vkb::Device& device,
   VkSwapchainKHR oldSwapchain,
   VkSurfaceFormatKHR format)
 {
-  spdlog::info("Creating swapchain with size {}x{}", width, height);
+  spdlog::info("Creating swapchain with size {}x{} and {} images", width, height, imageCount);
   return vkb::SwapchainBuilder{device}
     .set_desired_min_image_count(imageCount)
     .set_old_swapchain(oldSwapchain)
@@ -285,21 +285,25 @@ void PlayerHead::VariableUpdatePre(DeltaTime dt, World& world, bool willHaveGame
     audio_->FreeUnusedResources();
   }
 
-  if (enableFramePacing && (presentMode == VK_PRESENT_MODE_FIFO_KHR || presentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR))
+  if (enableFramePacing && (activePresentMode == VK_PRESENT_MODE_FIFO_KHR || activePresentMode == VK_PRESENT_MODE_FIFO_RELAXED_KHR))
   {
     ZoneScopedN("Anti lag at home (sleep)");
 
     // Based on https://codeberg.org/Games-by-Mason/mr_gpu/src/branch/main/src/ext/FramePacer.zig
-    const float refreshPeriod = 1.0f / videoMode->refreshRate;
-    const float overshootAmount = dt.real - refreshPeriod + static_cast<float>(framePacingOvershootTolerance.Get());
-    if (overshootAmount > 0 && lastFrameSleepDuration > 0.1f && overshootAmount < lastFrameSleepDuration)
+    const float refreshPeriod   = 1.0f / videoMode->refreshRate;
+    const float maxFrameTime    = refreshPeriod + static_cast<float>(framePacingOvershootTolerance.Get() / 1000.0);
+    const float overshootAmount = dt.real - maxFrameTime;
+    // Only back off if we are sure that our sleep caused the overshoot rather than natural variance.
+    if (overshootAmount > 0 && lastFrameSleepDuration > 0.1f / 1000.0f && overshootAmount < lastFrameSleepDuration)
     {
-      ZoneColor(tracy::Color::Yellow);
+      ZoneColor(tracy::Color::Goldenrod);
       ZoneTextF("Overshot previous frame due to sleep.\n"
-                "Frame time: %fms\n"
-                "Slept: %fms",
+                "Frame time: %.3fms\n"
+                "Slept: %.3fms\n"
+                "Max frame time: %.3fms",
         dt.real * 1000.0f,
-        lastFrameSleepDuration * 1000.0f);
+        lastFrameSleepDuration * 1000.0f,
+        maxFrameTime * 1000.0f);
       framePacingSleepDuration *= static_cast<float>(framePacingOvershootScale.Get());
     }
 
@@ -637,12 +641,46 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo)
   // swapchain
   {
     ZoneScopedN("Create Swapchain");
-    Fvog::detail::CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceCapabilities_));
-    numSwapchainImages = glm::clamp(surfaceCapabilities_.minImageCount + numExtraSwapchainImages, surfaceCapabilities_.minImageCount, surfaceCapabilities_.maxImageCount);
+
+    // Get available present modes for this surface
+    uint32_t presentModeCount{};
+    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, nullptr);
+    availablePresentModes_.resize(presentModeCount);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, availablePresentModes_.data());
+
+    // Get surface capabilities (namely minImageCount and maxImageCount) for each present mode.
+    // Vulkan offers a way to query this information irrespective of the present mode (simply don't use 
+    // pNext in VkSurfaceCapabilities2), but it provides less accurate limits.
+    for (auto presentMode : availablePresentModes_)
+    {
+      auto surfaceInfo = VkPhysicalDeviceSurfaceInfo2KHR{
+        .sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+        .surface = surface_,
+      };
+      auto surfacePresentMode = VkSurfacePresentModeKHR{
+        .sType       = VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR,
+        .presentMode = presentMode,
+      };
+      auto surfaceCapabilities = VkSurfaceCapabilities2KHR{
+        .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
+        .pNext = &surfacePresentMode,
+      };
+      Fvog::detail::CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilities2KHR(Fvog::GetDevice().physicalDevice_, &surfaceInfo, &surfaceCapabilities));
+      presentModeSurfaceCapabilities_.emplace(presentMode, surfaceCapabilities.surfaceCapabilities);
+    }
+
+    ASSERT(presentModeSurfaceCapabilities_.contains(activePresentMode));
+    const auto surfaceCapabilities = presentModeSurfaceCapabilities_[activePresentMode];
+    numSwapchainImages = glm::max(surfaceCapabilities.minImageCount + numExtraSwapchainImages, surfaceCapabilities.minImageCount);
+    // The spec allows maxImageCount to be 0 (unlimited), and some implementations (notably llvmpipe) actually report this, so we ought to check.
+    if (surfaceCapabilities.maxImageCount > 0)
+    {
+      numSwapchainImages = glm::min(numSwapchainImages, surfaceCapabilities.maxImageCount);
+    }
     swapchain_ = MakeVkbSwapchain(Fvog::GetDevice().device_,
       windowFramebufferWidth,
       windowFramebufferHeight,
-      presentMode,
+      activePresentMode,
       numSwapchainImages,
       VK_NULL_HANDLE,
       swapchainFormat_);
@@ -657,12 +695,6 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo)
     vkGetPhysicalDeviceSurfaceFormatsKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceFormatCount, nullptr);
     availableSurfaceFormats_.resize(surfaceFormatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(Fvog::GetDevice().physicalDevice_, surface_, &surfaceFormatCount, availableSurfaceFormats_.data());
-
-    // Get available present modes for this surface
-    uint32_t presentModeCount{};
-    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, nullptr);
-    availablePresentModes_.resize(presentModeCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(Fvog::GetDevice().physicalDevice_, surface_, &presentModeCount, availablePresentModes_.data());
   }
 
   glslang::InitializeProcess();
@@ -1022,11 +1054,17 @@ void PlayerHead::RemakeSwapchain([[maybe_unused]] uint32_t newWidth, [[maybe_unu
 
   {
     ZoneScopedN("Create New Swapchain");
-    numSwapchainImages = glm::clamp(surfaceCapabilities_.minImageCount + numExtraSwapchainImages, surfaceCapabilities_.minImageCount, surfaceCapabilities_.maxImageCount);
+    ASSERT(presentModeSurfaceCapabilities_.contains(activePresentMode));
+    const auto surfaceCapabilities = presentModeSurfaceCapabilities_[activePresentMode];
+    numSwapchainImages = glm::max(surfaceCapabilities.minImageCount + numExtraSwapchainImages, surfaceCapabilities.minImageCount);
+    if (surfaceCapabilities.maxImageCount > 0)
+    {
+      numSwapchainImages = glm::min(numSwapchainImages, surfaceCapabilities.maxImageCount);
+    }
     swapchain_ = MakeVkbSwapchain(Fvog::GetDevice().device_,
       windowFramebufferWidth,
       windowFramebufferHeight,
-      presentMode,
+      activePresentMode,
       numSwapchainImages,
       oldSwapchain,
       swapchainFormat_);

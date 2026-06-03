@@ -10,6 +10,8 @@
 
 #include <span>
 #include <functional>
+#include <vector>
+#include <unordered_map>
 
 struct GLFWwindow;
 struct GLFWvidmode;
@@ -78,7 +80,6 @@ private:
   DestroyList2 destroyList_;
   vkb::Instance instance_{};
   VkSurfaceKHR surface_{};
-  VkSurfaceCapabilitiesKHR surfaceCapabilities_{};
   uint32_t numSwapchainImages = 0;
   VkDescriptorPool imguiDescriptorPool_{};
   vkb::Swapchain swapchain_{};
@@ -86,6 +87,7 @@ private:
   std::vector<VkImageView> swapchainImageViews_;
   std::vector<VkSurfaceFormatKHR> availableSurfaceFormats_;
   std::vector<VkPresentModeKHR> availablePresentModes_;
+  std::unordered_map<VkPresentModeKHR, VkSurfaceCapabilitiesKHR> presentModeSurfaceCapabilities_{};
   static constexpr VkSurfaceFormatKHR defaultSwapchainFormat = {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
   VkSurfaceFormatKHR swapchainFormat_                        = defaultSwapchainFormat; // Only Application should modify this
   VkSurfaceFormatKHR nextSwapchainFormat_ =
@@ -102,7 +104,7 @@ private:
   // Resizing from UI is deferred until next frame so texture handles remain valid when ImGui is rendered
   bool shouldResizeNextFrame          = false;
   bool shouldRemakeSwapchainNextFrame = false;
-  VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+  VkPresentModeKHR activePresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
   std::vector<PerSwapchainImageData> perSwapchainImageData;
 
