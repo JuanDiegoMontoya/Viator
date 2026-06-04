@@ -252,3 +252,42 @@ float Math::GaussianNorm(float x, float mean, float stddev)
   const float den    = stddev * stddev;
   return factor * std::exp(-0.5f * (num / den));
 }
+
+glm::vec3 Math::KelvinToSrgb(float kelvin)
+{
+  kelvin = glm::clamp(kelvin, 1000.0f, 40000.0f) / 100.0f;
+  float r, g, b;
+
+  if (kelvin <= 66.0f)
+  {
+    r = 1.0f;
+  }
+  else
+  {
+    r = glm::clamp(329.698727446f * std::pow(kelvin - 60.0f, -0.1332047592f) / 255.0f, 0.0f, 1.0f);
+  }
+
+  if (kelvin <= 66.0f)
+  {
+    g = glm::clamp((99.4708025861f * std::log(kelvin) - 161.1195681661f) / 255.0f, 0.0f, 1.0f);
+  }
+  else
+  {
+    g = glm::clamp(288.1221695283f * std::pow(kelvin - 60.0f, -0.0755148492f) / 255.0f, 0.0f, 1.0f);
+  }
+
+  if (kelvin >= 66.0f)
+  {
+    b = 1.0f;
+  }
+  else if (kelvin <= 19.0f)
+  {
+    b = 0.0f;
+  }
+  else
+  {
+    b = glm::clamp((138.5177312231f * std::log(kelvin - 10.0f) - 305.0447927307f) / 255.0f, 0.0f, 1.0f);
+  }
+
+  return {r, g, b};
+}

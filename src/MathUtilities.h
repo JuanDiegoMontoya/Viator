@@ -81,4 +81,6 @@ namespace Math
   }
 
   float GaussianNorm(float x, float mean, float stddev);
+
+  glm::vec3 KelvinToSrgb(float kelvin);
 } // namespace Math
