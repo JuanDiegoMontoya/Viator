@@ -573,6 +573,7 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo)
                   .set_debug_callback(vulkan_debug_callback)
                   .enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
                   .enable_extension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME)
+                  .enable_extension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME)
                   .build()
                   .value();
 
@@ -653,17 +654,17 @@ PlayerHead::PlayerHead(const CreateInfo& createInfo)
     // pNext in VkSurfaceCapabilities2), but it provides less accurate limits.
     for (auto presentMode : availablePresentModes_)
     {
-      auto surfaceInfo = VkPhysicalDeviceSurfaceInfo2KHR{
-        .sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
-        .surface = surface_,
-      };
       auto surfacePresentMode = VkSurfacePresentModeKHR{
         .sType       = VK_STRUCTURE_TYPE_SURFACE_PRESENT_MODE_KHR,
         .presentMode = presentMode,
       };
+      auto surfaceInfo = VkPhysicalDeviceSurfaceInfo2KHR{
+        .sType   = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR,
+        .pNext   = &surfacePresentMode,
+        .surface = surface_,
+      };
       auto surfaceCapabilities = VkSurfaceCapabilities2KHR{
         .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR,
-        .pNext = &surfacePresentMode,
       };
       Fvog::detail::CheckVkResult(vkGetPhysicalDeviceSurfaceCapabilities2KHR(Fvog::GetDevice().physicalDevice_, &surfaceInfo, &surfaceCapabilities));
       presentModeSurfaceCapabilities_.emplace(presentMode, surfaceCapabilities.surfaceCapabilities);
