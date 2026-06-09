@@ -203,6 +203,8 @@ add_executable(frogRender
     src/Game/CVar.cpp
     src/Game/CVarInternal.h
     src/Game/Rendering/Particle.h
+    src/Game/WeatherDirector.h
+    src/Game/WeatherDirector.cpp
     src/Core/Timer.h
     src/Core/Timer.cpp
     src/Core/Defer.h

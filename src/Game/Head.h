@@ -16,6 +16,11 @@ namespace Game2::Render
   struct ParticleArchetype;
 }
 
+namespace Weather
+{
+  struct State;
+}
+
 // A head implements windowing, input polling, and rendering, if applicable.
 class Head
 {
@@ -39,6 +44,8 @@ public:
   virtual void RegisterParticleArchetype([[maybe_unused]] std::string name, [[maybe_unused]] const Game2::Render::ParticleArchetype& archetype) {}
   virtual void SpawnParticles([[maybe_unused]] std::span<const Game2::Render::Particle> particles) {}
   virtual void SpawnParticleArchetypes([[maybe_unused]] std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos) {}
+
+  virtual void SetWeather([[maybe_unused]] const Weather::State& state) {}
 
   virtual Audio* GetAudio() = 0;
 };

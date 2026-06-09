@@ -39,7 +39,9 @@ struct VolumetricUniforms
   FVOG_FLOAT noiseOffsetScale;
   FVOG_UINT32 frog;
   FVOG_FLOAT groundFogDensity;
+  FVOG_FLOAT rainFogDensity;
 
+  CascadedShadowMapInfoPtr skyShadowMap;
   FVOG_SHARED Texture2D inSceneLuminance;
   FVOG_SHARED Texture2D gDepth;
   FVOG_SHARED Texture3D inScatteringAndTransmittanceVolume;

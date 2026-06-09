@@ -19,6 +19,7 @@ namespace Game2::Render
     ForceUpPosZ            = 1 << 7,
     ForceRightPosX         = 1 << 8,
     CollideWithTranslucent = 1 << 9,
+    ForceUpNormVelocity    = 1 << 10,
   };
 
   FVOG_DECLARE_FLAG_TYPE(ParticleFlags, ParticleFlag, uint32_t);

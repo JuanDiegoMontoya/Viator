@@ -165,6 +165,8 @@ namespace Techniques
             .accelerationMax   = {},
           });
 
+        using Game2::Render::ParticleFlag;
+
         ParticlesImpl::RegisterArchetype("rain_impact",
           {
             .prototype =
@@ -185,6 +187,31 @@ namespace Techniques
             .positionOffsetMax = {},
             .velocityMin       = {},
             .velocityMax       = {},
+            .accelerationMin   = {},
+            .accelerationMax   = {},
+          });
+
+        ParticlesImpl::RegisterArchetype("rain",
+          {
+            .prototype =
+              Game2::Render::Particle{
+                .flags = ParticleFlag::Solid | ParticleFlag::UseSkyShadowMap | ParticleFlag::DestroyOnCollision | ParticleFlag::ForceUpNormVelocity |
+                         ParticleFlag::CollideWithTranslucent,
+                .baseColorTexture              = "rain",
+                .initialBaseColorFactor        = {1, 1, 1, 1},
+                .finalBaseColorFactor          = {1, 1, 1, 1},
+                .position                      = {},
+                .velocity                      = {0, 0, 0},
+                .acceleration                  = {0, 0, 0},
+                .particleArchetypeToSpawnOnHit = "rain_impact",
+                .initialScale                  = glm::vec2(0.01f, 0.05f),
+                .finalScale                    = glm::vec2(0.01f, 0.05f),
+                .life                          = 3,
+              },
+            .positionOffsetMin = {-50, 10, -50},
+            .positionOffsetMax = {50, 50, 50},
+            .velocityMin       = {-1, -11, -1},
+            .velocityMax       = {1, -9, 1},
             .accelerationMin   = {},
             .accelerationMax   = {},
           });
@@ -238,10 +265,13 @@ namespace Techniques
         if (!particleArchetypesToSpawn_.empty())
         {
           auto archetypesToSpawn = std::vector<::ParticleArchetypeSpawnInfo>();
+          const auto numParticlesToSpawn = std::ranges::fold_left(particleArchetypesToSpawn_, 0, [](int a, const auto& archetype) { return a + archetype.count; });
+          constexpr int BATCH_SIZE = 100;
+          // Conservative since batches are also split by unique archetype, which can't be merged.
+          archetypesToSpawn.reserve((numParticlesToSpawn + BATCH_SIZE - 1) / BATCH_SIZE);
           for (const auto& info : particleArchetypesToSpawn_)
           {
             // Split spawns into smaller batches so they can be processed by multiple GPU threads.
-            constexpr int BATCH_SIZE = 20;
             for (int remaining = info.count; remaining > 0; remaining -= BATCH_SIZE)
             {
               archetypesToSpawn.push_back(::ParticleArchetypeSpawnInfo{

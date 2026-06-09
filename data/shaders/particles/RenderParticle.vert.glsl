@@ -38,19 +38,34 @@ void main()
 
   if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_FORCE_UP_POS_Y))
   {
-    up = vec3(0, 1, 0);
+    up    = vec3(0, 1, 0);
     upOld = vec3(0, 1, 0);
+  }
+
+  if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_FORCE_UP_NORM_VELOCITY))
+  {
+    const float len = length(particle.velocity);
+    if (len > 1e-3)
+    {
+      up    = -particle.velocity / len;
+      upOld = up;
+    }
+    else
+    {
+      up    = vec3(0, 1, 0);
+      upOld = vec3(0, 1, 0);
+    }
   }
   
   if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_FORCE_RIGHT_POS_X))
   {
-    up = vec3(0, 0, 1);
+    up    = vec3(0, 0, 1);
     upOld = vec3(0, 0, 1);
   }
 
   if (bool(particle.behaviorFlags & PARTICLE_BEHAVIOR_FORCE_RIGHT_POS_X))
   {
-    right = vec3(1, 0, 0);
+    right    = vec3(1, 0, 0);
     rightOld = vec3(1, 0, 0);
   }
 

@@ -285,7 +285,7 @@ void main()
         {
           const float densityToSun = CloudDensityToPoint(curPos + globalUniforms2.sky.config.sunDir * sunSelfShadowDist, curPos, sunSelfShadowSteps, 0.5);
           float selfShadow = beer(densityToSun);
-          //selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
+          selfShadow = SampleCascadedBeerShadowMap(curPos, globalUniforms2.beerShadowMap);
           skylight_internal *= selfShadow;
           sunlight_internal *= selfShadow;
         }

@@ -15,6 +15,7 @@
 #define PARTICLE_BEHAVIOR_FORCE_UP_POS_Z               (1 << 7)
 #define PARTICLE_BEHAVIOR_FORCE_RIGHT_POS_X            (1 << 8)
 #define PARTICLE_BEHAVIOR_COLLIDE_WITH_TRANSLUCENT     (1 << 9)
+#define PARTICLE_BEHAVIOR_FORCE_UP_NORM_VELOCITY       (1 << 10)
 
 struct Particle
 {

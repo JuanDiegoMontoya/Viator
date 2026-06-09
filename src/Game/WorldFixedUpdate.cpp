@@ -10,6 +10,7 @@
 #include "Game/Voxel/Grid.h"
 #include "Physics/PhysicsUtils.h"
 #include "Networking/RPC.h"
+#include "WeatherDirector.h"
 
 #include "Jolt/Physics/Collision/RayCast.h"
 #include "Jolt/Physics/Constraints/DistanceConstraint.h"
@@ -17,6 +18,7 @@
 #include "spdlog/spdlog.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/gtx/hash.hpp>
 
 #include <stack>
@@ -68,6 +70,8 @@ void World::FixedUpdate(float dt)
         sunInfo.timeOfDay += dt / sunInfo.dayLength * 2;
         sunInfo.timeOfDay = glm::mod(sunInfo.timeOfDay, 2.0f);
       }
+
+      globals->game->weatherDirector->Update(*this, dt, sunInfo.timeOfDay);
     }
 
     GetPhysicsEngine().FixedUpdate(dt);

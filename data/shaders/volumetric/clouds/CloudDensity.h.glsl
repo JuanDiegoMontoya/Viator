@@ -19,7 +19,7 @@ vec3 Cloud_CartesianToSpherical(vec3 p)
 
 float CloudDensityAtPoint(vec3 positionWS, WeatherGpuParams params)
 {
-  positionWS.xz += params.cloudHorizontalOffset;
+  positionWS.xz -= params.cloudHorizontalOffset;
   const float height = params.cloudBottomAltitude;
   const float gradientLower = smoothstep(height, height + params.cloudBottomFalloffDistance, positionWS.y);
   const float gradientUpper = 1 - clamp((positionWS.y - height) / params.cloudHeight, 0, 1);

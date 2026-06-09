@@ -10,8 +10,9 @@ vec3 phaseTex(float cosTheta)
   vec3 intensity = textureLod(uniforms.mieScattering, uniforms.linearSampler, u, 0).rgb;
 
   // limit intensity (hack)
-  //return log2(1.0 + intensity);
-  return intensity;// / (1.0 + intensity);
+  //return intensity;
+  return log2(1.0 + intensity);
+  //return intensity / (1.0 + intensity);
 }
 
 vec4 FogAtPoint(vec3 wPos)
@@ -35,13 +36,16 @@ vec4 FogAtPoint(vec3 wPos)
   const ivec2 wSize = textureSize(uniforms.globalSurfaceHeight, 0);
   //const ivec2 wPos2 = clamp(ivec2(wPos.xz), ivec2(0), wSize - 1);
   const ivec2 wPos2 = ivec2(ogPos.xz);
+  const vec2 uv = (ogPos.xz + 0.5) / (uniforms.voxels.dimensions.xz);
+  const float height = textureLod(uniforms.globalSurfaceHeight, gLinearClampSampler, uv, 0).x;
   if (all(greaterThanEqual(wPos2, ivec2(0))) && all(lessThan(wPos2, wSize)))
   {
-    const vec2 uv = (ogPos.xz + 0.5) / (uniforms.voxels.dimensions.xz);
-    const float height = textureLod(uniforms.globalSurfaceHeight, uniforms.linearSampler, uv, 0).x;
-    const float fogginess = textureLod(uniforms.globalSurfaceFog, uniforms.linearSampler, uv, 0).x;
-    d += 3 * (1 - smoothstep(3, 8, abs(height - ogPos.y))) * fogginess;
+    const float fogginess = textureLod(uniforms.globalSurfaceFog, gLinearClampSampler, uv, 0).x;
+    d += 3 * (1 - smoothstep(3, 8, abs(height - ogPos.y))) * fogginess;  
   }
+
+  const float rainFogFactor = (1.0 - smoothstep(height, height + 200, ogPos.y)) * (smoothstep(height - 35, height - 15, ogPos.y));
+  d += uniforms.rainFogDensity * rainFogFactor * SampleCascadedShadowMap(ogPos, uniforms.skyShadowMap, 1);
 
   const ivec2 wPos3 = ivec2(ogPos);
   const vec3 uv2 = (ogPos + 0.5) / (uniforms.voxels.dimensions);
@@ -119,7 +123,7 @@ void main()
   light = SampleAverageLuminance(wPos, uniforms.linearSampler, uniforms.ddgi);
   
   // Shadow
-  //vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.sunDir)));
+  //vec3 phase = vec3(phaseHG(0.5, dot(-normalize(uniforms.viewPos - wPos), globalUniforms.sky.config.sunDir)));
   vec3 phase = phaseTex(dot(-normalize(uniforms.viewPos - wPos2), globalUniforms.sky.config.sunDir));
   const vec3 transmittanceToSun = Sky_GetTransmittanceAlongRay(globalUniforms.sky, globalUniforms.sky.config.sunDir, uniforms.viewPos);
   

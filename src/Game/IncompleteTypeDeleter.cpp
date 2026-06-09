@@ -12,6 +12,7 @@
 #include "Game/HashGrid.h"
 #include "Game/Pathfinding.h"
 #include "Game/World.h"
+#include "Game/WeatherDirector.h"
 #include "Game/Globals.h"
 
 template<typename T>

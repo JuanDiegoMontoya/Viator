@@ -34,6 +34,7 @@
 #include "tracy/Tracy.hpp"
 #include "tracy/TracyVulkan.hpp"
 #include "stb_image.h"
+#include "Game/WeatherDirector.h"
 #include "spdlog/spdlog.h"
 
 #include <format>
@@ -723,7 +724,7 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
       .fpMessage     = [](FfxFsr2MsgType type, const wchar_t* message)
       {
         char buffer[256]{};
-        if (wcstombs_s(nullptr, buffer, sizeof(buffer), message, sizeof(buffer)) == 0)
+        if (type == FFX_FSR2_MESSAGE_TYPE_ERROR && wcstombs_s(nullptr, buffer, sizeof(buffer), message, sizeof(buffer)) == 0)
         {
           spdlog::log(type == FFX_FSR2_MESSAGE_TYPE_WARNING ? spdlog::level::warn : spdlog::level::err, "[FSR2] {}", buffer);
         }
@@ -1116,6 +1117,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     ctx.Barrier();
     auto marker2 = ctx.MakeScopedDebugMarker("Particle logic");
     scheduler->AddPass("ParticlesSpawn",
+      {"ShadowMaps"},
       [&] { particles_->Spawn(commandBuffer, {.frameNumber = frameNumber, .skyShadowMap = skyShadowMap_.GetShadowInfoBufferAddress()}); });
     scheduler->AddPass("ParticlesUpdate",
       {"ParticlesSpawn"},
@@ -1350,6 +1352,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
 
     scheduler->AddPass("ShadowMaps", {"TerrainShadowMap0", "TerrainShadowMap1", "BeerShadowMap"}, nullptr);
   }
+  else
+  {
+    scheduler->AddPass("ShadowMaps", nullptr);
+  }
 
   // DDGI- good candidate for async compute or overlapped work.
   if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
@@ -1447,6 +1453,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       });
 
     scheduler->AddPass("IndirectLighting", {"DdgiDownsampleDepth", "DdgiConvolveIrradiance"}, nullptr);
+  }
+  else if (giMethod_ == GIMethod::DDGI)
+  {
+    scheduler->AddPass("IndirectLighting", nullptr);
   }
 
   scheduler->AddPass("RenderOpaque",
@@ -1803,7 +1813,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   }
 
   scheduler->AddPass("Fog",
-    {"IndirectLighting", "RayMarchedCloudsComposite", "AllSky"},
+    {"IndirectLighting", "RayMarchedCloudsComposite", "AllSky", "ShadowMaps"},
     [&]
     {
       if (!debugDisableFog)
@@ -1830,6 +1840,8 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .noiseOffsetScale     = 1,
             .frog                 = false,
             .groundFogDensity     = 0.25f,
+            .rainFogDensity       = rainFogDensity,
+            .skyShadowMap         = skyShadowMap_.GetShadowInfoBufferAddress(),
             //.sunColor                             =,
             .inSceneLuminance                     = frame.sceneColorInternalRes->ImageView().GetTexture2D(),
             .gDepth                               = frame.gDepth->ImageView().GetTexture2D(),
@@ -2116,6 +2128,19 @@ void VoxelRenderer::SpawnParticles(std::span<const Game2::Render::Particle> part
 void VoxelRenderer::SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos)
 {
   particles_->PushParticleArchetypes(archetypeSpawnInfos);
+}
+
+void VoxelRenderer::SetWeather(const Weather::State& state)
+{
+  weather_.cloudBottomAltitude   = state.settings.cloudBottomAltitude;
+  weather_.cloudHeight           = state.settings.cloudHeight;
+  weather_.cloudCoverage         = glm::max(0.0f, state.settings.cloudCoverage);
+  weather_.cloudDensity          = glm::max(0.0f, state.settings.cloudDensity);
+  weather_.cloudFrequency        = state.settings.cloudFrequency;
+  weather_.windVelocity          = state.settings.windVelocity;
+  weather_.cloudHorizontalOffset = state.cloudHorizontalOffset;
+  weather_.cloudTemporalOffset   = state.cloudTemporalOffset;
+  rainFogDensity                 = state.settings.rainDensity;
 }
 
 void VoxelRenderer::InitDDGI(const DDGIProbeGridInfo& probeGridInfo)

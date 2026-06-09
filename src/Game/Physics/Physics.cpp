@@ -377,7 +377,7 @@ namespace Physics
     auto bodyId = bodyInterface->CreateAndAddBody(bodySettings, rigidBodySettings.activate ? JPH::EActivation::Activate : JPH::EActivation::DontActivate);
 
     bodyInterface->SetUserData(bodyId, static_cast<JPH::uint64>(entity));
-
+    
     registry.emplace_or_replace<LinearVelocity>(entity);
     registry.emplace_or_replace<Shape>(entity, shape);
     registry.emplace_or_replace<RigidBody>(entity, bodyId);

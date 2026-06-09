@@ -695,6 +695,12 @@ namespace Pathfinding
 {
   class PathCache;
 }
+
+namespace Weather
+{
+  class Director;
+}
+
 struct GameGlobals
 {
 private:
@@ -720,4 +726,5 @@ public:
   unique_ptr<Pathfinding::PathCache> pathCache;
   LootRegistry lootRegistry;
   Crafting crafting;
+  unique_ptr<Weather::Director> weatherDirector;
 };

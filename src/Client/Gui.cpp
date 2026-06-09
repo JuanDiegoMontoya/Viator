@@ -42,6 +42,7 @@
 #include "IconsMaterialDesign.h"
 #include "imgui_internal.h"
 #include "miniaudio.h"
+#include "Game/WeatherDirector.h"
 #include "rapidfuzz/fuzz.hpp"
 #include "spdlog/spdlog.h"
 #include "misc/cpp/imgui_stdlib.h"
@@ -2213,16 +2214,8 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             ImGui::SliderFloat("Ray distance", &sunSelfShadowDist, 5, 300, "%.1f");
           }
 
-          if (ImGui::CollapsingHeader("Sun"))
+          if (ImGui::CollapsingHeader("Sun appearance"))
           {
-            ImGui::SeparatorText("Sun position");
-            auto& sunInfo = world.globals->game->sunInfo;
-            ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
-            ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
-            ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
-            ImGui::SliderFloat("Day length", &sunInfo.dayLength, 5, 3600, "%.0f s");
-
-            ImGui::SeparatorText("Sun appearance");
             ImGui::ColorEdit3("Color##sun", &sunColor[0], ImGuiColorEditFlags_Float);
             ImGui::SliderFloat("Brightness##sun", &sunBrightness, 0, 110'000, "%.1f", ImGuiSliderFlags_Logarithmic);
           }
@@ -2499,6 +2492,46 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
               }
             }
           }
+          ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+      }
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Game", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
+    {
+      if (ImGui::BeginTabBar("Options"))
+      {
+        if (ImGui::BeginTabItem("Sun"))
+        {
+          auto& sunInfo = world.globals->game->sunInfo;
+          ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
+          ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
+          ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
+          ImGui::SliderFloat("Day length", &sunInfo.dayLength, 5, 3600, "%.0f s");
+
+          ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Weather"))
+        {
+          auto& weather = *world.globals->game->weatherDirector;
+          if (ImGui::Button("Pick new weather"))
+          {
+            weather.PickNewWeather(world.globals->game->rng);
+          }
+
+          for (int i = 0; i < (int)Weather::Preset::COUNT; i++)
+          {
+            if (ImGui::Button(std::format("Preset {}", i).c_str()))
+            {
+              weather.SetWeatherToPreset((Weather::Preset)i, world.globals->game->rng);
+            }
+          }
+
+          ImGui::SliderFloat("Transition speed", &weather.transitionSpeed, 0, 10, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
           ImGui::EndTabItem();
         }
 

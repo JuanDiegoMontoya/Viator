@@ -41,9 +41,9 @@ bool SampleCascadedShadowMapDepth(out int cascade, out float depth, out vec2 uv,
   return false;
 }
 
-float SampleCascadedShadowMap(vec3 positionWS, CascadedShadowMapInfoPtr shadowMap)
+float SampleCascadedShadowMap(vec3 positionWS, CascadedShadowMapInfoPtr shadowMap, float fallbackVisibility)
 {
-  float sunVisibility = 0;
+  float sunVisibility = fallbackVisibility;
 
   for (int cascade = 0; cascade < shadowMap.numCascades; cascade++)
   {
@@ -61,6 +61,11 @@ float SampleCascadedShadowMap(vec3 positionWS, CascadedShadowMapInfoPtr shadowMa
   }
 
   return sunVisibility;
+}
+
+float SampleCascadedShadowMap(vec3 positionWS, CascadedShadowMapInfoPtr shadowMap)
+{
+  return SampleCascadedShadowMap(positionWS, shadowMap, 0);
 }
 #endif
 

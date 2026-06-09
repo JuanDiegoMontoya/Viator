@@ -45,6 +45,11 @@
 #include <optional>
 #include <string>
 
+namespace Weather
+{
+  struct Settings;
+}
+
 namespace Temp
 {
   FVOG_DECLARE_ARGUMENTS(PushConstants)
@@ -105,6 +110,7 @@ public:
   void RegisterParticleArchetype(std::string name, const Game2::Render::ParticleArchetype& archetype);
   void SpawnParticles(std::span<const Game2::Render::Particle> particles);
   void SpawnParticleArchetypes(std::span<const Game2::Render::ParticleArchetypeSpawnInfo> archetypeSpawnInfos);
+  void SetWeather(const Weather::State& state);
 
 private:
   bool needsHeightmapInit = false; // TODO: TEMP
@@ -308,9 +314,9 @@ private:
   Techniques::CascadedShadowMap sunShadowMap_;
 
   glm::ivec2 skyShadowResolution   = {256, 256};
-  float skyShadowFrustumSideLength = 100;
+  float skyShadowFrustumSideLength = 150;
   float skyShadowFrustumDepth      = 1000;
-  int skyShadowNumCascades         = 3;
+  int skyShadowNumCascades         = 4;
   Techniques::CascadedShadowMap skyShadowMap_;
 
   uint32_t renderInternalWidth{};
@@ -482,6 +488,7 @@ private:
     .cloudTemporalOffset        = {},
     .earthSizeFactor            = 1.0f / 10.0f,
   };
+  float rainFogDensity = 0;
 
   std::unique_ptr<Techniques::Particles> particles_;
 };
