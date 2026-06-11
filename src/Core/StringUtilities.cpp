@@ -37,3 +37,24 @@ bool Core::String::CompareCaseInsensitive(std::string_view a, std::string_view b
       return std::tolower(ca) == std::tolower(cb);
     });
 }
+
+std::string Core::String::TrimTrailingZeros(std::string str)
+{
+  const auto decimalPos = str.find('.');
+  if (decimalPos == std::string::npos)
+  {
+    return str;
+  }
+
+  const auto lastNonZero = str.find_last_not_of('0');
+  if (lastNonZero == decimalPos)
+  {
+    str.erase(decimalPos);
+  }
+  else if (lastNonZero != std::string::npos)
+  {
+    str.erase(lastNonZero + 1);
+  }
+
+  return str;
+}

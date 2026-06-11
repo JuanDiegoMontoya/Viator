@@ -11,4 +11,6 @@ namespace Core::String
   void TrimStartWhitespace(std::string& str);
 
   bool CompareCaseInsensitive(std::string_view a, std::string_view b);
+
+  std::string TrimTrailingZeros(std::string str);
 }

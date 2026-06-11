@@ -91,6 +91,7 @@ if (NOT GAME_HEADLESS)
         src/Client/Gui/Debug/GraphicsWindow.cpp
         src/Client/Gui/CVarWidgets.h
         src/Client/Gui/CVarWidgets.cpp
+        src/Client/Gui/Game/GameGui.cpp
     )
 endif()
 

@@ -49,4 +49,6 @@ namespace Gui
     ImGuiSliderFlags flags = 0,
     const char* tooltip    = nullptr);
   bool FlagCheckbox(const char* label, uint32_t* bitfield, uint32_t bits, const char* tooltip = nullptr);
+
+  bool LoadingBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col);
 }

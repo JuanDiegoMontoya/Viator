@@ -133,6 +133,9 @@ private:
   void RenderGame(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
   void OnGui(DeltaTime dt, World& world, VkCommandBuffer commandBuffer);
 
+  void ShowGraphicsWindow(World& world);
+  void ShowGameGui(World& world);
+
   struct Frame
   {
     // G-buffer
