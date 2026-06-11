@@ -15,6 +15,7 @@
 #include "techniques/volumetric/RayMarchedClouds.h"
 #include "techniques/Sky.h"
 #include "techniques/Particles.h"
+#include "techniques/DDGI.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -211,45 +212,15 @@ private:
   PlayerHead* head_;
   entt::handle selectedHandle;
 
-  // DDGI
-  struct DDGI
-  {
-    // static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
-    static constexpr Fvog::Format radianceFormat = Fvog::Format::R32G32B32A32_SFLOAT; // TODO: TEMP until quantization with smaller formats is dealt with.
-    std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;
-    std::optional<Fvog::Texture> packedProbeRadiance;
-    std::optional<Fvog::Texture> packedProbeRawDepth; // Same resolution as radiance
-    std::optional<Fvog::Texture> packedProbeIrradiance;
-    std::optional<Fvog::Texture> packedProbeDepthMoments; // Filtered depth and depth^2
-    std::unique_ptr<std::optional<Fvog::TypedBuffer<ProbeData>>[]> probeDataBuffers;
-    DDGIArgs args{};
-    PipelineManager::ComputePipelineKey traceRaysPipeline;
-    PipelineManager::ComputePipelineKey convolveIrradiancePipeline;
-    PipelineManager::ComputePipelineKey downsampleDepthPipeline;
-    PipelineManager::ComputePipelineKey resetNewProbesPipeline;
-    PipelineManager::GraphicsPipelineKey debugProbesPipeline;
-  } ddgi;
+  std::unique_ptr<Techniques::DDGI> ddgi_;
 
-  // Successive cascades will have 2x the scale of the previous.
-  void InitDDGI(const DDGIProbeGridInfo& probeGridInfo);
-
-  enum class DDGIDebugView : uint32_t
-  {
-    None,
-    Luminance,
-    Illuminance,
-    RawDepth,
-    DepthMoments,
-    Validity,
-    AverageLuminance,
-  };
-
-  DDGIDebugView ddgiDebugView_           = DDGIDebugView::None;
-  float ddgiDebugProbeSize_              = 0.25f;
-  bool ddgiDebugPauseUpdates_            = false;
-  bool ddgiDebugFreezeGrid_              = false; // Pauses only grid movement- probes still update.
-  int ddgiDebugShowOnlyThisCascade_      = -1;    // <0: show all cascades
-  bool ddgiDebugShowCascadeIndexAsColor_ = false;
+  Techniques::DDGIDebugMode ddgiDebugView_ = Techniques::DDGIDebugMode::None;
+  float ddgiBaseGridScale_                 = 2;
+  float ddgiDebugProbeSize_                = 0.25f;
+  bool ddgiDebugPauseUpdates_              = false;
+  bool ddgiDebugFreezeGrid_                = false; // Pauses only grid movement- probes still update.
+  int ddgiDebugShowOnlyThisCascade_        = -1;    // <0: show all cascades
+  bool ddgiDebugShowCascadeIndexAsColor_   = false;
 
   Techniques::FroxelFog fog_;
   // Resources needed for froxel fog

@@ -2298,7 +2298,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             {
               if (ImGui::Selectable(names[i], int(ddgiDebugView_) == i))
               {
-                ddgiDebugView_ = DDGIDebugView(i);
+                ddgiDebugView_ = Techniques::DDGIDebugMode(i);
               }
             }
             ImGui::EndCombo();
@@ -2322,7 +2322,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
             ddgiDebugPauseUpdates_ = false;
             ddgiDebugFreezeGrid_   = true;
           }
-          ImGui::SliderFloat("Base Grid Scale", &ddgi.args.gridInfo[0].baseGridScale, 1, 32, "%.0f");
+          ImGui::SliderFloat("Base Grid Scale", &ddgiBaseGridScale_, 1, 32, "%.0f");
           ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
 
           ImGui::EndTabItem();

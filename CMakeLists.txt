@@ -87,6 +87,9 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/Particles.cpp
         src/Client/Scheduler.h
         src/Client/Scheduler.cpp
+        src/Client/techniques/DDGI.h
+        src/Client/techniques/DDGI.cpp
+        src/Client/GpuMesh.h
     )
 endif()
 
