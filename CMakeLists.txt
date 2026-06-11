@@ -45,8 +45,6 @@ if (NOT GAME_HEADLESS)
         src/Client/Renderables.h
         src/Client/Fvog/AccelerationStructure.h
         src/Client/Fvog/AccelerationStructure.cpp
-        src/Client/debug/ForwardRenderer.h
-        src/Client/debug/ForwardRenderer.cpp
         src/Client/debug/Shapes.h
         src/Client/techniques/ao/RayTracedAO.h
         src/Client/techniques/ao/RayTracedAO.cpp
