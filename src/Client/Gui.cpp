@@ -69,7 +69,6 @@ using namespace entt::literals;
 
 namespace
 {
-  const auto g_defaultIniPath = (GetConfigDirectory() / "defaultLayout.ini").string();
   const auto sGameSettingsPath = GetConfigDirectory() / "rendererConfig.toml";
   const auto sAudioSettingsPath = GetConfigDirectory() / "audioConfig.toml";
   const auto sServerListPath = GetConfigDirectory() / "ServerList.toml";
@@ -493,9 +492,9 @@ void VoxelRenderer::InitGui()
   spdlog::info("Initializing GUI.");
   LoadGameSettings();
   // Attempt to load default layout, if it exists
-  if (std::filesystem::exists(g_defaultIniPath) && !std::filesystem::is_directory(g_defaultIniPath))
+  if (std::filesystem::exists(uiLayoutPath) && !std::filesystem::is_directory(uiLayoutPath))
   {
-    ImGui::LoadIniSettingsFromDisk(g_defaultIniPath.c_str());
+    ImGui::LoadIniSettingsFromDisk(uiLayoutPath.c_str());
   }
 
   // Settings are only saved when the user explicitly requests it
@@ -1260,56 +1259,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     DrawReflectionWindow(world);
 
-    if (ImGui::Begin("Context", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
-    {
-      ImGui::Text("World: %s", world.globals->worldName.c_str());
-      auto& debug = world.globals->game->debugging;
-      if (ImGui::Button("Enable noclip"))
-      {
-        if (auto player = world.TryGetLocalPlayer(); player != entt::null)
-        {
-          world.GetRegistry().emplace_or_replace<NoclipCharacterController>(player);
-        }
-      }
-
-      ImGui::Text("Game state: %s", Core::Reflection::EnumToString(world.globals->game->gameState));
-      ImGui::Text("Time: %f", world.globals->game->time);
-      ImGui::Checkbox("Spawn NPCs", &world.globals->game->updateNpcSpawnDirector);
-      ImGui::Checkbox("Infinite items", &debug.infiniteItems);
-
-      ImGui::SliderFloat("Time Scale", &world.globals->game->timeScale.scale, 0, 4, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
-      auto min = uint32_t(5);
-      auto max = uint32_t(120);
-      ImGui::SliderScalar("Tick Rate", ImGuiDataType_U32, &world.globals->game->tickRate.hz, &min, &max, "%u", ImGuiSliderFlags_AlwaysClamp);
-
-      ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
-      ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
-      ImGui::Checkbox("Show FPS", &debug.showFps);
-      ImGui::Checkbox("Draw Path Lines", &debug.drawPathLines);
-      ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
-      ImGui::Checkbox("Draw Debug Normal", &debug.drawDebugNormal);
-      ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
-      ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
-
-      auto& grid = *world.globals->grid;
-      VmaStatistics stats{};
-      vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
-      auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
-      auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
-      ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
-
-      if (ImGui::Button("Collapse da grid"))
-      {
-        grid.CoalesceDirtyBricks();
-      }
-
-      if (ImGui::Selectable("Save UI layout"))
-      {
-        ImGui::SaveIniSettingsToDisk(g_defaultIniPath.c_str());
-      }
-    }
-    ImGui::End();
-
     if (false)
     {
       if (ImGui::Begin("TEST PROBULUS", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
@@ -1353,100 +1302,7 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
 
     ShowGraphicsWindow(world);
 
-    if (ImGui::Begin("Game", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
-    {
-      if (ImGui::BeginTabBar("Options"))
-      {
-        if (ImGui::BeginTabItem("Sun"))
-        {
-          auto& sunInfo = world.globals->game->sunInfo;
-          ImGui::Checkbox("Freeze time", &sunInfo.pauseDayNightCycle);
-          ImGui::DragFloat("Time of day", &sunInfo.timeOfDay, 0.01f, 0, 2, "%.4f", ImGuiSliderFlags_NoRoundToFormat);
-          ImGui::SliderFloat("Azimuth", &sunInfo.azimuth, -glm::two_pi<float>(), glm::two_pi<float>());
-          ImGui::SliderFloat("Day length", &sunInfo.dayLength, 5, 3600, "%.0f s");
-
-          ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Weather"))
-        {
-          auto& weather = *world.globals->game->weatherDirector;
-          if (ImGui::Button("Pick new weather"))
-          {
-            weather.PickNewWeather(world.globals->game->rng);
-          }
-
-          for (int i = 0; i < (int)Weather::Preset::COUNT; i++)
-          {
-            if (ImGui::Button(std::format("Preset {}", i).c_str()))
-            {
-              weather.SetWeatherToPreset((Weather::Preset)i, world.globals->game->rng);
-            }
-          }
-
-          ImGui::SliderFloat("Transition speed", &weather.transitionSpeed, 0, 10, "%.2f", ImGuiSliderFlags_NoRoundToFormat);
-          ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
-      }
-    }
-    ImGui::End();
-
-    auto range = world.GetRegistry().view<const Player, const LocalPlayer, Inventory, const GlobalTransform>().each();
-
-    if (range.begin() == range.end())
-    {
-      return;
-    }
-
-    auto&& [playerEntity, p, inventory, gt] = *range.begin();
-
-    if (ImGui::Begin("It's free real estate", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
-    {
-      ZoneScopedN("Item list");
-      static char buffer[256]{};
-      ImGui::Text("Filter");
-      ImGui::SameLine();
-      ImGui::InputText("##Filter", buffer, 256);
-      const auto len = std::strlen(buffer);
-
-      const auto& itemRegistry = world.globals->itemRegistry;
-      auto scores              = std::multimap<double, decltype(*itemRegistry->GetNameToIdMap().begin()), std::greater<double>>();
-      for (const auto& pair : itemRegistry->GetNameToIdMap())
-      {
-        scores.emplace(rapidfuzz::fuzz::partial_ratio(buffer, pair.first), pair);
-      }
-
-      for (int i = 0; const auto& [score, pair] : scores)
-      {
-        if (len != 0 && score == 0)
-        {
-          continue;
-        }
-        const auto& [tag, id] = pair;
-        ImGui::PushID(i);
-        if (ImGui::Button(tag.c_str(), {-1, 0}))
-        {
-          auto item = ItemState{static_cast<ItemId>(id), 1};
-          inventory.TryStackItem(world, item);
-          if (item.count > 0)
-          {
-            if (auto slot = inventory.GetFirstEmptySlot())
-            {
-              inventory.OverwriteSlot(world, *slot, item, playerEntity);
-            }
-            else
-            {
-              world.CreateDroppedItem(item, gt.position, gt.rotation, gt.scale);
-            }
-          }
-        }
-        ImGui::PopID();
-        i++;
-      }
-    }
-    ImGui::End();
+    ShowGameDebugWindow(world);
     
     if (ImGui::Begin("Networking", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
     {
@@ -1682,49 +1538,6 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
         }
         ImGui::EndPopup();
       }
-    }
-    ImGui::End();
-
-    if (ImGui::Begin("Entity Prefabs", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
-    {
-      const auto localPlayer = world.TryGetLocalPlayer();
-      const auto* playerTransform = world.GetRegistry().try_get<const GlobalTransform>(localPlayer);
-      ImGui::BeginDisabled(localPlayer == entt::null);
-      const auto& prefabs = world.globals->entityPrefabRegistry;
-      for (const auto& prefab : prefabs->GetAllPrefabs())
-      {
-        ImGui::PushID(prefab->GetCreateInfo().name.c_str());
-        if (ImGui::Button(" x1 "))
-        {
-          prefab->Spawn(world, playerTransform->position + 5.0f * GetForward(playerTransform->rotation));
-        }
-        ImGui::SameLine();
-        if (ImGui::Button(" x5 "))
-        {
-          for (int i = 0; i < 5; i++)
-          {
-            auto& rng         = world.globals->game->rng;
-            const auto jitter = 1.5f * glm::vec3(rng.RandFloat(-1, 1), rng.RandFloat(-1, 1), rng.RandFloat(-1, 1));
-            prefab->Spawn(world, jitter + playerTransform->position + 5.0f * GetForward(playerTransform->rotation));
-          }
-        }
-        ImGui::SameLine();
-        ImGui::Text("%s", prefab->GetCreateInfo().name.c_str());
-        ImGui::PopID();
-      }
-      ImGui::EndDisabled();
-    }
-    ImGui::End();
-
-    if (ImGui::Begin("NPCs", nullptr, ImGuiWindowFlags_NoFocusOnAppearing))
-    {
-      ImGui::SliderFloat("Spawn period", &world.globals->game->npcSpawnDirector.timeBetweenSpawns, 0.01f, 100.0f, "%.2fs", ImGuiSliderFlags_Logarithmic);
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-      {
-        ImGui::SetTooltip("How often the NPC director will attempt to spawn mobs.");
-      }
-      ImGui::Checkbox("Disable pathfinding", &world.globals->game->disableNpcPathfinding);
-      ImGui::Checkbox("Ignore players", &world.globals->game->npcsIgnorePlayers);
     }
     ImGui::End();
   }

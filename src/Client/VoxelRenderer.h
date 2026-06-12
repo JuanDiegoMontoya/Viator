@@ -135,6 +135,7 @@ private:
 
   void ShowGraphicsWindow(World& world);
   void ShowGameGui(World& world);
+  void ShowGameDebugWindow(World& world);
 
   struct Frame
   {
@@ -465,6 +466,8 @@ private:
   float rainFogDensity = 0;
 
   std::unique_ptr<Techniques::Particles> particles_;
+
+  std::string uiLayoutPath;
 };
 
 struct ImFont;

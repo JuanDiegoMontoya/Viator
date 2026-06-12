@@ -221,6 +221,7 @@ namespace
 VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
 {
   ZoneScoped;
+  uiLayoutPath = (GetConfigDirectory() / "defaultLayout.ini").string();
   
   g_meshes.emplace("frog", LoadObjFile(GetAssetDirectory() / "models/frog.obj"));
   g_meshes.emplace("ar15", LoadObjFile(GetAssetDirectory() / "models/frog.obj"));

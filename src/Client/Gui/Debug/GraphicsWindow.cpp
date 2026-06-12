@@ -3,6 +3,7 @@
 #include "Game/World.h"
 
 #include "imgui.h"
+#include "vk_mem_alloc.h"
 #include "Client/ImGui/imgui_impl_fvog.h"
 #include "Game/Game.h"
 #include "Game/Globals.h"
@@ -24,6 +25,38 @@ void VoxelRenderer::ShowGraphicsWindow(World& world)
 
     if (ImGui::BeginTabBar("Options"))
     {
+      if (ImGui::BeginTabItem("Debug"))
+      {
+        auto& debug = world.globals->game->debugging;
+        ImGui::Checkbox("Show Debug GUI", &debug.showDebugGui);
+        ImGui::Checkbox("Force Show Cursor", &debug.forceShowCursor);
+        ImGui::Checkbox("Show FPS", &debug.showFps);
+        ImGui::Checkbox("Draw Path Lines", &debug.drawPathLines);
+        ImGui::Checkbox("Draw Debug Probe", &debug.drawDebugProbe);
+        ImGui::Checkbox("Draw Debug Normal", &debug.drawDebugNormal);
+        ImGui::Checkbox("Draw Physics Shapes", &debug.drawPhysicsShapes);
+        ImGui::Checkbox("Draw Physics Velocity", &debug.drawPhysicsVelocity);
+
+        auto& grid = *world.globals->grid;
+        VmaStatistics stats{};
+        vmaGetVirtualBlockStatistics(grid.Buffer().GetAllocator(), &stats);
+        auto [usedSuffix, usedDivisor]   = Math::BytesToSuffixAndDivisor(stats.allocationBytes);
+        auto [blockSuffix, blockDivisor] = Math::BytesToSuffixAndDivisor(stats.blockBytes);
+        ImGui::Text("Voxel memory: %.2f %s / %.2f %s", stats.allocationBytes / usedDivisor, usedSuffix, stats.blockBytes / blockDivisor, blockSuffix);
+
+        if (ImGui::Button("Collapse da grid"))
+        {
+          grid.CoalesceDirtyBricks();
+        }
+
+        if (ImGui::Selectable("Save UI layout"))
+        {
+          ImGui::SaveIniSettingsToDisk(uiLayoutPath.c_str());
+        }
+
+        ImGui::EndTabItem();
+      }
+
       if (ImGui::BeginTabItem("Atmosphere"))
       {
         if (ImGui::CollapsingHeader("Fog"))

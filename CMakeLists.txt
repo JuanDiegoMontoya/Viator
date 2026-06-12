@@ -89,6 +89,7 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/DDGI.cpp
         src/Client/GpuMesh.h
         src/Client/Gui/Debug/GraphicsWindow.cpp
+        src/Client/Gui/Debug/GameWindow.cpp
         src/Client/Gui/CVarWidgets.h
         src/Client/Gui/CVarWidgets.cpp
         src/Client/Gui/Game/GameGui.cpp
