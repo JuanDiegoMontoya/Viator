@@ -5,10 +5,13 @@
 #include "Game/Game.h"
 #include "Game/Item.h"
 #include "Core/Reflection.h"
+#include "Game/NpcDirector.h"
 
 #include "imgui.h"
 #include "rapidfuzz/fuzz.hpp"
 #include "entt/meta/meta.hpp"
+
+#include <print>
 
 namespace
 {
@@ -95,6 +98,28 @@ namespace
       i++;
     }
   }
+
+  void ShowNpcDirectorTab(World& world)
+  {
+    ImGui::SeparatorText("House interior constraints");
+    static auto params = Game2::NpcDirector::HousingParams{};
+    ImGui::SliderInt("minWidth", &params.minWidth, 1, 10);
+    ImGui::SliderInt("maxWidth", &params.maxWidth, 1, 10);
+    ImGui::SliderInt("minHeight", &params.minHeight, 1, 10);
+    ImGui::SliderInt("maxHeight", &params.maxHeight, 1, 10);
+    if (ImGui::Button("Check housing validity"))
+    {
+      if (const auto* xform = world.TryGetLocalPlayerTransform())
+      {
+        auto hit = Voxel::Grid::HitSurfaceParameters{};
+        if (world.globals->grid->TraceRaySimple(xform->position, GetForward(xform->rotation), 10, hit))
+        {
+          const bool res = Game2::NpcDirector::CheckIsValidHousing(world, glm::ivec3(hit.voxelPosition + hit.flatNormalWorld), params);
+          std::println("is valid housing? {}", res ? "YES" : "NO");
+        }
+      }
+    }
+  }
 }
 
 void VoxelRenderer::ShowGameDebugWindow(World& world)
@@ -179,6 +204,8 @@ void VoxelRenderer::ShowGameDebugWindow(World& world)
         }
         ImGui::Checkbox("Disable pathfinding", &world.globals->game->disableNpcPathfinding);
         ImGui::Checkbox("Ignore players", &world.globals->game->npcsIgnorePlayers);
+
+        ShowNpcDirectorTab(world);
         ImGui::EndTabItem();
       }
 
