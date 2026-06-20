@@ -627,6 +627,11 @@ bool Block::IsVisible(const World& world, BlockId block)
 
 bool Block::IsSolid(const World& world, BlockId block)
 {
+  if (block == voxel_t::Air)
+  {
+    return false;
+  }
+
   const auto& bReg = world.globals->blockRegistry->GetRegistry();
   if (const auto* p = bReg.try_get<const Component::PhysicalProperties>(entt::entity(block)))
   {

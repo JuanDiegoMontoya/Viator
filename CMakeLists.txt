@@ -218,6 +218,8 @@ add_executable(frogRender
     src/Core/Platform/PlatformInit.cpp
     src/Core/Platform/Sleep.h
     src/Core/Platform/Sleep.cpp
+    src/Game/NpcDirector.h
+    src/Game/NpcDirector.cpp
 )
 
 target_compile_features(frogRender PUBLIC cxx_std_23)

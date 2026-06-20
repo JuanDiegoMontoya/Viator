@@ -701,6 +701,11 @@ namespace Weather
   class Director;
 }
 
+namespace Game2
+{
+  class NpcDirector;
+}
+
 struct GameGlobals
 {
 private:
@@ -727,4 +732,5 @@ public:
   LootRegistry lootRegistry;
   Crafting crafting;
   unique_ptr<Weather::Director> weatherDirector;
+  unique_ptr<Game2::NpcDirector> npcDirector;
 };

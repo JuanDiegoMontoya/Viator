@@ -26,6 +26,7 @@
 #include "Physics/PhysicsUtils.h"
 #include "Networking/Server.h"
 #include "WeatherDirector.h"
+#include "NpcDirector.h"
 #include "Game/Globals.h"
 
 #include "tracy/Tracy.hpp"
@@ -48,6 +49,7 @@ GameGlobals::GameGlobals()
   hashGrid.reset(new HashGrid(16));
   pathCache.reset(new Pathfinding::PathCache());
   weatherDirector.reset(new Weather::Director());
+  npcDirector.reset(new Game2::NpcDirector());
 }
 
 // We don't want this to happen when the component/entity is actually deleted, as we care about having a valid parent.

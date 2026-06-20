@@ -13,6 +13,7 @@
 #include "Game/Pathfinding.h"
 #include "Game/World.h"
 #include "Game/WeatherDirector.h"
+#include "Game/NpcDirector.h"
 #include "Game/Globals.h"
 
 template<typename T>
