@@ -1,7 +1,9 @@
 #include "EntityPrefab.h"
 
 #include "Globals.h"
+#include "Item.h"
 #include "Pathfinding.h"
+#include "TraderNpcDialogue.h"
 #include "Game/World.h"
 #include "Game/Game.h"
 #include "Physics/Physics.h"
@@ -350,6 +352,91 @@ public:
   }
 };
 
+class TraderNpcDefinition : public EntityPrefabDefinition
+{
+public:
+  using EntityPrefabDefinition::EntityPrefabDefinition;
+
+  entt::entity Spawn(World& world, glm::vec3 position, glm::quat) const override
+  {
+    auto& registry = world.GetRegistry();
+    auto sphere    = Physics::ShapeSettings{Physics::Sphere{0.4f}};
+
+    auto e                         = world.CreateRenderableEntity(position, {1, 0, 0, 0}, 0.4f);
+    registry.emplace<Mesh>(e).name = "frog";
+    registry.emplace<Name>(e, "deccer the frog");
+    registry.emplace<Health>(e) = {100, 100};
+    // registry_.emplace<SimpleEnemyBehavior>(e);
+    registry.emplace<SimplePathfindingEnemyBehavior>(e);
+    registry.emplace<Pathfinding::CachedPath>(e).timeBetweenUpdates = 1;
+    registry.emplace<InputState>(e);
+    registry.emplace<Loot>(e).name = "standard";
+    registry.emplace<TeamFlags>(e, TeamFlagBits::FRIENDLY);
+    //registry.emplace<DespawnWhenFarFromPlayer>(e);
+    //registry.emplace<Enemy>(e);
+    registry.emplace<AiVision>(e);
+    registry.emplace<AiHearing>(e);
+    registry.emplace<AiTarget>(e);
+    registry.emplace<AiWanderBehavior>(e);
+    registry.emplace<WalkingMovementAttributes>(e) = {.runMaxSpeed = 3.0f};
+    registry.emplace<Tint>(e).color                = {0.2f, 0.5f, 0.5f};
+    auto& craft = registry.emplace<Game2::TraderNpcWares>(e);
+    registry.emplace<Game2::TraderNpcDialogueState>(e);
+
+    const auto coinId = world.globals->itemRegistry->Get("item_electrum");
+
+    craft.crafting.recipes.push_back({
+      .ingredients     = {ItemIdAndCount{coinId, 1}},
+      .output          = {ItemIdAndCount{coinId, 100}},
+      .craftingStation = voxel_t::Air,
+      .name            = "Infinite money glitch",
+      .description     = "See name.",
+    });
+
+    auto& contactDamage  = registry.emplace<ContactDamage>(e);
+    contactDamage.damage = 10;
+    registry.emplace<Physics::CharacterControllerSettings>(e, Physics::CharacterControllerSettings{.shape = sphere});
+    // registry_.emplace<FlyingCharacterController>(e) = {.maxSpeed = 6, .acceleration = 25};
+    registry.emplace_or_replace<LinearVelocity>(e);
+    registry.emplace<Physics::RigidBodySettings>(e,
+      Physics::RigidBodySettings{
+        .shape         = sphere,
+        .gravityFactor = 0,
+        .layer         = Physics::Layers::CHARACTER,
+      });
+
+    // Make the frog hold something.
+    // auto e2                         = world.CreateRenderableEntity({1.0f, 0.3f, -0.8f}, {1, 0, 0, 0}, 1.5f);
+    // registry.emplace<Name>(e2).name = "Child";
+    // registry.emplace<Mesh>(e2).name = "ar15";
+    // world.SetParent(e2, e);
+
+    // Make hitbox/hurtbox collider.
+    auto eHitbox                         = registry.create();
+    registry.emplace<Name>(eHitbox).name = "Frog hitbox";
+    registry.emplace<ForwardCollisionsToParent>(eHitbox);
+    registry.emplace<RenderTransform>(eHitbox);
+    registry.emplace<PreviousGlobalTransform>(eHitbox);
+    auto& tpHitbox                             = registry.emplace<LocalTransform>(eHitbox);
+    tpHitbox.position                          = {};
+    tpHitbox.rotation                          = glm::identity<glm::quat>();
+    tpHitbox.scale                             = 1;
+    registry.emplace<GlobalTransform>(eHitbox) = {{}, glm::identity<glm::quat>(), 1};
+    registry.emplace<Hierarchy>(eHitbox);
+    registry.emplace<Physics::RigidBodySettings>(eHitbox,
+      Physics::RigidBodySettings{
+        .shape      = {.shape = Physics::Sphere{0.75f}},
+        .isSensor   = true,
+        .motionType = JPH::EMotionType::Kinematic,
+        .layer      = Physics::Layers::HITBOX_AND_HURTBOX,
+      });
+    world.SetParent(eHitbox, e);
+
+    return e;
+  }
+};
+
+
 const EntityPrefabDefinitionCreateInfo& EntityPrefabDefinition::GetCreateInfo() const
 {
   return info_;
@@ -417,4 +504,5 @@ void RegisterDefaultEntityPrefabs(EntityPrefabRegistry& entityPrefabRegistry)
   entityPrefabRegistry.Add("Chest", new ChestDefinition({.isVisible = false}));
   entityPrefabRegistry.Add("Worm Boss", new WormBossDefinition());
   entityPrefabRegistry.Add("SimpleScriptable", new SimpleScriptableDefinition({.isVisible = false}));
+  entityPrefabRegistry.Add("Trader", new TraderNpcDefinition({.name = "deccer the frog"}));
 }

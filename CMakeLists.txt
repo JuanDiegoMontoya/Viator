@@ -220,6 +220,9 @@ add_executable(frogRender
     src/Core/Platform/Sleep.cpp
     src/Game/NpcDirector.h
     src/Game/NpcDirector.cpp
+    src/Game/TraderNpcDialogue.h
+    src/Game/TraderNpcDialogue.cpp
+    src/Game/Crafting.h
 )
 
 target_compile_features(frogRender PUBLIC cxx_std_23)

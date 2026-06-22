@@ -7,6 +7,8 @@
 #include "Game/HashGrid.h"
 #include "Core/Image.h"
 #include "Game/Commands.h"
+#include "Game/Crafting.h"
+#include "Game/TraderNpcDialogue.h"
 
 #include <vector>
 #include <functional>
@@ -1281,7 +1283,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
   REGISTER_RPC(UpdatePlayerInput, RpcTraits::Server);
   
   REGISTER_RPC(GiveLocalPlayerRPC, RpcTraits::Client);
-  entt::meta_factory<RpcTraits>().func<[]() {}>("peni"_hs);
   
   REGISTER_RPC(UpdateTransformRPC, RpcTraits::Server);
 
@@ -1289,12 +1290,24 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(ItemIdAndCount, item)
     DATA(ItemIdAndCount, count);
 
-  REFLECT_TYPE(Crafting::Recipe)
-    DATA_BASE(Crafting::Recipe, ingredients)
-    DATA_BASE(Crafting::Recipe, output)
-    DATA(Crafting::Recipe, craftingStation)
-    DATA(Crafting::Recipe, name)
-    DATA(Crafting::Recipe, description);
+  REFLECT_TYPE(Game2::CraftingRecipe)
+    DATA_BASE(Game2::CraftingRecipe, ingredients)
+    DATA_BASE(Game2::CraftingRecipe, output)
+    DATA(Game2::CraftingRecipe, craftingStation)
+    DATA(Game2::CraftingRecipe, name)
+    DATA(Game2::CraftingRecipe, description);
+
+  BEGIN_REFLECT_NON_OBJECT_TYPE(Game2::Crafting)
+    MEMBER(recipes);
+  END_REFLECT
+
+  BEGIN_REFLECT_COMPONENT(Game2::TraderNpcDialogueState, REPLICATED)
+    MEMBER(state);
+  END_REFLECT
+
+  BEGIN_REFLECT_COMPONENT(Game2::TraderNpcWares, REPLICATED)
+    MEMBER(crafting);
+  END_REFLECT
 
   REGISTER_RPC(DropItemRPC, RpcTraits::Server);
   REGISTER_RPC(ThrowItemRPC, RpcTraits::Server);

@@ -11,6 +11,7 @@
 #include "Networking/Interface.h"
 #include "Head.h"
 #include "CoreComponents.h"
+#include "Crafting.h"
 #include "Game/IncompleteTypeDeleter.h"
 
 #include "entt/entity/registry.hpp"
@@ -78,12 +79,6 @@ void CreateContextVariablesAndObservers(World& world);
 
 void SetVoxelAtRPC(World& world, glm::ivec3 voxelPosition, voxel_t voxel);
 
-struct ItemIdAndCount
-{
-  ItemId item = entt::null;
-  int count   = 1;
-};
-
 // Loot type for simple independent random drops.
 struct RandomLootDrop
 {
@@ -150,20 +145,6 @@ struct Loot
   std::string name;
 };
 
-struct Crafting
-{
-  struct Recipe
-  {
-    std::vector<ItemIdAndCount> ingredients;
-    std::vector<ItemIdAndCount> output;
-    BlockId craftingStation = voxel_t(0);
-    std::string name;
-    std::string description;
-  };
-
-  std::vector<Recipe> recipes;
-};
-
 struct Inventory
 {
   static constexpr size_t height = 4;
@@ -197,7 +178,7 @@ struct Inventory
   std::optional<glm::ivec2> GetFirstEmptySlot() const;
 
   int CountItem(ItemId item) const;
-  bool CanCraftRecipe(const Crafting::Recipe& recipe) const;
+  bool CanCraftRecipe(const Game2::CraftingRecipe& recipe) const;
 };
 
 void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol);
@@ -237,7 +218,7 @@ entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAcc
 entt::entity ThrowItemRPC(World& world, entt::entity parent, entt::entity thrower, glm::ivec2 slot);
 entt::entity ThrowItemFromArmorRPC(World& world, entt::entity parent, entt::entity thrower, ArmorAndAccessories::Slot slot);
 
-void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recipe);
+void TryCraftRecipeRPC(World& world, entt::entity parent, Game2::CraftingRecipe recipe);
 
 // If parent1 and parent2 both have an inventory, swaps items between them.
 bool SwapInventorySlotsRPC(World& world, entt::entity parent1, glm::ivec2 parent1Slot, entt::entity parent2, glm::ivec2 parent2Slot);
@@ -730,7 +711,7 @@ public:
   SunInfo sunInfo;
   unique_ptr<Pathfinding::PathCache> pathCache;
   LootRegistry lootRegistry;
-  Crafting crafting;
+  Game2::Crafting crafting;
   unique_ptr<Weather::Director> weatherDirector;
   unique_ptr<Game2::NpcDirector> npcDirector;
 };

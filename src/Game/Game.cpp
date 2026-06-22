@@ -1097,7 +1097,7 @@ int Inventory::CountItem(ItemId item) const
   return count;
 }
 
-bool Inventory::CanCraftRecipe(const Crafting::Recipe& recipe) const
+bool Inventory::CanCraftRecipe(const Game2::CraftingRecipe& recipe) const
 {
   for (const auto& ingredient : recipe.ingredients)
   {
@@ -1110,7 +1110,7 @@ bool Inventory::CanCraftRecipe(const Crafting::Recipe& recipe) const
   return true;
 }
 
-void TryCraftRecipeRPC(World& world, entt::entity parent, Crafting::Recipe recipe)
+void TryCraftRecipeRPC(World& world, entt::entity parent, Game2::CraftingRecipe recipe)
 {
   auto* inv = world.GetRegistry().try_get<Inventory>(parent);
   if (!inv)

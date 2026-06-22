@@ -735,6 +735,16 @@ void VoxelRenderer::OnGui([[maybe_unused]] DeltaTime dt, World& world, [[maybe_u
     }
     else if (state == GameState::GAME)
     {
+      if (auto p = world.TryGetLocalPlayer(); p != entt::null)
+      {
+        auto& player = world.GetRegistry().get<Player>(p);
+        if (player.inventoryIsOpen)
+        {
+          player.inventoryIsOpen = false;
+          player.openContainerId = entt::null;
+        }
+      }
+
       state = GameState::PAUSED;
     }
   }

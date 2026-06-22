@@ -1224,117 +1224,117 @@ void World::InitializeGameDefinitions()
 
   [[maybe_unused]] auto& crafting = globals->game->crafting = {};
   
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stoneBlockId, 15}},
     {{forgeBlockItemId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stoneBlockId, 5}, {stickId, 1}},
     {{stoneSpearId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stoneBlockId, 5}, {stickId, 1}},
     {{stonePickaxeId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stoneBlockId, 5}, {stickId, 1}},
     {{stoneAxeId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stickId, 3}},
     {{charcoalId, 1}},
     blocks.Get("forge"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stickId, 1}, {charcoalId, 1}},
     {{torchItemId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{stoneBlockId, 1}, {charcoalId, 1}, {Block::GetItemId(*this, blocks.Get("mushroom")), 1}},
     {{healingPotion, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{Block::GetItemId(*this, malachiteBlockId), 4}, {charcoalId, 1}},
     {{copperIngotId, 1}},
     blocks.Get("forge"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{Block::GetItemId(*this, galenaBlockId), 4}, {charcoalId, 1}},
     {{leadIngotId, 1}},
     blocks.Get("forge"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 10}, {charcoalId, 1}},
     {{Block::GetItemId(*this, blocks.Get("anvil_lead")), 1}},
     blocks.Get("forge"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperSpearId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperPickaxeId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperAxeId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadSpearId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadPickaxeId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadAxeId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperHelmetId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperShirtId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{copperIngotId, 5}, {stickId, 1}},
     {{copperPantsId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadHelmetId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadShirtId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{leadIngotId, 5}, {stickId, 1}},
     {{leadPantsId, 1}},
     blocks.Get("anvil_lead"),
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{coinId, 10}, {stickId, 20}},
     {{chestItemId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {{gunId, 1}, {susCoin, 1}},
     {{flareGunId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     {},
     {{flareGunId, 1}},
   });
-  crafting.recipes.emplace_back(Crafting::Recipe{
+  crafting.recipes.emplace_back(Game2::CraftingRecipe{
     .ingredients = {{stickId, 1}},
     .output      = {{chestItemId, 1}},
     .name        = "Chest Test",

@@ -768,6 +768,13 @@ void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
   frame.sceneColorBloomScratch = Fvog::CreateTexture2DMip({outputExtent.width / 2, outputExtent.height / 2}, Frame::sceneColorFormat, 8, Fvog::TextureUsage::GENERAL, "Scene color (bloom scratch buffer)");
 
   frame.sceneColorTonemapped = Fvog::CreateTexture2D(outputExtent, Frame::sceneColorTonemappedFormat, Fvog::TextureUsage::GENERAL, "Scene color tonemapped");
+
+  Fvog::GetDevice().ImmediateSubmit(
+    [this](VkCommandBuffer cmd)
+    {
+      auto ctx = Fvog::Context(cmd);
+      ctx.ImageBarrierDiscard(frame.sceneColorInternalRes.value(), VK_IMAGE_LAYOUT_GENERAL);
+    });
 }
 
 void VoxelRenderer::OnRender(DeltaTime dt, World& world, VkCommandBuffer commandBuffer, uint32_t swapchainImageIndex)
@@ -1710,7 +1717,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       });
 
     scheduler->AddPass("RayMarchedCloudsComposite",
-      {"RayMarchedCloudsUpscale"},
+      {"RayMarchedCloudsUpscale", "ShadeDeferred"},
       [&]
       {
         rayMarchedClouds_->Composite(commandBuffer,

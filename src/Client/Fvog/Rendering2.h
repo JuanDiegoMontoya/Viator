@@ -170,7 +170,7 @@ namespace Fvog
     // Everything->everything barrier
     void Barrier() const;
 
-    void ClearTexture(const Texture& texture, const TextureClearInfo& clearInfo) const;
+    void ClearTexture(const Texture& texture, const TextureClearInfo& clearInfo = {}) const;
 
     // Texture layout must be TRANSFER_DST_OPTIMAL or GENERAL
     void CopyBufferToTexture(const Buffer& src, Texture& dst, const TextureUpdateInfo& info);

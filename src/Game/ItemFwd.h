@@ -9,6 +9,12 @@ namespace entt
 
 using ItemId = entt::entity;
 
+struct ItemIdAndCount
+{
+  ItemId item = entt::null;
+  int count   = 1;
+};
+
 struct ItemState
 {
   bool operator==(const ItemState&) const = default;

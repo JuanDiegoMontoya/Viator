@@ -19,6 +19,8 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 
+#include "TraderNpcDialogue.h"
+
 #include <glm/gtx/hash.hpp>
 
 #include <stack>
@@ -231,7 +233,7 @@ void World::FixedUpdate(float dt)
         if (registry_.valid(player.openContainerId))
         {
           player.showInteractPrompt = false;
-          if (!registry_.any_of<Inventory, SimpleScriptable>(player.openContainerId))
+          if (!registry_.any_of<Inventory, SimpleScriptable, Game2::TraderNpcDialogueState>(player.openContainerId))
           {
             player.openContainerId = entt::null;
             continue;
@@ -312,6 +314,11 @@ void World::FixedUpdate(float dt)
                 showInteractPrompt = true;
               }
             }
+            if (auto [eee, _] = GetComponentFromAncestorOrDescendant<Game2::TraderNpcDialogueState>(hitEntity); eee != entt::null)
+            {
+              hitEntity          = eee;
+              showInteractPrompt = true;
+            }
 
             // Handle other interactable voxels like doors.
             if (globals->blockRegistry->GetRegistry().any_of<Block::Component::TransformWhenUsed>(entt::entity(hitVoxel)))
@@ -361,6 +368,10 @@ void World::FixedUpdate(float dt)
             else if (auto [ent2, script] = GetComponentFromAncestor<SimpleScriptable>(hitEntity); script)
             {
               player.openContainerId = ent2;
+            }
+            else if (auto [ent3, wares] = GetComponentFromAncestor<Game2::TraderNpcDialogueState>(hitEntity); wares)
+            {
+              player.openContainerId = ent3;
             }
 
             if (const auto* p = registry_.try_get<const RopeAttachmentPoint>(hitEntity))
