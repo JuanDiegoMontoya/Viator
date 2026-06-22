@@ -4,6 +4,8 @@
 #include "Voxel/VoxelType.h"
 
 #include <optional>
+#include <vector>
+#include <string>
 
 namespace Game2
 {

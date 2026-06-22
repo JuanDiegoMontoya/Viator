@@ -237,7 +237,7 @@ namespace
 
     for (const auto& node : nodes)
     {
-      auto newNode = IncompleteDirectedAcyclicGraph<Payload>::Node();
+      auto newNode = typename IncompleteDirectedAcyclicGraph<Payload>::Node();
       newNode.parents.reserve(node->parents.size());
 
       for (const auto* parent : node->parents)
