@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <utility>
+#include <cstring>
 
 Core::BitArray::BitArray() = default;
 

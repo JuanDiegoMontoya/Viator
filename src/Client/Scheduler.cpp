@@ -14,6 +14,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <format>
+#include <cstddef>
+#include <utility>
 
 namespace
 {
@@ -43,7 +45,15 @@ namespace
       std::pmr::vector<Node*> children;
     };
 
-    using UniquePtrToNode = std::unique_ptr<Node, decltype([](Node* p) { std::destroy_at(p); })>;
+    struct Deleter
+    {
+      void operator()(Node* p) const
+      {
+        std::destroy_at(p);
+      }
+    };
+    
+    using UniquePtrToNode = std::unique_ptr<Node, Deleter>;
 
     void Insert(std::string_view id, Payload payload)
     {
@@ -51,7 +61,7 @@ namespace
       auto node    = DirectedAcyclicGraph::Node(*allocator);
       node.id      = std::pmr::string(id, *allocator);
       node.payload = std::move(payload);
-      auto newNode = UniquePtrToNode(allocator->new_object<DirectedAcyclicGraph::Node>(std::move(node)));
+      auto newNode = UniquePtrToNode(allocator->new_object<DirectedAcyclicGraph::Node>(std::move(node)), Deleter{});
       idToNode.emplace(id, newNode.get());
       nodes.push_back(std::move(newNode));
     }
@@ -428,7 +438,7 @@ TEST_CASE("DirectedAcyclicGraph")
 {
   ZoneScoped;
   auto allocator = std::pmr::polymorphic_allocator<>();
-  auto dag = DirectedAcyclicGraph<nullptr_t>(allocator);
+  auto dag       = DirectedAcyclicGraph<std::nullptr_t>(allocator);
 
   SUBCASE("Basic cycle detection")
   {
@@ -491,7 +501,7 @@ TEST_CASE("DirectedAcyclicGraph")
     REQUIRE(sorted.size() == 2);
     CHECK(sorted[0] == dag.idToNode.at("A"));
     CHECK(sorted[1] == dag.idToNode.at("B"));
-    CHECK(IsTopologicallySorted<nullptr_t>(sorted));
+    CHECK(IsTopologicallySorted<std::nullptr_t>(sorted));
   }
 
   SUBCASE("Advanced topological sort")
@@ -516,7 +526,7 @@ TEST_CASE("DirectedAcyclicGraph")
     dag.AddDependency("10", "3");
     auto sorted = dag.GetTopologicallySortedNodes();
     CHECK(sorted.size() == dag.nodes.size());
-    CHECK(IsTopologicallySorted<nullptr_t>(sorted));
+    CHECK(IsTopologicallySorted<std::nullptr_t>(sorted));
   }
 }
 

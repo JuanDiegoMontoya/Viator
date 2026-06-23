@@ -1,6 +1,7 @@
 #pragma once
 #include "Core/Assert2.h"
 
+#include <atomic>
 #include <array>
 #include <mutex>
 #include <shared_mutex>

@@ -451,7 +451,7 @@ namespace Core::Serialization
     auto& grid = *world.globals->grid;
     SerializeGrid<true>(outputArchive, grid);
 
-    const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(), [](const auto& p) { return entt::resolve(p.first).traits<Traits>() & Traits::COMPONENT; });
+    const auto numSets = (uint32_t)std::ranges::count_if(registry.storage(), [](const auto& p) { return entt::resolve(p.first).template traits<Traits>() & Traits::COMPONENT; });
     Serialize<true>(outputArchive, numSets);
     for (auto [id, set] : registry.storage())
     {

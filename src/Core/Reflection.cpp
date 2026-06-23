@@ -194,7 +194,7 @@ using namespace Core::Reflection;
 namespace entt
 {
   template<>
-  struct entt::type_name<std::string> final
+  struct type_name<std::string> final
   {
     [[nodiscard]] static constexpr std::string_view value() noexcept
     {

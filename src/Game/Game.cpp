@@ -819,7 +819,7 @@ std::vector<std::shared_ptr<Voxel::SubGrid>> VoxToSubGrids(const Vox::Chunk& roo
       if (const auto emissionInfo = Vox::ParseEmissionInfoFromDict(processed.materials[i]->attributes))
       {
         // TODO: Fix color space.
-        materials[i].emissionSrgb = materials[i].colorSrgb * emissionInfo->emission * exp2(emissionInfo->power);
+        materials[i].emissionSrgb = materials[i].colorSrgb * emissionInfo->emission * static_cast<float>(exp2(emissionInfo->power));
       }
       if (const auto glassInfo = Vox::ParseGlassInfoFromDict(processed.materials[i]->attributes))
       {

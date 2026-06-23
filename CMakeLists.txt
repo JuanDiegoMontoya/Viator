@@ -239,7 +239,7 @@ target_compile_options(frogRender
     #-Wall
     #-Wextra
     -Wpedantic
-    -pedantic-errors
+    #-pedantic-errors
     -Wno-missing-field-initializers
     -Wno-unsafe-buffer-usage
     -Wno-pre-c++17-compat
@@ -258,6 +258,7 @@ target_compile_options(frogRender
     -Wno-format-nonliteral
     -Wunused-variable
     -march=native # zstd requires BMI2 for precisely one function
+    -Wa,-mbig-obj
     #-ftime-trace # Emit flamegraph traces (viewable in chrome://tracing and speedscope.app) for each TU.
     #-fproc-stat-report # Print memory and execution time for each compilation step.
     $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:
@@ -435,6 +436,11 @@ target_link_libraries(frogRender
 
 if (MSVC)
     target_compile_definitions(frogRender PUBLIC STBI_MSC_SECURE_CRT)
-else()
+elseif(NOT WIN32)
     target_link_libraries(frogRender PRIVATE tbb)
+endif()
+
+# Manually link additional libraries if compiling with GCC on Windows.
+if (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    target_link_libraries(frogRender PRIVATE winmm stdc++exp)
 endif()

@@ -257,7 +257,7 @@ namespace Techniques
 
         for (uint32_t i = 0; i < params.numCascades; i++)
         {
-          const auto side            = (params.baseFrustumSideLength / 2) * exp2(float(i));
+          const auto side            = static_cast<float>((params.baseFrustumSideLength / 2) * exp2(float(i)));
           const auto clip_from_view  = glm::ortho(-side, side, -side, side, -params.frustumDepth / 2, params.frustumDepth / 2);
           const auto clip_from_world = clip_from_view * view_from_world;
 
