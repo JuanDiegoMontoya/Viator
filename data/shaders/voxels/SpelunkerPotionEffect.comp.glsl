@@ -27,10 +27,10 @@ void main()
   uint valueToWrite = 0;
 
   const vec3 rayDir = CreateRay(uv, uniforms.invProj, uniforms.invView);
-  const vec3 rayPos = positionWorld;
+  const vec3 rayPos = positionWorld - rayDir * 1e-3;
   
   const float effectDistance = 12 + 2 * MM_Hash2(uv);
-  const float tMax = effectDistance - dot(rayDir, positionWorld - uniforms.cameraPos.xyz);
+  const float tMax = effectDistance - max(0, dot(rayDir, positionWorld - uniforms.cameraPos.xyz));
   // This shader will be invoked with a different voxel material buffer, so any hit will be a specially marked material.
   HitSurfaceParameters hit;
   //if (vx_TraceRayMultiLevel(rayPos, rayDir, tMax, hit))

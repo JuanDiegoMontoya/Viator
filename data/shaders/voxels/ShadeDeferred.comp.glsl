@@ -210,7 +210,7 @@ void main()
     if (special != 0)
     {
       // Ores behind walls
-      if (special == 1 && false)
+      if (special == 1)
       {
         float noise = Simplex_Noise(vec3(0.2 * uv, sin(Simplex_Noise(vec3(0.5 * uv * 5, 0.5 * float(uniforms.frameNumber) / 120)))));
         vec3 colorA = vec3(.8, .3, .1);
