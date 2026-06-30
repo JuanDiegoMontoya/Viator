@@ -12,6 +12,7 @@
 #include "entt/meta/meta.hpp"
 
 #include <print>
+#include <ranges>
 
 namespace
 {
@@ -102,7 +103,7 @@ namespace
   void ShowNpcDirectorTab(World& world)
   {
     ImGui::SeparatorText("House interior constraints");
-    static auto params = Game2::NpcDirector::HousingParams{};
+    static auto params = Game2::HousingParams{};
     ImGui::SliderInt("minWidth", &params.minWidth, 1, 10);
     ImGui::SliderInt("maxWidth", &params.maxWidth, 1, 10);
     ImGui::SliderInt("minHeight", &params.minHeight, 1, 10);
@@ -114,9 +115,20 @@ namespace
         auto hit = Voxel::Grid::HitSurfaceParameters{};
         if (world.globals->grid->TraceRaySimple(xform->position, GetForward(xform->rotation), 10, hit))
         {
-          const bool res = Game2::NpcDirector::CheckIsValidHousing(world, glm::ivec3(hit.voxelPosition + hit.flatNormalWorld), params);
-          std::println("is valid housing? {}", res ? "YES" : "NO");
+          const auto res = world.globals->game->npcDirector->CheckIsValidHousingAndRegister(world, glm::ivec3(hit.voxelPosition + hit.flatNormalWorld), params);
+          std::println("is valid housing? {} {}", res.has_value() ? "YES" : "NO. Reason:", std::to_underlying(res.error_or({})));
         }
+      }
+    }
+
+    if (ImGui::CollapsingHeader("Houses"))
+    {
+      for (const auto [index, house] : std::ranges::views::enumerate(world.globals->game->npcDirector->houses))
+      {
+        ImGui::SeparatorText(std::format("House {}", index).c_str());
+        ImGui::Text("%s", std::format("Min: {}, {}, {}", house.interiorVolume.min.x, house.interiorVolume.min.y, house.interiorVolume.min.z).c_str());
+        ImGui::Text("%s", std::format("Ext: {}, {}, {}", house.interiorVolume.extent.x, house.interiorVolume.extent.y, house.interiorVolume.extent.z).c_str());
+        ImGui::Text("Occupant: %u", entt::to_integral(house.occupant));
       }
     }
   }

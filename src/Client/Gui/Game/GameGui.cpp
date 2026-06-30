@@ -696,7 +696,7 @@ void VoxelRenderer::ShowGameGui(World& world)
       p.inventoryIsOpen = true;
       if (ImGui::Begin("Trading"))
       {
-        auto* wares = world.GetRegistry().try_get<Game2::TraderNpcWares>(p.openContainerId);
+        auto* wares = world.GetRegistry().try_get<Game2::Comp::TraderNpcWares>(p.openContainerId);
         switch (wp->state)
         {
         case Game2::TraderNpcDialogueState::State::None:

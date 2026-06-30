@@ -231,7 +231,13 @@ bool Math::Intersect::BoxVsBox(glm::vec3 b1min, glm::vec3 b1max, glm::vec3 b2min
 {
   DEBUG_ASSERT(glm::all(glm::greaterThan(b1max, b1min)));
   DEBUG_ASSERT(glm::all(glm::greaterThan(b2max, b2min)));
-  return !(glm::any(glm::lessThan(b2max, b1min)) || glm::any(glm::greaterThan(b2min, b1max)));
+  return !(glm::any(glm::lessThanEqual(b2max, b1min)) || glm::any(glm::greaterThan(b2min, b1max)));
+}
+
+bool Math::Intersect::PointVsBox(glm::vec3 point, glm::vec3 bmin, glm::vec3 bmax)
+{
+  DEBUG_ASSERT(all(greaterThan(bmax, bmin)));
+  return all(greaterThanEqual(point, bmin)) && all(lessThan(point, bmax));
 }
 
 float Math::SDF::Box(glm::vec3 p, glm::vec3 b)

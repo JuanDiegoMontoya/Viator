@@ -1305,7 +1305,7 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(state);
   END_REFLECT
 
-  BEGIN_REFLECT_COMPONENT(Game2::TraderNpcWares, REPLICATED)
+  BEGIN_REFLECT_COMPONENT(Game2::Comp::TraderNpcWares, REPLICATED)
     MEMBER(crafting);
   END_REFLECT
 

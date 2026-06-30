@@ -17,8 +17,21 @@ namespace Game2
     State state = State::None;
   };
 
-  struct TraderNpcWares
+  namespace Comp
   {
-    Crafting crafting;
-  };
+    struct NPC {};
+
+    struct HousingStatus
+    {
+      bool isHoused = false;
+      float timeSinceHomeless = 0;
+    };
+
+    struct TraderNpcWares
+    {
+      Crafting crafting;
+    };
+
+    struct NpcBed {};
+  } // namespace Comp
 }

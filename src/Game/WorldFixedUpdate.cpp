@@ -11,6 +11,8 @@
 #include "Physics/PhysicsUtils.h"
 #include "Networking/RPC.h"
 #include "WeatherDirector.h"
+#include "NpcDirector.h"
+#include "TraderNpcDialogue.h"
 
 #include "Jolt/Physics/Collision/RayCast.h"
 #include "Jolt/Physics/Constraints/DistanceConstraint.h"
@@ -18,8 +20,6 @@
 #include "spdlog/spdlog.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
-
-#include "TraderNpcDialogue.h"
 
 #include <glm/gtx/hash.hpp>
 
@@ -62,6 +62,11 @@ void World::FixedUpdate(float dt)
     if (IsServer() && globals->game->updateNpcSpawnDirector)
     {
       globals->game->npcSpawnDirector.Update(*this, dt);
+    }
+
+    if (IsServer() && globals->game->npcDirector)
+    {
+      globals->game->npcDirector->Update(*this, dt);
     }
 
     if (IsServer())

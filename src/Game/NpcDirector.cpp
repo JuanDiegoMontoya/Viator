@@ -1,21 +1,22 @@
 #include "NpcDirector.h"
 #include "Game/World.h"
 #include "Game/Globals.h"
+#include "Block.h"
+#include "Game.h"
+#include "TraderNpcDialogue.h"
+#include "Voxel/Grid.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include "Block.h"
-#include "Voxel/Grid.h"
 #include "glm/vec3.hpp"
 #include "glm/gtx/component_wise.hpp"
 #include "spdlog/spdlog.h"
+#include "tracy/Tracy.hpp"
 
 #include <mdspan>
 #include <optional>
 #include <queue>
 #include <ranges>
 #include <vector>
-
-#include "tracy/Tracy.hpp"
 
 namespace
 {
@@ -26,13 +27,7 @@ namespace
     Solid,
   };
 
-  struct Prism
-  {
-    glm::ivec3 min;
-    glm::ivec3 extent{};
-
-    bool operator==(const Prism&) const = default;
-  };
+  using Game2::Prism;
 
   struct Rect
   {
@@ -209,19 +204,75 @@ namespace
   }
 }
 
-void Game2::NpcDirector::Update([[maybe_unused]] float dt) {}
-
-bool Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPos, const HousingParams& params)
+void Game2::NpcDirector::Update(World& world, float dt)
 {
   ZoneScoped;
-  const auto& grid   = *world.globals->grid;
-  [[maybe_unused]] const auto& blocks = world.globals->blockRegistry->GetRegistry();
+  validateHousingAccumulator += dt;
+  if (validateHousingAccumulator >= validateHousingInterval)
+  {
+    validateHousingAccumulator = std::fmodf(validateHousingAccumulator, validateHousingInterval);
+    ValidateRandomOccupiedHouse(world);
+  }
+
+  bedCheckAccumulator += dt;
+  if (bedCheckAccumulator >= bedCheckInterval)
+  {
+    bedCheckAccumulator = std::fmodf(bedCheckAccumulator, bedCheckInterval);
+    CheckIfRandomBedIsPartOfHouse(world);
+  }
+
+  houseCheckAccumulator += dt;
+  if (houseCheckAccumulator >= houseCheckInterval)
+  {
+    houseCheckAccumulator = std::fmodf(houseCheckAccumulator, houseCheckInterval);
+    CheckIfRandomHouseContainsBed(world);
+  }
+
+  for (auto&& [entity, status] : world.GetRegistry().view<const Game2::Comp::NPC, Game2::Comp::HousingStatus>().each())
+  {
+    if (status.isHoused)
+    {
+      // For housed NPCs, ensure that they still have a home assigned to them.
+      if (const auto it = std::ranges::find(houses, entity, &House::occupant); it == houses.end())
+      {
+        status.isHoused = false;
+      }
+
+      status.timeSinceHomeless = 0;
+    }
+    else
+    {
+      // For homeless NPCs, search for an unoccupied house from the list.
+      if (const auto it = std::ranges::find(houses, entt::null, &House::occupant); it != houses.end())
+      {
+        it->occupant             = entity;
+        status.timeSinceHomeless = 0;
+        status.isHoused          = true;
+        break;
+      }
+
+      status.timeSinceHomeless += dt;
+
+      if (status.timeSinceHomeless > 60.0f)
+      {
+        world.GetRegistry().emplace_or_replace<DeferredDelete>(entity);
+      }
+    }
+  }
+}
+
+std::expected<Prism, Game2::InvalidHousingReason> Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPos, const HousingParams& params)
+{
+  ZoneScoped;
+  const auto& grid = *world.globals->grid;
 
   const int maxWidth  = params.maxWidth;
   const int maxHeight = params.maxHeight;
 
   const int minWidth  = params.minWidth;
   const int minHeight = params.minHeight;
+
+  const auto shiftAmount = originalPos - glm::ivec3(maxWidth, maxHeight, maxWidth);
 
   auto nodesTraversed1D = std::vector<TraversalState>(maxWidth * 2 * maxWidth * 2 * maxHeight * 2, TraversalState::NotTraversed);
   auto nodesTraversed   = std::mdspan(nodesTraversed1D.data(), maxWidth * 2, maxHeight * 2, maxWidth * 2);
@@ -241,8 +292,7 @@ bool Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPo
 
     if (!grid.IsPositionInGrid(nextPos))
     {
-      spdlog::info("Flooded area reaches world edge.");
-      return false;
+      return std::unexpected{InvalidHousingReason::RoomReachesWorldEdge};
     }
 
     const auto block   = grid.GetVoxelAtUnchecked(nextPos);
@@ -253,11 +303,10 @@ bool Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPo
       glm::abs(originalPos.z - nextPos.z) >= maxWidth ||
       glm::abs(originalPos.y - nextPos.y) >= maxHeight))
     {
-      spdlog::info("Flooded area is too large.");
-      return false;
+      return std::unexpected{InvalidHousingReason::RoomIsTooLarge};
     }
 
-    const auto relPos = nextPos - originalPos + glm::ivec3(maxWidth, maxHeight, maxWidth);
+    const auto relPos = nextPos - shiftAmount;
 
     nodesTraversed[relPos.x, relPos.y, relPos.z] = isSolid ? TraversalState::Solid : TraversalState::NotSolid;
 
@@ -283,8 +332,7 @@ bool Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPo
   // Step 2: early out if flooded area is smaller than the minimum room size.
   if (const auto diff = maxPos - minPos; diff.x < minWidth || diff.y < minHeight || diff.z < minWidth)
   {
-    spdlog::info("Flooded area too small. Extents: ({}, {}, {})", diff.x, diff.y, diff.z);
-    return false;
+    return std::unexpected{InvalidHousingReason::RoomIsTooSmall};
   }
 
   // Step 3: find a sufficiently large prism that encompasses the point.
@@ -298,12 +346,225 @@ bool Game2::NpcDirector::CheckIsValidHousing(World& world, glm::ivec3 originalPo
       const auto p = glm::ivec3(maxWidth, maxHeight, maxWidth);
       if (all(greaterThanEqual(p, prism.min)) && all(lessThan(p, prism.min + prism.extent)))
       {
-        return true;
+        return Prism{.min = prism.min + shiftAmount, .extent = prism.extent};
       }
     }
   }
 
-  spdlog::info("Failed to find prism of sufficient size.");
+  // Hopefully this should be rare, as it doesn't convey much information to the caller.
+  return std::unexpected{InvalidHousingReason::RoomHasInvalidDimensions};
+}
+
+std::expected<Prism, Game2::InvalidHousingReason> Game2::NpcDirector::CheckIsValidHousingAndRegister(World& world,
+  glm::ivec3 originalPos,
+  const HousingParams& params)
+{
+  ZoneScoped;
+  const auto res = CheckIsValidHousing(world, originalPos, params);
+
+  if (res.has_value())
+  {
+    const auto prism = res.value();
+
+    // Make sure the house doesn't intersect another one.
+    for (const auto& house : houses)
+    {
+      if (Math::Intersect::BoxVsBox(prism.min, prism.min + prism.extent, house.interiorVolume.min, house.interiorVolume.min + house.interiorVolume.extent))
+      {
+        return std::unexpected{InvalidHousingReason::RoomIntersectsExistingRoom};
+      }
+    }
+
+    // See if there's an unoccupied bed in the volume, and if there is, add it to the volume.
+    for (auto&& [entity, gt] : world.GetRegistry().view<const GlobalTransform, const Comp::NpcBed>().each())
+    {
+      if (!Math::Intersect::PointVsBox(gt.position, prism.min, prism.min + prism.extent))
+      {
+        continue;
+      }
+
+      bool isOccupied = false;
+      for (const auto& house : houses)
+      {
+        if (Math::Intersect::PointVsBox(gt.position, house.interiorVolume.min, house.interiorVolume.min + house.interiorVolume.extent))
+        {
+          isOccupied = true;
+          break;
+        }
+      }
+
+      if (!isOccupied)
+      {
+        houses.push_back({.interiorVolume = prism});
+        return res;
+      }
+    }
+
+    return std::unexpected{InvalidHousingReason::RoomDoesNotContainBed};
+  }
+
+  return res;
+}
+
+void Game2::NpcDirector::ValidateRandomOccupiedHouse(World& world)
+{
+  ZoneScoped;
+
+  if (houses.empty())
+  {
+    return;
+  }
+
+  auto occupiedHomes = std::vector<size_t>();
+  occupiedHomes.reserve(houses.size());
+
+  for (const auto [index, house] : std::views::enumerate(houses))
+  {
+    if (house.occupant != entt::null && !world.GetRegistry().valid(house.occupant))
+    {
+      spdlog::warn("House at ({}, {}, {}) contains invalid occupant {}. Did you forget to remove the occupant when they died?",
+        house.interiorVolume.min.x,
+        house.interiorVolume.min.y,
+        house.interiorVolume.min.z,
+        entt::to_integral(house.occupant));
+    }
+    else if (house.occupant != entt::null)
+    {
+      occupiedHomes.push_back(index);
+    }
+  }
+
+  if (occupiedHomes.empty())
+  {
+    return;
+  }
+
+  const auto index = occupiedHomes[world.globals->game->rng.RandU32(0, (uint32_t)occupiedHomes.size())];
+  auto& house      = houses[index];
+
+  const auto res = CheckIsValidHousing(world, house.interiorVolume.min, {});
+
+  if (res.has_value())
+  {
+    const auto& prism = res.value();
+    if (house.interiorVolume != res)
+    {
+      spdlog::debug("House at ({}, {}, {}) with dimensions ({}, {}, {}) now has origin ({}, {}, {}) and dimensions ({}, {}, {}).",
+        house.interiorVolume.min.x,
+        house.interiorVolume.min.y,
+        house.interiorVolume.min.z,
+        house.interiorVolume.extent.x,
+        house.interiorVolume.extent.y,
+        house.interiorVolume.extent.z,
+        prism.min.x,
+        prism.min.y,
+        prism.min.z,
+        prism.extent.x,
+        prism.extent.y,
+        prism.extent.z);
+      
+      house.interiorVolume = prism;
+    }
+  }
+  else
+  {
+    const auto& reason = res.error();
+    spdlog::debug("House at ({}, {}, {}) is no longer considered valid. Reason: {}.",
+      house.interiorVolume.min.x,
+      house.interiorVolume.min.y,
+      house.interiorVolume.min.z,
+      std::to_underlying(reason));
+
+    houses.erase(houses.begin() + index);
+  }
+
+  if (!DoesHouseContainBed(world, index))
+  {
+    spdlog::debug("House at ({}, {}, {}) is no longer considered valid. Reason: {}.",
+      house.interiorVolume.min.x,
+      house.interiorVolume.min.y,
+      house.interiorVolume.min.z,
+      std::to_underlying(InvalidHousingReason::RoomDoesNotContainBed));
+  }
+}
+
+void Game2::NpcDirector::CheckIfRandomBedIsPartOfHouse(World& world)
+{
+  ZoneScoped;
+  auto bedsNotInAHouse = std::vector<entt::entity>();
+
+  for (auto&& [entity, gt] : world.GetRegistry().view<const GlobalTransform, const Comp::NpcBed>().each())
+  {
+    bool isInHouse = false;
+    for (const auto& house : houses)
+    {
+      if (Math::Intersect::PointVsBox(gt.position, house.interiorVolume.min, house.interiorVolume.min + house.interiorVolume.extent))
+      {
+        isInHouse = true;
+        break;
+      }
+    }
+
+    if (!isInHouse)
+    {
+      bedsNotInAHouse.push_back(entity);
+    }
+  }
+
+  if (bedsNotInAHouse.empty())
+  {
+    return;
+  }
+
+  const auto bed = bedsNotInAHouse[world.globals->game->rng.RandU32(0, (uint32_t)bedsNotInAHouse.size())];
+  const auto pos = world.GetRegistry().get<const GlobalTransform>(bed).position;
+  const auto res = CheckIsValidHousing(world, glm::ivec3(pos), {});
+
+  if (res.has_value())
+  {
+    const auto prism = res.value();
+    spdlog::debug("Automatically placing new house with bed at location ({}, {}, {}) with extents ({}, {}, {})",
+      prism.min.x,
+      prism.min.y,
+      prism.min.z,
+      prism.extent.x,
+      prism.extent.y,
+      prism.extent.z);
+
+    houses.push_back({.interiorVolume = prism});
+  }
+}
+
+void Game2::NpcDirector::CheckIfRandomHouseContainsBed(World& world)
+{
+  if (houses.empty())
+  {
+    return;
+  }
+
+  const auto index  = world.globals->game->rng.RandU32(0, (uint32_t)houses.size());
+
+  if (!DoesHouseContainBed(world, (size_t)index))
+  {
+    [[maybe_unused]] const auto prism = houses[index].interiorVolume;
+    spdlog::debug("Removing house which no longer contains a bed at location ({}, {}, {})", prism.min.x, prism.min.y, prism.min.z);
+
+    houses.erase(houses.begin() + index);
+  }
+}
+
+bool Game2::NpcDirector::DoesHouseContainBed(World& world, size_t bedIndex) const
+{
+  const auto& house = houses[bedIndex];
+
+  for (auto&& [entity, gt] : world.GetRegistry().view<const GlobalTransform, const Comp::NpcBed>().each())
+  {
+    if (Math::Intersect::PointVsBox(gt.position, house.interiorVolume.min, house.interiorVolume.min + house.interiorVolume.extent))
+    {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -418,12 +679,12 @@ TEST_CASE("GetRectsInSlab")
     // https://stackoverflow.com/questions/5931735/finding-largest-rectangle-in-2d-array
     /*
      * ----------------------
-     * |    ------    ------|
-     * |    ----        ----|
+     * |    [][][]    [][][]|
+     * |    [][]        [][]|
      * |                    |
-     * |                --  |
-     * |                --  |
-     * |--    --            |
+     * |                []  |
+     * |                []  |
+     * |[]    []            |
      * ----------------------
      */
     std::ranges::fill(region1D, TraversalState::NotTraversed);

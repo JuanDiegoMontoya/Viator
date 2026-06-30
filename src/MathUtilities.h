@@ -78,6 +78,7 @@ namespace Math
   namespace Intersect
   {
     bool BoxVsBox(glm::vec3 b1min, glm::vec3 b1max, glm::vec3 b2min, glm::vec3 b2max);
+    bool PointVsBox(glm::vec3 point, glm::vec3 bmin, glm::vec3 bmax);
   }
 
   float GaussianNorm(float x, float mean, float stddev);
