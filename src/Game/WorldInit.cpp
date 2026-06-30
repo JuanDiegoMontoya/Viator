@@ -1165,6 +1165,58 @@ void World::InitializeGameDefinitions()
     prevFireBlockId = entt::entity(fireBlockId);
   }
 
+  {
+    auto bedHeadVox      = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string("bed_head") + ".vox"));
+    auto bedHeadSubGrids = VoxToSubGrids(*bedHeadVox);
+
+    const auto bedHead = Block::CreateStandardBlock(*this,
+      {
+        .tag  = "bed_head",
+        .name = "Bed",
+        .breakable =
+          Block::Component::Breakable{
+            .initialHealth     = 50,
+            .damageTier        = 1,
+            .fireDestroyChance = 0.05f,
+          },
+        .render             = Block::Component::RenderAsSubGrid{bedHeadSubGrids.front()},
+        .physicalProperties = Block::Component::PhysicalProperties{.isSolid = false, .flammability = 0.1f},
+        .entityPrefab       = Block::Component::SpawnDependentEntityPrefabWhenPlaced{.id = entityPrefabs.GetId("Bed")},
+        .support            = Block::Component::RequiresSupport{.supportingSide = Block::Direction::Down},
+      });
+
+    auto bedBottomVox      = Vox::LoadFromFile(GetAssetDirectory() / "voxels" / "models" / (std::string("bed_bottom") + ".vox"));
+    auto bedBottomSubGrids = VoxToSubGrids(*bedBottomVox);
+
+    const auto bedBottom = Block::CreateStandardBlock(*this,
+      {
+        .tag  = "bed_bottom",
+        .name = "bed_bottom",
+        .breakable =
+          Block::Component::Breakable{
+            .initialHealth     = 50,
+            .damageTier        = 1,
+            .fireDestroyChance = 0.05f,
+            .dropWhenBroken    = std::monostate{},
+          },
+        .render             = Block::Component::RenderAsSubGrid{bedBottomSubGrids.front()},
+        .physicalProperties = Block::Component::PhysicalProperties{.isSolid = false, .flammability = 0.1f},
+        .support            = Block::Component::RequiresSupport{.supportingSide = Block::Direction::Down},
+      });
+    
+
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(bedHead)).direction   = Block::Direction::South;
+    blocks.GetRegistry().emplace<Block::Component::InterlinkedBlock>(entt::entity(bedBottom)).direction = Block::Direction::North;
+
+    blocks.GetRegistry().emplace<Block::Component::SpawnExtraBlockOnPlace>(entt::entity(bedHead)) = {.block = bedBottom, .direction = Block::Direction::South};
+
+    Block::CreateStandardRotatedVariants(*this, bedHead);
+    Block::CreateStandardRotatedVariants(*this, bedBottom);
+
+    Block::UpdateTransformedForRotatedVariants(*this, bedHead);
+    Block::UpdateTransformedForRotatedVariants(*this, bedBottom);
+  }
+
   auto& prefabs = *globals->prefabRegistry = {};
   // const auto grassId = blocks.Get("Grass").GetBlockId();
   // const auto frogLightBlockId = blocks.Get("Frog Light").GetBlockId();

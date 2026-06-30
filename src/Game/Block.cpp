@@ -103,6 +103,101 @@ namespace
 
     return true;
   }
+
+  // Pre: `ref` is not Up or Down.
+  // Rotates `from` by the amount `ref` is rotated from North.
+  // Example: if `ref` is East (90 degrees from North), and `from` is South, then this function will return West (South + 90 degrees).
+  // If `from` is Up or Down, this function does nothing.
+  [[nodiscard]] Block::Direction RotateTo(Block::Direction ref, Block::Direction from)
+  {
+    if (from == Block::Direction::Down || from == Block::Direction::Up)
+    {
+      return from;
+    }
+
+    switch (ref)
+    {
+    case Block::Direction::North:
+    {
+      return from;
+    }
+    case Block::Direction::South:
+    {
+      // 180 degrees
+      switch (from)
+      {
+      case Block::Direction::North:
+      {
+        return Block::Direction::South;
+      }
+      case Block::Direction::South:
+      {
+        return Block::Direction::North;
+      }
+      case Block::Direction::East:
+      {
+        return Block::Direction::West;
+      }
+      case Block::Direction::West:
+      {
+        return Block::Direction::East;
+      }
+      }
+      break;
+    }
+    case Block::Direction::East:
+    {
+      // 90 degrees
+      switch (from)
+      {
+      case Block::Direction::North:
+      {
+        return Block::Direction::East;
+      }
+      case Block::Direction::South:
+      {
+        return Block::Direction::West;
+      }
+      case Block::Direction::East:
+      {
+        return Block::Direction::South;
+      }
+      case Block::Direction::West:
+      {
+        return Block::Direction::North;
+      }
+      }
+      break;
+    }
+    case Block::Direction::West:
+    {
+      // 270 degrees
+      switch (from)
+      {
+      case Block::Direction::North:
+      {
+        return Block::Direction::West;
+      }
+      case Block::Direction::South:
+      {
+        return Block::Direction::East;
+      }
+      case Block::Direction::East:
+      {
+        return Block::Direction::North;
+      }
+      case Block::Direction::West:
+      {
+        return Block::Direction::South;
+      }
+      }
+      break;
+    }
+    }
+  
+    UNREACHABLE;
+    return {};
+  }
 }
 
 Block::Registry::Registry()
@@ -171,6 +266,11 @@ static bool OnTryPlaceBlockExt(World& world, glm::ivec3 voxelPosition, BlockId b
 
       const auto neighbor = grid.GetVoxelAt(voxelPosition + neighborPos);
       if (neighbor != voxel_t::Air)
+      {
+        return false;
+      }
+
+      if (!IsBlockSupportedAtPosition(world, sp->block, voxelPosition + neighborPos))
       {
         return false;
       }
@@ -981,6 +1081,16 @@ Block::Component::StandardRotatedVariants& Block::CreateStandardRotatedVariants(
     {
       rotatedVariants.west = block;
     }
+
+    if (auto* p = bReg.try_get<Component::SpawnExtraBlockOnPlace>(entt::entity(block)))
+    {
+      p->direction = RotateTo(dir, p->direction);
+    }
+
+    if (auto* p = bReg.try_get<Component::InterlinkedBlock>(entt::entity(block)))
+    {
+      p->direction = RotateTo(dir, p->direction);
+    }
   }
 
   return bReg.emplace<Component::StandardRotatedVariants>(entt::entity(base), rotatedVariants);
@@ -995,6 +1105,7 @@ void Block::UpdateTransformedForRotatedVariants(World& world, BlockId base)
   ASSERT(rotated);
 
   // Update transformed variants of this block.
+  if (bReg.all_of<Component::TransformWhenUsed>(entt::entity(base)))
   {
     auto& eTransformed = bReg.get<Component::TransformWhenUsed>(entt::entity(rotated->east));
     eTransformed.block = GetRotatedBlockVariant(world, eTransformed.block, Direction::East);

@@ -307,6 +307,28 @@ public:
   }
 };
 
+class BedDefinition : public EntityPrefabDefinition
+{
+public:
+  using EntityPrefabDefinition::EntityPrefabDefinition;
+
+  entt::entity Spawn(World& world, glm::vec3 position, glm::quat rotation) const override
+  {
+    auto& registry = world.GetRegistry();
+    auto entity    = registry.create();
+    auto& t        = registry.emplace<LocalTransform>(entity);
+    t.position     = position;
+    t.rotation     = rotation;
+    t.scale        = 1;
+
+    registry.emplace<GlobalTransform>(entity) = {t.position, t.rotation, t.scale};
+    registry.emplace<Hierarchy>(entity);
+    registry.emplace<Name>(entity, GetCreateInfo().name);
+    registry.emplace<Game2::Comp::NpcBed>(entity);
+    return entity;
+  }
+};
+
 class ShrimpleMeshPrefabDefinition : public EntityPrefabDefinition
 {
 public:
@@ -380,7 +402,7 @@ public:
     registry.emplace<AiWanderBehavior>(e);
     registry.emplace<WalkingMovementAttributes>(e) = {.runMaxSpeed = 3.0f};
     registry.emplace<Tint>(e).color                = {0.2f, 0.5f, 0.5f};
-    auto& craft = registry.emplace<Game2::TraderNpcWares>(e);
+    auto& craft = registry.emplace<Game2::Comp::TraderNpcWares>(e);
     registry.emplace<Game2::TraderNpcDialogueState>(e);
 
     const auto coinId = world.globals->itemRegistry->Get("item_electrum");
@@ -505,4 +527,5 @@ void RegisterDefaultEntityPrefabs(EntityPrefabRegistry& entityPrefabRegistry)
   entityPrefabRegistry.Add("Worm Boss", new WormBossDefinition());
   entityPrefabRegistry.Add("SimpleScriptable", new SimpleScriptableDefinition({.isVisible = false}));
   entityPrefabRegistry.Add("Trader", new TraderNpcDefinition({.name = "deccer the frog"}));
+  entityPrefabRegistry.Add("Bed", new BedDefinition({.isVisible = false}));
 }
