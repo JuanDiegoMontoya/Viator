@@ -7,15 +7,18 @@
 #include "Voxel/Grid.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
+#include "Item.h"
 #include "glm/vec3.hpp"
 #include "glm/gtx/component_wise.hpp"
 #include "spdlog/spdlog.h"
 #include "tracy/Tracy.hpp"
 
+#include <algorithm>
 #include <mdspan>
 #include <optional>
 #include <queue>
 #include <ranges>
+#include <utility>
 #include <vector>
 
 namespace
@@ -204,6 +207,11 @@ namespace
   }
 }
 
+Game2::NpcDirector::NpcDirector()
+{
+  npcStatuses.emplace(NpcId::Merchant, NpcStatus::InitialRequirementsNotMet);
+}
+
 void Game2::NpcDirector::Update(World& world, float dt)
 {
   ZoneScoped;
@@ -227,6 +235,21 @@ void Game2::NpcDirector::Update(World& world, float dt)
     houseCheckAccumulator = std::fmodf(houseCheckAccumulator, houseCheckInterval);
     CheckIfRandomHouseContainsBed(world);
   }
+
+  npcStatusCheckAccumulator += dt;
+  if (npcStatusCheckAccumulator >= npcStatusCheckInterval)
+  {
+    npcStatusCheckAccumulator = std::fmodf(npcStatusCheckAccumulator, npcStatusCheckInterval);
+    UpdateNpcStatuses(world);
+  }
+
+  // Attempt to spawn NPCs once per day.
+  const auto currentTime = world.globals->game->sunInfo.timeOfDay;
+  if (previousTime < trySpawnNpcTime && currentTime >= trySpawnNpcTime)
+  {
+    TrySpawnNpcs(world);
+  }
+  previousTime = currentTime;
 
   for (auto&& [entity, status] : world.GetRegistry().view<const Game2::Comp::NPC, Game2::Comp::HousingStatus>().each())
   {
@@ -566,6 +589,108 @@ bool Game2::NpcDirector::DoesHouseContainBed(World& world, size_t bedIndex) cons
   }
 
   return false;
+}
+
+void Game2::NpcDirector::UpdateNpcStatuses(World& world)
+{
+  // For each NPC slot, confirm its status and update if needed.
+  for (auto& [id, status] : npcStatuses)
+  {
+    switch (status)
+    {
+    case NpcStatus::InitialRequirementsNotMet:
+    {
+      if (CheckNpcInitialRequirements(world, id))
+      {
+        spdlog::debug("Initial requirements met for NPC {}.", std::to_underlying(id));
+        status = NpcStatus::NotPresent;
+      }
+      break;
+    }
+    case NpcStatus::NotPresent:
+    {
+      if (std::ranges::any_of(world.GetRegistry().view<const NpcId>().each(), [&](const auto& v) { return std::get<1>(v) == id; }))
+      {
+        status = NpcStatus::Present;
+      }
+      break;
+    }
+    case NpcStatus::Present:
+    {
+      if (std::ranges::none_of(world.GetRegistry().view<const NpcId>().each(), [&](const auto& v) { return std::get<1>(v) == id; }))
+      {
+        status = NpcStatus::NotPresent;
+      }
+      break;
+    }
+    default: UNREACHABLE;
+    }
+  }
+}
+
+bool Game2::NpcDirector::CheckNpcInitialRequirements(World& world, NpcId id)
+{
+  if (id == NpcId::Merchant)
+  {
+    const auto coinId = world.globals->itemRegistry->Get("item_electrum");
+    int sum           = 0;
+
+    // Count money in all players' inventories.
+    for (auto&& [entity, player, inventory] : world.GetRegistry().view<const Player, const Inventory>().each())
+    {
+      for (const auto& row : inventory.slots)
+      {
+        for (const auto& slot : row)
+        {
+          if (slot.id == coinId)
+          {
+            sum += slot.count;
+          }
+        }
+      }
+    }
+
+    return sum >= 5;
+  }
+
+  return false;
+}
+
+void Game2::NpcDirector::TrySpawnNpcs(World& world)
+{
+  for (auto& [id, status] : npcStatuses)
+  {
+    if (status == NpcStatus::NotPresent)
+    {
+      // Look for a suitable house.
+      if (auto it = std::ranges::find(houses, entt::null, &House::occupant); it != houses.end())
+      {
+        if (const auto e = TrySpawnNpc(world, id); e != entt::null)
+        {
+          spdlog::debug("Successfully spawned NPC {} (entity {}).", std::to_underlying(id), entt::to_integral(e));
+          it->occupant = e;
+        }
+        else
+        {
+          spdlog::debug("Failed to spawn NPC {} (spawn function failed).", std::to_underlying(id));
+        }
+      }
+      else
+      {
+        spdlog::debug("Failed to spawn NPC {} (no house available).", std::to_underlying(id));
+      }
+    }
+  }
+}
+
+entt::entity Game2::NpcDirector::TrySpawnNpc([[maybe_unused]] World& world, NpcId id)
+{
+  if (id == NpcId::Merchant)
+  {
+    // TODO: actually spawn the NPC
+  }
+
+  return entt::null;
 }
 
 

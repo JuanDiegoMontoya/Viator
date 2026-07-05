@@ -121,14 +121,56 @@ namespace
       }
     }
 
-    if (ImGui::CollapsingHeader("Houses"))
+    if (ImGui::CollapsingHeader("NPC Statuses"))
     {
-      for (const auto [index, house] : std::ranges::views::enumerate(world.globals->game->npcDirector->houses))
+      if (ImGui::BeginTable("statuses", 2, ImGuiTableFlags_BordersH | ImGuiTableFlags_NoSavedSettings))
       {
-        ImGui::SeparatorText(std::format("House {}", index).c_str());
-        ImGui::Text("%s", std::format("Min: {}, {}, {}", house.interiorVolume.min.x, house.interiorVolume.min.y, house.interiorVolume.min.z).c_str());
-        ImGui::Text("%s", std::format("Ext: {}, {}, {}", house.interiorVolume.extent.x, house.interiorVolume.extent.y, house.interiorVolume.extent.z).c_str());
-        ImGui::Text("Occupant: %u", entt::to_integral(house.occupant));
+        ImGui::TableSetupColumn("ID");
+        ImGui::TableSetupColumn("Status");
+        ImGui::TableHeadersRow();
+
+        for (const auto [id, status] : world.globals->game->npcDirector->npcStatuses)
+        {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", std::format("{}", std::to_underlying(id)).c_str());
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", std::format("{}", std::to_underlying(status)).c_str());
+        }
+
+        ImGui::EndTable();
+      }
+    }
+
+    const auto& houses = world.globals->game->npcDirector->houses;
+    if (ImGui::CollapsingHeader(std::format("Houses ({})###houses", houses.size()).c_str()))
+    {
+      if (ImGui::BeginTable("houses", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_NoSavedSettings))
+      {
+        ImGui::TableSetupColumn("Index");
+        ImGui::TableSetupColumn("Min Position");
+        ImGui::TableSetupColumn("Extent");
+        ImGui::TableSetupColumn("Occupant");
+        ImGui::TableHeadersRow();
+
+        for (const auto [index, house] : std::ranges::views::enumerate(houses))
+        {
+          ImGui::TableNextRow();
+          ImGui::TableNextColumn();
+          ImGui::Text("%d", (int)index);
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", std::format("{}, {}, {}", house.interiorVolume.min.x, house.interiorVolume.min.y, house.interiorVolume.min.z).c_str());
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%s", std::format("{}, {}, {}", house.interiorVolume.extent.x, house.interiorVolume.extent.y, house.interiorVolume.extent.z).c_str());
+
+          ImGui::TableNextColumn();
+          ImGui::Text("%u", entt::to_integral(house.occupant));
+        }
+
+        ImGui::EndTable();
       }
     }
   }
