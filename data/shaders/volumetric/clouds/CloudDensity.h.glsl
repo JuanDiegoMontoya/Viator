@@ -26,7 +26,7 @@ float CloudDensityAtPoint(vec3 positionWS, WeatherGpuParams params)
   const float gradient = gradientLower * gradientUpper;
   if (gradient < 1e-3) return 0;
   const float raw = Remap(Simplex_Fbm(positionWS * params.cloudFrequency, 7), -1, 1, -1.0 / params.cloudCoverage, 1);
-  return gradient * max(0.0, raw) * params.cloudDensity;
+  return gradient * max(0.0, isnan(raw) ? 0 : raw) * params.cloudDensity;
 }
 
 #endif // CLOUD_DENSITY_H
