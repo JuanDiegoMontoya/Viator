@@ -212,6 +212,12 @@ namespace Fvog
       return {storageDescriptorInfo_.value().GpuResource().index};
     }
 
+    [[nodiscard]] shared::UImage3D GetUImage3D()
+    {
+      DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_3D);
+      return {storageDescriptorInfo_.value().GpuResource().index};
+    }
+
     [[nodiscard]] shared::Image2DArray GetImage2DArray()
     {
       DEBUG_ASSERT(createInfo_.viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);

@@ -524,6 +524,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
     .gDepthFormat   = frame.sceneDepthFormat,
   });
 
+  lightGrid_ = Techniques::LightGrid::Create();
+
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
 
@@ -1077,6 +1079,45 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     voxelsPtr = voxelsGpu.ptr;
   }
 
+  auto lights = std::vector<GpuLight>();
+  for (auto&& [entity, light, transform] : world.GetRegistryRaw().view<GpuLight, const GlobalTransform>().each())
+  {
+    light.position  = transform.position;
+    light.direction = GetForward(transform.rotation);
+    if (const auto* rt = world.GetRegistry().try_get<const RenderTransform>(entity))
+    {
+      light.position  = rt->transform.position;
+      light.direction = GetForward(rt->transform.rotation);
+    }
+    light.colorSpace = COLOR_SPACE_sRGB_LINEAR;
+    lights.emplace_back(light);
+  }
+
+  if (!lights.empty())
+  {
+    if (!lightBuffer || lightBuffer->Size() < lights.size() * sizeof(GpuLight))
+    {
+      lightBuffer.emplace((uint32_t)lights.size(), "Lights");
+    }
+    lightBuffer->UpdateData(commandBuffer, lights);
+  }
+
+  const auto lightGridGpuPtr = lightGrid_->Update(commandBuffer,
+    *scheduler,
+    Techniques::LightGridUpdateInfo{
+      .gridParams =
+        Techniques::LightGridParams{
+          .numCascades            = (uint32_t)lightGridNumCascades.Get(),
+          .cascadeDimensions      = glm::ivec3((int)lightGridCascadeDims.Get()),
+          .baseGridScale          = (float)lightGridBaseGridScale.Get(),
+          .maxLightsPerCell       = (uint32_t)lightGridMaxLightsPerCell.Get(),
+          .lightIndicesPerCascade = (uint32_t)lightGridLightIndicesPerCascade.Get(),
+        },
+      .numLights      = (uint32_t)lights.size(),
+      .lightsBuffer   = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetDeviceAddress(),
+      .cameraPosition = position,
+    });
+
   perFrameUniforms.UpdateData(commandBuffer,
     GlobalUniforms{
       .viewProj               = clip_from_world,
@@ -1105,6 +1146,9 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
       .voxelsPtr              = voxelsPtr,
+      .lights                 = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetDeviceAddress(),
+      .numLights              = (uint32_t)lights.size(),
+      .cascadedLightGrid      = lightGridGpuPtr,
       .time                   = static_cast<float>(time += dt.game),
       .dt                     = static_cast<float>(dt.game),
     });
@@ -1216,20 +1260,6 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       GetOrEmplaceCachedTexture(billboardSprite.name, true).ImageView().GetTexture2D());
   }
 
-  auto lights = std::vector<GpuLight>();
-  for (auto&& [entity, light, transform] : world.GetRegistryRaw().view<GpuLight, const GlobalTransform>().each())
-  {
-    light.position  = transform.position;
-    light.direction = GetForward(transform.rotation);
-    if (const auto* rt = world.GetRegistry().try_get<const RenderTransform>(entity))
-    {
-      light.position  = rt->transform.position;
-      light.direction = GetForward(rt->transform.rotation);
-    }
-    light.colorSpace = COLOR_SPACE_sRGB_LINEAR;
-    lights.emplace_back(light);
-  }
-
   auto lines           = std::vector<Debug::Line>();
   const auto& ecsLines = world.globals->debugLines;
   lines.insert(lines.end(), ecsLines.begin(), ecsLines.end());
@@ -1264,15 +1294,6 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       billboardInstanceBuffer.emplace((uint32_t)billboards.size(), "Billboards");
     }
     billboardInstanceBuffer->UpdateData(commandBuffer, billboards);
-  }
-
-  if (!lights.empty())
-  {
-    if (!lightBuffer || lightBuffer->Size() < lights.size() * sizeof(GpuLight))
-    {
-      lightBuffer.emplace((uint32_t)lights.size(), "Lights");
-    }
-    lightBuffer->UpdateData(commandBuffer, lights);
   }
 
   if (!billboardSprites.empty())
@@ -1508,7 +1529,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   if (giMethod_ == GIMethod::PerPixelPathTracing)
   {
     scheduler->AddPass("PathTracing",
-      {"RenderOpaque", "ShadowMaps"},
+      {"RenderOpaque", "ShadowMaps", "LightGrid"},
       [&]
       {
         ctx.BindComputePipeline(perPixelPathtracerPipeline.GetPipeline());
@@ -1620,7 +1641,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
 
   // Shade image.
   scheduler->AddPass("ShadeDeferred",
-    {"AmbientOcclusion", "SpelunkerEffect", "RenderOpaque", "TranslucentVoxels", "FrameGIlluminance", "ShadowMaps", "AllSky"},
+    {"AmbientOcclusion", "SpelunkerEffect", "RenderOpaque", "TranslucentVoxels", "FrameGIlluminance", "ShadowMaps", "AllSky", "LightGrid"},
     [&]
     {
       ctx.BindComputePipeline(shadeDeferredPipeline.GetPipeline());
@@ -1730,7 +1751,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   }
 
   scheduler->AddPass("Fog",
-    {"IndirectLighting", "RayMarchedCloudsComposite", "AllSky", "ShadowMaps"},
+    {"IndirectLighting", "RayMarchedCloudsComposite", "AllSky", "ShadowMaps", "LightGrid"},
     [&]
     {
       if (!debugDisableFog)

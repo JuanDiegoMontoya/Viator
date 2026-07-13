@@ -369,7 +369,7 @@ void World::InitializeGameDefinitions()
   light.color     = {1.0f, 0.4f, 0.2f};
   light.intensity = 500;
   light.type      = LIGHT_TYPE_POINT;
-  light.range     = 200;
+  light.range     = 35;
   const auto flareGunId = Item::CreateGun(items,
     "weapon_flaregun",
     "Flare Gun",

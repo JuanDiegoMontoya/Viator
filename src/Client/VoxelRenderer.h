@@ -16,6 +16,7 @@
 #include "techniques/Sky.h"
 #include "techniques/Particles.h"
 #include "techniques/DDGI.h"
+#include "techniques/LightGrid.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -450,6 +451,51 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float lightGridNumCascades = {
+    "r.lightGrid.numCascades",
+    "- Number of cascades in the light grid. A higher number means the grids will cover a larger area, but is more expensive to update.",
+    6,
+    1,
+    8,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float lightGridCascadeDims = {
+    "r.lightGrid.dimensions",
+    "- The dimensions of each cascade of the light grid.",
+    15,
+    1,
+    20,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float lightGridBaseGridScale = {
+    "r.lightGrid.gridScale",
+    "- The world-space size of cells in the light grid.",
+    8,
+    1,
+    100,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float lightGridMaxLightsPerCell = {
+    "r.lightGrid.maxLightsPerCell",
+    "- The maximum number of lights grid cells can hold. A higher number may impact performance in light-heavy scenes.",
+    8,
+    1,
+    100,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float lightGridLightIndicesPerCascade = {
+    "r.lightGrid.maxCascadeIndices",
+    "- Maximum number of light indices between all cells, per cascade. Impacts memory usage.",
+    1'000'000,
+    0,
+    10'000'000,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,
@@ -466,6 +512,7 @@ private:
   float rainFogDensity = 0;
 
   std::unique_ptr<Techniques::Particles> particles_;
+  std::unique_ptr<Techniques::LightGrid> lightGrid_;
 
   std::string uiLayoutPath;
 };

@@ -87,6 +87,8 @@ if (NOT GAME_HEADLESS)
         src/Client/Scheduler.cpp
         src/Client/techniques/DDGI.h
         src/Client/techniques/DDGI.cpp
+        src/Client/techniques/LightGrid.h
+        src/Client/techniques/LightGrid.cpp
         src/Client/GpuMesh.h
         src/Client/Gui/Debug/GraphicsWindow.cpp
         src/Client/Gui/Debug/GameWindow.cpp
