@@ -77,7 +77,36 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   const vec3 sunlightIS = float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL / M_PI * sunVisibility;
   const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, positionWS);
   
-  return sunlightIS + skylightIS + irradianceIS;
+  // Local lighting
+  const ivec4 cellPosAndCascade = LG_GetCellPositionAndCascadeIndexAtPoint(uniforms.cascadedLightGrid, positionWS);
+  vec3 localLightIS = vec3(0);
+
+  if (cellPosAndCascade.w >= 0)
+  {
+    const ivec3 cellPos    = cellPosAndCascade.xyz;
+    const int cascade      = cellPosAndCascade.w;
+    const uint lightOffset = LG_GetLightListOffsetForCell(uniforms.cascadedLightGrid, cascade, cellPos);
+    const uint lightCount  = LG_GetLightCountForCell(uniforms.cascadedLightGrid, cascade, cellPos);
+
+    for (uint i = 0; i < lightCount; i++)
+    {
+      const uint lightIndex = uniforms.cascadedLightGrid.grids[cascade].lightIndices.values[lightOffset + i].data;
+      const float visibility = GetPunctualLightVisibility(positionWS + normalWS * 1e-3, lightIndex);
+      
+      const GpuLight light = uniforms.lights[lightIndex].data;
+
+      Surface surface;
+      surface.albedo = albedoIS;
+      surface.normal = normalWS;
+      surface.position = positionWS;
+
+      localLightIS += visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR);
+    }
+    //return 100 * (lightCount + 1) * TurboColormap(float(cellPosAndCascade.w) / uniforms.cascadedLightGrid.numCascades);
+  }
+
+
+  return sunlightIS + skylightIS + irradianceIS + localLightIS;
 }
 
 vec3 CalcRadianceFromPointSpecular(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 albedoIS, bool isOpaque)

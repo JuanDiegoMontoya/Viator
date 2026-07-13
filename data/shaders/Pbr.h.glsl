@@ -3,7 +3,7 @@
 
 #include "Math.h.glsl"
 #include "Color.h.glsl"
-#include "ShadeDeferredPbr.h.glsl"
+#include "Light.h.glsl"
 
 // Punctual light attenuation factor
 float GetSquareFalloffAttenuation(vec3 posToLight, float lightInvRadius)

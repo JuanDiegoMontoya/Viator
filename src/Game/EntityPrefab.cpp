@@ -280,7 +280,7 @@ public:
     light.type      = LIGHT_TYPE_POINT;
     light.color     = {1, 0.58f, 0.3f};
     light.intensity = 15;
-    light.range     = 200;
+    light.range     = 10;
     return entity;
   }
 };

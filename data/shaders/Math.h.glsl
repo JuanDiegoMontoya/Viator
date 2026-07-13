@@ -224,9 +224,27 @@ bool AABBIntersect(vec3 ro, vec3 rd, vec3 minV, vec3 maxV)
   return t0 <= t1;
 }
 
+// Returns a point within the AABB that is closest to the given point.
+// If the point is inside the AABB, returns that point.
+vec3 ClosestPointOnAABB(vec3 point, vec3 aabbMin, vec3 aabbMax)
+{
+  return clamp(point, aabbMin, aabbMax);
+}
+
 float distance2(vec3 a, vec3 b)
 {
   return dot(a - b, a - b);
+}
+
+float square(float x)
+{
+  return x * x;
+}
+
+bool SphereAABBIntersect(vec3 spherePos, float sphereRadius, vec3 aabbMin, vec3 aabbMax)
+{
+  const vec3 closestPoint = ClosestPointOnAABB(spherePos, aabbMin, aabbMax);
+  return distance2(closestPoint, spherePos) < square(sphereRadius);
 }
 
 float LinearWeight(float p, float x)
@@ -244,11 +262,6 @@ float BilinearWeight(vec2 p, vec2 x)
 float TrilinearWeight(vec3 p, vec3 x)
 {
   return BilinearWeight(p.xy, x.xy) * LinearWeight(p.z, x.z);
-}
-
-float square(float x)
-{
-  return x * x;
 }
 
 // More precise way to generate a ray direction.

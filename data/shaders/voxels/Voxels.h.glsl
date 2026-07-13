@@ -1344,7 +1344,7 @@ float GetPunctualLightVisibility(vec3 surfacePos, uint lightIndex)
   // TODO: More accurate tMax calculation. If lightDist is used, check for inf/nan and clamp to a relatively small number.
   if (vx_TraceRayMultiLevel(surfacePos, surfaceToLight, surfaceToLightDist, hit))
   {
-    return 0.0;
+    return distance(hit.positionWorld, light.position) < 1e-3 ? 1.0 : 0.0;
   }
   return 1.0;
 }

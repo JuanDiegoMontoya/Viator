@@ -29,4 +29,9 @@ struct GpuLight
   FVOG_UINT32 _padding;
 };
 
+FVOG_DECLARE_BUFFER_REFERENCE_3(GpuLightPtr, 4)
+{
+  GpuLight data;
+};
+
 #endif // LIGHT_H_GLSL

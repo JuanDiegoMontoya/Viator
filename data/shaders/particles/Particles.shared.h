@@ -4,6 +4,7 @@
 #include "../Resources.h.glsl"
 #include "../voxels/RayTracedVoxelsShadowCommon.h.glsl"
 #include "../volumetric/clouds/BeerShadowMap.h.glsl"
+#include "../CommonTypes.shared.h"
 
 #define PARTICLE_BEHAVIOR_SOLID                        (1 << 0)
 #define PARTICLE_BEHAVIOR_SPAWN_ARCHETYPE_ON_COLLISION (1 << 1)
@@ -57,11 +58,6 @@ FVOG_DECLARE_BUFFER_REFERENCE_3(ParticleArchetypePtr, 4)
   ParticleArchetype data;
 };
 
-FVOG_DECLARE_BUFFER_REFERENCE_3(IntPtr, 4)
-{
-  FVOG_INT32 data;
-};
-
 FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleList)
 {
   FVOG_INT32 size;
@@ -73,12 +69,6 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(ParticleVector)
   FVOG_INT32 size;
   FVOG_INT32 capacity;
   ParticlePtr particles;
-};
-
-FVOG_DECLARE_BUFFER_REFERENCE_2(IntList)
-{
-  FVOG_INT32 size;
-  IntPtr values;
 };
 
 struct ParticleArchetypeSpawnInfo

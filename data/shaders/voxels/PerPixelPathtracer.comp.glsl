@@ -30,25 +30,5 @@ void main()
 
   indirectIlluminance += TraceIndirectLighting(gid, positionWorld + normal * 1e-3, normal, samples, bounces, noiseTexture);
 
-  // Technically direct lighting, but since it's noisy it'll be lumped in with the indirect.
-  if (g_voxels.numLights > 0)
-  {
-    uint randState = PCG_Hash(gid.y + PCG_Hash(gid.x));
-    // Local light NEE
-    const uint lightIndex = PCG_RandU32(randState) % g_voxels.numLights;
-    const float lightPdf = 1.0 / g_voxels.numLights;
-    GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex];
-
-    const float visibility = GetPunctualLightVisibility(positionWorld + normal * 1e-3, lightIndex);
-    if (visibility > 0)
-    {
-      Surface surface;
-      surface.albedo = vec3(1); // Albedo modulation happens after denoising, so for shading we just assume it's 1. This is valid as long as the BRDF is isotropic.
-      surface.normal = normal;
-      surface.position = positionWorld;
-      indirectIlluminance += visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
-    }
-  }
-
   imageStore(gIndirectIrradiance, gid, vec4(indirectIlluminance, 0));
 }

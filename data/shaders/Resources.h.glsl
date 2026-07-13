@@ -10,6 +10,8 @@
 #include "glm/vec4.hpp"
 #include "glm/mat4x4.hpp"
 
+typedef uint64_t VkDeviceAddress;
+
 #define CONSTEXPR_INLINE constexpr inline
 
 #define FVOG_FLOAT float
@@ -150,6 +152,9 @@
 
 #define FVOG_DECLARE_STORAGE_IMAGES(type) \
   layout(set = 0, binding = FVOG_STORAGE_IMAGE_BINDING) uniform type i_storageImages_##type[]
+  
+#define FVOG_DECLARE_STORAGE_IMAGES_2(type, format) \
+  layout(set = 0, binding = FVOG_STORAGE_IMAGE_BINDING, format) uniform type i_storageImages_##type##_##format[]
 
 #define FVOG_DECLARE_BUFFER_REFERENCE(typename) \
   layout(buffer_reference, buffer_reference_align = 8, scalar) buffer typename
@@ -179,7 +184,10 @@
   s_samplers[index]
 
 #define FvogGetStorageImage(name, index) \
-  i_storageImages_##name[index]
+  i_storageImages_##name[NonUniformIndex(index)]
+  
+#define FvogGetStorageImageFormat(name, format, index) \
+  i_storageImages_##name##_##format[NonUniformIndex(index)] // NURI needs to be directly on the index, or format qualifiers are lost.
 
 #define Fvog_sampler1D(textureIndex, samplerIndex) \
   NonUniformIndex(sampler1D(FvogGetSampledImage(texture1D, textureIndex), FvogGetSampler(samplerIndex)))
@@ -213,6 +221,12 @@
   
 #define Fvog_uimage2DArray(imageIndex) \
   FvogGetStorageImage(uimage2DArray, imageIndex)
+
+#define Fvog_uimage3D(imageIndex) \
+  FvogGetStorageImage(uimage3D, imageIndex)
+  
+#define Fvog_uimage3D_format(format, imageIndex) \
+  FvogGetStorageImageFormat(uimage3D, format, imageIndex)
 
 #define Fvog_utexture2D(textureIndex) \
   FvogGetSampledImage(utexture2D, textureIndex)
@@ -289,6 +303,11 @@ struct UImage2D
   FVOG_UINT32 imgIdx;
 };
 
+struct UImage3D
+{
+  FVOG_UINT32 imgIdx;
+};
+
 struct Image2DArray
 {
   FVOG_UINT32 imgIdx;
@@ -328,6 +347,8 @@ FVOG_DECLARE_SAMPLED_IMAGES(texture2DArray);
 FVOG_DECLARE_SAMPLED_IMAGES(utexture2DArray);
 
 FVOG_DECLARE_STORAGE_IMAGES(uimage2D);
+FVOG_DECLARE_STORAGE_IMAGES(uimage3D);
+FVOG_DECLARE_STORAGE_IMAGES_2(uimage3D, r32ui);
 FVOG_DECLARE_STORAGE_IMAGES(image2D);
 FVOG_DECLARE_STORAGE_IMAGES(image3D);
 FVOG_DECLARE_STORAGE_IMAGES(image2DArray);
@@ -434,6 +455,11 @@ void imageStore(Image3D img, ivec3 coord, vec4 data)
   imageStore(Fvog_image3D(img.imgIdx), coord, data);
 }
 
+void imageStore(UImage3D img, ivec3 coord, uvec4 data)
+{
+  imageStore(Fvog_uimage3D(img.imgIdx), coord, data);
+}
+
 void imageStore(UImage2D img, ivec2 coord, uvec4 data)
 {
   imageStore(Fvog_uimage2D(img.imgIdx), coord, data);
@@ -454,9 +480,19 @@ uvec4 imageLoad(UImage2D img, ivec2 coord)
   return imageLoad(Fvog_uimage2D(img.imgIdx), coord);
 }
 
+uvec4 imageLoad(UImage3D img, ivec3 coord)
+{
+  return imageLoad(Fvog_uimage3D(img.imgIdx), coord);
+}
+
 vec4 imageLoad(Image2DArray img, ivec3 coord)
 {
   return imageLoad(Fvog_image2DArray(img.imgIdx), coord);
+}
+
+uint imageAtomicAdd(UImage3D img, ivec3 coord, uint value)
+{
+  return imageAtomicAdd(Fvog_uimage3D_format(r32ui, img.imgIdx), coord, value);
 }
 
 #endif // !__cplusplus

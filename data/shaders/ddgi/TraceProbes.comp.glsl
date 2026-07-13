@@ -114,25 +114,6 @@ void main()
     // causes undershadowing when a small gap in a sky full of clouds is above a probe.
     radiance *= SampleCascadedBeerShadowMap(rayPos, uniforms.beerShadowMap);
   }
-  
-  // Direct lighting
-  if (g_voxels.numLights > 0)
-  {
-    // Local light NEE
-    const uint lightIndex = PCG_RandU32(randState) % g_voxels.numLights;
-    const float lightPdf = 1.0 / g_voxels.numLights;
-    GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex];
-
-    const float visibility = GetPunctualLightVisibility(rayPos, lightIndex);
-    if (visibility > 0)
-    {
-      Surface surface;
-      surface.albedo = vec3(1); // Here, albedo is modulated when the actual surface applying this lighting is lit.
-      surface.normal = rayDir;
-      surface.position = rayPos;
-      radiance += visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
-    }
-  }
 
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 

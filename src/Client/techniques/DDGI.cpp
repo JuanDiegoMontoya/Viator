@@ -150,6 +150,7 @@ namespace Techniques
   void Update(Scheduler& scheduler, VkCommandBuffer cmd, const DDGIUpdateParams& params) override
   {
     scheduler.AddPass("DdgiUpdateArguments",
+      {"LightGrid"},
       [=]
       {
         // Successive cascades are 2x the scale of the previous.

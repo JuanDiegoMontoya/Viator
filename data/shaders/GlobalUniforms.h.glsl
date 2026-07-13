@@ -7,6 +7,8 @@
 #include "volumetric/clouds/BeerShadowMap.h.glsl"
 #include "volumetric/clouds/WeatherGpuParams.shared.h"
 #include "sky/SkyParams.shared.h"
+#include "light_grid/LightGridCommon.shared.h"
+#include "Light.h.glsl"
 
 FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
 {
@@ -48,7 +50,10 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
   CascadedShadowMapInfoPtr sunShadowMap;      \
   CascadedBeerShadowMapInfoPtr beerShadowMap; \
   WeatherGpuParams weatherParams;             \
-  uint64_t voxelsPtr;                         \
+  FVOG_UINT64 voxelsPtr;                      \
+  GpuLightPtr lights;                         \
+  FVOG_UINT32 numLights;                      \
+  CascadedLightGrid cascadedLightGrid;        \
   FVOG_FLOAT time;                            \
   FVOG_FLOAT dt
 
