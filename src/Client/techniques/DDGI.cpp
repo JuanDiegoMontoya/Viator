@@ -22,10 +22,6 @@ namespace Techniques
     explicit DDGIImpl(const DDGIInitParams& params)
   {
     ZoneScoped;
-    ASSERT(params.probeGridInfo);
-    const auto& probeGridInfo = *params.probeGridInfo;
-    ASSERT(probeGridInfo.probeRadianceResolution.x > 0);
-    ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
     traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
       .name = "DDGI Trace Luminance",
       .shaderModuleInfo =
@@ -86,69 +82,20 @@ namespace Techniques
             },
         },
     });
-
-
-    args.gridInfo[0] = probeGridInfo;
-    for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-    {
-      args.gridInfo[i] = args.gridInfo[0];
-    }
-    argsBuffer.emplace(1, "DDGI Arguments");
-    const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
-
-    probeDataBuffers = std::make_unique<decltype(probeDataBuffers)::element_type[]>(DDGI_NUM_CASCADES);
-    for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-    {
-      probeDataBuffers[i].emplace(Fvog::TypedBufferCreateInfo{uint32_t(numProbes)}, std::format("Probe Data (cascade {})", i));
-    }
-
-    Fvog::GetDevice().ImmediateSubmit(
-      [&](VkCommandBuffer cmd)
-      {
-        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-        {
-          probeDataBuffers[i]->FillData(cmd);
-        }
-      });
-
-    // Probe sizes are dilated to include a 1-texel border.
-    const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-    const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);
-    packedProbeRadiance =
-      Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
-    packedProbeRawDepth =
-      Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, Fvog::Format::R32_SFLOAT, Fvog::TextureUsage::GENERAL, "DDGI Probe Raw Depth");
-
-    const auto width2  = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-    const auto height2 = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeIrradianceResolution.x) / width2);
-    packedProbeIrradiance =
-      Fvog::CreateTexture2DArray({uint32_t(width2), uint32_t(height2)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
-
-    const auto width3  = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-    const auto height3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeDepthMomentsResolution.x) / width2);
-    packedProbeDepthMoments = Fvog::CreateTexture2DArray({uint32_t(width3), uint32_t(height3)},
-      DDGI_NUM_CASCADES,
-      Fvog::Format::R32G32_SFLOAT,
-      Fvog::TextureUsage::GENERAL,
-      "DDGI Probe Depth Moments");
-
-    Fvog::GetDevice().ImmediateSubmit(
-      [&](VkCommandBuffer cmd)
-      {
-        auto ctx = Fvog::Context(cmd);
-        ctx.ImageBarrierDiscard(packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
-        ctx.ImageBarrierDiscard(packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
-        ctx.ImageBarrierDiscard(packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
-        ctx.ImageBarrierDiscard(packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
-        ctx.ClearTexture(packedProbeRadiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
-        ctx.ClearTexture(packedProbeIrradiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
-        ctx.ClearTexture(packedProbeRawDepth.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
-        ctx.ClearTexture(packedProbeDepthMoments.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
-      });
   }
 
   void Update(Scheduler& scheduler, VkCommandBuffer cmd, const DDGIUpdateParams& params) override
   {
+    ASSERT(params.probeGridInfo);
+
+      if (params.probeGridInfo->probeRadianceResolution != args.gridInfo[0].probeRadianceResolution ||
+        params.probeGridInfo->probeIrradianceResolution != args.gridInfo[0].probeIrradianceResolution ||
+        params.probeGridInfo->probeDepthMomentsResolution != args.gridInfo[0].probeDepthMomentsResolution ||
+        params.probeGridInfo->gridResolution != args.gridInfo[0].gridResolution)
+      {
+        CreateResources(*params.probeGridInfo);
+      }
+
     scheduler.AddPass("DdgiUpdateArguments",
       {"LightGrid"},
       [=]
@@ -204,7 +151,7 @@ namespace Techniques
 
     scheduler.AddPass("DdgiResetNewProbes",
       {"DdgiUpdateArguments"},
-      [=]
+      [=, this]
       {
         auto ctx             = Fvog::Context(cmd);
         const auto numProbes = args.gridInfo[0].gridResolution.x * args.gridInfo[0].gridResolution.y * args.gridInfo[0].gridResolution.z;
@@ -215,7 +162,7 @@ namespace Techniques
 
     scheduler.AddPass("DdgiTraceRays",
       {"DdgiResetNewProbes", "ShadowMaps", "AllSky"},
-      [=]
+      [=, this]
       {
         // As long as probe validity is unused here, a barrier is not needed.
         auto ctx          = Fvog::Context(cmd);
@@ -227,7 +174,7 @@ namespace Techniques
 
     scheduler.AddPass("DdgiConvolveIrradiance",
       {"DdgiTraceRays"},
-      [=]
+      [=, this]
       {
         auto ctx          = Fvog::Context(cmd);
         const auto extent = packedProbeRadiance->GetCreateInfo().extent;
@@ -238,7 +185,7 @@ namespace Techniques
 
     scheduler.AddPass("DdgiDownsampleDepth",
       {"DdgiTraceRays"},
-      [=]
+      [=, this]
       {
         auto ctx          = Fvog::Context(cmd);
         const auto extent = packedProbeRadiance->GetCreateInfo().extent;
@@ -281,6 +228,74 @@ namespace Techniques
   }
 
   private:
+    void CreateResources(const DDGIProbeGridInfo& probeGridInfo)
+    {
+      ZoneScoped;
+      ASSERT(probeGridInfo.probeRadianceResolution.x > 0);
+      ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
+
+      args.gridInfo[0] = probeGridInfo;
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        args.gridInfo[i] = args.gridInfo[0];
+      }
+      argsBuffer.emplace(1, "DDGI Arguments");
+      const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
+
+      probeDataBuffers = std::make_unique<decltype(probeDataBuffers)::element_type[]>(DDGI_NUM_CASCADES);
+      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      {
+        probeDataBuffers[i].emplace(Fvog::TypedBufferCreateInfo{uint32_t(numProbes)}, std::format("Probe Data (cascade {})", i));
+      }
+
+      Fvog::GetDevice().ImmediateSubmit(
+        [&](VkCommandBuffer cmd)
+        {
+          for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+          {
+            probeDataBuffers[i]->FillData(cmd);
+          }
+        });
+
+      // Probe sizes are dilated to include a 1-texel border.
+      const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);
+      packedProbeRadiance =
+        Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
+      packedProbeRawDepth = Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)},
+        DDGI_NUM_CASCADES,
+        Fvog::Format::R32_SFLOAT,
+        Fvog::TextureUsage::GENERAL,
+        "DDGI Probe Raw Depth");
+
+      const auto width2  = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height2 = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeIrradianceResolution.x) / width2);
+      packedProbeIrradiance =
+        Fvog::CreateTexture2DArray({uint32_t(width2), uint32_t(height2)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
+
+      const auto width3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeDepthMomentsResolution.x) / width2);
+      packedProbeDepthMoments = Fvog::CreateTexture2DArray({uint32_t(width3), uint32_t(height3)},
+        DDGI_NUM_CASCADES,
+        Fvog::Format::R32G32_SFLOAT,
+        Fvog::TextureUsage::GENERAL,
+        "DDGI Probe Depth Moments");
+
+      Fvog::GetDevice().ImmediateSubmit(
+        [&](VkCommandBuffer cmd)
+        {
+          auto ctx = Fvog::Context(cmd);
+          ctx.ImageBarrierDiscard(packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ImageBarrierDiscard(packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ImageBarrierDiscard(packedProbeRawDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ImageBarrierDiscard(packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ClearTexture(packedProbeRadiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+          ctx.ClearTexture(packedProbeIrradiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+          ctx.ClearTexture(packedProbeRawDepth.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+          ctx.ClearTexture(packedProbeDepthMoments.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+        });
+    }
+
     // static constexpr Fvog::Format radianceFormat = Fvog::Format::B10G11R11_UFLOAT;
     static constexpr Fvog::Format radianceFormat = Fvog::Format::R32G32B32A32_SFLOAT; // TODO: TEMP until quantization with smaller formats is dealt with.
     std::optional<Fvog::NDeviceBuffer<DDGIArgs>> argsBuffer;

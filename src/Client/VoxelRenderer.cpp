@@ -475,14 +475,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
 
   InitGui();
 
-  const auto probeGridInfo = DDGIProbeGridInfo{
-    .probeRadianceResolution     = {16, 16},
-    .probeIrradianceResolution   = {10, 10},
-    .probeDepthMomentsResolution = {10, 10},
-    .gridResolution              = {10, 10, 10}, // TODO: FIXME: certain sizes (such as 12^3) have unexpected black probes.
-  };
   ddgi_ = Techniques::DDGI::Create({
-    .probeGridInfo    = &probeGridInfo,
     .sceneColorFormat = Frame::sceneColorFormat,
     .sceneDepthFormat = Frame::sceneDepthFormat,
   });
@@ -1377,8 +1370,15 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   // DDGI- good candidate for async compute or overlapped work.
   if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
   {
+    const auto probeGridInfo = DDGIProbeGridInfo{
+      .probeRadianceResolution     = {16, 16},
+      .probeIrradianceResolution   = {10, 10},
+      .probeDepthMomentsResolution = {10, 10},
+      .gridResolution              = {10, 10, 10}, // TODO: FIXME: certain sizes (such as 12^3) have unexpected black probes.
+    };
     ddgi_->Update(*scheduler, commandBuffer,
       {
+        .probeGridInfo           = &probeGridInfo,
         .position                = position,
         .voxels                  = voxels,
         .shadingColorSpace       = tonemapUniforms.shadingInternalColorSpace,

@@ -20,13 +20,13 @@ namespace Techniques
 {
   struct DDGIInitParams
   {
-    const DDGIProbeGridInfo* probeGridInfo;
     Fvog::Format sceneColorFormat{};
     Fvog::Format sceneDepthFormat{};
   };
 
   struct DDGIUpdateParams
   {
+    const DDGIProbeGridInfo* probeGridInfo;
     glm::vec3 position{};
     Voxels voxels{};
     uint32_t shadingColorSpace{};
