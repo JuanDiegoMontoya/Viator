@@ -1,16 +1,16 @@
 #include "DDGI.h"
 
-#include "Client/PipelineManager.h"
-#include "Client/Fvog/Texture2.h"
-#include "Client/Scheduler.h"
 #include "Client/Fvog/Device.h"
 #include "Client/Fvog/Rendering2.h"
+#include "Client/Fvog/Texture2.h"
 #include "Client/GpuMesh.h"
+#include "Client/PipelineManager.h"
+#include "Client/Scheduler.h"
 #include "Game/Assets.h"
 
 #include "shaders/Config.shared.h"
-#include "shaders/ddgi/ProbeCommon.shared.h"
 #include "shaders/ddgi/DebugProbesCommon.h.glsl"
+#include "shaders/ddgi/ProbeCommon.shared.h"
 
 #include "tracy/Tracy.hpp"
 
@@ -20,212 +20,212 @@ namespace Techniques
   {
   public:
     explicit DDGIImpl(const DDGIInitParams& params)
-  {
-    ZoneScoped;
-    traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-      .name = "DDGI Trace Luminance",
-      .shaderModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/TraceProbes.comp.glsl",
-        },
-      .useMinSubgroupSize = true,
-    });
+    {
+      ZoneScoped;
+      traceRaysPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "DDGI Trace Luminance",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/TraceProbes.comp.glsl",
+          },
+        .useMinSubgroupSize = true,
+      });
 
-    convolveIrradiancePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-      .name = "DDGI Convolve Illuminance",
-      .shaderModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/ConvolveIrradiance.comp.glsl",
-        },
-    });
+      convolveIrradiancePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "DDGI Convolve Illuminance",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/ConvolveIrradiance.comp.glsl",
+          },
+      });
 
-    downsampleDepthPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-      .name = "DDGI Downsample Probe Depth",
-      .shaderModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/DownsampleProbeDepth.comp.glsl",
-        },
-    });
+      downsampleDepthPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "DDGI Downsample Probe Depth",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/DownsampleProbeDepth.comp.glsl",
+          },
+      });
 
-    resetNewProbesPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
-      .name = "Reset New Probes",
-      .shaderModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::COMPUTE_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/ResetNewProbes.comp.glsl",
-        },
-    });
+      resetNewProbesPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "Reset New Probes",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/ResetNewProbes.comp.glsl",
+          },
+      });
 
-    debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
-      .name = "Debug Probes",
-      .vertexModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::VERTEX_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/DebugProbes.vert.glsl",
-        },
-      .fragmentModuleInfo =
-        PipelineManager::ShaderModuleCreateInfo{
-          .stage = Fvog::PipelineStage::FRAGMENT_SHADER,
-          .path  = GetShaderDirectory() / "ddgi/DebugProbes.frag.glsl",
-        },
-      .state =
-        {
-          .rasterizationState = {.cullMode = VK_CULL_MODE_BACK_BIT},
-          .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
-          .renderTargetFormats =
-            {
-              .colorAttachmentFormats = {{params.sceneColorFormat}},
-              .depthAttachmentFormat  = params.sceneDepthFormat,
-            },
-        },
-    });
-  }
+      debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
+        .name = "Debug Probes",
+        .vertexModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::VERTEX_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/DebugProbes.vert.glsl",
+          },
+        .fragmentModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::FRAGMENT_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/DebugProbes.frag.glsl",
+          },
+        .state =
+          {
+            .rasterizationState = {.cullMode = VK_CULL_MODE_BACK_BIT},
+            .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
+            .renderTargetFormats =
+              {
+                .colorAttachmentFormats = {{params.sceneColorFormat}},
+                .depthAttachmentFormat  = params.sceneDepthFormat,
+              },
+          },
+      });
+    }
 
-  void Update(Scheduler& scheduler, VkCommandBuffer cmd, const DDGIUpdateParams& params) override
-  {
-    ASSERT(params.probeGridInfo);
+    void Update(Scheduler& scheduler, VkCommandBuffer cmd, const DDGIUpdateParams& params) override
+    {
+      ASSERT(params.probeGridInfo);
 
       if (params.probeGridInfo->probeRadianceResolution != args.gridInfo[0].probeRadianceResolution ||
-        params.probeGridInfo->probeIrradianceResolution != args.gridInfo[0].probeIrradianceResolution ||
-        params.probeGridInfo->probeDepthMomentsResolution != args.gridInfo[0].probeDepthMomentsResolution ||
-        params.probeGridInfo->gridResolution != args.gridInfo[0].gridResolution)
+          params.probeGridInfo->probeIrradianceResolution != args.gridInfo[0].probeIrradianceResolution ||
+          params.probeGridInfo->probeDepthMomentsResolution != args.gridInfo[0].probeDepthMomentsResolution ||
+          params.probeGridInfo->gridResolution != args.gridInfo[0].gridResolution)
       {
         CreateResources(*params.probeGridInfo);
       }
 
-    scheduler.AddPass("DdgiUpdateArguments",
-      {"LightGrid"},
-      [=]
-      {
-        // Successive cascades are 2x the scale of the previous.
-        args.gridInfo[0].baseGridScale = params.baseGridScale;
-        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+      scheduler.AddPass("DdgiUpdateArguments",
+        {"LightGrid"},
+        [=]
         {
-          args.gridInfo[i].baseGridScale = args.gridInfo[0].baseGridScale * float(glm::exp2(i));
-        }
-
-        DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
-        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-        {
-          if (!params.debugFreezeGrid)
+          // Successive cascades are 2x the scale of the previous.
+          args.gridInfo[0].baseGridScale = params.baseGridScale;
+          for (int i = 0; i < DDGI_NUM_CASCADES; i++)
           {
-            args.gridInfo[i].probeInfosIndex = probeDataBuffers[i].value().GetResourceHandle().index;
-            args.gridInfo[i].oldGridOffset   = args.gridInfo[i].gridOffset;
-            const auto offset = 1.0f + (params.position - glm::vec3(glm::vec3(args.gridInfo[i].gridResolution) * args.gridInfo[i].baseGridScale / 2.0f)) /
-                                         args.gridInfo[i].baseGridScale;
-            args.gridInfo[i].gridOffset         = glm::floor(offset);
-            args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+            args.gridInfo[i].baseGridScale = args.gridInfo[0].baseGridScale * float(glm::exp2(i));
           }
-          tempGridInfos[i] = args.gridInfo[i];
-        }
-        args = DDGIArgs{
-          .voxels                  = params.voxels,
-          .internalColorSpace      = params.shadingColorSpace,
-          .noiseTexture            = params.noiseTexture,
-          .samples                 = 1,
-          .bounces                 = 2,
-          .globalUniformsIndex     = params.globalUniformsIndex,
-          .showCascadeIndexAsColor = params.showCascadeIndexAsColor,
-          //.gridInfo                   = ddgi.args.gridInfo,
-          .packedProbeRadiance        = packedProbeRadiance->ImageView().GetImage2DArray(),
-          .packedProbeIrradiance      = packedProbeIrradiance->ImageView().GetImage2DArray(),
-          .packedProbeRawDepth        = packedProbeRawDepth->ImageView().GetImage2DArray(),
-          .packedProbeDepthMoments    = packedProbeDepthMoments->ImageView().GetImage2DArray(),
-          .packedProbeRadianceTex     = packedProbeRadiance->ImageView().GetTexture2DArray(),
-          .packedProbeIrradianceTex   = packedProbeIrradiance->ImageView().GetTexture2DArray(),
-          .packedProbeRawDepthTex     = packedProbeRawDepth->ImageView().GetTexture2DArray(),
-          .packedProbeDepthMomentsTex = packedProbeDepthMoments->ImageView().GetTexture2DArray(),
-          .linearSampler              = params.linearClampSampler,
-        };
 
-        for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-        {
-          args.gridInfo[i] = tempGridInfos[i];
-        }
+          DDGIProbeGridInfo tempGridInfos[DDGI_NUM_CASCADES];
+          for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+          {
+            if (!params.debugFreezeGrid)
+            {
+              args.gridInfo[i].probeInfosIndex = probeDataBuffers[i].value().GetResourceHandle().index;
+              args.gridInfo[i].oldGridOffset   = args.gridInfo[i].gridOffset;
+              const auto offset = 1.0f + (params.position - glm::vec3(glm::vec3(args.gridInfo[i].gridResolution) * args.gridInfo[i].baseGridScale / 2.0f)) /
+                                           args.gridInfo[i].baseGridScale;
+              args.gridInfo[i].gridOffset         = glm::floor(offset);
+              args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+            }
+            tempGridInfos[i] = args.gridInfo[i];
+          }
+          args = DDGIArgs{
+            .voxels                  = params.voxels,
+            .internalColorSpace      = params.shadingColorSpace,
+            .noiseTexture            = params.noiseTexture,
+            .samples                 = 1,
+            .bounces                 = 2,
+            .globalUniformsIndex     = params.globalUniformsIndex,
+            .showCascadeIndexAsColor = params.showCascadeIndexAsColor,
+            //.gridInfo                   = ddgi.args.gridInfo,
+            .packedProbeRadiance        = packedProbeRadiance->ImageView().GetImage2DArray(),
+            .packedProbeIrradiance      = packedProbeIrradiance->ImageView().GetImage2DArray(),
+            .packedProbeRawDepth        = packedProbeRawDepth->ImageView().GetImage2DArray(),
+            .packedProbeDepthMoments    = packedProbeDepthMoments->ImageView().GetImage2DArray(),
+            .packedProbeRadianceTex     = packedProbeRadiance->ImageView().GetTexture2DArray(),
+            .packedProbeIrradianceTex   = packedProbeIrradiance->ImageView().GetTexture2DArray(),
+            .packedProbeRawDepthTex     = packedProbeRawDepth->ImageView().GetTexture2DArray(),
+            .packedProbeDepthMomentsTex = packedProbeDepthMoments->ImageView().GetTexture2DArray(),
+            .linearSampler              = params.linearClampSampler,
+          };
 
-        argsBuffer->UpdateData(cmd, args);
-      });
+          for (int i = 0; i < DDGI_NUM_CASCADES; i++)
+          {
+            args.gridInfo[i] = tempGridInfos[i];
+          }
 
-    scheduler.AddPass("DdgiResetNewProbes",
-      {"DdgiUpdateArguments"},
-      [=, this]
-      {
-        auto ctx             = Fvog::Context(cmd);
-        const auto numProbes = args.gridInfo[0].gridResolution.x * args.gridInfo[0].gridResolution.y * args.gridInfo[0].gridResolution.z;
-        ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-        ctx.BindComputePipeline(resetNewProbesPipeline.GetPipeline());
-        ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
-      });
-
-    scheduler.AddPass("DdgiTraceRays",
-      {"DdgiResetNewProbes", "ShadowMaps", "AllSky"},
-      [=, this]
-      {
-        // As long as probe validity is unused here, a barrier is not needed.
-        auto ctx          = Fvog::Context(cmd);
-        const auto extent = packedProbeRadiance->GetCreateInfo().extent;
-        ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-        ctx.BindComputePipeline(traceRaysPipeline.GetPipeline());
-        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
-      });
-
-    scheduler.AddPass("DdgiConvolveIrradiance",
-      {"DdgiTraceRays"},
-      [=, this]
-      {
-        auto ctx          = Fvog::Context(cmd);
-        const auto extent = packedProbeRadiance->GetCreateInfo().extent;
-        ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-        ctx.BindComputePipeline(convolveIrradiancePipeline.GetPipeline());
-        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-      });
-
-    scheduler.AddPass("DdgiDownsampleDepth",
-      {"DdgiTraceRays"},
-      [=, this]
-      {
-        auto ctx          = Fvog::Context(cmd);
-        const auto extent = packedProbeRadiance->GetCreateInfo().extent;
-        ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-        ctx.BindComputePipeline(downsampleDepthPipeline.GetPipeline());
-        ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
-      });
-
-    scheduler.AddPass("DDGI", {"DdgiDownsampleDepth", "DdgiConvolveIrradiance"}, nullptr);
-  }
-
-  VkDeviceAddress GetArgsBufferAddress() override
-  {
-    return argsBuffer.value().GetDeviceBuffer().GetDeviceAddress();
-  }
-
-  void RenderDebugProbes(VkCommandBuffer cmd, const DDGIRenderDebugProbesParams& params) override
-  {
-    ASSERT(params.mesh);
-    auto ctx = Fvog::Context(cmd);
-    ctx.BindGraphicsPipeline(debugProbesPipeline.GetPipeline());
-    for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
-    {
-      if (params.singleCascadeToShow < 0 || params.singleCascadeToShow == cascade)
-      {
-        ctx.SetPushConstants(DebugProbesArguments{
-          .vertexBuffer        = params.mesh->vertexBuffer.value().GetDeviceAddress(),
-          .ddgi                = GetArgsBufferAddress(),
-          .globalUniformsIndex = params.globalUniformsIndex,
-          .samplerr            = params.linearClampSampler,
-          .debugMode           = uint32_t(params.mode),
-          .probeSize           = params.probeSize,
-          .cascade             = cascade,
+          argsBuffer->UpdateData(cmd, args);
         });
-        ctx.BindIndexBuffer(params.mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-        const auto& res = args.gridInfo[cascade].gridResolution;
-        ctx.DrawIndexed(uint32_t(params.mesh->indices.size()), res.x * res.y * res.z, 0, 0, 0);
+
+      scheduler.AddPass("DdgiResetNewProbes",
+        {"DdgiUpdateArguments"},
+        [=, this]
+        {
+          auto ctx             = Fvog::Context(cmd);
+          const auto numProbes = args.gridInfo[0].gridResolution.x * args.gridInfo[0].gridResolution.y * args.gridInfo[0].gridResolution.z;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(resetNewProbesPipeline.GetPipeline());
+          ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+        });
+
+      scheduler.AddPass("DdgiTraceRays",
+        {"DdgiResetNewProbes", "ShadowMaps", "AllSky"},
+        [=, this]
+        {
+          // As long as probe validity is unused here, a barrier is not needed.
+          auto ctx          = Fvog::Context(cmd);
+          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(traceRaysPipeline.GetPipeline());
+          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
+        });
+
+      scheduler.AddPass("DdgiConvolveIrradiance",
+        {"DdgiTraceRays"},
+        [=, this]
+        {
+          auto ctx          = Fvog::Context(cmd);
+          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(convolveIrradiancePipeline.GetPipeline());
+          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+        });
+
+      scheduler.AddPass("DdgiDownsampleDepth",
+        {"DdgiTraceRays"},
+        [=, this]
+        {
+          auto ctx          = Fvog::Context(cmd);
+          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(downsampleDepthPipeline.GetPipeline());
+          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+        });
+
+      scheduler.AddPass("DDGI", {"DdgiDownsampleDepth", "DdgiConvolveIrradiance"}, nullptr);
+    }
+
+    VkDeviceAddress GetArgsBufferAddress() override
+    {
+      return argsBuffer.value().GetDeviceBuffer().GetDeviceAddress();
+    }
+
+    void RenderDebugProbes(VkCommandBuffer cmd, const DDGIRenderDebugProbesParams& params) override
+    {
+      ASSERT(params.mesh);
+      auto ctx = Fvog::Context(cmd);
+      ctx.BindGraphicsPipeline(debugProbesPipeline.GetPipeline());
+      for (int cascade = 0; cascade < DDGI_NUM_CASCADES; cascade++)
+      {
+        if (params.singleCascadeToShow < 0 || params.singleCascadeToShow == cascade)
+        {
+          ctx.SetPushConstants(DebugProbesArguments{
+            .vertexBuffer        = params.mesh->vertexBuffer.value().GetDeviceAddress(),
+            .ddgi                = GetArgsBufferAddress(),
+            .globalUniformsIndex = params.globalUniformsIndex,
+            .samplerr            = params.linearClampSampler,
+            .debugMode           = uint32_t(params.mode),
+            .probeSize           = params.probeSize,
+            .cascade             = cascade,
+          });
+          ctx.BindIndexBuffer(params.mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
+          const auto& res = args.gridInfo[cascade].gridResolution;
+          ctx.DrawIndexed(uint32_t(params.mesh->indices.size()), res.x * res.y * res.z, 0, 0, 0);
+        }
       }
-    } 
-  }
+    }
 
   private:
     void CreateResources(const DDGIProbeGridInfo& probeGridInfo)
@@ -316,4 +316,4 @@ namespace Techniques
   {
     return std::make_unique<DDGIImpl>(params);
   }
-}
+} // namespace Techniques
