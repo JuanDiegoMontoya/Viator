@@ -3,13 +3,13 @@
 #include "Client/Fvog/detail/VkFwd.h"
 #include "shaders/voxels/Voxels.h.glsl"
 
+#include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 
 #include <memory>
 
 struct GpuMesh;
 class Scheduler;
-struct DDGIProbeGridInfo;
 
 namespace Fvog
 {
@@ -24,18 +24,30 @@ namespace Techniques
     Fvog::Format sceneDepthFormat{};
   };
 
+  struct DDGIGridSetup
+  {
+    glm::ivec2 probeRadianceResolution;
+    glm::ivec2 probeIrradianceResolution;
+    glm::ivec2 probeDepthMomentsResolution;
+    glm::ivec3 gridResolution; 
+  };
+
   struct DDGIUpdateParams
   {
-    const DDGIProbeGridInfo* probeGridInfo;
+    // Grid setup. Changing these will trigger recreation of DDGI resources.
+    DDGIGridSetup gridSetup;
+
     glm::vec3 position{};
     Voxels voxels{};
     uint32_t shadingColorSpace{};
     shared::Texture2D noiseTexture{};
     uint32_t globalUniformsIndex{};
-    bool showCascadeIndexAsColor{};
     shared::Sampler linearClampSampler{};
-    bool debugFreezeGrid{};
     float baseGridScale{};
+
+    // Debugging
+    bool debugFreezeGrid{};
+    bool showCascadeIndexAsColor{};
   };
 
   enum class DDGIDebugMode : uint32_t

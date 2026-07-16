@@ -13,7 +13,7 @@ const bool gUseNearestNeighbor = true;
 
 void main()
 {
-  const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, args.ddgi.gridInfo[v_cascade]);
+  const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, v_cascade, args.ddgi);
   if (args.debugMode == 5) // Validity
   {
     o_sceneColor.rgb = vec3(min(10, probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].validity / 100));
@@ -29,12 +29,12 @@ void main()
   ivec3 swizzle = {0, 1, 2};
   float scale = 1;
   ivec2 probeImageSize = imageSize(args.ddgi.packedProbeRadiance).xy;
-  ivec2 probeGridResolution = args.ddgi.gridInfo[v_cascade].probeRadianceResolution;
+  ivec2 probeGridResolution = args.ddgi.probeRadianceResolution;
   Texture2DArray tex = args.ddgi.packedProbeRadianceTex;
   if (args.debugMode == 2) // Irradiance
   {
     probeImageSize = imageSize(args.ddgi.packedProbeIrradiance).xy;
-    probeGridResolution = args.ddgi.gridInfo[v_cascade].probeIrradianceResolution;
+    probeGridResolution = args.ddgi.probeIrradianceResolution;
     tex = args.ddgi.packedProbeIrradianceTex;
   }
   else if (args.debugMode == 3) // Raw depth
@@ -42,14 +42,14 @@ void main()
     swizzle = ivec3(0, 0, 0);
     scale = 1 / (args.ddgi.gridInfo[v_cascade].baseGridScale * M_SQRT_3);
     probeImageSize = imageSize(args.ddgi.packedProbeRawDepth).xy;
-    probeGridResolution = args.ddgi.gridInfo[v_cascade].probeRadianceResolution;
+    probeGridResolution = args.ddgi.probeRadianceResolution;
     tex = args.ddgi.packedProbeRawDepthTex;
   }
   else if (args.debugMode == 4) // Depth moments
   {
     scale = 1 / (args.ddgi.gridInfo[v_cascade].baseGridScale * M_SQRT_3);
     probeImageSize = imageSize(args.ddgi.packedProbeDepthMoments).xy;
-    probeGridResolution = args.ddgi.gridInfo[v_cascade].probeDepthMomentsResolution;
+    probeGridResolution = args.ddgi.probeDepthMomentsResolution;
     tex = args.ddgi.packedProbeDepthMomentsTex;
   }
 

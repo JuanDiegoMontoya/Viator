@@ -8,7 +8,7 @@ void main()
 {
   v_cascade = args.cascade;
   v_probeIndex = gl_InstanceIndex;
-  const ivec3 probeCoord = ProbeIndexToCoord(v_probeIndex, args.ddgi.gridInfo[args.cascade].gridResolution) + args.ddgi.gridInfo[args.cascade].gridOffset;
+  const ivec3 probeCoord = ProbeIndexToCoord(v_probeIndex, args.ddgi.gridResolution) + args.ddgi.gridInfo[args.cascade].gridOffset;
   Vertex vertex = args.vertexBuffer.vertices[gl_VertexIndex];
   const vec3 vertexPosWorld = vertex.position * args.probeSize + probeCoord * args.ddgi.gridInfo[args.cascade].baseGridScale + 0.5;
 

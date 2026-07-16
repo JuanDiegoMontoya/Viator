@@ -86,19 +86,17 @@ namespace Techniques
 
     void Update(Scheduler& scheduler, VkCommandBuffer cmd, const DDGIUpdateParams& params) override
     {
-      ASSERT(params.probeGridInfo);
-
-      if (params.probeGridInfo->probeRadianceResolution != args.gridInfo[0].probeRadianceResolution ||
-          params.probeGridInfo->probeIrradianceResolution != args.gridInfo[0].probeIrradianceResolution ||
-          params.probeGridInfo->probeDepthMomentsResolution != args.gridInfo[0].probeDepthMomentsResolution ||
-          params.probeGridInfo->gridResolution != args.gridInfo[0].gridResolution)
+      if (params.gridSetup.probeRadianceResolution != args.probeRadianceResolution ||
+          params.gridSetup.probeIrradianceResolution != args.probeIrradianceResolution ||
+          params.gridSetup.probeDepthMomentsResolution != args.probeDepthMomentsResolution ||
+          params.gridSetup.gridResolution != args.gridResolution)
       {
-        CreateResources(*params.probeGridInfo);
+        CreateResources(params.gridSetup);
       }
 
       scheduler.AddPass("DdgiUpdateArguments",
         {"LightGrid"},
-        [=]
+        [=, this]
         {
           // Successive cascades are 2x the scale of the previous.
           args.gridInfo[0].baseGridScale = params.baseGridScale;
@@ -114,8 +112,8 @@ namespace Techniques
             {
               args.gridInfo[i].probeInfosIndex = probeDataBuffers[i].value().GetResourceHandle().index;
               args.gridInfo[i].oldGridOffset   = args.gridInfo[i].gridOffset;
-              const auto offset = 1.0f + (params.position - glm::vec3(glm::vec3(args.gridInfo[i].gridResolution) * args.gridInfo[i].baseGridScale / 2.0f)) /
-                                           args.gridInfo[i].baseGridScale;
+              const auto offset =
+                1.0f + (params.position - glm::vec3(glm::vec3(args.gridResolution) * args.gridInfo[i].baseGridScale / 2.0f)) / args.gridInfo[i].baseGridScale;
               args.gridInfo[i].gridOffset         = glm::floor(offset);
               args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
             }
@@ -125,20 +123,22 @@ namespace Techniques
             .voxels                  = params.voxels,
             .internalColorSpace      = params.shadingColorSpace,
             .noiseTexture            = params.noiseTexture,
-            .samples                 = 1,
-            .bounces                 = 2,
             .globalUniformsIndex     = params.globalUniformsIndex,
             .showCascadeIndexAsColor = params.showCascadeIndexAsColor,
             //.gridInfo                   = ddgi.args.gridInfo,
-            .packedProbeRadiance        = packedProbeRadiance->ImageView().GetImage2DArray(),
-            .packedProbeIrradiance      = packedProbeIrradiance->ImageView().GetImage2DArray(),
-            .packedProbeRawDepth        = packedProbeRawDepth->ImageView().GetImage2DArray(),
-            .packedProbeDepthMoments    = packedProbeDepthMoments->ImageView().GetImage2DArray(),
-            .packedProbeRadianceTex     = packedProbeRadiance->ImageView().GetTexture2DArray(),
-            .packedProbeIrradianceTex   = packedProbeIrradiance->ImageView().GetTexture2DArray(),
-            .packedProbeRawDepthTex     = packedProbeRawDepth->ImageView().GetTexture2DArray(),
-            .packedProbeDepthMomentsTex = packedProbeDepthMoments->ImageView().GetTexture2DArray(),
-            .linearSampler              = params.linearClampSampler,
+            .packedProbeRadiance         = packedProbeRadiance->ImageView().GetImage2DArray(),
+            .packedProbeIrradiance       = packedProbeIrradiance->ImageView().GetImage2DArray(),
+            .packedProbeRawDepth         = packedProbeRawDepth->ImageView().GetImage2DArray(),
+            .packedProbeDepthMoments     = packedProbeDepthMoments->ImageView().GetImage2DArray(),
+            .packedProbeRadianceTex      = packedProbeRadiance->ImageView().GetTexture2DArray(),
+            .packedProbeIrradianceTex    = packedProbeIrradiance->ImageView().GetTexture2DArray(),
+            .packedProbeRawDepthTex      = packedProbeRawDepth->ImageView().GetTexture2DArray(),
+            .packedProbeDepthMomentsTex  = packedProbeDepthMoments->ImageView().GetTexture2DArray(),
+            .linearSampler               = params.linearClampSampler,
+            .probeRadianceResolution     = params.gridSetup.probeRadianceResolution,
+            .probeIrradianceResolution   = params.gridSetup.probeIrradianceResolution,
+            .probeDepthMomentsResolution = params.gridSetup.probeDepthMomentsResolution,
+            .gridResolution              = params.gridSetup.gridResolution,
           };
 
           for (int i = 0; i < DDGI_NUM_CASCADES; i++)
@@ -154,7 +154,7 @@ namespace Techniques
         [=, this]
         {
           auto ctx             = Fvog::Context(cmd);
-          const auto numProbes = args.gridInfo[0].gridResolution.x * args.gridInfo[0].gridResolution.y * args.gridInfo[0].gridResolution.z;
+          const auto numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(resetNewProbesPipeline.GetPipeline());
           ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
@@ -221,26 +221,21 @@ namespace Techniques
             .cascade             = cascade,
           });
           ctx.BindIndexBuffer(params.mesh->indexBuffer.value(), 0, VK_INDEX_TYPE_UINT32);
-          const auto& res = args.gridInfo[cascade].gridResolution;
+          const auto res = args.gridResolution;
           ctx.DrawIndexed(uint32_t(params.mesh->indices.size()), res.x * res.y * res.z, 0, 0, 0);
         }
       }
     }
 
   private:
-    void CreateResources(const DDGIProbeGridInfo& probeGridInfo)
+    void CreateResources(const DDGIGridSetup& gridSetup)
     {
       ZoneScoped;
-      ASSERT(probeGridInfo.probeRadianceResolution.x > 0);
-      ASSERT(probeGridInfo.probeRadianceResolution.x == probeGridInfo.probeRadianceResolution.y);
+      ASSERT(gridSetup.probeRadianceResolution.x > 0);
+      ASSERT(gridSetup.probeRadianceResolution.x == gridSetup.probeRadianceResolution.y);
 
-      args.gridInfo[0] = probeGridInfo;
-      for (int i = 0; i < DDGI_NUM_CASCADES; i++)
-      {
-        args.gridInfo[i] = args.gridInfo[0];
-      }
       argsBuffer.emplace(1, "DDGI Arguments");
-      const auto numProbes = probeGridInfo.gridResolution.x * probeGridInfo.gridResolution.y * probeGridInfo.gridResolution.z;
+      const auto numProbes = gridSetup.gridResolution.x * gridSetup.gridResolution.y * gridSetup.gridResolution.z;
 
       probeDataBuffers = std::make_unique<decltype(probeDataBuffers)::element_type[]>(DDGI_NUM_CASCADES);
       for (int i = 0; i < DDGI_NUM_CASCADES; i++)
@@ -258,8 +253,8 @@ namespace Techniques
         });
 
       // Probe sizes are dilated to include a 1-texel border.
-      const auto width1  = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-      const auto height1 = (2 + probeGridInfo.probeRadianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeRadianceResolution.x) / width1);
+      const auto width1  = (2 + gridSetup.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height1 = (2 + gridSetup.probeRadianceResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeRadianceResolution.x) / width1);
       packedProbeRadiance =
         Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Radiance");
       packedProbeRawDepth = Fvog::CreateTexture2DArray({uint32_t(width1), uint32_t(height1)},
@@ -268,13 +263,13 @@ namespace Techniques
         Fvog::TextureUsage::GENERAL,
         "DDGI Probe Raw Depth");
 
-      const auto width2  = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-      const auto height2 = (2 + probeGridInfo.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeIrradianceResolution.x) / width2);
+      const auto width2  = (2 + gridSetup.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height2 = (2 + gridSetup.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeIrradianceResolution.x) / width2);
       packedProbeIrradiance =
         Fvog::CreateTexture2DArray({uint32_t(width2), uint32_t(height2)}, DDGI_NUM_CASCADES, radianceFormat, Fvog::TextureUsage::GENERAL, "DDGI Probe Irradiance");
 
-      const auto width3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
-      const auto height3 = (2 + probeGridInfo.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + probeGridInfo.probeDepthMomentsResolution.x) / width2);
+      const auto width3       = (2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes)));
+      const auto height3      = (2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeDepthMomentsResolution.x) / width2);
       packedProbeDepthMoments = Fvog::CreateTexture2DArray({uint32_t(width3), uint32_t(height3)},
         DDGI_NUM_CASCADES,
         Fvog::Format::R32G32_SFLOAT,

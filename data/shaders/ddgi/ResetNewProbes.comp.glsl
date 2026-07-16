@@ -8,7 +8,7 @@ void main()
   const int gid = int(gl_GlobalInvocationID.x);
   const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridInfo[cascade].gridResolution.x * args.gridInfo[cascade].gridResolution.y * args.gridInfo[cascade].gridResolution.z;
+  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
   const int probeIndex = gid;
   
   if (probeIndex >= numProbes)
@@ -17,12 +17,12 @@ void main()
   }
 
   const ivec3 offsetVelocity = args.gridInfo[cascade].gridOffset - args.gridInfo[cascade].oldGridOffset;
-  const vec3 probePos = ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution);
+  const vec3 probePos = ProbeIndexToCoord(probeIndex, args.gridResolution);
   const vec3 probePosOldProbeSpace = probePos + offsetVelocity;
 
-  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
+  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, cascade, args);
 
-  if (any(lessThan(probePosOldProbeSpace, vec3(0))) || any(greaterThanEqual(probePosOldProbeSpace, args.gridInfo[cascade].gridResolution)))
+  if (any(lessThan(probePosOldProbeSpace, vec3(0))) || any(greaterThanEqual(probePosOldProbeSpace, args.gridResolution)))
   {
     probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 0;
   }

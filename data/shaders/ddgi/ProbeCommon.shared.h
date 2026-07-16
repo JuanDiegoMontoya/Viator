@@ -31,10 +31,6 @@ FVOG_DECLARE_STORAGE_BUFFERS(ProbeInfo)
 
 struct DDGIProbeGridInfo
 {
-  FVOG_IVEC2 probeRadianceResolution;
-  FVOG_IVEC2 probeIrradianceResolution;
-  FVOG_IVEC2 probeDepthMomentsResolution;
-  FVOG_IVEC3 gridResolution;
   FVOG_FLOAT baseGridScale; // Scale of smallest cascade. Successive cascades have 2x the scale as the last.
   FVOG_IVEC3 gridOffset; // Offset of the grid, in baseGridScale units, from the origin.
   FVOG_IVEC3 oldGridOffset; // Previous frame's gridOffset. Used to determine which probes to reset.
@@ -52,8 +48,6 @@ struct DDGIArgs
   Voxels voxels;
   FVOG_UINT32 internalColorSpace;
   FVOG_SHARED Texture2D noiseTexture;
-  FVOG_UINT32 samples;
-  FVOG_UINT32 bounces;
   FVOG_UINT32 globalUniformsIndex;
   FVOG_BOOL32 showCascadeIndexAsColor;
 
@@ -68,6 +62,11 @@ struct DDGIArgs
   FVOG_SHARED Texture2DArray packedProbeRawDepthTex;
   FVOG_SHARED Texture2DArray packedProbeDepthMomentsTex;
   FVOG_SHARED Sampler linearSampler;
+
+  FVOG_IVEC2 probeRadianceResolution;
+  FVOG_IVEC2 probeIrradianceResolution;
+  FVOG_IVEC2 probeDepthMomentsResolution;
+  FVOG_IVEC3 gridResolution;
 };
 
 #ifndef __cplusplus
@@ -143,12 +142,12 @@ int ProbeCoordToIndex(ivec3 probeCoord, ivec3 gridResolution)
 }
 
 // Stable index for a world-space position.
-int ProbeIndexToStableIndex(int probeIndex, DDGIProbeGridInfo gridInfo)
+int ProbeIndexToStableIndex(int probeIndex, int cascade, DDGIArgs ddgi)
 {
-  const vec3 probePos = ProbeIndexToCoord(probeIndex, gridInfo.gridResolution);
-  const vec3 probePosKindaWS = probePos + gridInfo.gridOffset;
-  const vec3 probePosKindaWSWrapped = mod(probePosKindaWS, gridInfo.gridResolution);
-  return ProbeCoordToIndex(ivec3(probePosKindaWSWrapped), gridInfo.gridResolution);
+  const vec3 probePos = ProbeIndexToCoord(probeIndex, ddgi.gridResolution);
+  const vec3 probePosKindaWS = probePos + ddgi.gridInfo[cascade].gridOffset;
+  const vec3 probePosKindaWSWrapped = mod(probePosKindaWS, ddgi.gridResolution);
+  return ProbeCoordToIndex(ivec3(probePosKindaWSWrapped), ddgi.gridResolution);
 }
 
 void WriteToProbeWithBorder(Image2DArray packedProbeImage, int cascade, int probeIndex, ivec2 probeResolution, ivec2 texelCoord, vec4 value)
@@ -228,7 +227,7 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
   //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
 
   const vec3 posProbeSpacePreMod = ((positionWS - 0.5) / ddgi.gridInfo[cascade].baseGridScale) - ddgi.gridInfo[cascade].gridOffset;
-  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridResolution);
   const ivec3 minProbe = ivec3(floor(posProbeSpace));
   const ivec3 maxProbe = minProbe + 1;
 
@@ -248,12 +247,12 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     const float backfaceWeight = square(max(1e-4, dot(dirToProbe, normalWS) * 0.5 + 0.5)) + 0.2; // Wrap shading term
 
     // Sample probe illuminance and depth moments.
-    const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
-    const int probeIndex = ProbeIndexToStableIndex(probeIndexA, ddgi.gridInfo[cascade]);
+    const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridResolution);
+    const int probeIndex = ProbeIndexToStableIndex(probeIndexA, cascade, ddgi);
 
-    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.probeIrradianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
-    const vec2 uv = ProbeDirectionToUv(normalWS, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+    const vec2 uv = ProbeDirectionToUv(normalWS, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.probeIrradianceResolution);
     const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
     
     float shadowWeight = 1;
@@ -265,9 +264,9 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     //const float distToProbeWS = length(probePos - posProbeSpace) * ddgi.gridInfo.baseGridScale;
 
 #if 1 // Chebyshev test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.probeDepthMomentsResolution);
     const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.probeDepthMomentsResolution);
     const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).xy;
     const float mean = depthMoments.x;
     const float mean2 = depthMoments.y;
@@ -278,9 +277,9 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
       shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
     }
 #else // Regular shadow test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
     const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
     const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
 
     if (distToProbeWS > rawDepth)
@@ -358,7 +357,7 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
   //uint rng = PCG_Hash(gid.x + PCG_Hash(gid.y));
 
   const vec3 posProbeSpacePreMod = ((positionWS - 0.5) / ddgi.gridInfo[cascade].baseGridScale) - ddgi.gridInfo[cascade].gridOffset;
-  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridResolution);
   const ivec3 minProbe = ivec3(floor(posProbeSpace));
   const ivec3 maxProbe = minProbe + 1;
 
@@ -376,10 +375,10 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     const vec3 dirToProbe = normalize(probePos - posProbeSpace);
 
     // Sample probe illuminance and depth moments.
-    const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridInfo[cascade].gridResolution);
-    const int probeIndex = ProbeIndexToStableIndex(probeIndexA, ddgi.gridInfo[cascade]);
+    const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridResolution);
+    const int probeIndex = ProbeIndexToStableIndex(probeIndexA, cascade, ddgi);
 
-    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
+    const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.probeIrradianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
     //const vec2 uv = ProbeDirectionToUv(normalWS, probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.gridInfo[cascade].probeIrradianceResolution);
     //const vec3 illuminance = textureLod(ddgi.packedProbeIrradianceTex, linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
@@ -394,9 +393,9 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     //const float distToProbeWS = length(probePos - posProbeSpace) * ddgi.gridInfo.baseGridScale;
 
 #if 1 // Chebyshev test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.probeDepthMomentsResolution);
     const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepthMoments).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.gridInfo[cascade].probeDepthMomentsResolution);
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepthMoments).xy, ddgi.probeDepthMomentsResolution);
     const vec2 depthMoments = textureLod(ddgi.packedProbeDepthMomentsTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).xy;
     const float mean = depthMoments.x;
     const float mean2 = depthMoments.y;
@@ -407,9 +406,9 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
       shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
     }
 #else // Regular shadow test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
     const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.gridInfo[cascade].probeRadianceResolution);
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
     const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
 
     if (distToProbeWS > rawDepth)
@@ -473,7 +472,7 @@ int SelectMinimumCascade(vec3 positionWS, DDGIArgs ddgi, out vec3 posProbeSpaceP
   {
     posProbeSpacePreMod = ((positionWS - 0.5) / ddgi.gridInfo[i].baseGridScale) - ddgi.gridInfo[i].gridOffset;
     posProbeSpacePreMod -= ddgi.gridInfo[i].gridOffsetFraction;
-    if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridInfo[i].gridResolution - 1)))
+    if (all(greaterThanEqual(posProbeSpacePreMod, vec3(0))) && all(lessThan(posProbeSpacePreMod, ddgi.gridResolution - 1)))
     {
       return i;
     }
@@ -490,10 +489,10 @@ vec3 SampleIlluminanceField(vec3 positionWS, vec3 normalWS, Sampler linearSample
   {
     return vec3(0, 0, 0); // No available cascade
   }
-  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridResolution);
 
   const float MAGIC_IDK_WHY = 0.9999; // Chosen after visualizing with TurboColorMap. The exact value 1 does not work!
-  const vec3 halfGridExtent = (ddgi.gridInfo[cascade].gridResolution - MAGIC_IDK_WHY) / 2;
+  const vec3 halfGridExtent = (ddgi.gridResolution - MAGIC_IDK_WHY) / 2;
   const vec3 centeredPos = posProbeSpace - halfGridExtent;
   const float distFromEdgeA = sd_Box(centeredPos, halfGridExtent);
   // Decrease the distance if negative. This gives some room for gridOffsetFraction to move the space around.
@@ -534,10 +533,10 @@ vec3 SampleAverageLuminance(vec3 positionWS, Sampler linearSampler, DDGIArgs ddg
   {
     return vec3(0, 0, 0); // No available cascade
   }
-  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridInfo[cascade].gridResolution);
+  const vec3 posProbeSpace = mod(posProbeSpacePreMod, ddgi.gridResolution);
 
   const float MAGIC_IDK_WHY = 0.9999; // Chosen after visualizing with TurboColorMap. The exact value 1 does not work!
-  const vec3 halfGridExtent = (ddgi.gridInfo[cascade].gridResolution - MAGIC_IDK_WHY) / 2;
+  const vec3 halfGridExtent = (ddgi.gridResolution - MAGIC_IDK_WHY) / 2;
   const vec3 centeredPos = posProbeSpace - halfGridExtent;
   const float distFromEdgeA = sd_Box(centeredPos, halfGridExtent);
   // Decrease the distance if negative. This gives some room for gridOffsetFraction to move the space around.

@@ -10,8 +10,8 @@ void main()
   const int gid = int(gl_GlobalInvocationID.x);
   const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridInfo[cascade].gridResolution.x * args.gridInfo[cascade].gridResolution.y * args.gridInfo[cascade].gridResolution.z;
-  const int numTexels = args.gridInfo[cascade].probeRadianceResolution.x * args.gridInfo[cascade].probeRadianceResolution.y;
+  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
+  const int numTexels = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
   const int probeIndex = gid / numTexels;
   const int texelIndex = gid % numTexels;
 
@@ -22,10 +22,10 @@ void main()
 
   vx_Init(args.voxels);
 
-  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.gridInfo[cascade].probeRadianceResolution);
+  const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeRadianceResolution);
 
   const vec2 offset = Hammersley(uniforms.frameNumber % 16, 16) - 0.5;
-  vec3 rayDir = ProbeTexelCoordToDirectionOffset(texelCoord, args.gridInfo[cascade].probeRadianceResolution, offset);
+  vec3 rayDir = ProbeTexelCoordToDirectionOffset(texelCoord, args.probeRadianceResolution, offset);
   //vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeRadianceResolution);
   rayDir = normalize(rayDir + vec3(1e-4, 0, 0)); // HACK: perfectly 45-degree ray directions are not liked by DDA.
   
@@ -35,7 +35,7 @@ void main()
   const uint frameNumber = uniforms.frameNumber;
   uint randState = PCG_Hash(gid + frameNumber);
   
-  const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridInfo[cascade].gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
+  const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
   HitSurfaceParameters hit;
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 512, hit))
   {
@@ -47,9 +47,9 @@ void main()
       const vec3 albedo = GetHitAlbedo(hit);
       radiance += GetHitEmission(hit);
       
+#if 0 // Path traced indirect light
       const int samples = 2;//args.samples;
       const int bounces = 2;//args.bounces;
-#if 0 // Path traced indirect light
       radiance += albedo * TraceIndirectLighting(texelCoord + int(PCG_Hash(frameNumber)), hit.positionWorld, hit.flatNormalWorld, samples, bounces, args.noiseTexture);
 #else
       radiance += albedo * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, args.linearSampler, args);
@@ -117,14 +117,14 @@ void main()
 
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
-  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, args.gridInfo[cascade]);
-  const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.gridInfo[cascade].probeRadianceResolution);
+  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, cascade, args);
+  const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
   const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
   const float validity = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity;
   const float alpha = max(0.01, 1.0 / validity);
   const vec3 newRadiance = mix(oldRadiance, radiance, alpha);
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
+  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
   const float oldDepth = imageLoad(args.packedProbeRawDepth, ivec3(texelOffset + texelCoord, cascade)).x;
   const float newDepth = mix(oldDepth, depth, alpha);
-  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.gridInfo[cascade].probeRadianceResolution, texelCoord, vec4(newDepth, 0, 0, 0));
+  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newDepth, 0, 0, 0));
 }
