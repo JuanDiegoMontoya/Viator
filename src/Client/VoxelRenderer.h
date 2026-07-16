@@ -496,6 +496,42 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float ddgiProbeRadianceResolution = {
+    "r.ddgi.probe.radianceResolution",
+    "- Resolution at which to trace rays from DDGI probes.",
+    16,
+    4,
+    64,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiProbeIrradianceResolution = {
+    "r.ddgi.probe.irradianceResolution",
+    "- Resolution at which to store convolved probe irradiance for DDGI probes.",
+    10,
+    4,
+    64,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiProbeDepthMomentsResolution = {
+    "r.ddgi.probe.depthMomentsResolution",
+    "- Resolution at which to store filtered depth moments for DDGI probes.",
+    10,
+    4,
+    64,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiGridResolution = {
+    "r.ddgi.gridResolution",
+    "- Resolution of each DDGI probe cascade.",
+    10,
+    4,
+    20,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,
