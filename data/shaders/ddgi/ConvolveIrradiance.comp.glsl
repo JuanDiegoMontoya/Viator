@@ -20,6 +20,12 @@ void main()
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeIrradianceResolution);
   const vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.probeIrradianceResolution);
 
+  if (probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity == 0)
+  {
+    WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.probeIrradianceResolution, texelCoord, vec4(0));
+    return;
+  }
+
   vec3 irradiance = vec3(0);
 
   uint rng = PCG_Hash(gid);
@@ -51,28 +57,8 @@ void main()
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeIrradiance).xy, args.probeIrradianceResolution);
   const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const float validity = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity;
-  const float alpha = max(0.05, 1.0 / validity);
+  const float age = float(probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age);
+  const float alpha = max(0.05, 1.0 / age);
   const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
-  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.probeIrradianceResolution, texelCoord, vec4(newIrradiance, 0));
-
-  // Compute the average luminance of this probe (used for fog).
-  const int AVG_SAMPLES = 32;
-  vec3 averageLuminance = vec3(0);
-  for (int i = 0; i < AVG_SAMPLES; i++)
-  {
-    const vec2 xi = Hammersley(i, AVG_SAMPLES);
-    const vec3 direction = map_to_unit_sphere(xi);
-
-    const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
-    const vec2 uvOffset = vec2(texelOffset) / imageSize(args.packedProbeRadiance).xy;
-    const vec2 uv = ProbeDirectionToUv(direction, stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
-
-    averageLuminance += textureLod(args.packedProbeRadianceTex, args.linearSampler, vec3(uvOffset + uv, cascade), 0).rgb;
-  }
-  const float pdf = uniform_sphere_PDF();
-  averageLuminance = averageLuminance / AVG_SAMPLES;
-  const vec3 oldAverageLuminance = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
-  const vec3 newAverageLuminance = mix(oldAverageLuminance, averageLuminance, alpha);
-  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance = newAverageLuminance;
+  WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.probeIrradianceResolution, texelCoord, vec4(any(isnan(newIrradiance)) ? vec3(0) : newIrradiance, 0));
 }

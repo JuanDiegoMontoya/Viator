@@ -1,5 +1,6 @@
 #include "ProbeCommon.shared.h"
 #include "../sky/SkyUtil.h.glsl"
+#include "../Color.h.glsl"
 
 #define uniforms perFrameUniformsBuffers[args.globalUniformsIndex]
 
@@ -118,13 +119,18 @@ void main()
   depth = min(depth, args.gridInfo[cascade].baseGridScale * M_SQRT_3);
 
   const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, cascade, args);
+  
+  const ProbeData probeData = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex];
+
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
-  const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const float validity = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity;
-  const float alpha = max(0.01, 1.0 / validity);
-  const vec3 newRadiance = mix(oldRadiance, radiance, alpha);
-  WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
-  const float oldDepth = imageLoad(args.packedProbeRawDepth, ivec3(texelOffset + texelCoord, cascade)).x;
+  WriteToProbeWithBorder(args.packedProbeRadianceRaw, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(radiance, 0));
+  
+  // Temporal accumulation for depth. I dunno if this makes sense.
+  const float validity = probeData.validity;
+  const float age = probeData.age;
+  const float alpha = max(args.minTemporalAlpha, 1.0 / float(age));
+
+  const float oldDepth = imageLoad(args.packedProbeDepth, ivec3(texelOffset + texelCoord, cascade)).x;
   const float newDepth = mix(oldDepth, depth, alpha);
-  WriteToProbeWithBorder(args.packedProbeRawDepth, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newDepth, 0, 0, 0));
+  WriteToProbeWithBorder(args.packedProbeDepth, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newDepth, 0, 0, 0));
 }

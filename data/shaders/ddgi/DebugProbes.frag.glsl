@@ -16,7 +16,7 @@ void main()
   const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, v_cascade, args.ddgi);
   if (args.debugMode == 5) // Validity
   {
-    o_sceneColor.rgb = vec3(min(10, probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].validity / 100));
+    o_sceneColor.rgb = vec3(100 * probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].validity);
     o_sceneColor.a = 1;
     return;
   }
@@ -41,9 +41,9 @@ void main()
   {
     swizzle = ivec3(0, 0, 0);
     scale = 1 / (args.ddgi.gridInfo[v_cascade].baseGridScale * M_SQRT_3);
-    probeImageSize = imageSize(args.ddgi.packedProbeRawDepth).xy;
+    probeImageSize = imageSize(args.ddgi.packedProbeDepth).xy;
     probeGridResolution = args.ddgi.probeRadianceResolution;
-    tex = args.ddgi.packedProbeRawDepthTex;
+    tex = args.ddgi.packedProbeDepthTex;
   }
   else if (args.debugMode == 4) // Depth moments
   {

@@ -18,11 +18,12 @@
 struct ProbeData
 {
   FVOG_VEC3 averageLuminance;
-  float validity;
+  FVOG_FLOAT validity;
+  FVOG_INT32 age;
 };
 
 #ifndef __cplusplus
-FVOG_DECLARE_STORAGE_BUFFERS(ProbeInfo)
+FVOG_DECLARE_STORAGE_BUFFERS_2(ProbeInfo)
 {
   ProbeData data[];
 } probeInfosBuffers_actual[];
@@ -44,22 +45,29 @@ FVOG_DECLARE_BUFFER_REFERENCE(DDGIArgs)
 struct DDGIArgs
 #endif
 {
-  // Path tracer info
+  // Basic info
   Voxels voxels;
   FVOG_UINT32 internalColorSpace;
   FVOG_SHARED Texture2D noiseTexture;
   FVOG_UINT32 globalUniformsIndex;
   FVOG_BOOL32 showCascadeIndexAsColor;
+  FVOG_FLOAT minTemporalAlpha;
+  FVOG_FLOAT fastMinTemporalAlpha;
 
   // Probe info
   DDGIProbeGridInfo gridInfo[DDGI_NUM_CASCADES];
   FVOG_SHARED Image2DArray packedProbeRadiance;
+  FVOG_SHARED Image2DArray packedProbeRadianceRaw;
+  FVOG_SHARED Image2DArray packedProbeFastRadianceLuminance;
   FVOG_SHARED Image2DArray packedProbeIrradiance;
-  FVOG_SHARED Image2DArray packedProbeRawDepth;
+  FVOG_SHARED Image2DArray packedProbeDepth;
   FVOG_SHARED Image2DArray packedProbeDepthMoments;
+
   FVOG_SHARED Texture2DArray packedProbeRadianceTex;
+  FVOG_SHARED Texture2DArray packedProbeRadianceRawTex;
+  FVOG_SHARED Texture2DArray packedProbeFastRadianceLuminanceTex;
   FVOG_SHARED Texture2DArray packedProbeIrradianceTex;
-  FVOG_SHARED Texture2DArray packedProbeRawDepthTex;
+  FVOG_SHARED Texture2DArray packedProbeDepthTex;
   FVOG_SHARED Texture2DArray packedProbeDepthMomentsTex;
   FVOG_SHARED Sampler linearSampler;
 
@@ -277,10 +285,10 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
       shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
     }
 #else // Regular shadow test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
-    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
-    const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepth).xy, ddgi.probeRadianceResolution);
+    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepth).xy;
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepth).xy, ddgi.probeRadianceResolution);
+    const float rawDepth = textureLod(ddgi.packedProbeDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
 
     if (distToProbeWS > rawDepth)
     {
@@ -288,7 +296,7 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     }
 #endif
 
-    const float validityWeight = min(1.0, probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].validity / 100);
+    const float validityWeight = probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].validity;
     float weightNoTrilinear = backfaceWeight * shadowWeight * validityWeight;
     float weightNoTrilinearNoShadow = backfaceWeight * validityWeight;
     
@@ -406,10 +414,10 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
       shadowWeight = variance / (variance + square(max(distToProbeWS - mean, 0.0)));
     }
 #else // Regular shadow test.
-    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
-    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeRawDepth).xy;
-    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeRawDepth).xy, ddgi.probeRadianceResolution);
-    const float rawDepth = textureLod(ddgi.packedProbeRawDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
+    const ivec2 texelOffset2 = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeDepth).xy, ddgi.probeRadianceResolution);
+    const vec2 uvOffset2 = vec2(texelOffset2) / imageSize(ddgi.packedProbeDepth).xy;
+    const vec2 uv2 = ProbeDirectionToUv(-dirToProbeBiased, probeIndex, imageSize(ddgi.packedProbeDepth).xy, ddgi.probeRadianceResolution);
+    const float rawDepth = textureLod(ddgi.packedProbeDepthTex, linearSampler, vec3(uvOffset2 + uv2, cascade), 0).x;
 
     if (distToProbeWS > rawDepth)
     {
@@ -417,7 +425,7 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     }
 #endif
 
-    const float validityWeight = min(1.0, probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].validity / 100);
+    const float validityWeight = probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].validity;
     float weightNoTrilinear = shadowWeight * validityWeight;
     float weightNoTrilinearNoShadow = validityWeight;
     

@@ -147,6 +147,22 @@ vec3 color_convert_src_to_dst(vec3 color_src, uint src_color_space, uint dst_col
   return dst_from_XYZ * XYZ_from_src * color_src;
 }
 
+vec3 color_convert_YCoCg_to_sRGB(vec3 c)
+{
+  // https://en.wikipedia.org/wiki/YCoCg
+  return vec3(c.x - c.z + c.y, c.x + c.z, c.x - c.z - c.y);
+}
+
+vec3 color_convert_sRGB_to_YCoCg(vec3 c)
+{
+  const mat3 YCoCg_from_sRGB = mat3(
+    vec3(0.25, 0.5, -0.25),
+    vec3(0.5, 0.0, 0.5),
+    vec3(0.25, -0.5, -0.25)
+  );
+  return YCoCg_from_sRGB * c;
+}
+
 
 
 

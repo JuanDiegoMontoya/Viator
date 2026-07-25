@@ -16,6 +16,8 @@ void main()
     return;
   }
 
+  vx_Init(args.voxels);
+
   const ivec3 offsetVelocity = args.gridInfo[cascade].gridOffset - args.gridInfo[cascade].oldGridOffset;
   const vec3 probePos = ProbeIndexToCoord(probeIndex, args.gridResolution);
   const vec3 probePosOldProbeSpace = probePos + offsetVelocity;
@@ -24,8 +26,20 @@ void main()
 
   if (any(lessThan(probePosOldProbeSpace, vec3(0))) || any(greaterThanEqual(probePosOldProbeSpace, args.gridResolution)))
   {
-    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 0;
+    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age = 0;
   }
 
-  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity += 1.02;
+  const vec3 probePosWS = (ProbeIndexToCoord(probeIndex, args.gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
+  if (vx_GetSolidAt(probePosWS))
+  {
+    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 0;
+    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age = 0;
+  }
+  else
+  {
+    probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 1.0;
+  }
+
+  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age =
+    min(255, 1 + probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age);
 }

@@ -396,6 +396,56 @@ uint vx_GetSubGridIndex(GpuVoxelMaterial material, ivec3 voxelPosition)
   return material.subGridOrAnimatedSubGridInfoIndex;
 }
 
+struct vx_Material
+{
+  bool isVoxel; // If true, result is `voxel`. If false, result is `subvoxelMaterial`.
+  voxel_t voxel;
+  SubVoxelMaterial subvoxelMaterial;
+};
+
+vx_Material vx_GetMaterialAt(vec3 positionWS)
+{
+  vx_Material ret;
+  ret.isVoxel = true;
+  ret.voxel   = 0;
+
+  const ivec3 voxelPosition = ivec3(floor(positionWS));
+  const bool isInMap = all(greaterThanEqual(voxelPosition, vec3(0))) && all(lessThan(voxelPosition, ivec3(g_voxels.dimensions)));
+  if (!isInMap)
+  {
+    return ret;
+  }
+  
+  ret.voxel = GetVoxelAt(voxelPosition);
+
+  if (ret.voxel == 0)
+  {
+    return ret;
+  }
+
+  GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[ret.voxel];
+  if (bool(material.voxelFlags & VOXEL_IS_SUBGRID))
+  {
+    const uint subGridIndex = vx_GetSubGridIndex(material, voxelPosition);
+    const ivec3 subGridDims = SUBGRIDS[subGridIndex].dimensions;
+
+    const ivec3 subvoxelPos = ivec3(positionWS * subGridDims) % subGridDims;
+    const uint subVoxelIndex = FlattenSubGridCoord(subGridIndex, subvoxelPos);
+    const uint8_t subVoxel = SUBVOXELS[SUBGRIDS[subGridIndex].gridBase + subVoxelIndex];
+    const int subVoxelMaterialIndex = subVoxel - 1;
+
+    if (subVoxelMaterialIndex == 0)
+    {
+      return ret;
+    }
+
+    ret.isVoxel          = false;
+    ret.subvoxelMaterial = SUBGRIDS[subGridIndex].materials[subVoxelMaterialIndex];
+  }
+
+  return ret;
+}
+
 bool vx_GetSolidAt(vec3 positionWS)
 {
   const ivec3 voxelPosition = ivec3(floor(positionWS));

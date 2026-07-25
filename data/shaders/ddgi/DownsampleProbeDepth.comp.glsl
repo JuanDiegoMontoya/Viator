@@ -19,11 +19,11 @@ void main()
   // UV is calculated with depth moment sizes.
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeDepthMomentsResolution);
   const vec2 sampleUv = (vec2(texelCoord) + 0.5) / args.probeDepthMomentsResolution;
-  const vec2 babySampleUv = sampleUv / (imageSize(args.packedProbeRawDepth).xy / args.probeRadianceResolution);
+  const vec2 babySampleUv = sampleUv / (imageSize(args.packedProbeDepth).xy / args.probeRadianceResolution);
   
-  const ivec2 rawDepthTexelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeRawDepth).xy, args.probeRadianceResolution);
+  const ivec2 rawDepthTexelOffset = GetProbeTexelOffset(probeIndex, imageSize(args.packedProbeDepth).xy, args.probeRadianceResolution);
   const vec2 rawDepthUvOffset = vec2(rawDepthTexelOffset) / imageSize(args.packedProbeRadiance).xy;
-  const float depth = textureLod(args.packedProbeRawDepthTex, args.linearSampler, vec3(rawDepthUvOffset + babySampleUv, cascade), 0).x;
+  const float depth = textureLod(args.packedProbeDepthTex, args.linearSampler, vec3(rawDepthUvOffset + babySampleUv, cascade), 0).x;
 
   WriteToProbeWithBorder(args.packedProbeDepthMoments, cascade, probeIndex, args.probeDepthMomentsResolution, texelCoord, vec4(depth, depth * depth, 0, 0));
 }
