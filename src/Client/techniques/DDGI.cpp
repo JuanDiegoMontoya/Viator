@@ -143,19 +143,23 @@ namespace Techniques
             .noiseTexture            = params.noiseTexture,
             .globalUniformsIndex     = params.globalUniformsIndex,
             .showCascadeIndexAsColor = params.showCascadeIndexAsColor,
-            .minTemporalAlpha        = 0.01f,
-            .fastMinTemporalAlpha    = 0.01f,
+            .minTemporalAlpha        = params.minTemporalAlpha,
+            .fastMinTemporalAlpha    = params.fastTemporalAlpha,
+            .varianceClipGamma       = params.varianceClipGamma,
+            .convolveTemporalAlpha   = params.convolveTemporalAlpha,
             //.gridInfo                   = ddgi.args.gridInfo,
             .packedProbeRadiance         = packedProbeRadiance->ImageView().GetImage2DArray(),
             .packedProbeRadianceRaw      = packedProbeRadianceRaw->ImageView().GetImage2DArray(),
             .packedProbeFastRadianceLuminance = packedProbeFastRadianceLuminance->ImageView().GetImage2DArray(),
             .packedProbeIrradiance       = packedProbeIrradiance->ImageView().GetImage2DArray(),
+            .packedProbeIrradianceRaw    = packedProbeIrradianceRaw->ImageView().GetImage2DArray(),
             .packedProbeDepth            = packedProbeDepth->ImageView().GetImage2DArray(),
             .packedProbeDepthMoments     = packedProbeDepthMoments->ImageView().GetImage2DArray(),
             .packedProbeRadianceTex      = packedProbeRadiance->ImageView().GetTexture2DArray(),
             .packedProbeRadianceRawTex   = packedProbeRadianceRaw->ImageView().GetTexture2DArray(),
             .packedProbeFastRadianceLuminanceTex = packedProbeFastRadianceLuminance->ImageView().GetTexture2DArray(),
             .packedProbeIrradianceTex    = packedProbeIrradiance->ImageView().GetTexture2DArray(),
+            .packedProbeIrradianceRawTex = packedProbeIrradianceRaw->ImageView().GetTexture2DArray(),
             .packedProbeDepthTex         = packedProbeDepth->ImageView().GetTexture2DArray(),
             .packedProbeDepthMomentsTex  = packedProbeDepthMoments->ImageView().GetTexture2DArray(),
             .linearSampler               = params.linearClampSampler,
@@ -311,6 +315,7 @@ namespace Techniques
       const auto width2  = uint32_t((2 + gridSetup.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes))));
       const auto height2 = uint32_t((2 + gridSetup.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeIrradianceResolution.x) / width2));
       packedProbeIrradiance = Fvog::CreateTexture2DArray({width2, height2}, cascades, radianceFormat, usage, "DDGI Probe Irradiance");
+      packedProbeIrradianceRaw = Fvog::CreateTexture2DArray({width2, height2}, cascades, radianceFormat, usage, "DDGI Probe Raw Irradiance");
 
       const auto width3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes))));
       const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeDepthMomentsResolution.x) / width2));
@@ -324,12 +329,14 @@ namespace Techniques
           ctx.ImageBarrierDiscard(packedProbeRadianceRaw.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeFastRadianceLuminance.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeIrradiance.value(), VK_IMAGE_LAYOUT_GENERAL);
+          ctx.ImageBarrierDiscard(packedProbeIrradianceRaw.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeDepth.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeDepthMoments.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ClearTexture(packedProbeRadiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
           ctx.ClearTexture(packedProbeRadianceRaw.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
           ctx.ClearTexture(packedProbeFastRadianceLuminance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
           ctx.ClearTexture(packedProbeIrradiance.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
+          ctx.ClearTexture(packedProbeIrradianceRaw.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
           ctx.ClearTexture(packedProbeDepth.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
           ctx.ClearTexture(packedProbeDepthMoments.value(), {.color = {0.0f, 0.0f, 0.0f, 0.0f}});
         });
@@ -343,6 +350,7 @@ namespace Techniques
     std::optional<Fvog::Texture> packedProbeFastRadianceLuminance;
     std::optional<Fvog::Texture> packedProbeDepth; // Same resolution as radiance
     std::optional<Fvog::Texture> packedProbeIrradiance;
+    std::optional<Fvog::Texture> packedProbeIrradianceRaw;
     std::optional<Fvog::Texture> packedProbeDepthMoments; // Filtered depth and depth^2
     std::unique_ptr<std::optional<Fvog::TypedBuffer<ProbeData>>[]> probeDataBuffers;
     DDGIArgs args{};

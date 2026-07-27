@@ -145,6 +145,7 @@ void VoxelRenderer::ShowGraphicsWindow(World& world)
           "Depth Moments",
           "Validity",
           "Average Luminance",
+          "Fast Luminance",
         };
         if (ImGui::BeginCombo("Visualize probes", names[int(ddgiDebugView_)]))
         {
@@ -178,6 +179,11 @@ void VoxelRenderer::ShowGraphicsWindow(World& world)
         }
         ImGui::SliderFloat("Base Grid Scale", &ddgiBaseGridScale_, 1, 32, "%.0f");
         ImGui::SliderFloat("Probe Size", &ddgiDebugProbeSize_, 0.125f, 1.0f, "%.3f");
+
+        Gui::CVarFloat(ddgiTemporalAlpha);
+        Gui::CVarFloat(ddgiFastTemporalAlpha);
+        Gui::CVarFloat(ddgiVarianceClipGamma);
+        Gui::CVarFloat(ddgiConvolveTemporalAlpha);
 
         ImGui::EndTabItem();
       }

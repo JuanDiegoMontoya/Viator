@@ -44,6 +44,10 @@ namespace Techniques
     uint32_t globalUniformsIndex{};
     shared::Sampler linearClampSampler{};
     float baseGridScale{};
+    float minTemporalAlpha{};
+    float fastTemporalAlpha{};
+    float varianceClipGamma{};
+    float convolveTemporalAlpha{};
 
     // Debugging
     bool debugFreezeGrid{};
@@ -59,6 +63,7 @@ namespace Techniques
     DepthMoments,
     Validity,
     AverageLuminance,
+    FastLuminance,
   };
 
   struct DDGIRenderDebugProbesParams

@@ -56,9 +56,10 @@ void main()
   irradiance += tempAccum / SHRIMPLES;
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeIrradiance).xy, args.probeIrradianceResolution);
+
   const vec3 oldIrradiance = imageLoad(args.packedProbeIrradiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
   const float age = float(probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age);
-  const float alpha = max(0.05, 1.0 / age);
+  const float alpha = max(args.convolveTemporalAlpha, 1.0 / age);
   const vec3 newIrradiance = mix(oldIrradiance, irradiance, alpha);
   WriteToProbeWithBorder(args.packedProbeIrradiance, cascade, stableProbeIndex, args.probeIrradianceResolution, texelCoord, vec4(any(isnan(newIrradiance)) ? vec3(0) : newIrradiance, 0));
 }

@@ -53,6 +53,8 @@ struct DDGIArgs
   FVOG_BOOL32 showCascadeIndexAsColor;
   FVOG_FLOAT minTemporalAlpha;
   FVOG_FLOAT fastMinTemporalAlpha;
+  FVOG_FLOAT varianceClipGamma;
+  FVOG_FLOAT convolveTemporalAlpha;
 
   // Probe info
   DDGIProbeGridInfo gridInfo[DDGI_NUM_CASCADES];
@@ -60,6 +62,7 @@ struct DDGIArgs
   FVOG_SHARED Image2DArray packedProbeRadianceRaw;
   FVOG_SHARED Image2DArray packedProbeFastRadianceLuminance;
   FVOG_SHARED Image2DArray packedProbeIrradiance;
+  FVOG_SHARED Image2DArray packedProbeIrradianceRaw;
   FVOG_SHARED Image2DArray packedProbeDepth;
   FVOG_SHARED Image2DArray packedProbeDepthMoments;
 
@@ -67,6 +70,7 @@ struct DDGIArgs
   FVOG_SHARED Texture2DArray packedProbeRadianceRawTex;
   FVOG_SHARED Texture2DArray packedProbeFastRadianceLuminanceTex;
   FVOG_SHARED Texture2DArray packedProbeIrradianceTex;
+  FVOG_SHARED Texture2DArray packedProbeIrradianceRawTex;
   FVOG_SHARED Texture2DArray packedProbeDepthTex;
   FVOG_SHARED Texture2DArray packedProbeDepthMomentsTex;
   FVOG_SHARED Sampler linearSampler;

@@ -532,6 +532,42 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float ddgiTemporalAlpha = {
+    "r.ddgi.temporalAlpha",
+    "- Responsiveness of DDGI radiance. A higher value will increase responsiveness and temporal noise.",
+    0.01f,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiFastTemporalAlpha = {
+    "r.ddgi.fastTemporalAlpha",
+    "- Responsiveness of DDGI fast luminance. A higher value will increase responsiveness and temporal noise.",
+    0.1f,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiVarianceClipGamma = {
+    "r.ddgi.varianceClipGamma",
+    "- Size of the bounding box when conditioning history radiance samples for DDGI.",
+    1.0f,
+    0.0f,
+    10.0f,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float ddgiConvolveTemporalAlpha = {
+    "r.ddgi.convolveTemporalAlpha",
+    "- Responsiveness of DDGI irradiance.",
+    0.15f,
+    0.0f,
+    1.0f,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,

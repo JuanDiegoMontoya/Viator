@@ -1387,6 +1387,10 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .globalUniformsIndex     = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
         .linearClampSampler      = linearClampSampler,
         .baseGridScale           = ddgiBaseGridScale_,
+        .minTemporalAlpha        = static_cast<float>(ddgiTemporalAlpha.Get()),
+        .fastTemporalAlpha       = static_cast<float>(ddgiFastTemporalAlpha.Get()),
+        .varianceClipGamma       = static_cast<float>(ddgiVarianceClipGamma.Get()),
+        .convolveTemporalAlpha   = static_cast<float>(ddgiConvolveTemporalAlpha.Get()),
         .debugFreezeGrid         = ddgiDebugFreezeGrid_,
         .showCascadeIndexAsColor = ddgiDebugShowCascadeIndexAsColor_,
       });

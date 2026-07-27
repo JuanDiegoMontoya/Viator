@@ -52,6 +52,11 @@ void main()
     probeGridResolution = args.ddgi.probeDepthMomentsResolution;
     tex = args.ddgi.packedProbeDepthMomentsTex;
   }
+  else if (args.debugMode == 7) // Fast luminance
+  {
+    swizzle = ivec3(0, 0, 0);
+    tex = args.ddgi.packedProbeFastRadianceLuminanceTex;
+  }
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, probeImageSize, probeGridResolution);
 

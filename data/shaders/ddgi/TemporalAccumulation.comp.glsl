@@ -34,8 +34,35 @@ void main()
   const float alpha = args.minTemporalAlpha;
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
+
+  // Calculate variance of luminance (for raw radiance) in small region.
+  float m1 = 0;
+  float m2 = 0;
+  float N  = 0;
+  for (int y = -1; y <= 1; y++)
+  for (int x = -1; x <= 1; x++)
+  {
+    const float luminance = imageLoad(args.packedProbeFastRadianceLuminance, ivec3(texelOffset + texelCoord + ivec2(x, y), cascade)).x;
+    m1 += luminance;
+    m2 += square(luminance);
+    N++;
+  }
+  const float mu     = m1 / N;
+  const float sigma  = sqrt(m2 / N - mu * mu);
+  const float gamma  = args.varianceClipGamma; // Higher gamma = larger bounding box (stable result, but more ghosting/less responsiveness).
+  const float minLum = mu - gamma * sigma;
+  const float maxLum = mu + gamma * sigma;
+
   const vec3 radianceRaw = imageLoad(args.packedProbeRadianceRaw, ivec3(texelOffset + texelCoord, cascade)).rgb;
-  const vec3 oldRadiance = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
+
+  const vec3 oldRadiance_sRGB  = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
+  const float luminanceOld     = Luminance(oldRadiance_sRGB);
+  const float clampedLuminance = clamp(luminanceOld, minLum, maxLum);
+  vec3 oldRadiance = oldRadiance_sRGB;
+  if (luminanceOld > 1e-4)
+  {
+    oldRadiance = oldRadiance / luminanceOld * clampedLuminance;
+  }
 
   const vec3 newRadiance = mix(oldRadiance, radianceRaw, alpha);
   WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newRadiance, 0));

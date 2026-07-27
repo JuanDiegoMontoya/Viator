@@ -129,6 +129,12 @@ void main()
   const float validity = probeData.validity;
   const float age = probeData.age;
   const float alpha = max(args.minTemporalAlpha, 1.0 / float(age));
+  const float alphaFast = max(args.fastMinTemporalAlpha, 1.0 / float(age));
+
+  const float luminance = Luminance(radiance);
+  const float luminanceOld = imageLoad(args.packedProbeFastRadianceLuminance, ivec3(texelOffset + texelCoord, cascade)).x;
+  const float luminanceNew = mix(luminanceOld, luminance, alphaFast);
+  WriteToProbeWithBorder(args.packedProbeFastRadianceLuminance, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(luminanceNew, 0, 0, 0));
 
   const float oldDepth = imageLoad(args.packedProbeDepth, ivec3(texelOffset + texelCoord, cascade)).x;
   const float newDepth = mix(oldDepth, depth, alpha);
