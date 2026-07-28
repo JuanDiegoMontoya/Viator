@@ -77,6 +77,33 @@ namespace Techniques
           },
       });
 
+      computeProbePriorityPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "[DDGI] Compute Probe Priority",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/ComputeProbePriority.comp.glsl",
+          },
+      });
+
+      determineProbesToUpdatePipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "[DDGI] Determine Probes to Update",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/DetermineProbesToUpdate.comp.glsl",
+          },
+      });
+
+      writeIndirectCommandsPipeline = GetPipelineManager().EnqueueCompileComputePipeline({
+        .name = "[DDGI] Write Indirect Commands",
+        .shaderModuleInfo =
+          PipelineManager::ShaderModuleCreateInfo{
+            .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+            .path  = GetShaderDirectory() / "ddgi/WriteIndirectCommands.comp.glsl",
+          },
+      });
+
       debugProbesPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
         .name = "[DDGI] Debug Probes",
         .vertexModuleInfo =
@@ -167,6 +194,16 @@ namespace Techniques
             .probeIrradianceResolution   = params.gridSetup.probeIrradianceResolution,
             .probeDepthMomentsResolution = params.gridSetup.probeDepthMomentsResolution,
             .gridResolution              = params.gridSetup.gridResolution,
+            
+            .wholeProbesIndirectCommand = wholeProbesIndirectCommand->GetDeviceAddress(),
+            .probeTexelsIndirectCommand = probeTexelsIndirectCommand->GetDeviceAddress(),
+            .probesToUpdate             = probesToUpdateVec->GetDeviceAddress(),
+            .probeUpdateBudget          = 1000,
+            .probeBaseAgePriority       = 1000,
+            .probeAgeFactor             = 100,
+            .probeFrequencyFactor       = 1,
+            .probeMinPriority           = 100,
+            .sumProbePriority           = 0,
           };
 
           for (int i = 0; i < DDGI_NUM_CASCADES; i++)
@@ -175,6 +212,14 @@ namespace Techniques
           }
 
           argsBuffer->UpdateData(cmd, args);
+
+          auto ctx = Fvog::Context(cmd);
+          ctx.TeenyBufferUpdate(probesToUpdateVec.value(),
+            UIntVector_t{
+              0,
+              1000,
+              probesToUpdateData->GetDeviceAddress(),
+            });
         });
 
       scheduler.AddPass("DdgiResetNewProbes",
@@ -188,8 +233,40 @@ namespace Techniques
           ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
         });
 
+      scheduler.AddPass("DdgiComputeProbePriority",
+        {"DdgiResetNewProbes"},
+        [=, this]
+        {
+          auto ctx             = Fvog::Context(cmd);
+          const auto numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(computeProbePriorityPipeline.GetPipeline());
+          ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+        });
+
+      scheduler.AddPass("DdgiDetermineProbesToUpdate",
+        {"DdgiComputeProbePriority"},
+        [=, this]
+        {
+          auto ctx             = Fvog::Context(cmd);
+          const auto numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(determineProbesToUpdatePipeline.GetPipeline());
+          ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+        });
+
+      scheduler.AddPass("DdgiWriteIndirectCommands",
+        {"DdgiDetermineProbesToUpdate"},
+        [=, this]
+        {
+          auto ctx = Fvog::Context(cmd);
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(writeIndirectCommandsPipeline.GetPipeline());
+          ctx.DispatchInvocations(1, 1, 1);
+        });
+
       scheduler.AddPass("DdgiTraceRays",
-        {"DdgiResetNewProbes", "ShadowMaps", "AllSky"},
+        {"DdgiWriteIndirectCommands", "DdgiResetNewProbes", "ShadowMaps", "AllSky"},
         [=, this]
         {
           auto ctx          = Fvog::Context(cmd);
@@ -321,10 +398,22 @@ namespace Techniques
       const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeDepthMomentsResolution.x) / width2));
       packedProbeDepthMoments = Fvog::CreateTexture2DArray({width3, height3}, cascades, Fvog::Format::R32G32_SFLOAT, usage, "DDGI Probe Depth Moments");
 
+      wholeProbesIndirectCommand.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
+      probeTexelsIndirectCommand.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
+      probesToUpdateData.emplace(Fvog::TypedBufferCreateInfo{.count = 1000, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
+      probesToUpdateVec.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
+
       Fvog::GetDevice().ImmediateSubmit(
         [&](VkCommandBuffer cmd)
         {
           auto ctx = Fvog::Context(cmd);
+          probesToUpdateData->FillData(cmd);
+          ctx.TeenyBufferUpdate(probesToUpdateVec.value(),
+            UIntVector_t{
+              .size     = 0,
+              .capacity = 1000,
+              .values   = probesToUpdateData.value().GetDeviceAddress(),
+            });
           ctx.ImageBarrierDiscard(packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeRadianceRaw.value(), VK_IMAGE_LAYOUT_GENERAL);
           ctx.ImageBarrierDiscard(packedProbeFastRadianceLuminance.value(), VK_IMAGE_LAYOUT_GENERAL);
@@ -353,6 +442,10 @@ namespace Techniques
     std::optional<Fvog::Texture> packedProbeIrradianceRaw;
     std::optional<Fvog::Texture> packedProbeDepthMoments; // Filtered depth and depth^2
     std::unique_ptr<std::optional<Fvog::TypedBuffer<ProbeData>>[]> probeDataBuffers;
+    std::optional<Fvog::TypedBuffer<FVOG_UINT32>> probesToUpdateData;
+    std::optional<Fvog::TypedBuffer<UIntVector_t>> probesToUpdateVec;
+    std::optional<Fvog::TypedBuffer<DispatchIndirectCommand>> wholeProbesIndirectCommand;
+    std::optional<Fvog::TypedBuffer<DispatchIndirectCommand>> probeTexelsIndirectCommand;
     DDGIArgs args{};
     PipelineManager::ComputePipelineKey traceRaysPipeline;
     PipelineManager::ComputePipelineKey temporalAccumulationPipeline;
@@ -360,6 +453,9 @@ namespace Techniques
     PipelineManager::ComputePipelineKey computeAverageRadiancePipeline;
     PipelineManager::ComputePipelineKey downsampleDepthPipeline;
     PipelineManager::ComputePipelineKey resetNewProbesPipeline;
+    PipelineManager::ComputePipelineKey computeProbePriorityPipeline;
+    PipelineManager::ComputePipelineKey determineProbesToUpdatePipeline;
+    PipelineManager::ComputePipelineKey writeIndirectCommandsPipeline;
     PipelineManager::GraphicsPipelineKey debugProbesPipeline;
   };
 
@@ -368,3 +464,33 @@ namespace Techniques
     return std::make_unique<DDGIImpl>(params);
   }
 } // namespace Techniques
+
+
+
+
+
+#include "doctest.h"
+
+TEST_CASE("DDGIHelpers")
+{
+  SUBCASE("Cascade and stable probe index encoding and decoding")
+  {
+    FVOG_INT32 cascade{};
+    FVOG_INT32 index{};
+
+    const auto encoded0 = EncodeCascadeAndStableProbeIndex(0, 0);
+    DecodeCascadeAndStableProbeIndex(encoded0, cascade, index);
+    CHECK_EQ(cascade, 0);
+    CHECK_EQ(index, 0);
+
+    const auto encoded1 = EncodeCascadeAndStableProbeIndex(5, 1000);
+    DecodeCascadeAndStableProbeIndex(encoded1, cascade, index);
+    CHECK_EQ(cascade, 5);
+    CHECK_EQ(index, 1000);
+
+    const auto encoded2 = EncodeCascadeAndStableProbeIndex(0xF, 0x0FFF'FFFF);
+    DecodeCascadeAndStableProbeIndex(encoded2, cascade, index);
+    CHECK_EQ(cascade, 0xF);
+    CHECK_EQ(index, 0x0FFF'FFFF);
+  }
+}

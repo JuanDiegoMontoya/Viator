@@ -13,6 +13,9 @@
 typedef uint64_t VkDeviceAddress;
 
 #define CONSTEXPR_INLINE constexpr inline
+#define FVOG_INLINE inline
+#define FVOG_OUT(x) x&
+#define FVOG_INOUT(x) x&
 
 #define FVOG_FLOAT float
 #define FVOG_VEC2 glm::vec2
@@ -53,6 +56,9 @@ typedef uint64_t VkDeviceAddress;
 #else // GLSL
 
 #define CONSTEXPR_INLINE const
+#define FVOG_INLINE
+#define FVOG_OUT(x) out x
+#define FVOG_INOUT(x) inout x
 
 #define FVOG_FLOAT float
 #define FVOG_VEC2 vec2

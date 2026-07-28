@@ -1,6 +1,6 @@
 #include "ProbeCommon.shared.h"
 
-layout(local_size_x = 128, local_size_y = 1) in;
+layout(local_size_x = DDGI_WORKGROUP_SIZE, local_size_y = 1) in;
 
 void main()
 {

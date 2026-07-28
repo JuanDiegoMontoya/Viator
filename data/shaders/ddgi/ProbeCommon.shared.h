@@ -3,12 +3,26 @@
 
 #include "../voxels/Voxels.h.glsl"
 #include "../Resources.h.glsl"
+#include "../BasicTypes.h.glsl"
+#include "../CommonTypes.shared.h"
 #ifndef __cplusplus
 #include "../Math.h.glsl"
 #include "../DistanceFunctions.h.glsl"
 #endif
 
 #define DDGI_NUM_CASCADES 6
+#define DDGI_WORKGROUP_SIZE 128
+
+FVOG_INLINE FVOG_UINT32 EncodeCascadeAndStableProbeIndex(FVOG_INT32 cascade, FVOG_INT32 stableProbeIndex)
+{
+  return ((FVOG_UINT32(cascade) & 0xF) << 28) | (FVOG_UINT32(stableProbeIndex) & 0x0FFFFFFF);
+}
+
+FVOG_INLINE void DecodeCascadeAndStableProbeIndex(FVOG_UINT32 encoded, FVOG_OUT(FVOG_INT32) cascade, FVOG_OUT(FVOG_INT32) stableProbeIndex)
+{
+  cascade          = int((encoded >> 28) & 0xF);
+  stableProbeIndex = int(encoded & 0x0FFFFFFF);
+}
 
 // When enabled, probes will be blended in a gamma-2 space to make gradients appear perceptually 
 // smoother than a simple photometrically linear blend.
@@ -20,6 +34,8 @@ struct ProbeData
   FVOG_VEC3 averageLuminance;
   FVOG_FLOAT validity;
   FVOG_INT32 age;
+  FVOG_INT32 queryCount; // Number of times this probe was queried this frame.
+  FVOG_INT32 priority;
 };
 
 #ifndef __cplusplus
@@ -79,6 +95,16 @@ struct DDGIArgs
   FVOG_IVEC2 probeIrradianceResolution;
   FVOG_IVEC2 probeDepthMomentsResolution;
   FVOG_IVEC3 gridResolution;
+
+  DispatchIndirectCommandPtr wholeProbesIndirectCommand;
+  DispatchIndirectCommandPtr probeTexelsIndirectCommand;
+  UIntVector probesToUpdate;
+  FVOG_INT32 probeUpdateBudget;
+  FVOG_INT32 probeBaseAgePriority;
+  FVOG_INT32 probeAgeFactor;
+  FVOG_INT32 probeFrequencyFactor;
+  FVOG_INT32 probeMinPriority;
+  FVOG_INT32 sumProbePriority;
 };
 
 #ifndef __cplusplus
