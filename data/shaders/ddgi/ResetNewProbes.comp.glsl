@@ -40,6 +40,4 @@ void main()
     probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 1.0;
   }
 
-  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age =
-    min(255, 1 + probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age);
 }

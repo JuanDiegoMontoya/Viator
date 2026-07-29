@@ -5,16 +5,19 @@ layout(local_size_x = DDGI_WORKGROUP_SIZE) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
-  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
-  const int numTexels = args.probeDepthMomentsResolution.x * args.probeDepthMomentsResolution.y;
-  const int probeIndex = gid / numTexels;
+  const int numTexels       = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
+  const int probeIndexIndex = gid / numTexels;
 
-  if (probeIndex >= numProbes)
+  if (probeIndexIndex >= args.probesToUpdate.size)
   {
     return;
   }
+
+  const uint encoded = args.probesToUpdate.values[probeIndexIndex].data;
+  int cascade;
+  int probeIndex;
+  DecodeCascadeAndProbeIndex(encoded, cascade, probeIndex);
 
   // UV is calculated with depth moment sizes.
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeDepthMomentsResolution);

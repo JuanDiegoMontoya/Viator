@@ -134,7 +134,8 @@ namespace Techniques
       if (params.gridSetup.probeRadianceResolution != args.probeRadianceResolution ||
           params.gridSetup.probeIrradianceResolution != args.probeIrradianceResolution ||
           params.gridSetup.probeDepthMomentsResolution != args.probeDepthMomentsResolution ||
-          params.gridSetup.gridResolution != args.gridResolution)
+          params.gridSetup.gridResolution != args.gridResolution ||
+          (int)params.gridSetup.probeUpdateBudget != args.probeUpdateBudget)
       {
         CreateResources(params.gridSetup);
       }
@@ -198,7 +199,7 @@ namespace Techniques
             .wholeProbesIndirectCommand = wholeProbesIndirectCommand->GetDeviceAddress(),
             .probeTexelsIndirectCommand = probeTexelsIndirectCommand->GetDeviceAddress(),
             .probesToUpdate             = probesToUpdateVec->GetDeviceAddress(),
-            .probeUpdateBudget          = 1000,
+            .probeUpdateBudget          = (int)params.gridSetup.probeUpdateBudget,
             .probeBaseAgePriority       = 1000,
             .probeAgeFactor             = 100,
             .probeFrequencyFactor       = 1,
@@ -217,7 +218,7 @@ namespace Techniques
           ctx.TeenyBufferUpdate(probesToUpdateVec.value(),
             UIntVector_t{
               0,
-              1000,
+              (int)params.gridSetup.probeUpdateBudget,
               probesToUpdateData->GetDeviceAddress(),
             });
         });
@@ -231,6 +232,7 @@ namespace Techniques
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(resetNewProbesPipeline.GetPipeline());
           ctx.DispatchInvocations(numProbes, 1, DDGI_NUM_CASCADES);
+          ctx.TeenyBufferUpdate(argsBuffer->GetDeviceBuffer(), 0, offsetof(DDGIArgs, sumProbePriority));
         });
 
       scheduler.AddPass("DdgiComputeProbePriority",
@@ -269,55 +271,50 @@ namespace Techniques
         {"DdgiWriteIndirectCommands", "DdgiResetNewProbes", "ShadowMaps", "AllSky"},
         [=, this]
         {
-          auto ctx          = Fvog::Context(cmd);
-          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          auto ctx = Fvog::Context(cmd);
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(traceRaysPipeline.GetPipeline());
-          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
+          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
       scheduler.AddPass("DdgiTemporalAccumulation",
         {"DdgiTraceRays"},
         [=, this]
         {
-          auto ctx          = Fvog::Context(cmd);
-          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          auto ctx = Fvog::Context(cmd);
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(temporalAccumulationPipeline.GetPipeline());
-          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes instead of image size.
+          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
       scheduler.AddPass("DdgiConvolveIrradiance",
         {"DdgiTemporalAccumulation"},
         [=, this]
         {
-          auto ctx          = Fvog::Context(cmd);
-          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          auto ctx = Fvog::Context(cmd);
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(convolveIrradiancePipeline.GetPipeline());
-          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
       scheduler.AddPass("DdgiComputeAverageRadiance",
         {"DdgiTemporalAccumulation"},
         [=, this]
         {
-          auto ctx          = Fvog::Context(cmd);
-          const auto extent = args.gridResolution;
+          auto ctx = Fvog::Context(cmd);
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(computeAverageRadiancePipeline.GetPipeline());
-          ctx.DispatchInvocations(extent.x * extent.y * extent.z, 1, DDGI_NUM_CASCADES); // TODO: caculate extent based on number of live probes.
+          ctx.DispatchIndirect(wholeProbesIndirectCommand.value());
         });
 
       scheduler.AddPass("DdgiDownsampleDepth",
         {"DdgiTraceRays"},
         [=, this] 
         {
-          auto ctx          = Fvog::Context(cmd);
-          const auto extent = packedProbeRadiance->GetCreateInfo().extent;
+          auto ctx = Fvog::Context(cmd);
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(downsampleDepthPipeline.GetPipeline());
-          ctx.DispatchInvocations(extent.width * extent.height, 1, DDGI_NUM_CASCADES);
+          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
       scheduler.AddPass("DDGI", {"DdgiDownsampleDepth", "DdgiConvolveIrradiance", "DdgiComputeAverageRadiance"}, nullptr);
@@ -400,7 +397,7 @@ namespace Techniques
 
       wholeProbesIndirectCommand.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
       probeTexelsIndirectCommand.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
-      probesToUpdateData.emplace(Fvog::TypedBufferCreateInfo{.count = 1000, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
+      probesToUpdateData.emplace(Fvog::TypedBufferCreateInfo{.count = gridSetup.probeUpdateBudget, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
       probesToUpdateVec.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});
 
       Fvog::GetDevice().ImmediateSubmit(
@@ -411,7 +408,7 @@ namespace Techniques
           ctx.TeenyBufferUpdate(probesToUpdateVec.value(),
             UIntVector_t{
               .size     = 0,
-              .capacity = 1000,
+              .capacity = (int)gridSetup.probeUpdateBudget,
               .values   = probesToUpdateData.value().GetDeviceAddress(),
             });
           ctx.ImageBarrierDiscard(packedProbeRadiance.value(), VK_IMAGE_LAYOUT_GENERAL);
@@ -478,18 +475,18 @@ TEST_CASE("DDGIHelpers")
     FVOG_INT32 cascade{};
     FVOG_INT32 index{};
 
-    const auto encoded0 = EncodeCascadeAndStableProbeIndex(0, 0);
-    DecodeCascadeAndStableProbeIndex(encoded0, cascade, index);
+    const auto encoded0 = EncodeCascadeAndProbeIndex(0, 0);
+    DecodeCascadeAndProbeIndex(encoded0, cascade, index);
     CHECK_EQ(cascade, 0);
     CHECK_EQ(index, 0);
 
-    const auto encoded1 = EncodeCascadeAndStableProbeIndex(5, 1000);
-    DecodeCascadeAndStableProbeIndex(encoded1, cascade, index);
+    const auto encoded1 = EncodeCascadeAndProbeIndex(5, 1000);
+    DecodeCascadeAndProbeIndex(encoded1, cascade, index);
     CHECK_EQ(cascade, 5);
     CHECK_EQ(index, 1000);
 
-    const auto encoded2 = EncodeCascadeAndStableProbeIndex(0xF, 0x0FFF'FFFF);
-    DecodeCascadeAndStableProbeIndex(encoded2, cascade, index);
+    const auto encoded2 = EncodeCascadeAndProbeIndex(0xF, 0x0FFF'FFFF);
+    DecodeCascadeAndProbeIndex(encoded2, cascade, index);
     CHECK_EQ(cascade, 0xF);
     CHECK_EQ(index, 0x0FFF'FFFF);
   }

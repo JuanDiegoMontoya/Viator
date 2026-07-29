@@ -5,16 +5,20 @@ layout(local_size_x = DDGI_WORKGROUP_SIZE, local_size_y = 1) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
-  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
-  const int probeIndex = gid;
-  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, cascade, args);
+  const int probeIndexIndex = gid;
 
-  if (probeIndex >= numProbes)
+  if (probeIndexIndex >= args.probesToUpdate.size)
   {
     return;
   }
+
+  const uint encoded = args.probesToUpdate.values[probeIndexIndex].data;
+  int cascade;
+  int probeIndex;
+  DecodeCascadeAndProbeIndex(encoded, cascade, probeIndex);
+
+  const int stableProbeIndex = ProbeIndexToStableIndex(probeIndex, cascade, args);
 
   if (probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity == 0)
   {

@@ -13,15 +13,15 @@
 #define DDGI_NUM_CASCADES 6
 #define DDGI_WORKGROUP_SIZE 128
 
-FVOG_INLINE FVOG_UINT32 EncodeCascadeAndStableProbeIndex(FVOG_INT32 cascade, FVOG_INT32 stableProbeIndex)
+FVOG_INLINE FVOG_UINT32 EncodeCascadeAndProbeIndex(FVOG_INT32 cascade, FVOG_INT32 probeIndex)
 {
-  return ((FVOG_UINT32(cascade) & 0xF) << 28) | (FVOG_UINT32(stableProbeIndex) & 0x0FFFFFFF);
+  return ((FVOG_UINT32(cascade) & 0xF) << 28) | (FVOG_UINT32(probeIndex) & 0x0FFFFFFF);
 }
 
-FVOG_INLINE void DecodeCascadeAndStableProbeIndex(FVOG_UINT32 encoded, FVOG_OUT(FVOG_INT32) cascade, FVOG_OUT(FVOG_INT32) stableProbeIndex)
+FVOG_INLINE void DecodeCascadeAndProbeIndex(FVOG_UINT32 encoded, FVOG_OUT(FVOG_INT32) cascade, FVOG_OUT(FVOG_INT32) probeIndex)
 {
-  cascade          = int((encoded >> 28) & 0xF);
-  stableProbeIndex = int(encoded & 0x0FFFFFFF);
+  cascade    = int((encoded >> 28) & 0xF);
+  probeIndex = int(encoded & 0x0FFFFFFF);
 }
 
 // When enabled, probes will be blended in a gamma-2 space to make gradients appear perceptually 

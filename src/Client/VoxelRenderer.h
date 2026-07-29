@@ -568,6 +568,15 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float ddgiProbeUpdateBudget = {
+    "r.ddgi.probeUpdateBudget",
+    "- Number of DDGI probes to update each frame.",
+    1000,
+    100,
+    10000,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,

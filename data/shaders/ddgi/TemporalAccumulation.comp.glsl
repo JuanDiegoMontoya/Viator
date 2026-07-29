@@ -9,18 +9,20 @@ layout(local_size_x = DDGI_WORKGROUP_SIZE, local_size_y = 1) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
-  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
-  const int numTexels = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
-  const int probeIndex = gid / numTexels;
-  const int texelIndex = gid % numTexels;
+  const int numTexels       = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
+  const int probeIndexIndex = gid / numTexels;
 
-  if (probeIndex >= numProbes)
+  if (probeIndexIndex >= args.probesToUpdate.size)
   {
     return;
   }
 
+  const uint encoded = args.probesToUpdate.values[probeIndexIndex].data;
+  int cascade;
+  int probeIndex;
+  DecodeCascadeAndProbeIndex(encoded, cascade, probeIndex);
+  
   vx_Init(args.voxels);
 
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeRadianceResolution);
@@ -30,8 +32,7 @@ void main()
   const ProbeData probeData = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex];
   const float validity = probeData.validity;
   const float age = probeData.age;
-  //const float alpha = max(0.01, 1.0 / float(age));
-  const float alpha = args.minTemporalAlpha;
+  const float alpha = max(args.minTemporalAlpha, 1.0 / float(age));
 
   const ivec2 texelOffset = GetProbeTexelOffset(stableProbeIndex, imageSize(args.packedProbeRadiance).xy, args.probeRadianceResolution);
 

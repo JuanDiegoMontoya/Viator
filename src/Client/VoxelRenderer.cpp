@@ -1379,6 +1379,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
             .probeIrradianceResolution   = glm::ivec2((int)ddgiProbeIrradianceResolution.Get()),
             .probeDepthMomentsResolution = glm::ivec2((int)ddgiProbeDepthMomentsResolution.Get()),
             .gridResolution              = glm::ivec3((int)ddgiGridResolution.Get()), // TODO: FIXME: certain sizes (such as 12^3) have unexpected black probes.
+            .probeUpdateBudget           = (uint32_t)ddgiProbeUpdateBudget.Get(),
           },
         .position                = position,
         .voxels                  = voxels,

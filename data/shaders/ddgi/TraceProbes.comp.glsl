@@ -9,17 +9,19 @@ layout(local_size_x = DDGI_WORKGROUP_SIZE, local_size_y = 1) in;
 void main()
 {
   const int gid = int(gl_GlobalInvocationID.x);
-  const int cascade = int(gl_GlobalInvocationID.z);
 
-  const int numProbes = args.gridResolution.x * args.gridResolution.y * args.gridResolution.z;
-  const int numTexels = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
-  const int probeIndex = gid / numTexels;
-  const int texelIndex = gid % numTexels;
+  const int numTexels       = args.probeRadianceResolution.x * args.probeRadianceResolution.y;
+  const int probeIndexIndex = gid / numTexels;
 
-  if (probeIndex >= numProbes)
+  if (probeIndexIndex >= args.probesToUpdate.size)
   {
     return;
   }
+
+  const uint encoded = args.probesToUpdate.values[probeIndexIndex].data;
+  int cascade;
+  int probeIndex;
+  DecodeCascadeAndProbeIndex(encoded, cascade, probeIndex);
 
   vx_Init(args.voxels);
 
@@ -27,14 +29,13 @@ void main()
 
   const vec2 offset = Hammersley(uniforms.frameNumber % 16, 16) - 0.5;
   vec3 rayDir = ProbeTexelCoordToDirectionOffset(texelCoord, args.probeRadianceResolution, offset);
-  //vec3 rayDir = ProbeTexelCoordToDirection(texelCoord, args.gridInfo[cascade].probeRadianceResolution);
   rayDir = normalize(rayDir + vec3(1e-4, 0, 0)); // HACK: perfectly 45-degree ray directions are not liked by DDA.
   
   vec3 radiance = {0, 0, 0};
   float depth = 1234;
 
   const uint frameNumber = uniforms.frameNumber;
-  uint randState = PCG_Hash(gid + frameNumber);
+  uint randState = PCG_Hash(gid) ^ PCG_Hash(frameNumber);
   
   const vec3 rayPos = (ProbeIndexToCoord(probeIndex, args.gridResolution) + args.gridInfo[cascade].gridOffset) * args.gridInfo[cascade].baseGridScale + 0.5;
   HitSurfaceParameters hit;

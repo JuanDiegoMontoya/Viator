@@ -29,7 +29,8 @@ namespace Techniques
     glm::ivec2 probeRadianceResolution;
     glm::ivec2 probeIrradianceResolution;
     glm::ivec2 probeDepthMomentsResolution;
-    glm::ivec3 gridResolution; 
+    glm::ivec3 gridResolution;
+    uint32_t probeUpdateBudget;
   };
 
   struct DDGIUpdateParams
