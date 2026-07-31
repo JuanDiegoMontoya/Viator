@@ -22,8 +22,6 @@ void main()
   int cascade;
   int probeIndex;
   DecodeCascadeAndProbeIndex(encoded, cascade, probeIndex);
-  
-  vx_Init(args.voxels);
 
   const ivec2 texelCoord = GetWorkTexelCoord(gid, args.probeRadianceResolution);
   

@@ -7,6 +7,7 @@
 #include "Client/PipelineManager.h"
 #include "Client/Scheduler.h"
 #include "Game/Assets.h"
+#include "glm/gtx/component_wise.inl"
 
 #include "shaders/Config.shared.h"
 #include "shaders/ddgi/DebugProbesCommon.h.glsl"
@@ -161,7 +162,7 @@ namespace Techniques
               const auto offset =
                 1.0f + (params.position - glm::vec3(glm::vec3(args.gridResolution) * args.gridInfo[i].baseGridScale / 2.0f)) / args.gridInfo[i].baseGridScale;
               args.gridInfo[i].gridOffset         = glm::floor(offset);
-              args.gridInfo[i].gridOffsetFraction = glm::fract(offset);
+              args.gridInfo[i].gridOffsetFraction = offset - glm::floor(offset);
             }
             tempGridInfos[i] = args.gridInfo[i];
           }
@@ -380,19 +381,22 @@ namespace Techniques
 
       // Probe sizes are dilated to include a 1-texel border.
       const auto width1  = uint32_t((2 + gridSetup.probeRadianceResolution.x) * std::ceil(std::sqrt(float(numProbes))));
-      const auto height1 = uint32_t((2 + gridSetup.probeRadianceResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeRadianceResolution.x) / width1));
+      const auto height1 = uint32_t((2 + gridSetup.probeRadianceResolution.x) * std::ceil(float(numProbes) * (2 + gridSetup.probeRadianceResolution.x) / float(width1)));
+      ASSERT(int(width1 * height1) / glm::compMul(gridSetup.probeRadianceResolution + 2) >= numProbes);
       packedProbeRadiance = Fvog::CreateTexture2DArray({width1, height1}, cascades, radianceFormat, usage, "DDGI Probe Radiance");
       packedProbeRadianceRaw = Fvog::CreateTexture2DArray({width1, height1}, cascades, radianceFormat, usage, "DDGI Probe Raw Radiance");
       packedProbeFastRadianceLuminance = Fvog::CreateTexture2DArray({width1, height1}, cascades, Fvog::Format::R32_SFLOAT, usage, "DDGI Probe Fast Radiance Luminance");
       packedProbeDepth = Fvog::CreateTexture2DArray({width1, height1}, cascades, Fvog::Format::R32_SFLOAT, usage, "DDGI Probe Depth");
 
       const auto width2  = uint32_t((2 + gridSetup.probeIrradianceResolution.x) * std::ceil(std::sqrt(float(numProbes))));
-      const auto height2 = uint32_t((2 + gridSetup.probeIrradianceResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeIrradianceResolution.x) / width2));
+      const auto height2 = uint32_t((2 + gridSetup.probeIrradianceResolution.x) * std::ceil(float(numProbes) * (2 + gridSetup.probeIrradianceResolution.x) / float(width2)));
+      ASSERT(int(width2 * height2) / glm::compMul(gridSetup.probeIrradianceResolution + 2) >= numProbes);
       packedProbeIrradiance = Fvog::CreateTexture2DArray({width2, height2}, cascades, radianceFormat, usage, "DDGI Probe Irradiance");
       packedProbeIrradianceRaw = Fvog::CreateTexture2DArray({width2, height2}, cascades, radianceFormat, usage, "DDGI Probe Raw Irradiance");
 
       const auto width3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes))));
-      const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(numProbes * (2 + gridSetup.probeDepthMomentsResolution.x) / width2));
+      const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(float(numProbes) * (2 + gridSetup.probeDepthMomentsResolution.x) / float(width2)));
+      ASSERT(int(width3 * height3) / glm::compMul(gridSetup.probeDepthMomentsResolution + 2) >= numProbes);
       packedProbeDepthMoments = Fvog::CreateTexture2DArray({width3, height3}, cascades, Fvog::Format::R32G32_SFLOAT, usage, "DDGI Probe Depth Moments");
 
       wholeProbesIndirectCommand.emplace(Fvog::TypedBufferCreateInfo{.count = 1, .flag = Fvog::BufferFlagThingy::NO_DESCRIPTOR});

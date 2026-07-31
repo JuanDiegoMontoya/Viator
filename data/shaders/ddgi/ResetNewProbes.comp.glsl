@@ -39,5 +39,4 @@ void main()
   {
     probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].validity = 1.0;
   }
-
 }

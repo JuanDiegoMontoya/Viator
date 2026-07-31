@@ -6,7 +6,7 @@ layout(location = 2) flat in int v_cascade;
 
 layout(location = 0) out vec4 o_sceneColor; // Luminance/"radiance"
 
-// If true, black is drawn everywhere except when very close to a texel.
+// If true, black is drawn everywhere except when very close to a sample.
 const bool gShrinkTexels = false;
 const float gShrunkTexelSize = 0.2;
 const bool gUseNearestNeighbor = true;
@@ -14,16 +14,17 @@ const bool gUseNearestNeighbor = true;
 void main()
 {
   const int stableProbeIndex = ProbeIndexToStableIndex(v_probeIndex, v_cascade, args.ddgi);
+  const ProbeData probeData = probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex];
   if (args.debugMode == 5) // Validity
   {
-    o_sceneColor.rgb = vec3(100 * probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].validity);
+    o_sceneColor.rgb = vec3(100 * probeData.validity);
     o_sceneColor.a = 1;
     return;
   }
 
   if (args.debugMode == 6)
   {
-    o_sceneColor.rgb = probeInfosBuffers(args.ddgi.gridInfo[v_cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
+    o_sceneColor.rgb = probeData.averageLuminance;
     return;
   }
   ivec3 swizzle = {0, 1, 2};
@@ -67,7 +68,7 @@ void main()
   vec3 sampled;
   if (gUseNearestNeighbor)
   {
-    sampled = texelFetch(tex, ivec3(texelPos, v_cascade), 0).rgb * scale;
+    sampled = textureLod(tex, gNearestClampSampler, vec3(uvOffset + uv, v_cascade), 0).rgb * scale;
   }
   else
   {
@@ -82,5 +83,10 @@ void main()
   else
   {
     o_sceneColor = vec4(0, 0, 0, 1);
+  }
+
+  if (probeData.validity == 0)
+  {
+    o_sceneColor = vec4(100, 0, 0, 1);
   }
 }
