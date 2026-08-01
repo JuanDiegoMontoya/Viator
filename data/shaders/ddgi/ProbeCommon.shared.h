@@ -32,6 +32,8 @@ FVOG_INLINE void DecodeCascadeAndProbeIndex(FVOG_UINT32 encoded, FVOG_OUT(FVOG_I
 struct ProbeData
 {
   FVOG_VEC3 averageLuminance;
+  FVOG_VEC3 fastAverageLuminance;
+  FVOG_VEC3 fastAverageLuminance2;
   FVOG_FLOAT validity;
   FVOG_INT32 age;
   FVOG_INT32 queryCount; // Number of times this probe was queried this frame.
@@ -357,6 +359,11 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     sumWeightsNoShadow += weightNoShadow;
   }
 
+  if (sumWeights < 1e-4 || sumWeightsNoShadow < 1e-4)
+  {
+    return vec3(0);
+  }
+
   irradiance_internal /= sumWeights;
   irradiance_internalNoShadow /= sumWeightsNoShadow;
 
@@ -484,6 +491,11 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
 #endif
     sumWeights += weight;
     sumWeightsNoShadow += weightNoShadow;
+  }
+
+  if (sumWeights < 1e-4 || sumWeightsNoShadow < 1e-4)
+  {
+    return vec3(0);
   }
 
   irradiance_internal /= sumWeights;

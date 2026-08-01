@@ -45,8 +45,26 @@ void main()
 
   const float pdf = uniform_sphere_PDF();
   averageLuminance = averageLuminance / AVG_SAMPLES;
-  const vec3 oldAverageLuminance = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
+  
   const float age = float(probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].age);
+
+  const float fastAlpha = max(0.2, 1.0 / age);
+  const vec3 oldFastAvgLum = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].fastAverageLuminance;
+  const vec3 oldFastAvgLum2 = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].fastAverageLuminance2;
+  const vec3 newFastAvgLum = mix(oldFastAvgLum, averageLuminance, fastAlpha);
+  const vec3 newFastAvgLum2 = mix(oldFastAvgLum2, averageLuminance * averageLuminance, fastAlpha);
+  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].fastAverageLuminance = newFastAvgLum;
+  probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].fastAverageLuminance2 = newFastAvgLum2;
+  
+  const vec3 mu     = newFastAvgLum;
+  const vec3 sigma  = sqrt(abs(newFastAvgLum2 - mu * mu));
+  const float gamma  = 1;
+  const vec3 minLum = mu - gamma * sigma;
+  const vec3 maxLum = mu + gamma * sigma;
+
+  vec3 oldAverageLuminance = probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance;
+  oldAverageLuminance = clamp(oldAverageLuminance, minLum, maxLum);
+
   const float alpha = max(0.05, 1.0 / age);
   const vec3 newAverageLuminance = mix(oldAverageLuminance, averageLuminance, alpha);
   probeInfosBuffers(args.gridInfo[cascade].probeInfosIndex).data[stableProbeIndex].averageLuminance = any(isnan(newAverageLuminance)) ? vec3(0) : newAverageLuminance;

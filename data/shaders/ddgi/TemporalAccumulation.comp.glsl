@@ -47,12 +47,10 @@ void main()
     N++;
   }
   const float mu     = m1 / N;
-  const float sigma  = sqrt(m2 / N - mu * mu);
+  const float sigma  = sqrt(abs(m2 / N - mu * mu));
   const float gamma  = args.varianceClipGamma; // Higher gamma = larger bounding box (stable result, but more ghosting/less responsiveness).
   const float minLum = mu - gamma * sigma;
   const float maxLum = mu + gamma * sigma;
-
-  const vec3 radianceRaw = imageLoad(args.packedProbeRadianceRaw, ivec3(texelOffset + texelCoord, cascade)).rgb;
 
   const vec3 oldRadiance_sRGB  = imageLoad(args.packedProbeRadiance, ivec3(texelOffset + texelCoord, cascade)).rgb;
   const float luminanceOld     = Luminance(oldRadiance_sRGB);
@@ -63,6 +61,7 @@ void main()
     oldRadiance = oldRadiance / luminanceOld * clampedLuminance;
   }
 
+  const vec3 radianceRaw = imageLoad(args.packedProbeRadianceRaw, ivec3(texelOffset + texelCoord, cascade)).rgb;
   const vec3 newRadiance = mix(oldRadiance, radianceRaw, alpha);
   WriteToProbeWithBorder(args.packedProbeRadiance, cascade, stableProbeIndex, args.probeRadianceResolution, texelCoord, vec4(newRadiance, 0));
 }
