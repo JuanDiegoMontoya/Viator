@@ -395,7 +395,7 @@ namespace Techniques
       packedProbeIrradianceRaw = Fvog::CreateTexture2DArray({width2, height2}, cascades, radianceFormat, usage, "DDGI Probe Raw Irradiance");
 
       const auto width3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(std::sqrt(float(numProbes))));
-      const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(float(numProbes) * (2 + gridSetup.probeDepthMomentsResolution.x) / float(width2)));
+      const auto height3 = uint32_t((2 + gridSetup.probeDepthMomentsResolution.x) * std::ceil(float(numProbes) * (2 + gridSetup.probeDepthMomentsResolution.x) / float(width3)));
       ASSERT(int(width3 * height3) / glm::compMul(gridSetup.probeDepthMomentsResolution + 2) >= numProbes);
       packedProbeDepthMoments = Fvog::CreateTexture2DArray({width3, height3}, cascades, Fvog::Format::R32G32_SFLOAT, usage, "DDGI Probe Depth Moments");
 

@@ -289,6 +289,7 @@ vec3 SampleIlluminanceFieldRaw(vec3 positionWS, vec3 normalWS, Sampler linearSam
     // Sample probe illuminance and depth moments.
     const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridResolution);
     const int probeIndex = ProbeIndexToStableIndex(probeIndexA, cascade, ddgi);
+    ++probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].queryCount;
 
     const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.probeIrradianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
@@ -422,6 +423,7 @@ vec3 SampleAverageLuminanceRaw(vec3 positionWS, Sampler linearSampler, DDGIArgs 
     // Sample probe illuminance and depth moments.
     const int probeIndexA = ProbeCoordToIndex(ivec3(probePos), ddgi.gridResolution);
     const int probeIndex = ProbeIndexToStableIndex(probeIndexA, cascade, ddgi);
+    ++probeInfosBuffers(ddgi.gridInfo[cascade].probeInfosIndex).data[probeIndex].queryCount;
 
     const ivec2 texelOffset = GetProbeTexelOffset(probeIndex, imageSize(ddgi.packedProbeIrradiance).xy, ddgi.probeIrradianceResolution);
     const vec2 uvOffset = vec2(texelOffset) / imageSize(ddgi.packedProbeIrradiance).xy;
