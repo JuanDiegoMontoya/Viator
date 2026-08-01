@@ -568,7 +568,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
             if (ImGui::Selectable(items[i], i == presentMode))
             {
               head_->shouldRemakeSwapchainNextFrame = true;
-              head_->activePresentMode                    = static_cast<VkPresentModeKHR>(i);
+              head_->activePresentMode              = static_cast<VkPresentModeKHR>(i);
               sGameSettingsModified                 = true;
             }
             ImGui::EndDisabled();
@@ -616,23 +616,22 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 
         ImGui::Text("Global Illumination Method");
         ImGui::Separator();
-        if (ImGui::RadioButton("None", giMethod_ == GIMethod::None))
+
+        constexpr auto giItems = std::array{"None", "Path Tracing", "DDGI", "Hybrid"};
+        const auto giMode = static_cast<int>(giMethod_);
+        if (ImGui::BeginCombo("Global Illumination Method", giItems[giMode]))
         {
-          sGameSettingsModified = true;
-          giMethod_             = GIMethod::None;
+          for (int i = 0; i < 4; i++)
+          {
+            if (ImGui::Selectable(giItems[i], i == giMode))
+            {
+              giMethod_             = static_cast<GIMethod>(i);
+              sGameSettingsModified = true;
+            }
+          }
+          ImGui::EndCombo();
         }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Path Tracing", giMethod_ == GIMethod::PerPixelPathTracing))
-        {
-          sGameSettingsModified = true;
-          giMethod_             = GIMethod::PerPixelPathTracing;
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("DDGI", giMethod_ == GIMethod::DDGI))
-        {
-          sGameSettingsModified = true;
-          giMethod_             = GIMethod::DDGI;
-        }
+
         ImGui::BeginDisabled(giMethod_ != GIMethod::PerPixelPathTracing);
         sGameSettingsModified |= ImGui::SliderInt("PT Samples", &pathTracerSamples, 1, 32);
         sGameSettingsModified |= ImGui::SliderInt("PT Bounces", &pathTracerBounces, 0, 8);
@@ -640,7 +639,7 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
 
         sGameSettingsModified |= ImGui::Checkbox("Bloom", &enableBloom);
 
-        ImGui::BeginDisabled(giMethod_ != GIMethod::DDGI);
+        ImGui::BeginDisabled(giMethod_ != GIMethod::DDGI && giMethod_ != GIMethod::Hybrid);
         sGameSettingsModified |= ImGui::Checkbox("Ambient Occlusion", &enableAo_);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered())

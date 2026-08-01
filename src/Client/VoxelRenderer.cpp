@@ -1368,7 +1368,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   }
 
   // DDGI- good candidate for async compute or overlapped work.
-  if (giMethod_ == GIMethod::DDGI && !ddgiDebugPauseUpdates_)
+  if ((giMethod_ == GIMethod::DDGI || giMethod_ == GIMethod::Hybrid) && !ddgiDebugPauseUpdates_)
   {
     ddgi_->Update(*scheduler,
       commandBuffer,
@@ -1397,7 +1397,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       });
     scheduler->AddPass("IndirectLighting", {"DDGI"}, nullptr);
   }
-  else if (giMethod_ == GIMethod::DDGI)
+  else if (giMethod_ == GIMethod::DDGI || giMethod_ == GIMethod::Hybrid)
   {
     scheduler->AddPass("IndirectLighting", nullptr);
   }
@@ -1626,7 +1626,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     });
 
   Fvog::Texture* aoTexture = &whiteTexture_.value();
-  if (giMethod_ == GIMethod::DDGI && enableAo_)
+  if ((giMethod_ == GIMethod::DDGI || giMethod_ == GIMethod::Hybrid) && enableAo_)
   {
     aoParams_.voxels          = voxels;
     aoParams_.inputDepth      = &frame.gDepth.value();

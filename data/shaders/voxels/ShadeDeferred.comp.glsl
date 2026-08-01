@@ -39,6 +39,43 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   else if (giMethod == 2)
   {
     irradianceIS = albedoIS * SampleIlluminanceField(positionWS, normalWS, samplerr, ddgi);
+    //return SampleIlluminanceField(positionWS, normalWS, samplerr, ddgi);
+  }
+  else if (giMethod == 3)
+  {
+    uint noiseOffsetState = 12345;
+    const uint SAMPLES = 1;
+    vec3 illum = vec3(0);
+    for (uint i = 0; i < SAMPLES; i++)
+    {
+      const vec2 perSampleNoise = Hammersley(i, SAMPLES);
+      ivec2 noiseOffset;
+      noiseOffset.x = int(PCG_RandU32(noiseOffsetState));
+      noiseOffset.y = int(PCG_RandU32(noiseOffsetState));
+      const vec2 noiseTextureSample = texelFetch(uniforms.blueNoise, (gid + noiseOffset) % textureSize(uniforms.blueNoise, 0), 0).xy;
+      const vec2 xi        = fract(perSampleNoise + noiseTextureSample);
+      const vec3 curRayDir = normalize(map_to_unit_hemisphere_cosine_weighted(xi, normalWS));
+      const float cos_theta = clamp(dot(normalWS, curRayDir), 0, 1);
+      if (cos_theta <= 0) // Terminate path
+      {
+        break;
+      }
+      const float pdf = cosine_weighted_hemisphere_PDF(cos_theta);
+      const vec3 brdf_over_pdf = albedoIS / M_PI / pdf; // Lambertian
+      const vec3 throughput = throughput_t(cos_theta * brdf_over_pdf);
+
+      HitSurfaceParameters hit;
+      if (vx_TraceRayMultiLevel(positionWS + normalWS * 1e-3, curRayDir, 128, hit))
+      {
+        illum += throughput * GetHitEmission(hit);
+        illum += throughput * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, samplerr, ddgi);
+      }
+      else
+      {
+        illum += throughput * hit.transmission * Sky_GetScatteringAlongRay(uniforms.sky, curRayDir, positionWS);
+      }
+    }
+    irradianceIS = illum / float(SAMPLES);
   }
 
   if (applyAo)

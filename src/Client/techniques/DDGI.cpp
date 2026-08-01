@@ -288,16 +288,6 @@ namespace Techniques
           ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
-      scheduler.AddPass("DdgiConvolveIrradiance",
-        {"DdgiTemporalAccumulation"},
-        [=, this]
-        {
-          auto ctx = Fvog::Context(cmd);
-          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
-          ctx.BindComputePipeline(convolveIrradiancePipeline.GetPipeline());
-          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
-        });
-
       scheduler.AddPass("DdgiComputeAverageRadiance",
         {"DdgiTemporalAccumulation"},
         [=, this]
@@ -306,6 +296,16 @@ namespace Techniques
           ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
           ctx.BindComputePipeline(computeAverageRadiancePipeline.GetPipeline());
           ctx.DispatchIndirect(wholeProbesIndirectCommand.value());
+        });
+
+      scheduler.AddPass("DdgiConvolveIrradiance",
+        {"DdgiTemporalAccumulation"},
+        [=, this]
+        {
+          auto ctx = Fvog::Context(cmd);
+          ctx.SetPushConstants(argsBuffer->GetDeviceBuffer().GetDeviceAddress());
+          ctx.BindComputePipeline(convolveIrradiancePipeline.GetPipeline());
+          ctx.DispatchIndirect(probeTexelsIndirectCommand.value());
         });
 
       scheduler.AddPass("DdgiDownsampleDepth",

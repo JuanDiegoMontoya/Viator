@@ -248,6 +248,7 @@ private:
     None,
     PerPixelPathTracing,
     DDGI,
+    Hybrid,
   };
 
   GIMethod giMethod_ = GIMethod::DDGI;
