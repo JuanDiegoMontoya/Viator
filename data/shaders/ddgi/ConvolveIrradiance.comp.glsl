@@ -32,7 +32,7 @@ void main()
 
   vec3 irradiance = vec3(0);
 
-  uint rng = PCG_Hash(gid);
+  uint rng = PCG_Hash(stableProbeIndex);
 
   // Sample probe
   vec3 tempAccum = vec3(0);
