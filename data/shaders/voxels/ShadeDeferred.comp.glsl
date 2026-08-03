@@ -128,7 +128,8 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
     for (uint i = 0; i < lightCount; i++)
     {
       const uint lightIndex = uniforms.cascadedLightGrid.grids[cascade].lightIndices.values[lightOffset + i].data;
-      const float visibility = GetPunctualLightVisibility(positionWS + normalWS * 1e-3, lightIndex);
+      vec3 transmission;
+      const float visibility = GetPunctualLightVisibility2(positionWS + normalWS * 1e-3, lightIndex, transmission);
       
       const GpuLight light = uniforms.lights[lightIndex].data;
 
@@ -137,7 +138,7 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
       surface.normal = normalWS;
       surface.position = positionWS;
 
-      localLightIS += visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR);
+      localLightIS += visibility * transmission * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR);
     }
     //return 100 * (lightCount + 1) * TurboColormap(float(cellPosAndCascade.w) / uniforms.cascadedLightGrid.numCascades);
   }

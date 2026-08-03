@@ -56,7 +56,6 @@ void main()
 #else
       radiance += albedo * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, args.linearSampler, args);
 #endif
-      radiance *= hit.transmission;
 
       // Sun
       const float NoL = max(0, dot(hit.flatNormalWorld, uniforms.sky.config.sunDir));
@@ -92,16 +91,19 @@ void main()
         const float lightPdf = 1.0 / g_voxels.numLights;
         GpuLight light = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex];
 
-        const float visibility = GetPunctualLightVisibility(hit.positionWorld + hit.flatNormalWorld * 1e-3, lightIndex);
+        vec3 transmission;
+        const float visibility = GetPunctualLightVisibility2(hit.positionWorld + hit.flatNormalWorld * 1e-3, lightIndex, transmission);
         if (visibility > 0)
         {
           Surface surface;
           surface.albedo = albedo;
           surface.normal = hit.flatNormalWorld;
           surface.position = hit.positionWorld;
-          radiance += visibility * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
+          radiance += visibility * transmission * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
         }
       }
+
+      radiance *= hit.transmission;
     }
     else
     {

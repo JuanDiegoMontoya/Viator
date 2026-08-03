@@ -1399,6 +1399,32 @@ float GetPunctualLightVisibility(vec3 surfacePos, uint lightIndex)
   return 1.0;
 }
 
+float GetPunctualLightVisibility2(vec3 surfacePos, uint lightIndex, out vec3 transmission)
+{
+  const GpuLight light  = lightsBuffers[g_voxels.lightBufferIdx].lights[lightIndex];
+  const float lightDist2 = distance2(surfacePos, light.position);
+
+  if (lightDist2 <= 1e-2)
+  {
+    transmission = vec3(1);
+    return 1.0;
+  }
+
+  const float lightDist = sqrt(lightDist2);
+
+  const float surfaceToLightDist = length(light.position - surfacePos);
+  const vec3 surfaceToLight = (light.position - surfacePos) / surfaceToLightDist;
+  HitSurfaceParameters hit = HitSurfaceParameters_init();
+  // TODO: More accurate tMax calculation. If lightDist is used, check for inf/nan and clamp to a relatively small number.
+  if (vx_TraceRayMultiLevel(surfacePos, surfaceToLight, surfaceToLightDist, hit))
+  {
+    transmission = hit.transmission;
+    return distance(hit.positionWorld, light.position) < 1e-3 ? 1.0 : 0.0;
+  }
+  transmission = hit.transmission;
+  return 1.0;
+}
+
 vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint samples, uint bounces, Texture2D noiseTexture)
 {
   #define illum_t min16vec3
