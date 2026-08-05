@@ -271,7 +271,7 @@ public:
   {
     ZoneScoped;
     auto cloudNoise = FastNoise::NewFromEncodedNodeTree(
-      "JQAK@BBRUFFwUOBQsAAIDSQgRI4erACI/C9b7//wMNBQY@ADiQQT2KFw/CNejEED///8DFgMXBQUDFwUE@BgD//AwAAw/UoP///CxcF/wYAAwQIAACAP////wIK1yM8/waPwvU9////");
+      "JQAK@BCRUJFgIXCQUCBADD9Sg/BBIEEMP1KD8MAwrXIzwEC4/C9T0EAhcJFwkNCQ4JCwAAgNJCEHE92sAYzczMvhQDAACAPwQCFwkNCQY@ADiQRD2KFw/GIXrEUAMAylcD74c");
     constexpr auto regionSize = glm::ivec3(75, 32, 75);
     const auto& blocks        = *world.globals->blockRegistry;
     const auto& grid          = *world.globals->grid;

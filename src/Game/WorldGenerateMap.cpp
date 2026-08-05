@@ -166,13 +166,10 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
   {
     ZoneScopedN("Surface");
 
-    auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgUL@BIEEEAACAPwg@CDAM@AD/AwY@BgQQTNzEy+C@AoED//w==");
+    auto stoneInDirtA = FastNoise::NewFromEncodedNodeTree("GgkL@BIEEQAACAPxg@CIAM@BEAgY@BgQR@AKBADA==");
     auto stoneInDirt  = FastNoise::New<FastNoise::DomainScale>();
     stoneInDirt->SetSource(stoneInDirtA);
     stoneInDirt->SetScaling(1.0f / sampleScale);
-
-    auto copperOre = FastNoise::NewFromEncodedNodeTree("FgLNzIw/BxUFBg@AFRBCK5HoT//Aws@BIQQgzM7M/D@CD///8=");
-    auto leadOre = FastNoise::NewFromEncodedNodeTree("FgIAAIA/BxUFBg@BhBCK5HoT//AxAFCw@AFxBCJqZmT8M@CP8CAACAQf///w==");
 
 #ifndef GAME_HEADLESS
     total->store((int32_t)grid->numTopLevelBricks_);
@@ -243,7 +240,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
     const auto blur1 = globalSurfaceHeightImage.Convolve(kernelXGauss2);
     const auto blur2 = blur1.Convolve(kernelYGauss2);
 
-    FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
+    FastNoise::SmartNode<> riverWeight = FastNoise::NewFromEncodedNodeTree("GQkGAADAFUMM");
 
     const auto riverMask0 = WorldGen::GenerateAndUpscale2D(riverWeight, glm::ivec2(0, 0), mapGenInfo.seed + 123456, grid->Dimensions().x, grid->Dimensions().z, Core::DSP::Filter::Nearest);
 
@@ -715,6 +712,7 @@ void World::GenerateMap(const MapGenInfo& mapGenInfo)
 
   if (mapGenInfo.spawnYggdrasil)
   {
+    ASSERT(false, "Noise needs to be updated!");
     ZoneScopedN("Big Tree");
     auto bigTreeNoise = FastNoise::NewFromEncodedNodeTree(
       "FgMVBRoFGwUVBRcFBQMs@EFBgAAgAVDB@AoMAIAACgQP//BwQEAACAP/8LLAAC@BBSUF/wAA////AygJAABvEgM8/wAApptEPP8DLAAC@BBSw@EUlAAI@BFBgQ@C/////wY@C//8CAACAv/8CAACAv/8CAACAP/8DFwUbBQQEzcxMvQYAACDC//8DFgMbBQQEzczMvP8DFQUXBRsFGgUVBQQEj8L1PP8DJQAD@BBSwFBg@APZBB@DI@BP/////8CAACAP///AxUFGQU@CgL///wIK1yM8//8DFQUXBQUHBAQAAIA///8CbxKDOv8D/xsA////Bw8FE@BMZCBQY@ADJQv8CmpnKQv//////BxYCAACAPwcaBRsFHAUdBRUFE@AgDBDBSUABg@BUGAACAg0L//wMXBRUFFwUFBnuUFkP/AlJJnTn/AvYokkL/AmZmpkD//wP/LgD/AgrXo7z/AgAAgD//AgrXo7z/AgAAgD////8=");

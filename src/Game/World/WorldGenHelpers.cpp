@@ -13,7 +13,7 @@ namespace WorldGen
     {
       ZoneScopedN("GenUniformGrid2D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid2D(rawImage.Data(), start.x, start.y, sideCount, sideCount, seed);
+      node->GenUniformGrid2D(rawImage.Data(), (float)start.x, (float)start.y, sideCount, sideCount, 1.0f, 1.0f, seed);
     }
 
     if (inSideLength == outSideLength)
@@ -50,7 +50,7 @@ namespace WorldGen
     {
       ZoneScopedN("GenUniformGrid3D");
       const int sideCount = (inSideLength == outSideLength) ? inSideLength : inSideLength + 1;
-      node->GenUniformGrid3D(rawImage.Data(), start.x, start.y, start.z, sideCount, sideCount, sideCount, seed);
+      node->GenUniformGrid3D(rawImage.Data(), (float)start.x, (float)start.y, (float)start.z, sideCount, sideCount, sideCount, 1.0f, 1.0f, 1.0f, seed);
     }
 
     if (inSideLength == outSideLength)

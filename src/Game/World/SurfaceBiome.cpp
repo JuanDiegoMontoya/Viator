@@ -170,9 +170,9 @@ public:
 
 private:
   FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree(
-    "FQUXBRgDFgMdBRYDDQUlAEM@BFBg@AG9CBM3MTD////8HHwMiBQsAAIDfQgQ@CC@AwD8YB@CcI@BsEEEj8J1Pv//AgBAGMMGAADsQv8GXI/CP///AwAAw/VoP///B/8IAP8HFgIAAIA/B/8IAP//Ag@AED/AxwFDQAE@BBQY@BWQ///Aw8AB@CUXBQg@ABIQ/8C@BwP////8=");
+    "FQkXCRgCFgIdCRYCFwkNCQc@ABvQghD@BEM3MTD8MAw@AD8ECh8CIgkL@B60IQ@CBgAAMA/OAQ@BKC@BLBBEI/CdT4MAwBAGMMLAADsQgQLXI/CPwwCAACkcH0/BAuamZk+BAr/CAAEChYDAACAPwr/CAAMAw@AEAEAhwJFwkNAAQ@BJBg@ABZDDAM@B/BAIXCQ8AB@CkXCQg@ABIQwQD@BwAwD@BPxQ=");
   FastNoise::SmartNode<> meadowNoise = FastNoise::NewFromEncodedNodeTree(
-    "GgUbBRwFHQUXBRgDFgMdBRYCAACAPwcfAwsAAIDHQgQ@CGAQ@BHC@BKJBBB+F6z7//wbsUTg///8DAACamVk///8H/wQA/wcWAgAAgD8H/wQA//8CrkchQP//AgAAgD8GXI/CPv//AgAAgD//");
+    "GgkbCRwJHQkXCRgCFgIdCRYDAACAPwofAgsAAIDHQh@DOAQ@BKC@BKJBEB+F6z4MC+xROD8MAgAAmplZPwwK/wQABAoWAwAAgD8K/wQADAOuRyFADAMAAIA/C1yPwj4MAwAAgD8E");
 
   // Used to determine where meadows are. These are flatter areas with fewer trees.
   Core::DSP::Image<2, float> globalMeadowImage;
@@ -251,7 +251,7 @@ public:
 
 private:
   FastNoise::SmartNode<> terrainHeight2D =
-    FastNoise::NewFromEncodedNodeTree("FQUdBQ0FBgAAgKJCBK5HYT7//wMPAAI@BFJ@BMA/BSUAog@BUGAADAB0ME@Bvwg@B//////wbNzMw+/wMlAOz///8FC@AQB1DBJqZGb8ImpkZP////w==");
+    FastNoise::NewFromEncodedNodeTree("FQkdCRcJDQkGDAM@B/BAIXCQ8JJ@BMA/CQYAAMAHQwii@BE@BL8Y@BPxQD@BPwQLzczMPgQCCAjs////DA==");
 };
 
 class SnowBiomeNoise final : public SurfaceBiomeNoise
@@ -291,7 +291,7 @@ public:
   }
 
 private:
-  FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("DQUlAEM@BFBg@AG9CBM3MTD////8=");
+  FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("FwkNCQY@ABvQghD@BEM3MTD8MAw@AD8E");
 };
 
 class SurfaceCorruptionNoise final : public SurfaceBiomeNoise
@@ -329,7 +329,7 @@ public:
   void PlaceSurfaceFeatures([[maybe_unused]] World& world, [[maybe_unused]] const MapGenInfo& mapGenInfo, [[maybe_unused]] glm::ivec3 posWS) override {}
 
 private:
-  FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("DQUQBQY@BWQwQ@AC/C@BD//AykFJQCO////BQYAAIB6Q///DgAAyEL///8=");
+  FastNoise::SmartNode<> terrainHeight2D = FastNoise::NewFromEncodedNodeTree("FwkNCRAJBh@BC/G@BD8EAikJBg@AHpDCI7///8EGwAAyEIUAw@AD8E");
   FastNoise::SmartNode<FastNoise::Multiply> multiply;
   FastNoise::SmartNode<FastNoise::Constant> scale;
 };
@@ -408,9 +408,8 @@ public:
   }
 
 private:
-  FastNoise::SmartNode<> terrainHeight =
-    FastNoise::NewFromEncodedNodeTree("FgMXBRkFBgAAwBVD//8CAACgQP8GAACgQf8="); // Note: should be same shape as biomeWeight, but scaled and translated.
-  FastNoise::SmartNode<> biomeWeight = FastNoise::NewFromEncodedNodeTree("GQUGAADAFUP//w==");
+  // Note: should be same shape as biomeWeight (not in this file), but scaled and translated.
+  FastNoise::SmartNode<> terrainHeight = FastNoise::NewFromEncodedNodeTree("FgIXCRkJBgAAwBVDDAMAAKBABAsAAKBBBA==");
 };
 
 std::array<std::unique_ptr<SurfaceBiomeNoise>, int(SurfaceBiome::COUNT)> GetSurfaceBiomeNoises(const World& world)

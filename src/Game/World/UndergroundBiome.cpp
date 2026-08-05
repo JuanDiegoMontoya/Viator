@@ -37,7 +37,7 @@ public:
   }
 
 private:
-  FastNoise::SmartNode<> surfaceCavesA                      = FastNoise::NewFromEncodedNodeTree("HAUNBQY@ABSQgg@B///8DDwUXBQgAAIDIQv8C@BwP///w==");
+  FastNoise::SmartNode<> surfaceCavesA                      = FastNoise::NewFromEncodedNodeTree("HAkXCQ0JBg@AFJCG@BD8MAw@AD8EAhcJDwkXCQgAAIDIQgQD@BwAwD@BPww=");
   FastNoise::SmartNode<FastNoise::DomainScale> surfaceCaves = FastNoise::New<FastNoise::DomainScale>();
 };
 
@@ -64,7 +64,7 @@ public:
   }
 
 private:
-  FastNoise::SmartNode<> noise = FastNoise::NewFromEncodedNodeTree("Bg@AEhC/w==");
+  FastNoise::SmartNode<> noise = FastNoise::NewFromEncodedNodeTree("Bg@AEhCBA==");
 };
 
 class FunkyCaves final : public UndergroundBiomeNoise
@@ -160,9 +160,9 @@ public:
 
 private:
   FastNoise::SmartNode<> densityGenerator = FastNoise::NewFromEncodedNodeTree(
-    "FAAC@BB@A4EAFEg@BRCBRwFIwUlBQs@ADIQwTNzMw9C@AIMAMAw@ABAC@BFAM@BYAg@BcJ@BI0IEH4XrPgiF61E//////wP/AQAG7FE4Pv8C@AgQf8CmpmZPgbNzEw//w==");
+    "FAAC@BC@A4EAJEg@BRCCRwJIwklCQs@ADIQxDNzMw9G@AIMAgAw@ACgC@BMAM@B4Ag@BoJ@BI0IQH4XrPhiF61E/HAL/AQAEAwAAIEEEA5qZmT4LzcxMPwQ=");
   FastNoise::SmartNode<> shaftGenerator = FastNoise::NewFromEncodedNodeTree(
-    "GgUdBRUFDQUG@Bv0IEj8J1vQiPwnU9//8DFQUdBRcFGQUEBArXIzz//wIAAIC//wIAAIC//wIK16M9//8DHAUEBG8Sgzr/AycFHAUdBR@BCWQgUsBRQAAg@BQAAOBABRI@BFQgUcBSMFJQUL@BR0MEzczMPQgAACDADAM@BQAg@ABQD@BGAI@BHCQ@ADBCBFK4Hj8Ij8J1P/////8D/woABuxROD7/AgAAIEH/ApqZmT4GzcxMP///ApqZiUD/AgAAgL//AgAAgD//////AyQFE@AgMBCBSUABQ@BUXBQ@BCAv/8D/xQA//8CMzNLQv///w==");
+    "GgkdCRUJFwkNCQY@AC/QhCPwnW9GI/CdT0MAw@AD8EAhUJHQkXCRkJBAgK1yM8DAMAAIC/BAMAAIC/BAMK16M9DAIcCQQIbxKDOgQCJwkcCR0JE@BJZCCSwJFAAC@BC@A4EAJEg@BVCCRwJIwklCQs@ABHQxDNzMw9G@AIMAgAw@ACgC@BMAM@B4Ag@BoJ@BMEIQUrgePxiPwnU/HAL/CwAL7FE4PgQD@AgQQQDmpmZPgvNzEw/DAOamYlABAMAAIC/BAMAAIA/HAIkCR@AIDAQgklAAU@BJFwn/FQADAACAvwwDMzNLQhQ=");
   FastNoise::SmartNode<FastNoise::DomainOffset> shaftOffset = FastNoise::New<FastNoise::DomainOffset>();
   FastNoise::SmartNode<FastNoise::Max> combiner             = FastNoise::New<FastNoise::Max>();
 };
