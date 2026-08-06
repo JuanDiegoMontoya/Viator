@@ -550,6 +550,18 @@ bool VoxelRenderer::ShowSettingsWindow([[maybe_unused]] World& world)
   {
     if (ImGui::BeginTabBar("SettingsTabBar"))
     {
+      if (ImGui::BeginTabItem("Gameplay"))
+      {
+        float fov          = (float)glm::degrees(cameraFovyRadians.Get());
+        const bool changed = ImGui::SliderFloat("Field of view", &fov, 50.0f, 110.0f, "%.0f degrees");
+        if (changed)
+        {
+          cameraFovyRadians.Set(glm::radians(fov));
+        }
+
+        ImGui::EndTabItem();
+      }
+
       if (ImGui::BeginTabItem("Graphics"))
       {
         constexpr auto items    = std::array{"Immediate", "Mailbox", "FIFO", "FIFO Relaxed"};
