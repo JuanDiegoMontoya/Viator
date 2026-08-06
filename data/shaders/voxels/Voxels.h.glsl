@@ -514,7 +514,7 @@ bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, 
       return true;
     }
 
-    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
+    bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
 
     cases.x = conds.x && conds.y;
     cases.y = (!cases.x) && conds.z && conds.w;
@@ -616,7 +616,7 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
       }
     }
 
-    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
+    bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
 
     cases.x = conds.x && conds.y;
     cases.y = (!cases.x) && conds.z && conds.w;
@@ -711,7 +711,7 @@ bool vx_TraceRayBottomLevelBricks(vec3 rayPosLocal, vec3 rayDirection, TopLevelB
       }
     }
 
-    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
+    bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
 
     cases.x = conds.x && conds.y;
     cases.y = (!cases.x) && conds.z && conds.w;
@@ -826,7 +826,7 @@ bool vx_TraceRayMultiLevel(vec3 rayPosGlobal, vec3 rayDirection, float tMax, out
     }
 #endif
 
-    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
+    bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
 
     cases.x = conds.x && conds.y;
     cases.y = (!cases.x) && conds.z && conds.w;
@@ -972,7 +972,7 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
     }
 
     // Decide which way to go!
-    bvec4 conds = lessThan(sideDist.xxyy, sideDist.yzzx);
+    bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
 
     // This mimics the if, elseif and else clauses
     // * is 'and', 1.-x is negation
