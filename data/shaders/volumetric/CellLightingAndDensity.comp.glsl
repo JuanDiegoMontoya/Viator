@@ -136,7 +136,7 @@ void main()
 
   bool view_ray_intersects_ground = bottom_atmosphere_intersection_distance >= 0.0;
 #if 0 // Ray traced shadow
-  vec3 sunVisibility = TraceSunRay(wPos, globalUniforms.sky.sunDir);
+  vec3 sunVisibility = TraceSunRay(wPos, globalUniforms.sky.config.sunDir);
 #else
   float sunVisibility = SampleCascadedShadowMap(wPos, globalUniforms.sunShadowMap);
 #endif

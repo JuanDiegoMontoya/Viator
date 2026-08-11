@@ -65,7 +65,7 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
       const vec3 throughput = throughput_t(cos_theta * brdf_over_pdf);
 
       HitSurfaceParameters hit;
-      if (vx_TraceRayMultiLevel(positionWS + normalWS * 1e-3, curRayDir, 128, hit))
+      if (vx_TraceRayMultiLevel(positionWS + normalWS * 1e-3, curRayDir, 256, hit))
       {
         illum += throughput * GetHitEmission(hit);
         illum += throughput * SampleIlluminanceField(hit.positionWorld, hit.flatNormalWorld, samplerr, ddgi);
