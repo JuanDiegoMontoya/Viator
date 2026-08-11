@@ -26,6 +26,7 @@
 #include "shaders/voxels/ShadeDeferred.shared.h"
 #include "shaders/debug/DebugCommon.h.glsl"
 #include "Game/CVar.h"
+#include "Gui/ItemIconCache.h"
 
 #ifdef FROGRENDER_FSR2_ENABLE
   #include "src/ffx-fsr2-api/ffx_fsr2.h"
@@ -595,6 +596,9 @@ private:
 
   std::unique_ptr<Techniques::Particles> particles_;
   std::unique_ptr<Techniques::LightGrid> lightGrid_;
+
+  PipelineManager::ComputePipelineKey drawSingleVoxelPipeline_;
+  std::unique_ptr<Gui::ItemIconCache> iconCache_;
 
   std::string uiLayoutPath;
 };

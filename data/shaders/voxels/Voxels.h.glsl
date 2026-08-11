@@ -10,10 +10,10 @@ struct Voxels
   FVOG_IVEC3 dimensions;
   FVOG_UINT32 bufferIdx;
   FVOG_UINT32 materialBufferIdx;
-  FVOG_SHARED Sampler voxelSampler;
   FVOG_UINT32 numLights;
   FVOG_UINT32 lightBufferIdx;
   FVOG_UINT32 globalUniformsIndex;
+  FVOG_FLOAT time; // Automatically filled when vx_Init is called.
 };
 
 FVOG_DECLARE_BUFFER_REFERENCE_3(VoxelsPtr, 4)
@@ -389,7 +389,7 @@ uint vx_GetSubGridIndex(GpuVoxelMaterial material, ivec3 voxelPosition)
   {
     const float offset = Simplex_Noise(vec3(voxelPosition) / 10);
     const GpuAnimatedSubGrid info = ANIMATED_SUBGRID_INFOS[material.subGridOrAnimatedSubGridInfoIndex];
-    const uint frameIndex = uint((offset + v_globalUniforms.time) / info.frameDuration) % info.numFrames;
+    const uint frameIndex = uint((offset + g_voxels.time) / info.frameDuration) % info.numFrames;
     return info.subGridIndices[frameIndex];
   }
 
@@ -1328,7 +1328,7 @@ vec3 GetHitAlbedo(HitSurfaceParameters hit)
   vec3 albedo = face.baseColorFactor;
   if (bool(face.materialFlags & FACE_HAS_BASE_COLOR_TEXTURE))
   {
-    albedo *= textureLod(face.baseColorTexture, g_voxels.voxelSampler, hit.texCoords, 0).rgb;
+    albedo *= textureLod(face.baseColorTexture, gNearestClampSampler, hit.texCoords, 0).rgb;
   }
   return albedo;
   // return vec3(hsv_to_rgb(vec3(MM_Hash3(ivec3(hit.voxelPosition) % 3), 0.55, 0.8)));
@@ -1352,7 +1352,7 @@ vec3 GetHitEmission(HitSurfaceParameters hit)
   vec3 emission         = face.emissionFactor;
   if (bool(face.materialFlags & FACE_HAS_EMISSION_TEXTURE))
   {
-    const vec4 texEmission = textureLod(face.emissionTexture, g_voxels.voxelSampler, hit.texCoords, 0);
+    const vec4 texEmission = textureLod(face.emissionTexture, gNearestClampSampler, hit.texCoords, 0);
     emission *= texEmission.rgb * texEmission.a;
   }
   return emission;
@@ -1580,6 +1580,7 @@ vec3 TraceIndirectLighting(ivec2 gid, vec3 rayPosition, vec3 normal, uint sample
 void vx_Init(Voxels voxels)
 {
   g_voxels = voxels;
+  g_voxels.time = v_globalUniforms.time;
 }
 
 #endif // __cplusplus

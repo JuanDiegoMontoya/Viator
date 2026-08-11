@@ -415,7 +415,12 @@ namespace Gui
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{});
     const auto open = ImGui::TreeNodeEx((std::string("###") + label).c_str(), flags);
     ImGui::SameLine();
-    ImGui::Image(ImTextureSampler(texture.ImageView().GetSampledResourceHandle().index, sampler ? sampler->GetResourceHandle().index : 0), {16, 16});
+    ImGui::Image(
+      ImTextureSampler{
+        .textureIndex = texture.ImageView().GetSampledResourceHandle().index,
+        .samplerIndex = uint8_t(sampler ? sampler->GetResourceHandle().index : 0),
+      },
+      {16, 16});
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ImGui::Text(" %s", label);

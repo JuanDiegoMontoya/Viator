@@ -224,6 +224,27 @@ bool AABBIntersect(vec3 ro, vec3 rd, vec3 minV, vec3 maxV)
   return t0 <= t1;
 }
 
+// Returns t and hit normal.
+bool RayAABBIntersect2(vec3 bRadius, vec3 bCenterPos, vec3 ro, vec3 rd, out float t, out vec3 normal)
+{
+  ro = ro - bCenterPos;
+
+  vec3 sgn = -sign(rd);
+  // Distance to plane
+  vec3 d = bRadius * sgn - ro;
+  d *= 1.0 / rd;
+
+  #define TEST(U, VW) (d.U >= 0.0) && \
+    all(lessThan(abs(ro.VW + rd.VW * d.U), bRadius.VW))
+  bvec3 test = bvec3(TEST(x, yz), TEST(y, zx), TEST(z, xy));
+  sgn = test.x ? vec3(sgn.x, 0, 0) : (test.y ? vec3(0, sgn.y, 0) : vec3(0, 0, test.z ? sgn.z : 0));
+  #undef TEST
+
+  normal = sgn;
+  t = (sgn.x != 0) ? d.x : ((sgn.y != 0) ? d.y : d.z);
+  return (sgn.x != 0) || (sgn.y != 0) || (sgn.z != 0);
+}
+
 // Returns a point within the AABB that is closest to the given point.
 // If the point is inside the AABB, returns that point.
 vec3 ClosestPointOnAABB(vec3 point, vec3 aabbMin, vec3 aabbMax)

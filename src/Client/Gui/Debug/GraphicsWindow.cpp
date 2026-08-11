@@ -21,6 +21,11 @@ void VoxelRenderer::ShowGraphicsWindow(World& world)
       }
     }
 
+    if (ImGui::Button("Clear Icon Cache"))
+    {
+      iconCache_->Clear();
+    }
+
     ImGui::Checkbox("Clear GPU Primitives", &debugClearGpuPrimtives);
 
     if (ImGui::BeginTabBar("Options"))
@@ -112,18 +117,20 @@ void VoxelRenderer::ShowGraphicsWindow(World& world)
         {
           static float scale0 = 1;
           ImGui::SliderFloat("Transmittance##0", &scale0, 0, 1);
-          auto textureSampler = ImTextureSampler(sky_->GetTransmittanceLut().ImageView().GetSampledResourceHandle().index);
-          textureSampler.SetAlphaIsOne(true);
+          auto textureSampler = ImTextureSampler{
+            .textureIndex = sky_->GetTransmittanceLut().ImageView().GetSampledResourceHandle().index,
+            .flags        = ImTextureSamplerFlags::ALPHA_IS_ONE,
+          };
           ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale0, scale0, scale0, 1});
 
           static float scale1 = 1;
           ImGui::SliderFloat("Multiscattering##1", &scale1, 0, 1);
-          textureSampler.SetTextureIndex(sky_->GetMultiscatteringLut().ImageView().GetSampledResourceHandle().index);
+          textureSampler.textureIndex = sky_->GetMultiscatteringLut().ImageView().GetSampledResourceHandle().index;
           ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale1, scale1, scale1, 1});
 
           static float scale2 = 1;
           ImGui::SliderFloat("SkyView##2", &scale2, 0, 1);
-          textureSampler.SetTextureIndex(sky_->GetSkyViewLut().ImageView().GetSampledResourceHandle().index);
+          textureSampler.textureIndex = sky_->GetSkyViewLut().ImageView().GetSampledResourceHandle().index;
           ImGui::Image(textureSampler, {100, 100}, {0, 0}, {1, 1}, {scale2, scale2, scale2, 1});
         }
 

@@ -465,6 +465,15 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
       },
   });
 
+  drawSingleVoxelPipeline_ = GetPipelineManager().EnqueueCompileComputePipeline({
+    .name = "Draw Single Voxel",
+    .shaderModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::COMPUTE_SHADER,
+        .path  = GetShaderDirectory() / "voxels/DrawSingleVoxel.comp.glsl",
+      },
+  });
+
   noiseTexture = LoadImageFile(GetTextureDirectory() / "bluenoise256.png", false);
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
   backgroundTexture = LoadImageFile(GetTextureDirectory() / "background.png", false);
@@ -518,6 +527,7 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   });
 
   lightGrid_ = Techniques::LightGrid::Create();
+  iconCache_ = Gui::ItemIconCache::Create();
 
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
@@ -672,11 +682,12 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
   voxelMaterialBuffer = Fvog::Buffer({.size = voxelMaterials.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer");
   voxelMaterialBufferSpelunker = Fvog::Buffer({.size = voxelMaterialsSpelunker.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer Ex");
-  Fvog::GetDevice().ImmediateSubmit([&](VkCommandBuffer cmd)
-  {
-    voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials));
-    voxelMaterialBufferSpelunker->UpdateDataExpensive(cmd, std::span(voxelMaterialsSpelunker));
-  });
+  Fvog::GetDevice().ImmediateSubmit(
+    [&](VkCommandBuffer cmd)
+    {
+      voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials));
+      voxelMaterialBufferSpelunker->UpdateDataExpensive(cmd, std::span(voxelMaterialsSpelunker));
+    });
 
   needsHeightmapInit = true;
 }
@@ -861,6 +872,14 @@ void VoxelRenderer::OnRender(DeltaTime dt, World& world, VkCommandBuffer command
 
 void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer commandBuffer)
 {
+  iconCache_->SetRenderContext({
+    .cmd                     = commandBuffer,
+    .drawSingleVoxelPipeline = &drawSingleVoxelPipeline_.GetPipeline(),
+    .drawItemPipeline        = nullptr,
+    .voxelMaterialBuffer     = &voxelMaterialBuffer.value(),
+    .time                    = world.globals->game->time,
+  });
+
   auto scheduler = Scheduler::Create();
   auto ctx = Fvog::Context(commandBuffer);
 
@@ -1063,7 +1082,6 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .dimensions                 = grid.Dimensions(),
       .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
       .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
-      .voxelSampler               = voxelSampler,
       .numLights                  = 0,
       .lightBufferIdx             = 0,
       .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
@@ -1305,7 +1323,6 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     .dimensions                 = grid.Dimensions(),
     .bufferIdx                  = grid.Buffer().GetGpuBuffer().GetResourceHandle().index,
     .materialBufferIdx          = voxelMaterialBuffer->GetResourceHandle().index,
-    .voxelSampler               = voxelSampler,
     .numLights                  = (uint32_t)lights.size(),
     .lightBufferIdx             = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetResourceHandle().index,
     .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,

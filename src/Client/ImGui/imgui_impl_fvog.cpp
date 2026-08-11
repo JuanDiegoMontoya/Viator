@@ -171,8 +171,8 @@ struct ImGui_ImplFvog_Data
 {
   ImGui_ImplFvog_InitInfo VulkanInitInfo;
   VkDeviceSize BufferMemoryAlignment;
-  VkPipelineCreateFlags PipelineCreateFlags;
   PipelineManager::GraphicsPipelineKey Pipeline; // pipeline for main render pass (created by app)
+  PipelineManager::GraphicsPipelineKey Pipeline2; // pipeline for premultiplied alpha textures only
   VkPipeline PipelineForViewports; // pipeline for secondary viewports (created by backend)
   VkSurfaceFormatKHR lastSurfaceFormat;// = {.format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 
@@ -210,6 +210,7 @@ struct ImGuiPushConstants
   float translation[2]{};
   uint32_t alphaIsOne{};
 };
+static_assert(sizeof(ImGuiPushConstants) <= 128);
 
 bool ImGui_ImplFvog_LoadFunctions(PFN_vkVoidFunction (*loader_func)(const char* function_name, void* user_data), void* user_data)
 {
@@ -450,24 +451,35 @@ void ImGui_ImplFvog_RenderDrawData(ImDrawData* draw_data, VkCommandBuffer comman
 
         // Bind DescriptorSet with font or user texture
         //vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, bd->PipelineLayout, 0, 1, desc_set, 0, nullptr);
-        auto textureSampler = ImTextureSampler(pcmd->TextureId);
+        auto textureSampler = ImTextureSampler::Create(pcmd->TextureId);
         pushConstants.textureIndex = static_cast<uint32_t>(pcmd->TextureId);
-        if (textureSampler.IsSamplerDefault())
+        if (textureSampler.samplerIndex == ImTextureSampler::DefaultSamplerIndex)
         {
           pushConstants.samplerIndex = bd->FontSampler->GetResourceHandle().index;
         }
         else
         {
-          pushConstants.samplerIndex = textureSampler.GetSamplerIndex();
+          pushConstants.samplerIndex = textureSampler.samplerIndex;
         }
 
-        pushConstants.textureColorSpace = textureSampler.GetColorSpace();
-        pushConstants.alphaIsOne        = textureSampler.GetAlphaIsOne();
+        pushConstants.textureColorSpace  = textureSampler.colorSpace;
+        pushConstants.alphaIsOne         = textureSampler.flags & ImTextureSamplerFlags::ALPHA_IS_ONE;
 
         vkCmdPushConstants(command_buffer, Fvog::GetDevice().defaultPipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(pushConstants), &pushConstants);
 
+        const auto usePremultipliedAlphaPipeline = bool(textureSampler.flags & ImTextureSamplerFlags::PREMULTIPLIED_ALPHA);
+        if (usePremultipliedAlphaPipeline)
+        {
+          vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, bd->Pipeline2.GetPipeline().Handle());
+        }
+
         // Draw
         vkCmdDrawIndexed(command_buffer, pcmd->ElemCount, 1, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0);
+
+        if (usePremultipliedAlphaPipeline)
+        {
+          vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, bd->Pipeline.GetPipeline().Handle());
+        }
       }
     }
     global_idx_offset += cmd_list->IdxBuffer.Size;
@@ -524,7 +536,7 @@ void ImGui_ImplFvog_DestroyFontsTexture()
   }
 }
 
-[[nodiscard]] static PipelineManager::GraphicsPipelineKey ImGui_ImplFvog_CreatePipeline(VkSampleCountFlagBits MSAASamples)
+[[nodiscard]] static PipelineManager::GraphicsPipelineKey ImGui_ImplFvog_CreatePipeline(VkSampleCountFlagBits MSAASamples, VkBlendFactor srcBlendFactor)
 {
   ImGui_ImplFvog_Data* bd = ImGui_ImplFvog_GetBackendData();
 
@@ -550,7 +562,7 @@ void ImGui_ImplFvog_DestroyFontsTexture()
             .attachments = {{
               Fvog::ColorBlendAttachmentState{
                 .blendEnable         = true,
-                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .srcColorBlendFactor = srcBlendFactor,
                 .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 .colorBlendOp        = VK_BLEND_OP_ADD,
                 .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
@@ -571,7 +583,8 @@ IMGUI_IMPL_API void ImGui_ImplFvog_RecreatePipeline()
   ImGui_ImplFvog_InitInfo* v = &bd->VulkanInitInfo;
 
   // TODO: Leaks pipeline!
-  bd->Pipeline = ImGui_ImplFvog_CreatePipeline(v->MSAASamples);
+  bd->Pipeline  = ImGui_ImplFvog_CreatePipeline(v->MSAASamples, VK_BLEND_FACTOR_SRC_ALPHA);
+  bd->Pipeline2 = ImGui_ImplFvog_CreatePipeline(v->MSAASamples, VK_BLEND_FACTOR_ONE);
 }
 
 static bool ImGui_ImplFvog_CreateDeviceObjects()

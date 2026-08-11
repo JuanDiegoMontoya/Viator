@@ -8,9 +8,11 @@
 #include "Game/Globals.h"
 #include "Game/Scripting.h"
 #include "Client/GuiHelpers.h"
+#include "Client/Gui/ItemIconCache.h"
+#include "Client/ImGui/imgui_impl_fvog.h"
+#include "Game/TraderNpcDialogue.h"
 
 #include "imgui.h"
-#include "Game/TraderNpcDialogue.h"
 #include "rapidfuzz/fuzz.hpp"
 
 namespace
@@ -157,7 +159,7 @@ namespace
 
   // `minified`: Display just the first row of the inventory. Used to display the player's hotbar.
   // `userTransform`: Transform of the entity interacting with the container. Used to calculate throw position and direction.
-  Rect DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, bool minified = false)
+  Rect DrawInventory(World& world, entt::entity parent, entt::entity user, Inventory& inventory, Gui::ItemIconCache& iconCache, bool minified = false)
   {
     Rect rect{};
 
@@ -192,30 +194,48 @@ namespace
               ImGui::Selectable(std::to_string(slot.count).c_str(), false, ImGuiSelectableFlags_AllowOverlap, {50, 50});
               ImGui::PopStyleVar();
               ImGui::EndDisabled();
-              // nameStr += "\n" + std::to_string(slot.count);// + "/" + std::to_string(def.GetMaxStackSize());
             }
           }
           const auto name = nameStr.c_str();
 
+          const bool isSelected = inventory.canHaveActiveItem && inventory.activeSlotCoord == currentSlotCoord;
+          bool pressed = false;
+
           ImGui::SetCursorPos(cursorPos);
-          if (ImGui::Selectable(("##" + nameStr).c_str(), inventory.canHaveActiveItem && inventory.activeSlotCoord == currentSlotCoord, 0, {50, 50}))
+          pressed |= ImGui::Selectable(("##" + nameStr).c_str(), isSelected, 0, {50, 50});
+
+          Fvog::Texture* texture = nullptr;
+
+          if (slot.id != entt::null)
           {
-            Networking::CallRPC("SetActiveSlotRPC"_hs, world, parent, currentSlotCoord);
+            texture = iconCache.GetOrEmplaceIcon(world, {.item = slot.id, .extent = {128, 128}, .samples = 8});
           }
-          if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-          {
-            DrawTooltipForItem(world, parent, slot);
-          }
-          if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+
+          if (slot.id != entt::null && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
           {
             const auto dragDropPayload = InventoryDragDropPayload{
               .sourceRowCol = currentSlotCoord,
               .sourceEntity = parent,
             };
             ImGui::SetDragDropPayload("INVENTORY_SLOT", &dragDropPayload, sizeof(dragDropPayload));
-            ImGui::Text("%s", name);
+            if (texture)
+            {
+              ImGui::Image(
+                ImTextureSampler{
+                  .textureIndex = texture->ImageView().GetTexture2D().texIdx,
+                  .flags        = ImTextureSamplerFlags::PREMULTIPLIED_ALPHA,
+                },
+                ImVec2{50, 50},
+                {0, 1},
+                {1, 0});
+            }
+            else
+            {
+              ImGui::Text("%s", name);
+            }
             ImGui::EndDragDropSource();
           }
+
           if (ImGui::BeginDragDropTarget())
           {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("INVENTORY_SLOT"))
@@ -224,6 +244,7 @@ namespace
               const auto inventoryPayload = *static_cast<const InventoryDragDropPayload*>(payload->Data);
               Networking::CallRPC("SwapInventorySlotsRPC"_hs, world, inventoryPayload.sourceEntity, inventoryPayload.sourceRowCol, parent, currentSlotCoord);
             }
+
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ARMOR_SLOT"))
             {
               DEBUG_ASSERT(payload->DataSize == sizeof(ArmorDragDropPayload));
@@ -232,8 +253,34 @@ namespace
             }
             ImGui::EndDragDropTarget();
           }
-          ImGui::SetCursorPos(cursorPos);
-          ImGui::TextWrapped("%s", name);
+
+          if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+          {
+            DrawTooltipForItem(world, parent, slot);
+          }
+
+          if (texture)
+          {
+            const auto tint = isSelected ? ImVec4(1, 1, 1, 1) : ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+            ImGui::SetCursorPos(cursorPos);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            ImGui::Image(
+              ImTextureSampler{
+                .textureIndex = texture->ImageView().GetTexture2D().texIdx,
+                .flags        = ImTextureSamplerFlags::PREMULTIPLIED_ALPHA,
+              },
+              ImVec2{50, 50},
+              {0, 1},
+              {1, 0},
+              tint,
+              ImVec4(0, 0, 0, 0));
+            ImGui::PopStyleVar();
+          }
+
+          if (pressed)
+          {
+            Networking::CallRPC("SetActiveSlotRPC"_hs, world, parent, currentSlotCoord);
+          }
           ImGui::PopID();
         }
         ImGui::PopID();
@@ -645,7 +692,7 @@ void VoxelRenderer::ShowGameGui(World& world)
   }
   ImGui::End();
 
-  const auto rect = DrawInventory(world, playerEntity, playerEntity, inventory, !p.inventoryIsOpen);
+  const auto rect = DrawInventory(world, playerEntity, playerEntity, inventory, *iconCache_, !p.inventoryIsOpen);
 
   // Draw effects
   {
@@ -680,7 +727,7 @@ void VoxelRenderer::ShowGameGui(World& world)
     if (auto* ip = world.GetRegistry().try_get<Inventory>(p.openContainerId))
     {
       p.inventoryIsOpen = true;
-      DrawInventory(world, p.openContainerId, playerEntity, *ip);
+      DrawInventory(world, p.openContainerId, playerEntity, *ip, *iconCache_);
     }
     if (auto* ap = world.GetRegistry().try_get<ArmorAndAccessories>(p.openContainerId))
     {
