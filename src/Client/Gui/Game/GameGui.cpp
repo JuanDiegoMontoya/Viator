@@ -208,7 +208,7 @@ namespace
 
           if (slot.id != entt::null)
           {
-            texture = iconCache.GetOrEmplaceIcon(world, {.item = slot.id, .extent = {128, 128}, .samples = 8});
+            texture = iconCache.GetOrEmplaceIcon(world, {.item = slot.id});
           }
 
           if (slot.id != entt::null && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))

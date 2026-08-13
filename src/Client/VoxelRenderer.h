@@ -579,6 +579,24 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float iconResolution = {
+    "r.icon.resolution",
+    "- Resolution of item icons.",
+    128,
+    1,
+    512,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float iconSamples = {
+    "r.icon.samples",
+    "- Number of samples taken when rendering item icons.",
+    8,
+    1,
+    16,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,

@@ -36,18 +36,18 @@ namespace Gui
 
       Fvog::Texture* GetOrEmplaceIcon(World& world, const ItemIconParams& iconParams) override
       {
-        const auto key = CacheKey{.iconParams = iconParams, .time = 0};
+        const auto key = CacheKey{.iconParams = iconParams, .time = 0, .extent = render_.extent, .samples = render_.samples};
         auto it = iconCache_.find(key);
         if (it == iconCache_.end())
         {
           const auto name = Item::GetName(world, iconParams.item);
-          spdlog::debug("Rendering icon for item {}. Resolution: ({}, {}). Samples: {}", name, iconParams.extent.width, iconParams.extent.height, iconParams.samples);
+          spdlog::debug("Rendering icon for item {}. Resolution: ({}, {}). Samples: {}", name, render_.extent.width, render_.extent.height, render_.samples);
 
-          auto tex = Fvog::CreateTexture2D({iconParams.extent.width, iconParams.extent.height}, Fvog::Format::R8G8B8A8_UNORM, Fvog::TextureUsage::GENERAL, name);
+          auto tex = Fvog::CreateTexture2D({render_.extent.width, render_.extent.height}, Fvog::Format::R8G8B8A8_UNORM, Fvog::TextureUsage::GENERAL, name);
           auto res = iconCache_.try_emplace(key, std::make_shared<Fvog::Texture>(std::move(tex)));
           ASSERT(res.second);
           it = res.first;
-          if (!RenderIcon(world, iconParams.item, iconParams.samples, *it->second))
+          if (!RenderIcon(world, iconParams.item, render_.samples, *it->second))
           {
             it->second = iconCache_.at(errorKey);
           }
@@ -61,7 +61,7 @@ namespace Gui
             const auto& blockReg = world.globals->blockRegistry->GetRegistry();
             if (blockReg.all_of<Block::Component::RenderAsAnimatedSubGrid>(entt::entity(bp->voxel)))
             {
-              if (!RenderIcon(world, iconParams.item, iconParams.samples, *it->second))
+              if (!RenderIcon(world, iconParams.item, render_.samples, *it->second))
               {
                 it->second = iconCache_.at(errorKey);
               }
@@ -169,13 +169,15 @@ namespace Gui
 
         ItemIconParams iconParams;
         double time{}; // For animated items and blocks.
+        Fvog::Extent2D extent;
+        uint32_t samples;
       };
 
       struct CacheKeyHash
       {
         std::size_t operator()(const CacheKey& k) const noexcept
         {
-          auto hashed = std::make_tuple(k.iconParams.item, k.iconParams.extent.width, k.iconParams.extent.height, k.iconParams.samples, k.time);
+          auto hashed = std::make_tuple(k.iconParams.item, k.extent.width, k.extent.height, k.samples, k.time);
           return Fvog::detail::hashing::hash<decltype(hashed)>{}(hashed);
         }
       };

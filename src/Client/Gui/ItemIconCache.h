@@ -22,17 +22,17 @@ namespace Gui
     bool operator==(const ItemIconParams&) const = default;
 
     ItemId item;
-    Fvog::Extent2D extent;
-    uint32_t samples;
   };
 
   struct ItemIconRenderContext
   {
     VkCommandBuffer cmd;
     const Fvog::ComputePipeline* drawSingleVoxelPipeline;
-    const Fvog::ComputePipeline* drawItemPipeline;
+    const Fvog::ComputePipeline* drawMeshPipeline;
     Fvog::Buffer* voxelMaterialBuffer;
     double time;
+    Fvog::Extent2D extent;
+    uint32_t samples;
   };
 
   class ItemIconCache

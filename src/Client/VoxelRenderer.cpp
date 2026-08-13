@@ -875,9 +875,11 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   iconCache_->SetRenderContext({
     .cmd                     = commandBuffer,
     .drawSingleVoxelPipeline = &drawSingleVoxelPipeline_.GetPipeline(),
-    .drawItemPipeline        = nullptr,
+    .drawMeshPipeline        = nullptr,
     .voxelMaterialBuffer     = &voxelMaterialBuffer.value(),
     .time                    = world.globals->game->time,
+    .extent                  = {static_cast<uint32_t>(iconResolution.Get()), static_cast<uint32_t>(iconResolution.Get())},
+    .samples                 = static_cast<uint32_t>(iconSamples.Get()),
   });
 
   auto scheduler = Scheduler::Create();
