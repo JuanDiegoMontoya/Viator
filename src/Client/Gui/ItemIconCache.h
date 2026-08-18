@@ -6,10 +6,16 @@
 
 #include <memory>
 
+// TODO: remove when real mesh cache is added.
+#include "Client/GpuMesh.h"
+#include <unordered_map>
+#include <string>
+
 namespace Fvog
 {
   class Buffer;
   class ComputePipeline;
+  class GraphicsPipeline;
   class Texture;
 }
 
@@ -27,9 +33,11 @@ namespace Gui
   struct ItemIconRenderContext
   {
     VkCommandBuffer cmd;
-    const Fvog::ComputePipeline* drawSingleVoxelPipeline;
-    const Fvog::ComputePipeline* drawMeshPipeline;
-    Fvog::Buffer* voxelMaterialBuffer;
+    const Fvog::ComputePipeline* drawSingleVoxelPipeline{};
+    const Fvog::GraphicsPipeline* drawMeshPipeline{};
+    std::unordered_map<std::string, GpuMesh>* meshes{};
+    std::unordered_map<std::string, Fvog::Texture>* textures{};
+    Fvog::Buffer* voxelMaterialBuffer{};
     double time;
     Fvog::Extent2D extent;
     uint32_t samples;

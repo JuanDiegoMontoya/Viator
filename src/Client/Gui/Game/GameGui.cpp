@@ -692,6 +692,21 @@ void VoxelRenderer::ShowGameGui(World& world)
   }
   ImGui::End();
 
+  // Ensure that textures for inventory items exist before attempting to draw the inventory.
+  for (const auto& row : inventory.slots)
+  {
+    for (const auto& slot : row)
+    {
+      if (slot.id != entt::null)
+      {
+        if (const auto* mp = world.globals->itemRegistry->GetRegistry().try_get<const Item::Component::MaterializeAsSprite>(slot.id))
+        {
+          GetOrEmplaceCachedTexture(mp->tag, true);
+        }
+      }
+    }
+  }
+
   const auto rect = DrawInventory(world, playerEntity, playerEntity, inventory, *iconCache_, !p.inventoryIsOpen);
 
   // Draw effects

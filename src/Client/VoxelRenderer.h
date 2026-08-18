@@ -616,6 +616,7 @@ private:
   std::unique_ptr<Techniques::LightGrid> lightGrid_;
 
   PipelineManager::ComputePipelineKey drawSingleVoxelPipeline_;
+  PipelineManager::GraphicsPipelineKey drawMeshIconPipeline_;
   std::unique_ptr<Gui::ItemIconCache> iconCache_;
 
   std::string uiLayoutPath;

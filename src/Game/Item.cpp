@@ -785,6 +785,7 @@ ItemId Item::CreateSpear(Registry& registry, std::string tag, std::string name, 
   registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = std::move(model), .tint = tint, .position = {0.2f, -0.2f, -0.5f}};
   registry.GetRegistry().emplace<Component::ColliderWhenDropped>(id);
   registry.GetRegistry().emplace<Component::SpawnTempHurtboxOnUse>(id) = {.position = {0, 0, -1}, .damage = damage, .knockback = knockback, .duration = timeBetweenUses};
+  registry.GetRegistry().emplace<Component::IconModifiers>(id);
   auto& path = registry.GetRegistry().emplace<Component::AnimatePathOnUse>(id);
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, -1}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_OUT_BACK});
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, 0}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_SINE});

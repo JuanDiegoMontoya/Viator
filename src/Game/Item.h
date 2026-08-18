@@ -196,6 +196,16 @@ namespace Item
 
     struct AbsorbFogOnUse {};
     struct EmitFogOnUse {};
+
+    struct IconModifiers
+    {
+      glm::vec3 deltaCameraPosition{};
+      float deltaBound{};
+      glm::vec3 deltaLookAtPosition{};
+      float deltaPitch{};
+      float deltaYaw{};
+      float deltaRoll{};
+    };
   } // namespace Component
 
   class Registry

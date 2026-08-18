@@ -1592,6 +1592,15 @@ void Core::Reflection::Initialize(Scripting& scripting)
     MEMBER(springDamping);
   END_REFLECT
 
+  BEGIN_REFLECT_COMPONENT(Item::Component::IconModifiers, ITEM_COMPONENT | REPLICATED)
+    MEMBER(deltaCameraPosition);
+    MEMBER(deltaBound, PROP_MIN(-0.5f), PROP_MAX(0.5f));
+    MEMBER(deltaLookAtPosition);
+    MEMBER(deltaPitch, PROP_MIN(-3.14f), PROP_MAX(3.14f));
+    MEMBER(deltaYaw, PROP_MIN(-3.14f), PROP_MAX(3.14f));
+    MEMBER(deltaRoll, PROP_MIN(-3.14f), PROP_MAX(3.14f));
+  END_REFLECT
+
   REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
   REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
 

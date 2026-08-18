@@ -35,6 +35,7 @@
 #include "tracy/Tracy.hpp"
 #include "tracy/TracyVulkan.hpp"
 #include "stb_image.h"
+#include "Game/Commands.h"
 #include "spdlog/spdlog.h"
 
 #include <format>
@@ -290,6 +291,30 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
         .renderTargetFormats =
           {
             .colorAttachmentFormats = gBufferFormats,
+            .depthAttachmentFormat  = Frame::sceneDepthFormat,
+          },
+      },
+  });
+
+  drawMeshIconPipeline_ = GetPipelineManager().EnqueueCompileGraphicsPipeline({
+    .name = "Color mesh icon pipeline",
+    .vertexModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::VERTEX_SHADER,
+        .path  = GetShaderDirectory() / "mesh/MeshColorIcon.vert.glsl",
+      },
+    .fragmentModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::FRAGMENT_SHADER,
+        .path  = GetShaderDirectory() / "mesh/MeshColorIcon.frag.glsl",
+      },
+    .state =
+      {
+        .rasterizationState = {.cullMode = VK_CULL_MODE_BACK_BIT},
+        .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = VK_COMPARE_OP_LESS}, // Draw with ortho camera
+        .renderTargetFormats =
+          {
+            .colorAttachmentFormats = {Fvog::Format::R8G8B8A8_UNORM},
             .depthAttachmentFormat  = Frame::sceneDepthFormat,
           },
       },
@@ -690,6 +715,12 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
     });
 
   needsHeightmapInit = true;
+
+  world.globals->commandRegistry->RegisterCommand({
+    .name        = "r.icon.clear",
+    .description = "Clears the icon cache.",
+    .function    = [this](std::string_view) { iconCache_->Clear(); },
+  });
 }
 
 void VoxelRenderer::OnFramebufferResize(uint32_t newWidth, uint32_t newHeight)
@@ -875,7 +906,9 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
   iconCache_->SetRenderContext({
     .cmd                     = commandBuffer,
     .drawSingleVoxelPipeline = &drawSingleVoxelPipeline_.GetPipeline(),
-    .drawMeshPipeline        = nullptr,
+    .drawMeshPipeline        = &drawMeshIconPipeline_.GetPipeline(),
+    .meshes                  = &g_meshes,
+    .textures                = &stringToTexture,
     .voxelMaterialBuffer     = &voxelMaterialBuffer.value(),
     .time                    = world.globals->game->time,
     .extent                  = {static_cast<uint32_t>(iconResolution.Get()), static_cast<uint32_t>(iconResolution.Get())},
