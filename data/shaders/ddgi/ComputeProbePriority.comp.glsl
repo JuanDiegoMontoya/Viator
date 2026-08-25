@@ -4,7 +4,6 @@ layout(local_size_x = DDGI_WORKGROUP_SIZE) in;
 
 void main()
 {
-  // Check if this probe is on a newly-uncovered edge. If it is, set its validity to zero.
   const int gid = int(gl_GlobalInvocationID.x);
   const int cascade = int(gl_GlobalInvocationID.z);
 
