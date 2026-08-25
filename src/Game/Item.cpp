@@ -73,8 +73,7 @@ entt::entity Item::Materialize(World& world, ItemId item)
     ASSERT(self == entt::null);
     self = world.CreateRenderableEntity({0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>(), 0.25f);
 
-    auto& mesh = world.GetRegistry().emplace<Mesh>(self);
-    mesh.name  = "cube";
+    world.GetRegistry().emplace<RenderAsVoxel>(self).voxel = p->voxel;
 
     if (const auto* material = bReg.try_get<const Block::Component::RenderAsTexturedCube>(entt::entity(p->voxel)))
     {

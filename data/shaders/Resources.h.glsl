@@ -8,6 +8,7 @@
 #include "glm/vec2.hpp"
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
+#include "glm/mat3x3.hpp"
 #include "glm/mat4x4.hpp"
 
 typedef uint64_t VkDeviceAddress;
@@ -40,6 +41,7 @@ typedef uint64_t VkDeviceAddress;
 
 #define FVOG_UINT64 uint64_t
 
+#define FVOG_MAT3 glm::mat3
 #define FVOG_MAT4 glm::mat4
 
 #define FVOG_DECLARE_ARGUMENTS(name) \
@@ -83,6 +85,7 @@ typedef uint64_t VkDeviceAddress;
 
 #define FVOG_UINT64 uint64_t
 
+#define FVOG_MAT3 mat3
 #define FVOG_MAT4 mat4
 
 #define FVOG_DECLARE_ARGUMENTS(name) \

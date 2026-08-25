@@ -271,6 +271,31 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
           },
       },
   });
+
+  drawSingleVoxelToGBufferPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
+    .name = "Render Single Voxel",
+    .vertexModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::VERTEX_SHADER,
+        .path  = GetShaderDirectory() / "voxels/DrawSingleVoxelToGBuffer.vert.glsl",
+      },
+    .fragmentModuleInfo =
+      PipelineManager::ShaderModuleCreateInfo{
+        .stage = Fvog::PipelineStage::FRAGMENT_SHADER,
+        .path  = GetShaderDirectory() / "voxels/DrawSingleVoxelToGBuffer.frag.glsl",
+      },
+    .state =
+      {
+        .inputAssemblyState = {.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP},
+        .rasterizationState = {.cullMode = VK_CULL_MODE_NONE},
+        .depthState         = {.depthTestEnable = true, .depthWriteEnable = true, .depthCompareOp = FVOG_COMPARE_OP_NEARER_OR_EQUAL},
+        .renderTargetFormats =
+          {
+            .colorAttachmentFormats = gBufferFormats,
+            .depthAttachmentFormat  = Frame::sceneDepthFormat,
+          },
+      },
+  });
   
   meshPipeline = GetPipelineManager().EnqueueCompileGraphicsPipeline({
     .name = "Render meshes",
@@ -1253,8 +1278,14 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
 
   auto drawCalls       = std::vector<GpuMesh*>();
   auto meshUniformzVec = std::vector<Temp::ObjectUniforms>();
-  for (auto&& [entity, transform, mesh] : world.GetRegistry().view<const GlobalTransform, const Mesh>().each())
+  auto voxelUniforms   = std::vector<DrawSingleVoxelInstance_t>();
+  for (auto&& [entity, transform] : world.GetRegistry().view<const GlobalTransform>().each())
   {
+    if (!world.GetRegistry().any_of<Mesh, RenderAsVoxel>(entity))
+    {
+      continue;
+    }
+
     if (world.GetRegistry().all_of<DoNotRenderIfAncestorIsLocalPlayer>(entity) && world.AncestorHasComponent<LocalPlayer>(entity))
     {
       continue;
@@ -1270,14 +1301,27 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
                            glm::scale(glm::mat4(1), glm::vec3(actualTransform.scale));
     auto worldFromObjectOld =
       glm::translate(glm::mat4(1), oldTransform.position) * glm::mat4_cast(oldTransform.rotation) * glm::scale(glm::mat4(1), glm::vec3(oldTransform.scale));
-    auto& gpuMesh = g_meshes[mesh.name];
-    auto tint     = glm::vec3(1);
-    if (auto* tp = world.GetRegistry().try_get<const Tint>(entity))
+    if (const auto* mesh = world.GetRegistry().try_get<Mesh>(entity))
     {
-      tint = tp->color;
+      auto& gpuMesh = g_meshes[mesh->name];
+      auto tint     = glm::vec3(1);
+      if (auto* tp = world.GetRegistry().try_get<const Tint>(entity))
+      {
+        tint = tp->color;
+      }
+      meshUniformzVec.emplace_back(worldFromObject, worldFromObjectOld, gpuMesh.vertexBuffer->GetDeviceAddress(), tint);
+      drawCalls.emplace_back(&gpuMesh);
     }
-    meshUniformzVec.emplace_back(worldFromObject, worldFromObjectOld, gpuMesh.vertexBuffer->GetDeviceAddress(), tint);
-    drawCalls.emplace_back(&gpuMesh);
+    if (const auto* voxel = world.GetRegistry().try_get<RenderAsVoxel>(entity))
+    {
+      voxelUniforms.emplace_back(DrawSingleVoxelInstance_t{
+        .voxelPosition         = transform.position,
+        .world_from_object     = worldFromObject,
+        .world_from_object_old = worldFromObjectOld,
+        .object_from_world     = glm::inverse(worldFromObject),
+        .voxel                 = voxel->voxel,
+      });
+    }
   }
 
   auto billboards = std::vector<Temp::BillboardInstance>();
@@ -1349,6 +1393,15 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       billboardSpriteInstanceBuffer.emplace((uint32_t)billboardSprites.size(), "Billboard Sprites");
     }
     billboardSpriteInstanceBuffer->UpdateData(commandBuffer, billboardSprites);
+  }
+
+  if (!voxelUniforms.empty())
+  {
+    if (!singleVoxelsInstanceBuffer || singleVoxelsInstanceBuffer->Size() < voxelUniforms.size() * sizeof(DrawSingleVoxelInstance_t))
+    {
+      singleVoxelsInstanceBuffer.emplace((uint32_t)voxelUniforms.size(), "Single Voxels");
+    }
+    singleVoxelsInstanceBuffer->UpdateData(commandBuffer, voxelUniforms);
   }
 
   auto& grid        = *world.globals->grid;
@@ -1519,6 +1572,23 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         }
 
         particles_->Render(commandBuffer, {.globalUniforms = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress()});
+
+        // Dropped/held voxels.
+        if (!voxelUniforms.empty())
+        {
+          auto gpuParams = Fvog::GetDevice().AllocTransient<DrawSingleVoxelToGBufferParams_t>();
+
+          *gpuParams = {
+            .uniforms               = perFrameUniforms.GetDeviceBuffer().GetDeviceAddress(),
+            .voxelDataBufferIdx     = world.globals->grid->Buffer().GetGpuBuffer().GetResourceHandle().index,
+            .voxelMaterialBufferIdx = voxelMaterialBuffer->GetResourceHandle().index,
+            .instances              = singleVoxelsInstanceBuffer->GetDeviceBuffer().GetDeviceAddress(),
+          };
+
+          ctx.BindGraphicsPipeline(drawSingleVoxelToGBufferPipeline.GetPipeline());
+          ctx.SetPushConstants(gpuParams);
+          ctx.Draw(14, (uint32_t)voxelUniforms.size(), 0, 0);
+        }
 
         if (!lines.empty())
         {

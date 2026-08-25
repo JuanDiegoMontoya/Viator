@@ -82,8 +82,12 @@ void main()
         
         vec3 sideDist = (vec3(init.S) - init.stepDir * fract(hit.positionWorld)) * init.deltaDist;
         bvec3 cases   = bvec3(sideDist);
+        bvec4 conds = lessThanEqual(sideDist.xxyy, sideDist.yzzx);
+        cases.x = conds.x && conds.y;
+        cases.y = (!cases.x) && conds.z && conds.w;
+        cases.z = (!cases.x) && (!cases.y);
 
-        const uint subGridIndex = vx_GetSubGridIndex(material, ivec3(pc.cameraPos + (rayDir * t - normal * 1e-3)));
+        const uint subGridIndex = vx_GetSubGridIndex(material, ivec3(0));
         if (!vx_TraceRaySubGrid(uvw * SUBGRIDS[subGridIndex].dimensions, rayDir, subGridIndex, init, cases, t, 100, hit, TRANSLUCENCY_MODE_ALL))
         {
           if (hit.hitTranslucent)

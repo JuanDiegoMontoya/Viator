@@ -25,6 +25,7 @@
 #include "shaders/sky/SkyShared.h.glsl"
 #include "shaders/voxels/ShadeDeferred.shared.h"
 #include "shaders/debug/DebugCommon.h.glsl"
+#include "shaders/voxels/DrawSingleVoxelToGBuffer.shared.h"
 #include "Game/CVar.h"
 #include "Gui/ItemIconCache.h"
 
@@ -188,6 +189,7 @@ private:
   PipelineManager::GraphicsPipelineKey debugLinesPipeline;
   PipelineManager::GraphicsPipelineKey billboardsPipeline;
   PipelineManager::GraphicsPipelineKey billboardSpritesPipeline;
+  PipelineManager::GraphicsPipelineKey drawSingleVoxelToGBufferPipeline;
 
   PipelineManager::ComputePipelineKey spelunkerEffectPipeline;
   PipelineManager::ComputePipelineKey translucentVoxelsPipeline;
@@ -200,6 +202,7 @@ private:
   std::optional<Fvog::NDeviceBuffer<GpuLight>> lightBuffer;
   std::optional<Fvog::NDeviceBuffer<Temp::BillboardInstance>> billboardInstanceBuffer;
   std::optional<Fvog::NDeviceBuffer<Temp::BillboardSpriteInstance>> billboardSpriteInstanceBuffer;
+  std::optional<Fvog::NDeviceBuffer<DrawSingleVoxelInstance_t>> singleVoxelsInstanceBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBufferSpelunker;
   std::optional<Fvog::Texture> noiseTexture;

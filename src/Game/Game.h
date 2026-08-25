@@ -389,6 +389,11 @@ struct Mesh
   std::string name;
 };
 
+struct RenderAsVoxel
+{
+  voxel_t voxel;
+};
+
 struct DoNotRenderIfAncestorIsLocalPlayer {};
 
 struct Tint

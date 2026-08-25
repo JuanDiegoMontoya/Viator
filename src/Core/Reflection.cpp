@@ -1603,6 +1603,10 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
   REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
+  
+  BEGIN_REFLECT_COMPONENT(RenderAsVoxel, REPLICATED)
+    MEMBER(voxel);
+  END_REFLECT
 
   REFLECT_COMPONENT(RopeAttachmentPoint, REPLICATED)
     DATA(RopeAttachmentPoint, distanceFromBase);
