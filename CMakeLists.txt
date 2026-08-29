@@ -397,6 +397,7 @@ target_include_directories(frogRender
 
 add_library(miniaudio vendor/miniaudio.cpp vendor/ma_reverb_node.cpp)
 add_library(zstd vendor/zstd.cpp)
+add_library(mpack vendor/mpack/mpack.c)
 target_compile_definitions(zstd PRIVATE ZSTD_ASAN_DONT_POISON_WORKSPACE) # on MSVC, zstd attempts to call some undefined functions when ASan is enabled.
 
 if (NOT GAME_HEADLESS)
@@ -436,6 +437,7 @@ target_link_libraries(frogRender
     as_addons
     Jolt
     zstd
+    mpack
 )
 
 if (MSVC)
