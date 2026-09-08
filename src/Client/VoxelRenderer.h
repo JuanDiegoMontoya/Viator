@@ -602,6 +602,51 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float foliageSssEnable = {
+    "r.foliageSSS.enable",
+    "- Enablement of foliage subsurface scattering.",
+    1,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssResolution = {
+    "r.foliageSSS.resolution",
+    "- Resolution of each cascade for foliage SSS.",
+    512,
+    64,
+    1024,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssCascades = {
+    "r.foliageSSS.numCascades",
+    "- Number of shadow cascades to render for foliage SSS.",
+    4,
+    1,
+    8,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssFrustumDepth = {
+    "r.foliageSSS.frustumDepth",
+    "- Depth of the frustum when rendering foliage SSS.",
+    1024,
+    128,
+    4096,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssBaseFrustumSideLength = {
+    "r.foliageSSS.baseFrustumSideLength",
+    "- World-space width of the first cascade's frustum for foliage SSS.",
+    32,
+    1,
+    4096,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,

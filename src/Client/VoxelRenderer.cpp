@@ -1257,7 +1257,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
       .voxelsPtr              = voxelsPtr,
-      .foliageSSSPtr          = foliageSSS_->GetCBSMInfoPtr(),
+      .foliageSSSPtr          = foliageSssEnable.Get() != 0 ? foliageSSS_->GetCBSMInfoPtr() : 0,
       .lights                 = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetDeviceAddress(),
       .numLights              = (uint32_t)lights.size(),
       .cascadedLightGrid      = lightGridGpuPtr,
@@ -1513,17 +1513,24 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .jitterScale           = static_cast<float>(cloudCbsmJitterScale.Get()),
       });
 
-    foliageSSS_->RenderBeerShadowMap(*scheduler,
-      commandBuffer,
-      {
-        .shadowResolution      = {512, 512},
-        .numCascades           = 4,
-        .voxels                = voxelsSSS,
-        .playerPos             = playerPosition,
-        .lightDirection        = sunDirection,
-        .frustumDepth          = 1024,
-        .baseFrustumSideLength = 32,
-      });
+    if (foliageSssEnable.Get() != 0)
+    {
+      foliageSSS_->RenderBeerShadowMap(*scheduler,
+        commandBuffer,
+        {
+          .shadowResolution      = {(uint32_t)foliageSssResolution.Get(), (uint32_t)foliageSssResolution.Get()},
+          .numCascades           = (uint32_t)foliageSssCascades.Get(),
+          .voxels                = voxelsSSS,
+          .playerPos             = playerPosition,
+          .lightDirection        = sunDirection,
+          .frustumDepth          = (float)foliageSssFrustumDepth.Get(),
+          .baseFrustumSideLength = (float)foliageSssBaseFrustumSideLength.Get(),
+        });
+    }
+    else
+    {
+      scheduler->AddPass("FoliageSSS", nullptr);
+    }
 
     scheduler->AddPass("ShadowMaps", {"TerrainShadowMap0", "TerrainShadowMap1", "BeerShadowMap", "FoliageSSS"}, nullptr);
   }
