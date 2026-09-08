@@ -83,6 +83,8 @@ if (NOT GAME_HEADLESS)
         src/Client/techniques/Sky.cpp
         src/Client/techniques/Particles.h
         src/Client/techniques/Particles.cpp
+        src/Client/techniques/FoliageSSS.h
+        src/Client/techniques/FoliageSSS.cpp
         src/Client/Scheduler.h
         src/Client/Scheduler.cpp
         src/Client/techniques/DDGI.h

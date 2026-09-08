@@ -17,6 +17,7 @@
 #include "techniques/Particles.h"
 #include "techniques/DDGI.h"
 #include "techniques/LightGrid.h"
+#include "techniques/FoliageSSS.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -205,6 +206,7 @@ private:
   std::optional<Fvog::NDeviceBuffer<DrawSingleVoxelInstance_t>> singleVoxelsInstanceBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBufferSpelunker;
+  std::optional<Fvog::Buffer> voxelMaterialBufferSSS;
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
@@ -621,6 +623,8 @@ private:
   PipelineManager::ComputePipelineKey drawSingleVoxelPipeline_;
   PipelineManager::GraphicsPipelineKey drawMeshIconPipeline_;
   std::unique_ptr<Gui::ItemIconCache> iconCache_;
+
+  std::unique_ptr<Techniques::FoliageSSS> foliageSSS_;
 
   std::string uiLayoutPath;
 };

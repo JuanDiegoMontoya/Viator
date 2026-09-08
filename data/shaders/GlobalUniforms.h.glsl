@@ -51,6 +51,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_2(GBuffer)
   CascadedBeerShadowMapInfoPtr beerShadowMap; \
   WeatherGpuParams weatherParams;             \
   FVOG_UINT64 voxelsPtr;                      \
+  FVOG_UINT64 foliageSSSPtr;                  \
   GpuLightPtr lights;                         \
   FVOG_UINT32 numLights;                      \
   CascadedLightGrid cascadedLightGrid;        \

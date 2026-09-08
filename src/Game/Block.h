@@ -205,6 +205,11 @@ namespace Block
     R_END();
 
     R_DECLARE_COMPONENT(Fire, BLOCK_COMPONENT | REPLICATED);
+
+    R_STRUCT(TranslucentForGI)
+    R_END();
+
+    R_DECLARE_COMPONENT(TranslucentForGI, BLOCK_COMPONENT | REPLICATED);
   }
 
   class Registry

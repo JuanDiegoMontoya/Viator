@@ -36,6 +36,7 @@
 #include "tracy/TracyVulkan.hpp"
 #include "stb_image.h"
 #include "Game/Commands.h"
+#include "glm/gtx/component_wise.inl"
 #include "spdlog/spdlog.h"
 
 #include <format>
@@ -579,6 +580,8 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   lightGrid_ = Techniques::LightGrid::Create();
   iconCache_ = Gui::ItemIconCache::Create();
 
+  foliageSSS_ = Techniques::FoliageSSS::Create();
+
   OnFramebufferResize(head_->windowFramebufferWidth, head_->windowFramebufferHeight);
 }
 
@@ -605,6 +608,7 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
   auto voxelMaterials = std::vector<GpuVoxelMaterial>();
   auto voxelMaterialsSpelunker = std::vector<GpuVoxelMaterial>();
+  auto voxelMaterialsSSS = std::vector<GpuVoxelMaterial>();
 
   auto orderedBlocks = std::vector<entt::entity>();
   orderedBlocks.reserve(bReg.view<entt::entity>().size());
@@ -619,6 +623,11 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
   {
     auto gpuMat = GpuVoxelMaterial{};
     gpuMat.density = -1; // Negative density = solid voxel
+
+    if (bReg.all_of<Block::Component::TranslucentForGI>(block))
+    {
+      gpuMat.voxelFlags |= VOXEL_IS_SSS_FOLIAGE;
+    }
 
     if (const auto* p = bReg.try_get<const Block::Component::RenderAsTexturedCube>(block))
     {
@@ -723,20 +732,51 @@ void VoxelRenderer::CreateRenderingMaterials(const World& world)
 
     voxelMaterials.emplace_back(gpuMat);
 
+    auto gpuMatSpelunker = gpuMat;
     if (!bReg.all_of<Block::Component::Valuable>(block))
     {
-      gpuMat.voxelFlags |= VOXEL_IS_INVISIBLE;
+      gpuMatSpelunker.voxelFlags |= VOXEL_IS_INVISIBLE;
     }
-    voxelMaterialsSpelunker.emplace_back(gpuMat);
+    voxelMaterialsSpelunker.emplace_back(gpuMatSpelunker);
+
+    auto gpuMatSSS = gpuMat;
+    // Make the subvoxel materials slightly transparent if flag is set.
+    if (bReg.all_of<Block::Component::TranslucentForGI>(block))
+    {
+      gpuMatSSS.density = 0.02f;
+
+      if (const auto* sp = bReg.try_get<const Block::Component::RenderAsSubGrid>(block))
+      {
+        auto count    = 0;
+        auto sumColor = glm::vec3(0);
+        for (size_t i = 0; i < glm::compMul(sp->subGrid->dimensions); i++)
+        {
+          if (auto subVoxel = sp->subGrid->grid[i]; subVoxel != Voxel::SubVoxel::Air)
+          {
+            count++;
+            sumColor += glm::pow(glm::vec3(sp->subGrid->materials[int(subVoxel) - 1].colorSrgb), glm::vec3(2.2f));
+          }
+        }
+
+        const auto averageColor = glm::pow(sumColor / float(count), glm::vec3(1.0f / 2.2f));
+        for (auto& face : gpuMatSSS.faces)
+        {
+          face.baseColorFactor = averageColor;
+        }
+      }
+    }
+    voxelMaterialsSSS.emplace_back(gpuMatSSS);
   }
 
   voxelMaterialBuffer = Fvog::Buffer({.size = voxelMaterials.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer");
   voxelMaterialBufferSpelunker = Fvog::Buffer({.size = voxelMaterialsSpelunker.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer Ex");
+  voxelMaterialBufferSSS = Fvog::Buffer({.size = voxelMaterials.size() * sizeof(GpuVoxelMaterial), .flag = Fvog::BufferFlagThingy::NONE}, "Voxel Material Buffer SSS");
   Fvog::GetDevice().ImmediateSubmit(
     [&](VkCommandBuffer cmd)
     {
       voxelMaterialBuffer->UpdateDataExpensive(cmd, std::span(voxelMaterials));
       voxelMaterialBufferSpelunker->UpdateDataExpensive(cmd, std::span(voxelMaterialsSpelunker));
+      voxelMaterialBufferSSS->UpdateDataExpensive(cmd, std::span(voxelMaterialsSSS));
     });
 
   needsHeightmapInit = true;
@@ -1217,6 +1257,7 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .beerShadowMap          = rayMarchedClouds_->GetCascadedBeerShadowMapInfoPtr(),
       .weatherParams          = weatherGpuParams.ptr,
       .voxelsPtr              = voxelsPtr,
+      .foliageSSSPtr          = foliageSSS_->GetCBSMInfoPtr(),
       .lights                 = lights.empty() ? 0 : lightBuffer->GetDeviceBuffer().GetDeviceAddress(),
       .numLights              = (uint32_t)lights.size(),
       .cascadedLightGrid      = lightGridGpuPtr,
@@ -1416,6 +1457,13 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
     .globalUniformsIndex        = perFrameUniforms.GetDeviceBuffer().GetResourceHandle().index,
   };
 
+  const auto voxelsSSS = [&]
+  {
+    auto sss = voxels;
+    sss.materialBufferIdx = voxelMaterialBufferSSS->GetResourceHandle().index;
+    return sss;
+  }();
+
   if (enableSunShadowPass.Get() != 0)
   {
     ctx.Barrier();
@@ -1465,7 +1513,19 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
         .jitterScale           = static_cast<float>(cloudCbsmJitterScale.Get()),
       });
 
-    scheduler->AddPass("ShadowMaps", {"TerrainShadowMap0", "TerrainShadowMap1", "BeerShadowMap"}, nullptr);
+    foliageSSS_->RenderBeerShadowMap(*scheduler,
+      commandBuffer,
+      {
+        .shadowResolution      = {512, 512},
+        .numCascades           = 4,
+        .voxels                = voxelsSSS,
+        .playerPos             = playerPosition,
+        .lightDirection        = sunDirection,
+        .frustumDepth          = 1024,
+        .baseFrustumSideLength = 32,
+      });
+
+    scheduler->AddPass("ShadowMaps", {"TerrainShadowMap0", "TerrainShadowMap1", "BeerShadowMap", "FoliageSSS"}, nullptr);
   }
   else
   {

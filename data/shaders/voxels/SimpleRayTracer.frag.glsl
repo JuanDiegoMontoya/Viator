@@ -29,6 +29,7 @@ void main()
   vec3 normal = {0, 0, 0};
   vec3 radiance = {0, 0, 0};
   float translucentHitT = 1.0 / 0.0;
+  bool isFoliage = false;
 
   HitSurfaceParameters hit;
   //if (vx_TraceRaySimple(rayPos, rayDir, 40, hit))
@@ -38,6 +39,7 @@ void main()
     albedo = GetHitAlbedo(hit);
     normal = hit.flatNormalWorld;
     radiance += GetHitEmission(hit);
+    isFoliage = bool(vx_GetVoxelFlags(hit.voxel) & VOXEL_IS_SSS_FOLIAGE);
 
     const vec4 posClip = uniforms.viewProj * vec4(hit.positionWorld, 1.0);
     const vec4 posClipOld = uniforms.oldViewProj * vec4(hit.positionWorld, 1.0);
@@ -59,7 +61,7 @@ void main()
     translucentHitT = hit.firstTranslucentHitT;
   }
 
-  o_albedo = vec4(albedo, 1);
+  o_albedo = vec4(albedo, float(isFoliage));
   o_normal = vec4(normal, 1);
   vec3 bonus = vec3(0);
   // bonus.r += gSubGridVoxelsTraversed / 5;

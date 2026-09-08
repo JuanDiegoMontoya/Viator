@@ -7,6 +7,7 @@
 #include "../Hash.h.glsl"
 #include "../Config.shared.h"
 #include "../sky/SkyUtil.h.glsl"
+#include "FoliageSSS.shared.h"
 
 #define uniforms perFrameUniformsBuffers[uniformBufferIndex]
 
@@ -25,7 +26,7 @@ float FresnelSchlick(vec3 i, vec3 n, float eta)
 
 
 // isOpaque controls whether AO is applied and whether the illuminance buffer is sampled when using path traced GI.
-vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 albedoIS, vec2 uv, bool isOpaque, bool applyAo)
+vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 albedoIS, vec2 uv, bool isOpaque, bool applyAo, bool isFoliage)
 {
   const ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
   
@@ -78,8 +79,10 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
     irradianceIS = illum / float(SAMPLES);
   }
 
+  float ao = 1;
   if (applyAo)
   {
+    ao = textureLod(ambientOcclusion, samplerr, uv, 0).x;
     irradianceIS *= textureLod(ambientOcclusion, samplerr, uv, 0).x;
   }
   
@@ -110,7 +113,26 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
   {
     sunVisibility = vec3(SampleCascadedShadowMap(positionWS, uniforms.sunShadowMap));
   }
-  sunVisibility *= vec3(SampleCascadedBeerShadowMap(positionWS, uniforms.beerShadowMap));
+  
+  const vec3 sunVisibilityBsm = vec3(SampleCascadedBeerShadowMap(positionWS, uniforms.beerShadowMap));
+
+  vec3 sss = vec3(0);
+  if (uniforms.foliageSSSPtr != 0)
+  {
+    FoliageCBSMInfoPtr sssPtr = FoliageCBSMInfoPtr(uniforms.foliageSSSPtr);
+    const vec3 sssTransmittance = SampleFoliageCBSM(positionWS + uniforms.sky.config.sunDir * 0.5, sssPtr);
+
+    // Half lambert, AKA wrapped diffuse.
+    const float NoL2 = square(-dot(normalWS, uniforms.sky.config.sunDir) * 0.5 + 0.5);
+    const vec3 sunlightIS2 = sunVisibilityBsm * float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL2 / M_PI;
+    const vec3 skylightIS2 = sunVisibilityBsm * albedoIS * NoL2 / M_PI * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, positionWS);
+    if (isFoliage)
+    {
+      sss = (sunlightIS2 + skylightIS2) * sssTransmittance * 1;
+    }
+  }
+
+  sunVisibility *= sunVisibilityBsm;
   const vec3 sunlightIS = float(!view_ray_intersects_ground) * sun_light * albedoIS * NoL / M_PI * sunVisibility;
   const vec3 skylightIS = albedoIS * NoL / M_PI * sunVisibility * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, positionWS);
   
@@ -142,9 +164,8 @@ vec3 CalcRadianceFromPoint(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 
     }
     //return 100 * (lightCount + 1) * TurboColormap(float(cellPosAndCascade.w) / uniforms.cascadedLightGrid.numCascades);
   }
-
-
-  return sunlightIS + skylightIS + irradianceIS + localLightIS;
+  
+  return sss + (sunlightIS + skylightIS) + irradianceIS + localLightIS;
 }
 
 vec3 CalcRadianceFromPointSpecular(vec3 positionWS, vec3 normalWS, vec3 viewDirWS, vec3 albedoIS, bool isOpaque)
@@ -156,7 +177,8 @@ vec3 CalcRadianceFromPointSpecular(vec3 positionWS, vec3 normalWS, vec3 viewDirW
   //if (vx_TraceRaySimple(rayPos, rayDir, 64, hit))
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 128, hit))
   {
-    return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false));
+    const bool isFoliage = bool(vx_GetVoxelFlags(hit.voxel) & VOXEL_IS_SSS_FOLIAGE);
+    return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false, isFoliage));
   }
 
   return hit.transmission * Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
@@ -176,7 +198,8 @@ vec3 CalcRadianceFromPointRefract(vec3 positionWS, vec3 normalWS, vec3 viewDirWS
   //if (vx_TraceRaySimple(rayPos, rayDir, 64, hit))
   if (vx_TraceRayMultiLevel(rayPos, rayDir, 64, hit))
   {
-    return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false));
+    const bool isFoliage = bool(vx_GetVoxelFlags(hit.voxel) & VOXEL_IS_SSS_FOLIAGE);
+    return hit.transmission * (GetHitEmission(hit) + CalcRadianceFromPoint(hit.positionWorld, hit.flatNormalWorld, rayDir, GetHitAlbedo(hit), vec2(0), true, false, isFoliage));
   }
 
   return hit.transmission * Sky_GetScatteringAlongRay(uniforms.sky, rayDir, rayPos);
@@ -197,7 +220,8 @@ void main()
 
   const vec2 uv = (vec2(gid) + 0.5) / imageSize(sceneColor);
 
-  const vec3 albedo_internal = color_convert_src_to_dst(texelFetch(uniforms.gBuffer.gAlbedo, gid, 0).rgb, 
+  const vec4 albedoRaw = texelFetch(uniforms.gBuffer.gAlbedo, gid, 0).rgba;
+  const vec3 albedo_internal = color_convert_src_to_dst(albedoRaw.rgb, 
     COLOR_SPACE_sRGB_LINEAR,
     internalColorSpace);
   const vec3 normal = normalize(texelFetch(uniforms.gBuffer.gNormal, gid, 0).xyz);
@@ -240,7 +264,8 @@ void main()
   vec3 finalRadianceOpaque = vec3(0);
   if (depth != FAR_DEPTH)
   {
-    finalRadianceOpaque = transmission * (radiance_internal + CalcRadianceFromPoint(positionWorld, normal, viewDirWS, albedo_internal, uv, true, true));
+    const bool isFoliage = albedoRaw.a == 1;
+    finalRadianceOpaque = transmission * (radiance_internal + CalcRadianceFromPoint(positionWorld, normal, viewDirWS, albedo_internal, uv, true, true, isFoliage));
   }
   vec3 finalRadianceTranslucent = vec3(0);
   if (depthTranslucent < 1e9)
