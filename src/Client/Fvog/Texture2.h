@@ -62,6 +62,8 @@ namespace Fvog
     uint32_t arrayLayers = 1;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     TextureUsage usage = TextureUsage::GENERAL;
+
+    bool operator==(const TextureCreateInfo&) const = default;
   };
 
   struct TextureViewCreateInfo

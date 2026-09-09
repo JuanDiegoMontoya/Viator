@@ -24,6 +24,7 @@ FVOG_DECLARE_BUFFER_REFERENCE_3(VoxelsPtr, 4)
 #define VOXEL_IS_INVISIBLE        (1 << 0)
 #define VOXEL_IS_SUBGRID          (1 << 1)
 #define VOXEL_IS_ANIMATED_SUBGRID (1 << 2)
+#define VOXEL_IS_SSS_FOLIAGE      (1 << 3)
 
 #define FACE_HAS_BASE_COLOR_TEXTURE       (1 << 0)
 #define FACE_HAS_EMISSION_TEXTURE         (1 << 1)
@@ -307,6 +308,7 @@ struct HitSurfaceParameters
   vec3 transmission;
   bool hitTranslucent; // Initially false, set to true when a translucent surface is hit
   float firstTranslucentHitT;
+  float lastTranslucentHitT;
 };
 
 HitSurfaceParameters HitSurfaceParameters_init()
@@ -361,6 +363,16 @@ vec2 vx_GetTexCoords(vec3 normal, vec3 uvw)
   if (normal.z > 0)
     return vec2(uvw.x, uvw.y);
   return vec2(1 - uvw.x, uvw.y);
+}
+
+uint vx_GetVoxelFlags(voxel_t voxel)
+{
+  if (voxel == 0)
+  {
+    return 0;
+  }
+  GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
+  return material.voxelFlags;
 }
 
 bool vx_IsVisible(voxel_t voxel)
@@ -534,6 +546,7 @@ bool vx_TraceRaySubGrid(vec3 rayPosLocal, vec3 rayDirection, uint subGridIndex, 
     if (subVoxel != 0 && density >= 0)
     {
       hit.transmission *= exp(-density * 20 * tDelta * (1 - albedo));
+      hit.lastTranslucentHitT = t;
       if (!hit.hitTranslucent)
       {
         hit.firstTranslucentHitT = tOld;
@@ -637,6 +650,7 @@ bool vx_TraceRayVoxels(vec3 rayPosLocal, vec3 rayDirection, BottomLevelBrickPtr 
     {
       GpuVoxelMaterial material = voxelMaterialsBuffers[g_voxels.materialBufferIdx].materials[voxel];
       hit.transmission *= exp(-density * 20 * tDelta * (1 - color_sRGB_EOTF(material.faces[vx_NormalToFaceIndex(normal)].baseColorFactor)));
+      hit.lastTranslucentHitT = t;
       if (!hit.hitTranslucent)
       {
         hit.firstTranslucentHitT = tOld;
@@ -999,6 +1013,7 @@ bool vx_TraceRaySimple(vec3 rayPosition, vec3 rayDirection, float tMax, out HitS
     {
       //hit.transmission *= exp(-density * tDist * (1 - vec3(.45, .8, .96)));
       hit.transmission *= exp(-density * tDelta * (1 - vec3(.96, .2, .4)));
+      hit.lastTranslucentHitT = t;
       if (!hit.hitTranslucent)
       {
         hit.firstTranslucentHitT = t;

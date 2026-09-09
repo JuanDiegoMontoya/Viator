@@ -885,6 +885,7 @@ void World::InitializeGameDefinitions()
     bool isSolid = false;
     std::optional<Block::Component::RequiresSupport> support = Block::Component::RequiresSupport{Block::Direction::Down};
     bool flammable = false;
+    bool translucentForGI = false;
   };
   auto RegisterFoliageBlock = [&](const FoliageBlockParams& params) -> BlockId
   {
@@ -914,6 +915,10 @@ void World::InitializeGameDefinitions()
         .physicalProperties = {.isSolid = params.isSolid, .flammability = params.flammable ? 0.1f : 0},
         .support            = params.support,
       });
+    if (params.translucentForGI)
+    {
+      globals->blockRegistry->GetRegistry().emplace<Block::Component::TranslucentForGI>(entt::entity(id));
+    }
     return id;
   };
 
@@ -934,8 +939,8 @@ void World::InitializeGameDefinitions()
   const auto grassTop =
     RegisterFoliageBlock({.tag = "grass_double_top", .name = "Double Grass Top", .dropsSelf = false, .support = std::nullopt, .flammable = true});
   blocks.GetRegistry().emplace<Block::Component::RequiresSupportByBlocks>(entt::entity(grassTop)).blocks[int(Block::Direction::Down)] = grassBase;
-  const auto leaves01 = RegisterFoliageBlock({.tag = "leaves_01", .name = "Leaves 1", .dropsSelf = false, .support = std::nullopt, .flammable = true});
-  const auto leaves02 = RegisterFoliageBlock({.tag = "leaves_02", .name = "Leaves 2", .dropsSelf = false, .support = std::nullopt, .flammable = true});
+  const auto leaves01 = RegisterFoliageBlock({.tag = "leaves_01", .name = "Leaves 1", .dropsSelf = false, .support = std::nullopt, .flammable = true, .translucentForGI = true});
+  const auto leaves02 = RegisterFoliageBlock({.tag = "leaves_02", .name = "Leaves 2", .dropsSelf = false, .support = std::nullopt, .flammable = true, .translucentForGI = true});
   RegisterFoliageBlock({.tag = "dandelion", .name = "Dandelion", .dropsSelf = true});
   RegisterFoliageBlock({.tag = "rose", .name = "Rose", .dropsSelf = true});
   RegisterFoliageBlock({.tag = "pot", .name = "Pot", .dropsSelf = true});
@@ -947,7 +952,7 @@ void World::InitializeGameDefinitions()
   RegisterFoliageBlock({.tag = "cactus_small", .name = "Small Cactus", .dropsSelf = true});
   RegisterFoliageBlock({.tag = "bush_03", .name = "Bush 3", .dropsSelf = false, .flammable = true});
   RegisterFoliageBlock({.tag = "remains_generic", .name = "Corpse", .dropsSelf = false});
-  const auto leaves03 = RegisterFoliageBlock({.tag = "leaves_burnwillow_01", .name = "BW Leaves", .dropsSelf = false, .support = std::nullopt});
+  const auto leaves03 = RegisterFoliageBlock({.tag = "leaves_burnwillow_01", .name = "BW Leaves", .dropsSelf = false, .support = std::nullopt, .translucentForGI = true});
   const auto vineEndB = RegisterFoliageBlock({.tag = "vines_end_burnwillow", .name = "Vines End BW", .dropsSelf = false, .support = std::nullopt});
   const auto vineMainB = RegisterFoliageBlock({.tag = "vines_main_burnwillow", .name = "Vines Main BW", .dropsSelf = false, .support = std::nullopt});
 

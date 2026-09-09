@@ -1,6 +1,7 @@
 #include "ProbeCommon.shared.h"
 #include "../sky/SkyUtil.h.glsl"
 #include "../Color.h.glsl"
+#include "../voxels/FoliageSSS.shared.h"
 
 #define uniforms perFrameUniformsBuffers[args.globalUniformsIndex]
 
@@ -76,7 +77,8 @@ void main()
 #else
       float sunVisibility = SampleCascadedShadowMap(hit.positionWorld, uniforms.sunShadowMap);
 #endif
-      sunVisibility *= SampleCascadedBeerShadowMap(hit.positionWorld, uniforms.beerShadowMap);
+      const float sunVisibilityBsm = SampleCascadedBeerShadowMap(hit.positionWorld, uniforms.beerShadowMap);
+      sunVisibility *= sunVisibilityBsm;
       vec3 skylight_internal = albedo * NoL / M_PI * sunVisibility * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, hit.positionWorld);
       vec3 sun_light = uniforms.sky.config.sunColor * uniforms.sky.config.sunBrightness * transmittanceToSun / solid_angle_mapping_PDF(radians(0.5)) / M_PI;
       vec3 sunlight_internal = albedo * NoL * sun_light * sunVisibility;
@@ -101,6 +103,24 @@ void main()
           surface.position = hit.positionWorld;
           radiance += visibility * transmission * EvaluatePunctualLightLambert(light, surface, COLOR_SPACE_sRGB_LINEAR) / lightPdf;
         }
+      }
+      
+      if (uniforms.foliageSSSPtr != 0)
+      {
+        FoliageCBSMInfoPtr sssPtr = FoliageCBSMInfoPtr(uniforms.foliageSSSPtr);
+
+        // Half lambert, AKA wrapped diffuse.
+        const float NoL2 = -dot(hit.flatNormalWorld, uniforms.sky.config.sunDir) * 0.5 + 0.5;
+        const vec3 sunlightIS2 = sunVisibilityBsm * float(!view_ray_intersects_ground) * sun_light * albedo * NoL2 / M_PI;
+        const vec3 skylightIS2 = sunVisibilityBsm * albedo * NoL2 / M_PI * Sky_GetScatteringAlongRay(uniforms.sky, uniforms.sky.config.sunDir, hit.positionWorld);
+        vec3 sss = vec3(0);
+        if (bool(vx_GetVoxelFlags(hit.voxel) & VOXEL_IS_SSS_FOLIAGE))
+        {
+          const vec3 sssTransmittance = SampleFoliageCBSM(hit.positionWorld, sssPtr);
+          sss = (sunlightIS2 + skylightIS2) * sssTransmittance * 1;
+        }
+
+        radiance += sss;
       }
 
       radiance *= hit.transmission;

@@ -297,3 +297,22 @@ glm::vec3 Math::KelvinToSrgb(float kelvin)
 
   return {r, g, b};
 }
+
+glm::mat4 Math::SnapProjectionToTexel(glm::mat4 clip_from_view, glm::mat4 view_from_world, glm::uvec2 xySnapGranularity, std::optional<uint32_t> zSnapGranularity)
+{
+  // Determine how much we need to shift the projection to align it to the nearest texel.
+  const auto clip       = clip_from_view * view_from_world * glm::vec4(0, 0, 0, 1);
+  const auto ndc        = clip / clip.w;
+  const auto uv         = glm::vec3(ndc) * 0.5f;
+  const auto resolution = glm::vec3{xySnapGranularity, zSnapGranularity.value_or(1)};
+  const auto texel      = uv * resolution;
+  const auto shift      = texel - glm::round(texel);
+  auto shiftNdc         = 2.0f * shift / resolution;
+
+  if (!zSnapGranularity.has_value())
+  {
+    shiftNdc.z = 0;
+  }
+
+  return glm::translate(glm::mat4(1), -shiftNdc) * clip_from_view;
+}

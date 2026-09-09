@@ -84,4 +84,7 @@ namespace Math
   float GaussianNorm(float x, float mean, float stddev);
 
   glm::vec3 KelvinToSrgb(float kelvin);
+
+  // Returns clip_from_view matrix that, when used with the supplied view_from_world matrix, snaps texels to a texel-resolution grid under any motion.
+  glm::mat4 SnapProjectionToTexel(glm::mat4 clip_from_view, glm::mat4 view_from_world, glm::uvec2 xySnapGranularity, std::optional<uint32_t> zSnapGranularity);
 } // namespace Math

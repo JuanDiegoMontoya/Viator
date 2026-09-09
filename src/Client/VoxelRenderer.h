@@ -17,6 +17,7 @@
 #include "techniques/Particles.h"
 #include "techniques/DDGI.h"
 #include "techniques/LightGrid.h"
+#include "techniques/FoliageSSS.h"
 #include "shaders/Light.h.glsl"
 #include "shaders/voxels/Voxels.h.glsl"
 #include "shaders/ddgi/ProbeCommon.shared.h"
@@ -205,6 +206,7 @@ private:
   std::optional<Fvog::NDeviceBuffer<DrawSingleVoxelInstance_t>> singleVoxelsInstanceBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBuffer;
   std::optional<Fvog::Buffer> voxelMaterialBufferSpelunker;
+  std::optional<Fvog::Buffer> voxelMaterialBufferSSS;
   std::optional<Fvog::Texture> noiseTexture;
   std::optional<Fvog::Texture> tonyMcMapfaceLut;
   std::optional<Fvog::Texture> backgroundTexture;
@@ -600,6 +602,51 @@ private:
     Game2::CVarFlagBits::ARCHIVE,
   };
 
+  Game2::AutoCVar_float foliageSssEnable = {
+    "r.foliageSSS.enable",
+    "- Enablement of foliage subsurface scattering.",
+    1,
+    0,
+    1,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssResolution = {
+    "r.foliageSSS.resolution",
+    "- Resolution of each cascade for foliage SSS.",
+    512,
+    64,
+    1024,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssCascades = {
+    "r.foliageSSS.numCascades",
+    "- Number of shadow cascades to render for foliage SSS.",
+    4,
+    1,
+    8,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssFrustumDepth = {
+    "r.foliageSSS.frustumDepth",
+    "- Depth of the frustum when rendering foliage SSS.",
+    1024,
+    128,
+    4096,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float foliageSssBaseFrustumSideLength = {
+    "r.foliageSSS.baseFrustumSideLength",
+    "- World-space width of the first cascade's frustum for foliage SSS.",
+    32,
+    1,
+    4096,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
   bool enableWeatherOverride_ = false;
   WeatherGpuParams_t weather_{
     .cloudBottomAltitude        = 480.0f,
@@ -621,6 +668,8 @@ private:
   PipelineManager::ComputePipelineKey drawSingleVoxelPipeline_;
   PipelineManager::GraphicsPipelineKey drawMeshIconPipeline_;
   std::unique_ptr<Gui::ItemIconCache> iconCache_;
+
+  std::unique_ptr<Techniques::FoliageSSS> foliageSSS_;
 
   std::string uiLayoutPath;
 };
