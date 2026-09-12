@@ -3,7 +3,7 @@
 #include "Game/World.h"
 #include "Game/Item.h"
 #include "Core/StringUtilities.h"
-#include "Core/Reflection.h"
+#include "Core/Reflection/Reflection.h"
 #include "Game/Networking/RPC.h"
 #include "Game/Globals.h"
 #include "Game/Scripting.h"

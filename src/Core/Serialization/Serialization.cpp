@@ -1,5 +1,5 @@
-#include "Core/Serialization.h"
-#include "Core/Reflection.h"
+#include "Core/Serialization/Serialization.h"
+#include "Core/Reflection/Reflection.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/World.h"
 #include "Core/Assert2.h"

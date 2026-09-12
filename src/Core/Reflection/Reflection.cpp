@@ -2,7 +2,7 @@
 #define R_IMPLEMENTATION
 #include "ReflectionMacrosInternal.h"
 #include "Game/World.h"
-#include "Assert2.h"
+#include "Core/Assert2.h"
 #include "Game/Globals.h"
 #include "Game/HashGrid.h"
 #include "Core/Image.h"
@@ -164,7 +164,7 @@ using namespace Core::Reflection;
 #include "ReflectionMacros.h"
 
 /////////////// Place headers that contain R_ macros here.
-#include "Serialization.h"
+#include "Core/Serialization/Serialization.h"
 #include "Game/Voxel/Grid.h"
 #include "Game/Game.h"
 #include "Game/Physics/Physics.h"

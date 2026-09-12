@@ -1,5 +1,5 @@
 #pragma once
-#include "Assert2.h"
+#include "Core/Assert2.h"
 #include "Game/RegistryProxy.h"
 
 #include "entt/fwd.hpp"

@@ -1001,7 +1001,7 @@ static Block::Component::RenderAsTexturedCube2 MakeRotatedCubeFaceMaterials(cons
   return ret;
 }
 
-#include "Core/Reflection.h"
+#include "Core/Reflection/Reflection.h"
 #include "entt/meta/meta.hpp"
 static void CopyEntity(entt::registry& registry, entt::entity srcEntity, entt::entity dstEntity)
 {

@@ -1,6 +1,6 @@
 #include "Client.h"
 #include "Game/Voxel/Grid.h"
-#include "Core/Serialization.h"
+#include "Core/Serialization/Serialization.h"
 #include "Game/Game.h"
 #include "Game/Globals.h"
 #include "Game/World.h"

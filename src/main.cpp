@@ -2,9 +2,9 @@
 #include "Game/Assets.h"
 #include "Core/Logging.h"
 #include "Game/Physics/Physics.h"
-#include "Core/Reflection.h"
+#include "Core/Reflection/Reflection.h"
 #include "Game/Scripting.h"
-#include "Core/Serialization.h"
+#include "Core/Serialization/Serialization.h"
 #include "Core/Platform/PlatformInit.h"
 #include "Game/CVar.h"
 #ifdef GAME_HEADLESS

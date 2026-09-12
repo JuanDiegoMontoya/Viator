@@ -144,11 +144,13 @@ add_executable(frogRender
     src/Game/Networking/RPC.cpp
     src/Game/Networking/Interface.cpp
     src/HashUtilities.h
-    src/Core/Reflection.h
-    src/Core/Reflection.cpp
+    src/Core/Reflection/Reflection.h
+    src/Core/Reflection/Reflection.cpp
+    src/Core/Reflection/ReflectionMacros.h
+    src/Core/Reflection/ReflectionMacrosInternal.h
     src/MathUtilities.cpp
-    src/Core/Serialization.h
-    src/Core/Serialization.cpp
+    src/Core/Serialization/Serialization.h
+    src/Core/Serialization/Serialization.cpp
     src/Core/Logging.h
     src/Core/Logging.cpp
     src/Core/Assert2.h
@@ -186,8 +188,6 @@ add_executable(frogRender
     src/Game/Systems/CharacterAI.cpp
     src/Game/WorldFixedUpdate.cpp
     src/Game/WorldGenerateMap.cpp
-    src/Core/ReflectionMacros.h
-    src/Core/ReflectionMacrosInternal.h
     src/Game/CoreComponents.h
     src/Core/Container/RingBuffer.h
     src/Core/Container/RingBuffer.cpp
