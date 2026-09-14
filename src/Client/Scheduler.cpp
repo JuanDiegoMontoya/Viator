@@ -369,7 +369,7 @@ namespace
     void AddPassInternal(std::string_view id, int priority, std::function<void()> callback) override
     {
       ZoneScoped;
-      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::pmr::string(id),
+      [[maybe_unused]] auto [_, success] = graph.nodes.try_emplace(std::pmr::string(id, allocator),
         IncompleteDirectedAcyclicGraph<NodePayload>::Node{
           .payload =
             {
@@ -383,7 +383,7 @@ namespace
     void AddDependency(std::string_view childId, std::string_view parentId) override
     {
       ZoneScoped;
-      auto it = graph.nodes.find(std::pmr::string(childId));
+      auto it = graph.nodes.find(std::pmr::string(childId, allocator));
       DEBUG_ASSERT(it != graph.nodes.end());
       if (it == graph.nodes.end())
       {
