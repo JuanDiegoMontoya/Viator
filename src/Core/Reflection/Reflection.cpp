@@ -1,7 +1,6 @@
 #include "Reflection.h"
 #include "Core/Reflection/BlockComponentReflection.h"
 #include "Core/Reflection/ReflectionUtilitiesInternal.h"
-#include "Core/Reflection/EntityComponentReflection.h"
 #include "Core/Reflection/ItemComponentReflection.h"
 #include "Core/Reflection/RpcReflection.h"
 #include "Core/Reflection/MiscTypeReflection.h"
