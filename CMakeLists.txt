@@ -229,6 +229,16 @@ add_executable(frogRender
     src/Game/TraderNpcDialogue.h
     src/Game/TraderNpcDialogue.cpp
     src/Game/Crafting.h
+    src/Core/Reflection/BlockComponentReflection.cpp
+    src/Core/Reflection/BlockComponentReflection.h
+    src/Core/Reflection/ItemComponentReflection.cpp
+    src/Core/Reflection/ItemComponentReflection.h
+    src/Core/Reflection/ReflectionUtilitiesInternal.cpp
+    src/Core/Reflection/ReflectionUtilitiesInternal.h
+    src/Core/Reflection/MiscTypeReflection.cpp
+    src/Core/Reflection/MiscTypeReflection.h
+    src/Core/Reflection/RpcReflection.cpp
+    src/Core/Reflection/RpcReflection.h
 )
 
 target_compile_features(frogRender PUBLIC cxx_std_23)

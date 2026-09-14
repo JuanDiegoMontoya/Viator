@@ -1,4 +1,10 @@
 #include "Reflection.h"
+#include "Core/Reflection/BlockComponentReflection.h"
+#include "Core/Reflection/ReflectionUtilitiesInternal.h"
+#include "Core/Reflection/EntityComponentReflection.h"
+#include "Core/Reflection/ItemComponentReflection.h"
+#include "Core/Reflection/RpcReflection.h"
+#include "Core/Reflection/MiscTypeReflection.h"
 #define R_IMPLEMENTATION
 #include "ReflectionMacrosInternal.h"
 #include "Game/World.h"
@@ -29,131 +35,6 @@
 #include "entt/meta/pointer.hpp"
 #include "entt/core/hashed_string.hpp"
 using namespace entt::literals;
-
-namespace // type traits 2
-{
-  template<typename T>
-  struct is_optional : std::false_type
-  {
-  };
-
-  template<typename T>
-  struct is_optional<std::optional<T>> : std::true_type
-  {
-  };
-
-  template<typename T>
-  constexpr bool is_optional_v = is_optional<T>::value;
-
-  template<typename T>
-  struct is_unique_ptr : std::false_type
-  {
-  };
-
-  template<typename T, typename D>
-  struct is_unique_ptr<std::unique_ptr<T, D>> : std::true_type
-  {
-  };
-
-  template<typename T>
-  constexpr bool is_unique_ptr_v = is_unique_ptr<T>::value;
-
-  template<typename T>
-  struct is_variant : std::false_type
-  {
-  };
-
-  template<typename... Ts>
-  struct is_variant<std::variant<Ts...>> : std::true_type
-  {
-  };
-
-  template<typename T>
-  constexpr bool is_variant_v = is_variant<T>::value;
-} // namespace
-
-namespace
-{
-  template<typename Variant, std::size_t I = 0>
-  void ForEachVariantAlternative(auto&& func)
-  {
-    if constexpr (I < std::variant_size_v<Variant>)
-    {
-      using T = std::variant_alternative_t<I, Variant>;
-      func.template operator()<T>();
-      ForEachVariantAlternative<Variant, I + 1>(std::forward<decltype(func)>(func));
-    }
-  }
-
-  template<typename T, typename U>
-  decltype(auto) AppendToPropertiesMap(entt::hashed_string id, U any)
-  {
-    auto meta = entt::resolve<T>();
-    auto* map = static_cast<Core::Reflection::PropertiesMap*>(meta.custom());
-    if (!map)
-    {
-      entt::meta_factory<T>{}.template custom<Core::Reflection::PropertiesMap>();
-      map = static_cast<Core::Reflection::PropertiesMap*>(entt::resolve<T>().custom());
-      DEBUG_ASSERT(map);
-    }
-    return map->emplace(id, std::move(any)).first->second.template cast<U&>();
-  }
-
-  std::string RemoveNamespaces(std::string name)
-  {
-    if (auto pos = name.find_last_of(':'); pos != std::string::npos)
-    {
-      name.erase(name.begin(), name.begin() + pos + 1);
-    }
-
-    if (auto pos = name.find_last_of(' '); pos != std::string_view::npos)
-    {
-      name.erase(name.begin(), name.begin() + pos + 1);
-    }
-
-    return name;
-  }
-
-  template<typename T>
-  T WorldGet(World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    if (const auto* ptr = world.GetRegistry().try_get<const T>(entity))
-    {
-      return *ptr;
-    }
-    throw std::runtime_error("Component did not exist on entity");
-  }
-
-  template<typename T>
-  void WorldSet(World& world, entt::entity entity, T val)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    world.GetRegistry().emplace_or_replace<T>(entity, val);
-  }
-
-  template<typename T>
-  bool WorldHas(World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().valid(entity))
-    {
-      throw std::runtime_error("Invalid entity");
-    }
-    return world.GetRegistry().all_of<T>(entity);
-  }
-
-  template<typename T>
-  void EmplaceOrReplaceWrapper_HACK(entt::registry* registry, entt::entity entity, T& value)
-  {
-    registry->emplace_or_replace<T>(entity, std::move(value));
-  }
-} // namespace
 
 static std::vector<void (*)()> s_reflectionRegistrationFuncs;
 static asIScriptEngine* asEngine;
@@ -189,187 +70,6 @@ using namespace Core::Reflection;
 #include "Jolt/Physics/Body/MotionType.h"
 
 #include "tracy/Tracy.hpp"
-
-// ADL and specializations
-namespace entt
-{
-  template<>
-  struct type_name<std::string> final
-  {
-    [[nodiscard]] static constexpr std::string_view value() noexcept
-    {
-      return std::string_view{"std::string"};
-    }
-  };
-#if 0
-#if 1
-  template<typename T>
-  struct adl_meta_pointer_like<std::optional<T>>
-  {
-    static decltype(auto) dereference(const std::optional<T>& option)
-    {
-      return option.value();
-    }
-
-    static decltype(auto) dereference(std::optional<T>& option)
-    {
-      return option.value();
-    }
-  };
-
-  template<typename T>
-  struct is_meta_pointer_like<std::optional<T>> : std::true_type
-  {
-  };
-#else
-  template<typename T>
-  struct meta_sequence_container_traits<std::optional<T>>
-  {
-    using size_type = typename meta_sequence_container::size_type;
-    //using iterator = T*;
-    using value_type = T;
-    using iterator = typename meta_sequence_container::iterator;
-    using reference = T&;
-    using const_reference = const T&;
-
-    static constexpr bool fixed_size = false;
-    
-    [[nodiscard]] static size_type size(const void* container)
-    {
-      const auto* cont = static_cast<const std::optional<T>*>(container);
-      return cont->has_value() ? 1 : 0;
-    }
-
-    [[nodiscard]] static bool clear(void* container)
-    {
-      auto* cont = static_cast<std::optional<T>*>(container);
-      cont->reset();
-      return true;
-    }
-
-    [[nodiscard]] static bool reserve([[maybe_unused]] void* container, [[maybe_unused]] size_type size)
-    {
-      return false;
-    }
-
-    [[nodiscard]] static bool resize(void* container, size_type size)
-    {
-      if constexpr (!std::is_default_constructible_v<T>)
-      {
-        return false;
-      }
-
-      if (size == 0)
-      {
-        return clear(container);
-      }
-
-      if (size == 1)
-      {
-        auto* cont = static_cast<std::optional<T>*>(container);
-        cont->emplace();
-        return true;
-      }
-
-      return false;
-    }
-    static iterator begin(const meta_ctx& area, void* container, const void* as_const)
-    {
-      if (container)
-      {
-        auto* cont = static_cast<std::optional<T>*>(container);
-        return cont->has_value() ? iterator{area, &*cont} : iterator{area, (T*)nullptr};
-      }
-
-      const auto* cont = static_cast<const std::optional<T>*>(as_const);
-      return cont->has_value() ? iterator{area, &*cont} : iterator{area, (const T*)nullptr};
-    }
-    
-    static iterator end(const meta_ctx& area, void* container, const void* as_const)
-    {
-      if (container)
-      {
-        auto* cont = static_cast<std::optional<T>*>(container);
-        return cont->has_value() ? iterator{area, &*cont + 1} : iterator{area, (T*)nullptr};
-      }
-
-      const auto* cont = static_cast<const std::optional<T>*>(as_const);
-      return cont->has_value() ? iterator{area, &*cont + 1} : iterator{area, (const T*)nullptr};
-    }
-    
-    [[nodiscard]] static iterator insert([[maybe_unused]] const meta_ctx& area,
-      [[maybe_unused]] void* container,
-      [[maybe_unused]] const void* value,
-      [[maybe_unused]] const void* cref,
-      [[maybe_unused]] const iterator& it)
-    {
-      //auto* cont = static_cast<std::optional<T>*>(container);
-      return iterator{area, (T*)nullptr};
-    }
-    
-    [[nodiscard]] static iterator erase([[maybe_unused]] const meta_ctx& area, [[maybe_unused]] void* container, [[maybe_unused]] const iterator& it)
-    {
-      auto* cont = static_cast<std::optional<T>*>(container);
-      if (cont->has_value() && it == &*cont)
-      {
-        cont->reset();
-      }
-      return iterator{area, (T*)nullptr};
-    }
-  };
-#endif
-#endif
-} // namespace entt
-
-namespace
-{
-  void UpdatePlayerInput(World& world, entt::entity entity, InputState is, InputLookState ils)
-  {
-    world.GetRegistry().emplace_or_replace<InputState>(entity, is);
-    world.GetRegistry().emplace_or_replace<InputLookState>(entity, ils);
-  }
-
-  void GiveLocalPlayerRPC(World& world, entt::entity entity)
-  {
-    if (!world.GetRegistry().all_of<LocalPlayer, InputState, InputLookState, LocalAuthoritative>(entity))
-    {
-      world.GetRegistry().emplace_or_replace<LocalPlayer>(entity);
-      world.GetRegistry().emplace_or_replace<InputState>(entity);
-      world.GetRegistry().emplace_or_replace<InputLookState>(entity);
-      world.GetRegistry().emplace_or_replace<LocalAuthoritative>(entity);
-    }
-  }
-
-  void UpdateTransformRPC(World& world, entt::entity entity, LocalTransform transform)
-  {
-    // TODO: Verify that the entity is owned by the client.
-    if (world.GetRegistry().valid(entity))
-    {
-      world.GetRegistry().emplace_or_replace<LocalTransform>(entity, transform);
-      world.UpdateLocalTransform(entity);
-    }
-  }
-
-  void ExecuteCommand(World& world, const std::string& command)
-  {
-    world.globals->commandRegistry->ExecuteCommand(command);
-  }
-
-  BlockId GetVoxelAt(World& world, const glm::ivec3& voxelPosition)
-  {
-    return world.globals->grid->GetVoxelAt(voxelPosition);
-  }
-
-  void OnTryPlaceBlock(World& world, const glm::ivec3& voxelPosition, BlockId block)
-  {
-    Block::OnTryPlaceBlock(world, voxelPosition, block);
-  }
-
-  BlockId GetBlockId(World& world, const std::string& tag)
-  {
-    return world.globals->blockRegistry->Get(tag);
-  }
-}
 
 namespace Core::Reflection
 {
@@ -756,23 +456,6 @@ const char* Core::Reflection::EnumToIcon(entt::meta_any value)
   return "Unknown enumerator";
 }
 
-template<typename T>
-static std::string GetName()
-{
-  if (auto meta = entt::resolve<T>())
-  {
-    if (const auto* props = static_cast<const Core::Reflection::PropertiesMap*>(meta.custom()))
-    {
-      if (auto it = props->find("name"_hs); it != props->end())
-      {
-        return it->second.cast<const char*>();
-      }
-    }
-  }
-
-  return std::string(entt::type_name<T>::value());
-}
-
 void Core::Reflection::Initialize(Scripting& scripting)
 {
   ZoneScoped;
@@ -795,11 +478,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
   ASSERT(asEngine->RegisterObjectType("quat", sizeof(glm::quat), asOBJ_VALUE | asOBJ_POD) >= 0);
   entt::meta_factory<glm::quat>{}.func<[](void* ctx, int argIdx, glm::quat v) { ((asIScriptContext*)ctx)->SetArgObject(argIdx, &v); }>("ASSetArg"_hs);
   ASSERT(asEngine->RegisterTypedef("short", "uint16") >= 0);
-
-  ASSERT(asEngine->RegisterGlobalFunction("void ExecuteCommand(World&, const string& in)", asFUNCTION(ExecuteCommand), asCALL_CDECL) >= 0);
-  ASSERT(asEngine->RegisterGlobalFunction("entity GetVoxel(World&, const ivec3& in)", asFUNCTION(GetVoxelAt), asCALL_CDECL) >= 0);
-  ASSERT(asEngine->RegisterGlobalFunction("void SetVoxel(World&, const ivec3& in, entity)", asFUNCTION(OnTryPlaceBlock), asCALL_CDECL) >= 0);
-  ASSERT(asEngine->RegisterGlobalFunction("entity GetBlockId(World&, const string& in)", asFUNCTION(GetBlockId), asCALL_CDECL) >= 0);
 
   entt::meta_factory<int>()
     .traits(TRIVIAL)
@@ -888,6 +566,11 @@ void Core::Reflection::Initialize(Scripting& scripting)
     .func<&EditorReadEntity>("EditorRead"_hs)
 #endif
   ; // NOT trivial, because they need to be remapped for networking.
+
+  InitializeMiscTypeReflection(scripting);
+  InitializeBlockComponentReflection(scripting);
+  InitializeItemComponentReflection(scripting);
+  InitializeRpcReflection(scripting);
 
   REFLECT_COMPONENT_NO_DEFAULT(LocalTransform, REPLICATED | TRIVIAL)
 #ifndef GAME_HEADLESS
@@ -981,32 +664,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(FlyingCharacterController, maxSpeed, PROP_MAX(50.0f))
     DATA(FlyingCharacterController, acceleration, PROP_MAX(50.0f));
 
-  using namespace Physics;
-
-  REFLECT_TYPE(std::monostate);
-  REFLECT_TYPE(UseTwoLevelGrid);
-
-  REFLECT_TYPE(Sphere)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Sphere, radius);
-
-  REFLECT_TYPE(Capsule)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Capsule, radius)
-    DATA(Capsule, cylinderHalfHeight);
-  
-  REFLECT_TYPE(Box)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Box, halfExtent);
-
-  REFLECT_TYPE(Plane)
-    TRAITS(EDITOR_READ_ONLY)
-    DATA(Plane, normal)
-    DATA(Plane, constant);
-
-  REFLECT_TYPE(PolyShape)
-    VARIANT_FUNCS(PolyShape);
-
   REFLECT_TYPE(ItemState)
     DATA(ItemState, id)
     DATA(ItemState, count)
@@ -1020,6 +677,8 @@ void Core::Reflection::Initialize(Scripting& scripting)
     ENUMERATOR(JPH::CharacterBase::EGroundState, OnSteepGround)
     ENUMERATOR(JPH::CharacterBase::EGroundState, NotSupported)
     ENUMERATOR(JPH::CharacterBase::EGroundState, InAir);
+  
+  using namespace Physics;
 
   REFLECT_TYPE(ShapeSettings)
     TRAITS(EDITOR_READ_ONLY)
@@ -1241,50 +900,10 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(WalkingMovementAttributes, waterJumpControlTime, PROP_MAX(100.0f));
 
   REFLECT_COMPONENT(VoxelsComponent, REPLICATED);
-
-  // TODO: Grid reflection should be removed
-  REFLECT_TYPE(Voxel::Grid::TopLevelBrickPtr)
-    DATA(Voxel::Grid::TopLevelBrickPtr, voxelsDoBeAllSame)
-    DATA_BASE(Voxel::Grid::TopLevelBrickPtr, voxelIfAllSame);
-
-  REFLECT_TYPE(Voxel::Grid::TopLevelBrick)
-    DATA_BASE(Voxel::Grid::TopLevelBrick, bricks);
-  
-  REFLECT_TYPE(Voxel::Grid::BottomLevelBrickPtr)
-    DATA(Voxel::Grid::BottomLevelBrickPtr, voxelsDoBeAllSame)
-    DATA_BASE(Voxel::Grid::BottomLevelBrickPtr, voxelIfAllSame);
-  
-  REFLECT_TYPE(Voxel::Grid::BottomLevelBrick)
-    DATA_BASE(Voxel::Grid::BottomLevelBrick, occupancy)
-    DATA_BASE(Voxel::Grid::BottomLevelBrick, voxels);
-
-  REFLECT_TYPE(Voxel::Grid::OccupancyBitmask)
-    DATA_BASE(Voxel::Grid::OccupancyBitmask, bitmask);
-
-  REFLECT_ENUM(voxel_t)
-    ENUMERATOR(voxel_t, Air)
-    ENUMERATOR(voxel_t, Null);
   
   REFLECT_COMPONENT(LocalPlayer);
 
-  REFLECT_ENUM(Networking::ClientStatus)
-    ENUMERATOR(Networking::ClientStatus, Resolving)
-    ENUMERATOR(Networking::ClientStatus, Joining)
-    ENUMERATOR(Networking::ClientStatus, Connected)
-    ENUMERATOR(Networking::ClientStatus, Disconnected);
-
-  entt::meta_factory<const char*>().conv<std::string>().conv<std::string_view>();
-  entt::meta_factory<char*>().conv<std::string>().conv<std::string_view>();
-
-  REFLECT_ENUM(Networking::PacketType);
-
   REFLECT_COMPONENT(LocalAuthoritative, NO_EDITOR);
-  
-  REGISTER_RPC(UpdatePlayerInput, RpcTraits::Server);
-  
-  REGISTER_RPC(GiveLocalPlayerRPC, RpcTraits::Client);
-  
-  REGISTER_RPC(UpdateTransformRPC, RpcTraits::Server);
 
   REFLECT_TYPE(ItemIdAndCount)
     DATA(ItemIdAndCount, item)
@@ -1308,55 +927,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
   BEGIN_REFLECT_COMPONENT(Game2::Comp::TraderNpcWares, REPLICATED)
     MEMBER(crafting);
   END_REFLECT
-
-  REGISTER_RPC(DropItemRPC, RpcTraits::Server);
-  REGISTER_RPC(ThrowItemRPC, RpcTraits::Server);
-  REGISTER_RPC(TryCraftRecipeRPC, RpcTraits::Server);
-  REGISTER_RPC(SwapInventorySlotsRPC, RpcTraits::Server);
-  REGISTER_RPC(SetActiveSlotRPC, RpcTraits::Server);
-  REGISTER_RPC(SetVoxelAtRPC, RpcTraits::Broadcast | RpcTraits::UseVoxelChannel);
-  REGISTER_RPC(TeleportPlayerRPC, RpcTraits::Client);
-  REGISTER_RPC(ScrollHotbarRPC, RpcTraits::Server);
-  REGISTER_RPC(SwapInventorySlotAndArmorSlotRPC, RpcTraits::Server);
-  REGISTER_RPC(ThrowItemFromArmorRPC, RpcTraits::Server);
-  REGISTER_RPC(DropItemFromArmorRPC, RpcTraits::Server);
-  REGISTER_RPC(SwapArmorSlotsRPC, RpcTraits::Server);
-  REGISTER_RPC(UpdateSimpleScriptableCodeRPC, RpcTraits::Server | RpcTraits::Remote);
-
-  REFLECT_ENUM(ActionType);
-
-  REFLECT_TYPE(Networking::ClientNetworkInfo)
-    DATA(Networking::ClientNetworkInfo, entity)
-    DATA(Networking::ClientNetworkInfo, status)
-    DATA(Networking::ClientNetworkInfo, roundTripTime)
-    DATA(Networking::ClientNetworkInfo, roundTripTimeVariance)
-    DATA(Networking::ClientNetworkInfo, packetLoss);
-
-  REFLECT_ENUM(GameState)
-    ENUMERATOR(GameState, MENU)
-    ENUMERATOR(GameState, GAME)
-    ENUMERATOR(GameState, PAUSED)
-    ENUMERATOR(GameState, WORLD_SELECT)
-    ENUMERATOR(GameState, LOADING_SP)
-    ENUMERATOR(GameState, LOADING_MP)
-    ENUMERATOR(GameState, MENU_SETTINGS)
-    ENUMERATOR(GameState, PAUSED_SETTINGS)
-    ENUMERATOR(GameState, SERVER_SELECT)
-    ENUMERATOR(GameState, SERVER_SELECT_ADD_SERVER);
-
-  REFLECT_ENUM(Item::EffectType)
-    ENUMERATOR(Item::EffectType, MovementSpeedModifier, PROP_DISPLAY_NAME("Speed"))
-    ENUMERATOR(Item::EffectType, JumpImpulseModifier, PROP_DISPLAY_NAME("Jump Impulse"))
-    ENUMERATOR(Item::EffectType, WaterJumpControlTimeModifier, PROP_DISPLAY_NAME("Water Jump Control Time"))
-    ENUMERATOR(Item::EffectType, WaterAccelerationModifier, PROP_DISPLAY_NAME("Water Acceleration"))
-    ENUMERATOR(Item::EffectType, WaterMaxSpeedModifier, PROP_DISPLAY_NAME("Water Max Speed"))
-    ENUMERATOR(Item::EffectType, WaterGravityModifier, PROP_DISPLAY_NAME("Water Gravity"))
-    ENUMERATOR(Item::EffectType, ArmorModifier, PROP_DISPLAY_NAME("Armor"))
-    ENUMERATOR(Item::EffectType, BaseDamage, PROP_DISPLAY_NAME("Damage"))
-    ENUMERATOR(Item::EffectType, Knockback, PROP_DISPLAY_NAME("Knockback"))
-    ENUMERATOR(Item::EffectType, HealthRegeneration, PROP_DISPLAY_NAME("Health Regeneration"))
-    ENUMERATOR(Item::EffectType, Shine, PROP_DISPLAY_NAME("Shine"))
-    ENUMERATOR(Item::EffectType, Spelunker, PROP_DISPLAY_NAME("Spelunker"));
 
   REFLECT_ENUM(ArmorAndAccessories::Slot)
     ENUMERATOR(ArmorAndAccessories::Slot, SLOT_HEAD, PROP_DISPLAY_NAME("Head"), PROP_ICON(ICON_FA_HAT_COWBOY))
@@ -1383,186 +953,10 @@ void Core::Reflection::Initialize(Scripting& scripting)
 
   REFLECT_COMPONENT(DoNotRenderIfAncestorIsLocalPlayer, REPLICATED);
 
-  REFLECT_ENUM(Item::EffectCondition)
-    ENUMERATOR(Item::EffectCondition, OnUse)
-    ENUMERATOR(Item::EffectCondition, OnHeld)
-    ENUMERATOR(Item::EffectCondition, OnWorn);
-
-  REFLECT_ENUM(Item::EffectQuantityType)
-    ENUMERATOR(Item::EffectQuantityType, Additive)
-    ENUMERATOR(Item::EffectQuantityType, Multiplicative);
-
-  REFLECT_COMPONENT(Item::Component::MaterializeAsMeshEntity, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::MaterializeAsMeshEntity, mesh)
-    DATA(Item::Component::MaterializeAsMeshEntity, tint)
-    DATA(Item::Component::MaterializeAsMeshEntity, position)
-    DATA(Item::Component::MaterializeAsMeshEntity, scale)
-    DATA(Item::Component::MaterializeAsMeshEntity, rotation);
-
-  REFLECT_COMPONENT(Item::Component::Usable, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Usable, timeBetweenUses);
-
-  REFLECT_COMPONENT(Item::Component::Stackable, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Stackable, maxStackSize);
-  
-  REFLECT_COMPONENT(Item::Component::ColliderWhenDropped, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::ColliderWhenDropped, shape)
-    DATA(Item::Component::ColliderWhenDropped, translation)
-    DATA(Item::Component::ColliderWhenDropped, rotation)
-    DATA(Item::Component::ColliderWhenDropped, friction);
-  
-  REFLECT_COMPONENT_BASE(Item::Component::AllowedSlots, ITEM_COMPONENT | REPLICATED);
-
-  REFLECT_ENUM(Item::Component::AllowedSlots)
-    ENUMERATOR(Item::Component::AllowedSlots, Normal)
-    ENUMERATOR(Item::Component::AllowedSlots, Head)
-    ENUMERATOR(Item::Component::AllowedSlots, Body)
-    ENUMERATOR(Item::Component::AllowedSlots, Legs)
-    ENUMERATOR(Item::Component::AllowedSlots, Accessory)
-    ENUMERATOR(Item::Component::AllowedSlots, Hidden);
-
-  REFLECT_COMPONENT(Item::Component::StaticEffect, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::StaticEffect, condition)
-    DATA(Item::Component::StaticEffect, quantityType)
-    DATA(Item::Component::StaticEffect, type)
-    DATA(Item::Component::StaticEffect, amount);
-
-  REFLECT_COMPONENT(Item::Component::StaticEffects, ITEM_COMPONENT | REPLICATED)
-    DATA_BASE(Item::Component::StaticEffects, effects);
-  
-  REFLECT_COMPONENT(Item::Component::Gun, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Gun, model)
-    DATA(Item::Component::Gun, tint)
-    DATA(Item::Component::Gun, scale)
-    DATA(Item::Component::Gun, damage)
-    DATA(Item::Component::Gun, knockback)
-    DATA(Item::Component::Gun, bullets)
-    DATA(Item::Component::Gun, velocity)
-    DATA(Item::Component::Gun, accuracyMoa)
-    DATA(Item::Component::Gun, vrecoil)
-    DATA(Item::Component::Gun, vrecoilDev)
-    DATA(Item::Component::Gun, hrecoil)
-    DATA(Item::Component::Gun, hrecoilDev)
-    DATA_BASE(Item::Component::Gun, light)
-    DATA(Item::Component::Gun, sticky)
-    DATA(Item::Component::Gun, stickyDist)
-    DATA_BASE(Item::Component::Gun, fogEmitter)
-  ;
-
-  REFLECT_COMPONENT(Item::Component::MaterializeAsSprite, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::MaterializeAsSprite, tag)
-    DATA(Item::Component::MaterializeAsSprite, tint);
-
-  REFLECT_COMPONENT(Item::Component::Rainbow, ITEM_COMPONENT | REPLICATED);
-
-  REFLECT_COMPONENT(Item::Component::Tool, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Tool, blockDamage)
-    DATA(Item::Component::Tool, blockDamageTier)
-    DATA_BASE(Item::Component::Tool, blockDamageFlags);
-
-  REFLECT_COMPONENT(Item::Component::SpawnEntityPrefabOnUse, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::SpawnEntityPrefabOnUse, tag);
-  
-  REFLECT_COMPONENT(Item::Component::HealUserOnUse, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::HealUserOnUse, amount);
-  
-  REFLECT_COMPONENT(Item::Component::Block, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Block, voxel);
-  
-  REFLECT_COMPONENT(Item::Component::SpawnTempHurtboxOnUse, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::SpawnTempHurtboxOnUse, shape)
-    DATA(Item::Component::SpawnTempHurtboxOnUse, position)
-    DATA(Item::Component::SpawnTempHurtboxOnUse, damage)
-    DATA(Item::Component::SpawnTempHurtboxOnUse, knockback)
-    DATA_BASE(Item::Component::SpawnTempHurtboxOnUse, duration);
-
-  // TODO: reflect AnimatePathOnUse
-
-  REFLECT_COMPONENT(Item::Component::GiveEffectOnUse, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::GiveEffectOnUse, effectId)
-    DATA(Item::Component::GiveEffectOnUse, duration);
-
-  REFLECT_COMPONENT(Item::Component::Rope, ITEM_COMPONENT | REPLICATED)
-    DATA(Item::Component::Rope, length);
-
-  REFLECT_COMPONENT(Item::Component::AbsorbFogOnUse, ITEM_COMPONENT | REPLICATED);
-
   REFLECT_TYPE(Block::DropSelf);
-
-  REFLECT_ENUM(BlockDamageFlagBit)
-    ENUMERATOR(BlockDamageFlagBit, NONE)
-    ENUMERATOR(BlockDamageFlagBit, PICKAXE)
-    ENUMERATOR(BlockDamageFlagBit, AXE)
-    ENUMERATOR(BlockDamageFlagBit, ALL_TOOLS)
-    ENUMERATOR(BlockDamageFlagBit, NO_LOOT)
-    ENUMERATOR(BlockDamageFlagBit, NO_LOOT_95_PERCENT);
-
-  REFLECT_TYPE(BlockDamageFlags)
-    DATA_BASE(BlockDamageFlags, flags);
 
   REFLECT_TYPE(Block::Component::LootType)
     VARIANT_FUNCS(Block::Component::LootType);
-
-  REFLECT_COMPONENT(Block::Component::Valuable, BLOCK_COMPONENT | REPLICATED);
-
-  REFLECT_COMPONENT(Block::Component::RenderAsSubGrid, BLOCK_COMPONENT | REPLICATED);
-
-  REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::RenderAsTexturedCube, material);
-
-  REFLECT_COMPONENT(Block::Component::RenderAsTexturedCube2, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::RenderAsTexturedCube2, faces);
-  
-  REFLECT_COMPONENT(Block::Component::ExplodeWhenBroken, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::ExplodeWhenBroken, radius)
-    DATA(Block::Component::ExplodeWhenBroken, damage)
-    DATA(Block::Component::ExplodeWhenBroken, damageTier)
-    DATA(Block::Component::ExplodeWhenBroken, pushForce)
-    DATA(Block::Component::ExplodeWhenBroken, damageFlags);
-
-  REFLECT_COMPONENT(Block::Component::SpawnDependentEntityPrefabWhenPlaced, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::SpawnDependentEntityPrefabWhenPlaced, id);
-
-  REFLECT_COMPONENT(Block::Component::CorrespondingItem, BLOCK_COMPONENT | REPLICATED)
-    DATA(Block::Component::CorrespondingItem, item);
-  
-  REFLECT_COMPONENT(Block::Component::Script, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::Script, path);
-
-  REFLECT_ENUM(Block::Direction)
-    ENUMERATOR(Block::Direction, North)
-    ENUMERATOR(Block::Direction, South)
-    ENUMERATOR(Block::Direction, East)
-    ENUMERATOR(Block::Direction, West)
-    ENUMERATOR(Block::Direction, Up)
-    ENUMERATOR(Block::Direction, Down);
-
-  REFLECT_COMPONENT(Block::Component::RequiresSupport, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::RequiresSupport, supportingSide);
-  
-  REFLECT_COMPONENT(Block::Component::RequiresSupportByBlock, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::RequiresSupportByBlock, block);
-  
-  REFLECT_COMPONENT(Block::Component::RequiresSupportByBlocks, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::RequiresSupportByBlocks, blocks);
-  
-  REFLECT_COMPONENT(Block::Component::BaseVariant, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::BaseVariant, block);
-  
-  REFLECT_COMPONENT(Block::Component::StandardRotatedVariants, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::StandardRotatedVariants, east)
-    DATA_BASE(Block::Component::StandardRotatedVariants, south)
-    DATA_BASE(Block::Component::StandardRotatedVariants, west);
-  
-  REFLECT_COMPONENT(Block::Component::SpawnExtraBlockOnPlace, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::SpawnExtraBlockOnPlace, block)
-    DATA_BASE(Block::Component::SpawnExtraBlockOnPlace, direction);
-  
-  REFLECT_COMPONENT(Block::Component::InterlinkedBlock, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::InterlinkedBlock, direction);
-  
-  REFLECT_COMPONENT(Block::Component::TransformWhenUsed, BLOCK_COMPONENT | REPLICATED)
-    DATA_BASE(Block::Component::TransformWhenUsed, block);
 
   REFLECT_COMPONENT(IsInWater, REPLICATED);
 
@@ -1580,27 +974,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA_BASE(Grapple, shooter)
     DATA_BASE(Grapple, shortenConstraints);
 
-  BEGIN_REFLECT_COMPONENT(Item::Component::GrapplingHookLauncher, ITEM_COMPONENT | REPLICATED)
-    MEMBER(maxDistance, PROP_MAX(100.0f));
-    MEMBER(launchVelocity, PROP_MAX(100.0f));
-    MEMBER(pullAcceleration, PROP_MAX(100.0f));
-    MEMBER(pullMaxVelocity, PROP_MAX(100.0f));
-    MEMBER(pullInitialVelocity, PROP_MAX(100.0f));
-    MEMBER(initialSpringFrequency, PROP_MAX(20.0f));
-    MEMBER(maxSpringFrequency, PROP_MAX(20.0f));
-    MEMBER(springFrequencyVelocity, PROP_MAX(50.0f));
-    MEMBER(springDamping);
-  END_REFLECT
-
-  BEGIN_REFLECT_COMPONENT(Item::Component::IconModifiers, ITEM_COMPONENT | REPLICATED)
-    MEMBER(deltaCameraPosition);
-    MEMBER(deltaBound, PROP_MIN(-0.5f), PROP_MAX(0.5f));
-    MEMBER(deltaLookAtPosition);
-    MEMBER(deltaPitch, PROP_MIN(-3.14f), PROP_MAX(3.14f));
-    MEMBER(deltaYaw, PROP_MIN(-3.14f), PROP_MAX(3.14f));
-    MEMBER(deltaRoll, PROP_MIN(-3.14f), PROP_MAX(3.14f));
-  END_REFLECT
-
   REFLECT_COMPONENT(SyncWithParentPosition, REPLICATED);
   REFLECT_COMPONENT(DestroyWhenConstraintsBroken, REPLICATED);
   
@@ -1615,75 +988,11 @@ void Core::Reflection::Initialize(Scripting& scripting)
     DATA(DespawnWhenFarFromEntity, entity)
     DATA(DespawnWhenFarFromEntity, maxDistance);
 
-  using IvecVoxelPair = std::pair<glm::ivec3, voxel_t>;
-  REFLECT_TYPE(IvecVoxelPair)
-    DATA_BASE(IvecVoxelPair, first)
-    DATA_BASE(IvecVoxelPair, second);
-
-  BEGIN_REFLECT_TYPE(SerializableSimplePrefab)
-    MEMBER(voxelToName);
-    MEMBER(voxels);
-    END_REFLECT
-
-  BEGIN_REFLECT_NON_OBJECT_TYPE(SunInfo)
-    MEMBER(timeOfDay);
-    MEMBER(azimuth);
-    MEMBER(dayLength);
-    MEMBER(pauseDayNightCycle);
-  END_REFLECT
-
-  BEGIN_REFLECT_NON_OBJECT_TYPE(GameGlobals)
-    MEMBER(gameState) TRAITS(TRANSIENT);
-    MEMBER(rng);
-    MEMBER(debugging);
-    MEMBER(timeScale);
-    MEMBER(tickRate);
-    MEMBER(time);
-    MEMBER(hashGrid) TRAITS(TRANSIENT);
-    MEMBER(npcSpawnDirector);
-    MEMBER(updateNpcSpawnDirector);
-    MEMBER(npcsIgnorePlayers)
-    MEMBER(disableNpcPathfinding)
-    MEMBER(sunInfo);
-    MEMBER(pathCache) TRAITS(TRANSIENT);
-    MEMBER(lootRegistry) TRAITS(TRANSIENT);
-    MEMBER(crafting) TRAITS(TRANSIENT);
-  END_REFLECT
-
-  BEGIN_REFLECT_TYPE(NpcSpawnDirector)
-    MEMBER(maxEnemiesBase);
-    MEMBER(maxEnemiesPerAdditionalPlayer);
-    MEMBER(timeBetweenSpawns);
-    MEMBER(accumulator);
-  END_REFLECT
-
-  BEGIN_REFLECT_NON_OBJECT_TYPE(WorldGlobals)
-    MEMBER(worldName);
-    MEMBER(grid) TRAITS(TRANSIENT);
-    MEMBER(prefabRegistry) TRAITS(TRANSIENT);
-    MEMBER(blockRegistry) TRAITS(TRANSIENT);
-    MEMBER(itemRegistry) TRAITS(TRANSIENT);
-    MEMBER(entityPrefabRegistry) TRAITS(TRANSIENT);
-    MEMBER(game);
-    MEMBER(waterQueue);
-    MEMBER(waterSet);
-    MEMBER(globalSurfaceHeight);
-    MEMBER(globalSurfaceFog);
-    MEMBER(globalFog);
-    MEMBER(globalFogNeedsUpdate) TRAITS(TRANSIENT);
-    MEMBER(undergroundBiomes) TRAITS(TRANSIENT);
-    MEMBER(surfaceBiomes) TRAITS(TRANSIENT);
-  END_REFLECT
-
   BEGIN_REFLECT_COMPONENT(FogEmitter, REPLICATED | TRIVIAL)
     MEMBER(radiusInner);
     MEMBER(radiusOuter);
     MEMBER(density);
     MEMBER(color);
-  END_REFLECT
-
-  BEGIN_REFLECT_COMPONENT(Block::Component::RequiresSupportAdvanced, BLOCK_COMPONENT | REPLICATED)
-    MEMBER(supports);
   END_REFLECT
 
   BEGIN_REFLECT_COMPONENT(SimpleScriptable, REPLICATED)
