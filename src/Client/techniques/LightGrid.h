@@ -34,11 +34,11 @@ namespace Techniques
   class LightGrid
   {
   public:
-    static [[nodiscard]] std::unique_ptr<LightGrid> Create();
+    [[nodiscard]] static std::unique_ptr<LightGrid> Create();
 
     virtual ~LightGrid() = default;
 
     // Returns a device pointer to the cascaded light grid structure.
-    virtual [[nodiscard]] VkDeviceAddress Update(VkCommandBuffer cmd, Scheduler& scheduler, const LightGridUpdateInfo& info) = 0;
+    [[nodiscard]] virtual VkDeviceAddress Update(VkCommandBuffer cmd, Scheduler& scheduler, const LightGridUpdateInfo& info) = 0;
   };
 }

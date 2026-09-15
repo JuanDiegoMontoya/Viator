@@ -44,7 +44,7 @@ if (NOT GAME_HEADLESS)
     FetchContent_Declare(
         glslang
         GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
-        GIT_TAG        16.1.0
+        GIT_TAG        16.6.0
         #SYSTEM
     )
     

@@ -145,9 +145,9 @@ struct ImGui_ImplFvog_FrameRenderBuffers
 // [Please zero-clear before use!]
 struct ImGui_ImplFvog_WindowRenderBuffers
 {
-  uint32_t Index;
-  uint32_t Count;
-  ImGui_ImplFvog_FrameRenderBuffers* FrameRenderBuffers;
+  uint32_t Index{};
+  uint32_t Count{};
+  ImGui_ImplFvog_FrameRenderBuffers* FrameRenderBuffers{};
 };
 
 // For multi-viewport support:
@@ -169,12 +169,12 @@ struct ImGui_ImplFvog_ViewportData
 // Vulkan data
 struct ImGui_ImplFvog_Data
 {
-  ImGui_ImplFvog_InitInfo VulkanInitInfo;
-  VkDeviceSize BufferMemoryAlignment;
+  ImGui_ImplFvog_InitInfo VulkanInitInfo{};
+  VkDeviceSize BufferMemoryAlignment = 256;
   PipelineManager::GraphicsPipelineKey Pipeline; // pipeline for main render pass (created by app)
   PipelineManager::GraphicsPipelineKey Pipeline2; // pipeline for premultiplied alpha textures only
-  VkPipeline PipelineForViewports; // pipeline for secondary viewports (created by backend)
-  VkSurfaceFormatKHR lastSurfaceFormat;// = {.format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+  VkPipeline PipelineForViewports{}; // pipeline for secondary viewports (created by backend)
+  VkSurfaceFormatKHR lastSurfaceFormat{}; // = {.format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 
   // Font data
   std::optional<Fvog::Texture> FontImage;
@@ -182,12 +182,6 @@ struct ImGui_ImplFvog_Data
 
   // Render buffers for main window
   ImGui_ImplFvog_WindowRenderBuffers MainWindowRenderBuffers;
-
-  ImGui_ImplFvog_Data()
-  {
-    memset((void*)this, 0, sizeof(*this));
-    BufferMemoryAlignment = 256;
-  }
 };
 
 //-----------------------------------------------------------------------------

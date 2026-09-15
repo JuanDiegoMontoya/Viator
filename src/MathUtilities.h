@@ -5,6 +5,8 @@
 #include "glm/vec3.hpp"
 #include "glm/vec4.hpp"
 
+#include <optional>
+
 namespace Math
 {
   glm::mat4 InfReverseZPerspectiveRH(float fovY_radians, float aspectWbyH, float zNear);

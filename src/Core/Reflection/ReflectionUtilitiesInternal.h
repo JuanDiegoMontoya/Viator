@@ -4,6 +4,8 @@
 
 #include "entt/meta/resolve.hpp"
 
+#include <variant>
+
 namespace Core::Reflection
 {
   std::string RemoveNamespaces(std::string name);

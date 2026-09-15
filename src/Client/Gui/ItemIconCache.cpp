@@ -31,6 +31,16 @@ namespace Gui
 {
   namespace
   {
+    struct CacheKey
+    {
+      bool operator==(const CacheKey&) const = default;
+
+      ItemIconParams iconParams;
+      double time{}; // For animated items and blocks.
+      Fvog::Extent2D extent;
+      uint32_t samples;
+    };
+
     class ItemIconCacheImpl : public ItemIconCache
     {
     public:
@@ -408,16 +418,6 @@ namespace Gui
             ctx.CopyBufferToTexture(buffer, *res.first->second, {.extent = {width, height}});
           });
       }
-
-      struct CacheKey
-      {
-        bool operator==(const CacheKey&) const = default;
-
-        ItemIconParams iconParams;
-        double time{}; // For animated items and blocks.
-        Fvog::Extent2D extent;
-        uint32_t samples;
-      };
 
       struct CacheKeyHash
       {

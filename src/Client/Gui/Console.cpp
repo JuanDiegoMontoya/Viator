@@ -500,7 +500,7 @@ void Console::DrawWindow(World& world)
     {
       ExecuteCommand(world, s);
     }
-    console->inputBuffer[0]    = NULL;
+    console->inputBuffer[0]    = '\0';
     console->state.isPopupOpen = false;
     console->state.activeIdx   = -1;
     console->scrollToBottom    = true;

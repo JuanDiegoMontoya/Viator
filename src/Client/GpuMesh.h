@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 using index_t = uint32_t;
 
