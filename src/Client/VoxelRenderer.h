@@ -341,6 +341,7 @@ private:
   double time                              = 0;
 
   std::unique_ptr<Techniques::RayMarchedClouds> rayMarchedClouds_ = Techniques::RayMarchedClouds::Create();
+  
   Game2::AutoCVar_float cloudsUpscaleRatio                        = {
     "r.clouds.renderScale",
     "- The fraction of the render resolution to render clouds, prior to upscaling.",
@@ -644,6 +645,15 @@ private:
     32,
     1,
     4096,
+    Game2::CVarFlagBits::ARCHIVE,
+  };
+
+  Game2::AutoCVar_float tonemapper = {
+    "r.tonemapper",
+    "- The function used to perform the display transform just before forming the final image.",
+    1,
+    0,
+    std::nullopt,
     Game2::CVarFlagBits::ARCHIVE,
   };
 

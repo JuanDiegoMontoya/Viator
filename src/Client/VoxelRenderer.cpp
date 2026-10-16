@@ -529,10 +529,6 @@ VoxelRenderer::VoxelRenderer(PlayerHead* head) : head_(head)
   tonyMcMapfaceLut = LoadTonyMcMapfaceTexture();
   backgroundTexture = LoadImageFile(GetTextureDirectory() / "background.png", false);
 
-  tonemapUniforms.tonemapper                = 1;
-  tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
-  tonemapUniforms.enableDithering           = 1;
-
   InitGui();
 
   ddgi_ = Techniques::DDGI::Create({
@@ -1065,6 +1061,15 @@ void VoxelRenderer::RenderGame(DeltaTime dt, World& world, VkCommandBuffer comma
       .gNormalTranslucent   = frame.gNormalTranslucent->ImageView().GetImage2D(),
       .gDepthTranslucent    = frame.gDepthTranslucent->ImageView().GetImage2D(),
     });
+
+  tonemapUniforms.tonemapper                = uint32_t(tonemapper.Get());
+  tonemapUniforms.shadingInternalColorSpace = COLOR_SPACE_sRGB_LINEAR;
+  tonemapUniforms.enableDithering           = 1;
+
+  if (tonemapUniforms.tonemapOutputColorSpace == COLOR_SPACE_sRGB_LINEAR || tonemapUniforms.tonemapOutputColorSpace == COLOR_SPACE_sRGB_NONLINEAR)
+  {
+    tonemapUniforms.maxDisplayNits = 1;
+  }
 
   tonemapUniformBuffer.UpdateData(commandBuffer, tonemapUniforms);
 
