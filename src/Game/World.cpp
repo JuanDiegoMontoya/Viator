@@ -305,7 +305,7 @@ entt::entity World::CreatePlayer()
   auto p = registry_.create();
 
   registry_.emplace<Name>(p, "Player");
-  registry_.emplace<Player>(p);
+  registry_.emplace<Player>(p).id = nextPlayerId_++;
   registry_.emplace<InputState>(p);
   registry_.emplace<InputLookState>(p);
   registry_.emplace<Hierarchy>(p);

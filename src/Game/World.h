@@ -265,6 +265,7 @@ public:
 
 private:
   uint64_t ticks_ = 0;
+  uint32_t nextPlayerId_ = 1;
   entt::registry registryOld_;
   RegistryProxy registry_;
 };
