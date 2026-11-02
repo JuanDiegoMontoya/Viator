@@ -80,7 +80,7 @@ void main()
   radiance += GetHitEmission(hit);
 
   const float reactive = 0;
-  WriteGBuffer(normalWS, normalWS, radiance, motion, reactive);
+  WriteGBuffer(albedo, normalWS, radiance, motion, reactive);
 }
 
 #endif // !__cplusplus
