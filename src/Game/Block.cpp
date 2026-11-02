@@ -766,7 +766,7 @@ ItemId Block::GetItemId(const World& world, BlockId block)
   {
     return p->item;
   }
-  return entt::null;
+  return NullItem;
 }
 
 float Block::GetInitialHealth(const World& world,  BlockId block)

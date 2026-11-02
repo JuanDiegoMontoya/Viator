@@ -95,7 +95,7 @@ namespace Gui
         {
           // Determine if the icon needs to be updated due to animation.
           const auto& itemReg = world.globals->itemRegistry->GetRegistry();
-          if (const auto* bp = itemReg.try_get<const Item::Component::Block>(entt::entity(iconParams.item)))
+          if (const auto* bp = itemReg.try_get<const Item::Component::Block>(entt::entity(iconParams.item.id)))
           {
             const auto& blockReg = world.globals->blockRegistry->GetRegistry();
             if (blockReg.all_of<Block::Component::RenderAsAnimatedSubGrid>(entt::entity(bp->voxel)))
@@ -121,19 +121,19 @@ namespace Gui
       bool RenderIcon(World& world, ItemId item, uint32_t samples, Fvog::Texture& iconTexture) const
       {
         const auto& itemReg = world.globals->itemRegistry->GetRegistry();
-        if (const auto* bp = itemReg.try_get<const Item::Component::Block>(entt::entity(item)))
+        if (const auto* bp = itemReg.try_get<const Item::Component::Block>(entt::entity(item.id)))
         {
           RenderBlockIcon(world, bp->voxel, samples, iconTexture);
           return true;
         }
         
-        if (const auto* sp = itemReg.try_get<const Item::Component::MaterializeAsSprite>(entt::entity(item)))
+        if (const auto* sp = itemReg.try_get<const Item::Component::MaterializeAsSprite>(entt::entity(item.id)))
         {
           RenderSpriteIcon(world, sp->tag, sp->tint, iconTexture);
           return true;
         }
 
-        if (const auto* mp = itemReg.try_get<const Item::Component::MaterializeAsMeshEntity>(entt::entity(item)))
+        if (const auto* mp = itemReg.try_get<const Item::Component::MaterializeAsMeshEntity>(entt::entity(item.id)))
         {
           RenderMeshIcon(world, item, iconTexture);
           return true;
@@ -240,7 +240,7 @@ namespace Gui
           auto sumPosition = glm::vec3(0);
           auto entityCount = 0;
 
-          auto entityQueue = std::queue<ItemId>();
+          auto entityQueue = std::queue<entt::entity>();
           entityQueue.push(entity);
           while (!entityQueue.empty())
           {
@@ -265,7 +265,7 @@ namespace Gui
           averagePosition = sumPosition / (float)entityCount;
         }
 
-        auto renderQueue = std::queue<ItemId>();
+        auto renderQueue = std::queue<entt::entity>();
 
         renderQueue.push(entity);
 
@@ -285,7 +285,7 @@ namespace Gui
           if (const auto* mp = world.GetRegistry().try_get<const Mesh>(entityToRender))
           {
             auto mod = Item::Component::IconModifiers{};
-            if (const auto* ip = world.globals->itemRegistry->GetRegistry().try_get<const Item::Component::IconModifiers>(entt::entity(item)))
+            if (const auto* ip = world.globals->itemRegistry->GetRegistry().try_get<const Item::Component::IconModifiers>(entt::entity(item.id)))
             {
               mod = *ip;
             }
@@ -423,7 +423,7 @@ namespace Gui
       {
         std::size_t operator()(const CacheKey& k) const noexcept
         {
-          auto hashed = std::make_tuple(k.iconParams.item, k.extent.width, k.extent.height, k.samples, k.time);
+          auto hashed = std::make_tuple(k.iconParams.item.id, k.extent.width, k.extent.height, k.samples, k.time);
           return Fvog::detail::hashing::hash<decltype(hashed)>{}(hashed);
         }
       };
@@ -433,7 +433,7 @@ namespace Gui
       PipelineManager::ComputePipelineKey outlinePipeline_;
       PipelineManager::ComputePipelineKey spritePipeline_;
 
-      constexpr static CacheKey errorKey = {.iconParams = {.item = entt::null}};
+      constexpr static CacheKey errorKey = {.iconParams = {.item = NullItem}};
     };
   } // namespace
 

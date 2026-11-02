@@ -451,7 +451,7 @@ void World::KillPlayer(entt::entity playerEntity)
   }
 
   auto& inventory = registry_.get<const Inventory>(playerEntity);
-  if (inventory.ActiveSlot().id != entt::null)
+  if (inventory.ActiveSlot().id != NullItem)
   {
     Item::Dematerialize(*this, inventory.ActiveSlot().id, inventory.activeSlotEntity);
   }
@@ -470,7 +470,7 @@ void World::RespawnPlayer(entt::entity playerEntity)
   GivePlayerColliders(playerEntity);
 
   auto& inventory = registry_.get<Inventory>(playerEntity);
-  if (inventory.ActiveSlot().id != entt::null)
+  if (inventory.ActiveSlot().id != NullItem)
   {
     inventory.activeSlotEntity = Item::Materialize(*this, inventory.ActiveSlot().id);
     SetParent(inventory.activeSlotEntity, playerEntity);

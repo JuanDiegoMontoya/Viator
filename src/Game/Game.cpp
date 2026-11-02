@@ -215,7 +215,7 @@ static void OnContactAdded(World& world, Physics::ContactAddedPair* ppair)
         auto& i = world.GetRegistry().get<Inventory>(entity1);
         auto& d = world.GetRegistry().get<DroppedItem>(entity2);
 
-        if (d.item.id != entt::null)
+        if (d.item.id != NullItem)
         {
           world.GetAudio()->PlaySound({.name = "coin", .highlander = true});
           i.TryStackItem(world, d.item);
@@ -731,7 +731,7 @@ bool SwapInventorySlotAndArmorSlotRPC(World& world, entt::entity parent1, glm::i
   }
 
   // Check that target for the item being moved into restricted slots is compatible.
-  if (item1.id != entt::null && !Item::ItemIsCompatibleWithSlot(world, item1.id, item1Target))
+  if (item1.id != NullItem && !Item::ItemIsCompatibleWithSlot(world, item1.id, item1Target))
   {
     return false;
   }
@@ -890,13 +890,13 @@ void SetActiveSlotRPC(World& world, entt::entity parent, glm::ivec2 rowCol)
 
   if (rowCol != inv->activeSlotCoord)
   {
-    if (inv->ActiveSlot().id != entt::null)
+    if (inv->ActiveSlot().id != NullItem)
     {
       Item::Dematerialize(world, inv->ActiveSlot().id, inv->activeSlotEntity);
       inv->activeSlotEntity = entt::null;
     }
     inv->activeSlotCoord = rowCol;
-    if (inv->ActiveSlot().id != entt::null)
+    if (inv->ActiveSlot().id != NullItem)
     {
       inv->activeSlotEntity = Item::Materialize(world, inv->ActiveSlot().id);
       if (inv->activeSlotEntity != entt::null)
@@ -937,7 +937,7 @@ entt::entity DropItemRPC(World& world, entt::entity parent, glm::ivec2 slot)
   }
 
   auto& item = inv->slots[slot[0]][slot[1]];
-  if (item.id == entt::null)
+  if (item.id == NullItem)
   {
     return entt::null;
   }
@@ -971,7 +971,7 @@ entt::entity DropItemFromArmorRPC(World& world, entt::entity parent, ArmorAndAcc
   }
 
   auto& item = armor->slots[slot];
-  if (item.id == entt::null)
+  if (item.id == NullItem)
   {
     return entt::null;
   }
@@ -1030,13 +1030,13 @@ entt::entity ThrowItemFromArmorRPC(World& world, entt::entity parent, entt::enti
 void Inventory::OverwriteSlot(World& world, glm::ivec2 rowCol, ItemState itemState, entt::entity parent)
 {
   const bool dstIsActive = rowCol == activeSlotCoord;
-  if (canHaveActiveItem && dstIsActive && ActiveSlot().id != entt::null)
+  if (canHaveActiveItem && dstIsActive && ActiveSlot().id != NullItem)
   {
     Item::Dematerialize(world, ActiveSlot().id, activeSlotEntity);
     activeSlotEntity = entt::null;
   }
   slots[rowCol[0]][rowCol[1]] = itemState;
-  if (canHaveActiveItem && dstIsActive && itemState.id != entt::null)
+  if (canHaveActiveItem && dstIsActive && itemState.id != NullItem)
   {
     activeSlotEntity = Item::Materialize(world, ActiveSlot().id);
     world.SetParent(activeSlotEntity, parent);
@@ -1071,7 +1071,7 @@ std::optional<glm::ivec2> Inventory::GetFirstEmptySlot() const
   {
     for (size_t col = 0; col < width; col++)
     {
-      if (slots[row][col].id == entt::null)
+      if (slots[row][col].id == NullItem)
       {
         return glm::ivec2{row, col};
       }

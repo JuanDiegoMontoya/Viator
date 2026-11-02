@@ -85,7 +85,7 @@ struct RandomLootDrop
   // Use individual probabilities for spawning each of count items.
   [[nodiscard]] std::vector<ItemIdAndCount> Sample(PCG::Rng& rng) const;
 
-  ItemId item = entt::null;
+  ItemId item = NullItem;
   int count = 1;
   float chanceForOne = 1;
   // TODO: distribution type (normal, uniform)

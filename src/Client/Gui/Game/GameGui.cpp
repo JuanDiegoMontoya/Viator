@@ -19,7 +19,7 @@ namespace
 {
   void DrawTooltipForItem(World& world, entt::entity parent, const ItemState& item)
   {
-    if (item.id == entt::null)
+    if (item.id == NullItem)
     {
       return;
     }
@@ -184,7 +184,7 @@ namespace
           auto& slot           = inventory.slots[row][col];
           std::string nameStr  = "";
           const auto cursorPos = ImGui::GetCursorPos();
-          if (slot.id != entt::null)
+          if (slot.id != NullItem)
           {
             nameStr = Item::GetName(world, slot.id);
             if (Item::GetMaxStackSize(world, slot.id) > 1)
@@ -206,12 +206,12 @@ namespace
 
           Fvog::Texture* texture = nullptr;
 
-          if (slot.id != entt::null)
+          if (slot.id != NullItem)
           {
             texture = iconCache.GetOrEmplaceIcon(world, {.item = slot.id});
           }
 
-          if (slot.id != entt::null && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+          if (slot.id != NullItem && ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
           {
             const auto dragDropPayload = InventoryDragDropPayload{
               .sourceRowCol = currentSlotCoord,
@@ -335,7 +335,7 @@ namespace
         ImGui::TableNextColumn();
         auto& slot          = armorAndAccessories.slots[i];
         std::string nameStr = "";
-        if (slot.id != entt::null)
+        if (slot.id != NullItem)
         {
           nameStr = Item::GetName(world, slot.id);
         }
@@ -343,7 +343,7 @@ namespace
         ImGui::Selectable(("##" + nameStr).c_str(), false, 0, {50, 50});
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
         {
-          if (slot.id == entt::null)
+          if (slot.id == NullItem)
           {
             ImGui::SetTooltip("%s", Core::Reflection::EnumToString(ArmorAndAccessories::Slot(i)));
           }
@@ -697,9 +697,9 @@ void VoxelRenderer::ShowGameGui(World& world)
   {
     for (const auto& slot : row)
     {
-      if (slot.id != entt::null)
+      if (slot.id != NullItem)
       {
-        if (const auto* mp = world.globals->itemRegistry->GetRegistry().try_get<const Item::Component::MaterializeAsSprite>(slot.id))
+        if (const auto* mp = world.globals->itemRegistry->GetRegistry().try_get<const Item::Component::MaterializeAsSprite>(entt::entity(slot.id.id)))
         {
           GetOrEmplaceCachedTexture(mp->tag, true);
         }

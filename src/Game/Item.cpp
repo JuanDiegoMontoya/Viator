@@ -9,6 +9,7 @@
 #include "Physics/Physics.h"
 #include "Physics/PhysicsUtils.h"
 #include "Audio.h"
+#include "HashUtilities.h"
 #include "Core/Image.h"
 #include "Voxel/Grid.h"
 
@@ -33,9 +34,12 @@ ItemId Item::Registry::Get(const std::string& tag) const
 ItemId Item::Registry::Create(std::string tag)
 {
   ASSERT(!nameToId_.contains(tag));
-  const auto id = registry_->create();
-  nameToId_.emplace(tag, id);
-  return id;
+  const auto hash = HashFnv1a(tag.data(), tag.size());
+  const auto id   = registry_->create(entt::entity(hash));
+  static_assert(sizeof(hash) == sizeof(id));
+  ASSERT(hash == uint32_t(id), "Item ID already in use!");
+  nameToId_.emplace(tag, uint32_t(id));
+  return {uint32_t(id)};
 }
 
 entt::entity Item::Materialize(World& world, ItemId item)
@@ -43,14 +47,14 @@ entt::entity Item::Materialize(World& world, ItemId item)
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
 
   entt::entity self = entt::null;
-  if (const auto* p = iReg.try_get<const Component::MaterializeAsMeshEntity>(item))
+  if (const auto* p = iReg.try_get<const Component::MaterializeAsMeshEntity>(entt::entity(item.id)))
   {
     self = world.CreateRenderableEntity(p->position, p->rotation, p->scale);
     world.GetRegistry().emplace<Mesh>(self, p->mesh);
     world.GetRegistry().emplace<Tint>(self, p->tint);
   }
 
-  if (const auto* p = iReg.try_get<const Component::MaterializeAsSprite>(item))
+  if (const auto* p = iReg.try_get<const Component::MaterializeAsSprite>(entt::entity(item.id)))
   {
     ASSERT(self == entt::null);
     self = world.CreateRenderableEntity({0.2f, -0.2f, -0.5f}, glm::identity<glm::quat>(), 0.25f);
@@ -58,7 +62,7 @@ entt::entity Item::Materialize(World& world, ItemId item)
     world.GetRegistry().emplace<Tint>(self, p->tint);
   }
 
-  if (const auto* p = iReg.try_get<const Component::Block>(item))
+  if (const auto* p = iReg.try_get<const Component::Block>(entt::entity(item.id)))
   {
     auto& bReg = world.globals->blockRegistry->GetRegistry();
     if (const auto* p2 = bReg.try_get<const Block::Component::SpawnDependentEntityPrefabWhenPlaced>(entt::entity(p->voxel)))
@@ -93,7 +97,7 @@ entt::entity Item::Materialize(World& world, ItemId item)
 
   if (self != entt::null)
   {
-    if (const auto* p = iReg.try_get<const Name>(item))
+    if (const auto* p = iReg.try_get<const Name>(entt::entity(item.id)))
     {
       world.GetRegistry().emplace<Name>(self, *p);
     }
@@ -123,7 +127,7 @@ void Item::GiveCollider(World& world, ItemId item, entt::entity self)
   }
 
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
-  if (const auto* p = iReg.try_get<const Component::ColliderWhenDropped>(item))
+  if (const auto* p = iReg.try_get<const Component::ColliderWhenDropped>(entt::entity(item.id)))
   {
     world.GetRegistry().emplace<Friction>(self).axes = p->friction;
     world.GetRegistry().emplace<Physics::RigidBodySettings>(self,
@@ -146,7 +150,7 @@ void Item::Update(World& world, float dt, entt::entity self, ItemState& state)
 
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
 
-  if (iReg.any_of<const Component::Rainbow>(state.id))
+  if (iReg.any_of<const Component::Rainbow>(entt::entity(state.id.id)))
   {
     using namespace glm;
     auto hsv_to_rgb = [](vec3 hsv)
@@ -164,7 +168,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 {
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
   auto& reg        = world.GetRegistry();
-  if (const auto* usable = iReg.try_get<const Component::Usable>(state.id))
+  if (const auto* usable = iReg.try_get<const Component::Usable>(entt::entity(state.id.id)))
   {
     if (state.useAccum < usable->timeBetweenUses)
     {
@@ -175,7 +179,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
     
     bool subtractCountFromState = false;
 
-    if (const auto* p = iReg.try_get<const Component::SpawnEntityPrefabOnUse>(state.id))
+    if (const auto* p = iReg.try_get<const Component::SpawnEntityPrefabOnUse>(entt::entity(state.id.id)))
     {
       auto& prefabs         = world.globals->entityPrefabRegistry;
       const auto& transform = world.GetRegistry().get<GlobalTransform>(self);
@@ -184,7 +188,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       state.useAccum = 0;
     }
 
-    if (const auto* p = iReg.try_get<const Component::SpawnTempHurtboxOnUse>(state.id))
+    if (const auto* p = iReg.try_get<const Component::SpawnTempHurtboxOnUse>(entt::entity(state.id.id)))
     {
       auto child = reg.create();
       
@@ -205,7 +209,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         });
     }
 
-    if (const auto* p = iReg.try_get<const Component::HealUserOnUse>(state.id))
+    if (const auto* p = iReg.try_get<const Component::HealUserOnUse>(entt::entity(state.id.id)))
     {
       auto parent = reg.get<Hierarchy>(self).parent;
       ASSERT(reg.valid(parent));
@@ -219,7 +223,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
     }
 
-    if (const auto* p = iReg.try_get<const Component::Gun>(state.id))
+    if (const auto* p = iReg.try_get<const Component::Gun>(entt::entity(state.id.id)))
     {
       const auto& transform = reg.get<const GlobalTransform>(self);
       world.GetAudio()->PlaySound({
@@ -303,7 +307,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
     }
 
-    if (const auto* p = iReg.try_get<const Component::Tool>(state.id))
+    if (const auto* p = iReg.try_get<const Component::Tool>(entt::entity(state.id.id)))
     {
       if (reg.all_of<LinearPath>(self))
       {
@@ -341,7 +345,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
     }
 
-    if (const auto* p = iReg.try_get<const Component::Block>(state.id))
+    if (const auto* p = iReg.try_get<const Component::Block>(entt::entity(state.id.id)))
     {
       const auto& h  = reg.get<const Hierarchy>(self);
       const auto par = h.parent;
@@ -379,7 +383,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
     }
 
-    if (const auto* p = iReg.try_get<const Component::GiveEffectOnUse>(state.id))
+    if (const auto* p = iReg.try_get<const Component::GiveEffectOnUse>(entt::entity(state.id.id)))
     {
       subtractCountFromState = true;
       const auto& h = world.GetRegistry().get<const Hierarchy>(self);
@@ -395,12 +399,12 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       }
     }
 
-    if (const auto* p = iReg.try_get<const Component::AnimatePathOnUse>(state.id))
+    if (const auto* p = iReg.try_get<const Component::AnimatePathOnUse>(entt::entity(state.id.id)))
     {
       reg.emplace_or_replace<LinearPath>(self, *p);
     }
 
-    if (const auto* p = iReg.try_get<const Component::Rope>(state.id))
+    if (const auto* p = iReg.try_get<const Component::Rope>(entt::entity(state.id.id)))
     {
       const auto& transform = reg.get<const GlobalTransform>(self);
       state.useAccum        = glm::clamp(state.useAccum - dt, 0.0f, dt);
@@ -533,7 +537,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       //Physics::RegisterConstraint(constraint);
     }
 
-    if (const auto* p = iReg.try_get<const Component::GrapplingHookLauncher>(state.id))
+    if (const auto* p = iReg.try_get<const Component::GrapplingHookLauncher>(entt::entity(state.id.id)))
     {
       const auto& transform = reg.get<const GlobalTransform>(self);
       state.useAccum        = glm::clamp(state.useAccum - dt, 0.0f, dt);
@@ -593,7 +597,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
       subtractCountFromState = true;
     }
 
-    if (iReg.any_of<Component::AbsorbFogOnUse, Component::EmitFogOnUse>(state.id))
+    if (iReg.any_of<Component::AbsorbFogOnUse, Component::EmitFogOnUse>(entt::entity(state.id.id)))
     {
       const auto& transform = reg.get<const GlobalTransform>(self);
       const auto fogSize    = glm::vec3(world.globals->globalFog->Size());
@@ -607,7 +611,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
         const auto texCoord = uv * fogSize + glm::vec3(x, y, z);
         if (glm::all(glm::greaterThanEqual(texCoord, glm::vec3(0))) && glm::all(glm::lessThan(texCoord, fogSize)))
         {
-          const bool isEmitting = iReg.any_of<Component::EmitFogOnUse>(state.id);
+          const bool isEmitting = iReg.any_of<Component::EmitFogOnUse>(entt::entity(state.id.id));
           const auto prev = world.globals->globalFog->Load(texCoord);
           const auto next = glm::max(0.0f, prev + dt * (isEmitting ? 20 : -20));
           if (prev != next)
@@ -629,7 +633,7 @@ void Item::UsePrimary(World& world, float dt, entt::entity self, ItemState& stat
 bool Item::ItemIsCompatibleWithSlot(World& world, ItemId item, Component::AllowedSlots slot)
 {
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
-  if (const auto* p = iReg.try_get<const Component::AllowedSlots>(item))
+  if (const auto* p = iReg.try_get<const Component::AllowedSlots>(entt::entity(item.id)))
   {
     return slot == *p;
   }
@@ -640,7 +644,7 @@ bool Item::ItemIsCompatibleWithSlot(World& world, ItemId item, Component::Allowe
 int Item::GetMaxStackSize(World& world, ItemId item)
 {
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
-  if (const auto* p = iReg.try_get<const Component::Stackable>(item))
+  if (const auto* p = iReg.try_get<const Component::Stackable>(entt::entity(item.id)))
   {
     return p->maxStackSize;
   }
@@ -651,18 +655,18 @@ int Item::GetMaxStackSize(World& world, ItemId item)
 std::string Item::GetName(World& world, ItemId item)
 {
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
-  if (const auto* p = iReg.try_get<const Name>(item))
+  if (const auto* p = iReg.try_get<const Name>(entt::entity(item.id)))
   {
     return p->name;
   }
 
-  return std::to_string(entt::to_integral(item));
+  return std::to_string(entt::to_integral(item.id));
 }
 
 float Item::GetEffect(World& world, ItemId item, [[maybe_unused]] entt::entity parent, EffectCondition condition, EffectQuantityType quantityType, EffectType type)
 {
   const auto& iReg = world.globals->itemRegistry->GetRegistry();
-  if (const auto* p = iReg.try_get<const Component::StaticEffects>(item))
+  if (const auto* p = iReg.try_get<const Component::StaticEffects>(entt::entity(item.id)))
   {
     for (const auto& effect : p->effects)
     {
@@ -699,7 +703,7 @@ float Item::GetTotalEffectOnEntity(World& world, entt::entity entity, EffectType
       for (size_t colIdx = 0; colIdx < inv->slots[rowIdx].size(); colIdx++)
       {
         const auto& slot = inv->slots[rowIdx][colIdx];
-        if (slot.id != entt::null && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
+        if (slot.id != NullItem && inv->activeSlotCoord == glm::ivec2(rowIdx, colIdx))
         {
           sum += GetEffect(world, slot.id, entity, EffectCondition::OnHeld, EffectQuantityType::Additive, effect);
           product *= GetEffect(world, slot.id, entity, EffectCondition::OnHeld, EffectQuantityType::Multiplicative, effect);
@@ -713,7 +717,7 @@ float Item::GetTotalEffectOnEntity(World& world, entt::entity entity, EffectType
     for (int i = 0; i < ArmorAndAccessories::SLOT_COUNT; i++)
     {
       const auto& slot = armor->slots[i];
-      if (slot.id != entt::null)
+      if (slot.id != NullItem)
       {
         sum += GetEffect(world, slot.id, entity, EffectCondition::OnWorn, EffectQuantityType::Additive, effect);
         product *= GetEffect(world, slot.id, entity, EffectCondition::OnWorn, EffectQuantityType::Multiplicative, effect);
@@ -725,7 +729,7 @@ float Item::GetTotalEffectOnEntity(World& world, entt::entity entity, EffectType
   {
     for (const auto& effect2 : effects->effects)
     {
-      DEBUG_ASSERT(effect2.id != entt::null);
+      DEBUG_ASSERT(effect2.id != NullItem);
       sum += GetEffect(world, effect2.id, entity, EffectCondition::OnWorn, EffectQuantityType::Additive, effect);
       product *= GetEffect(world, effect2.id, entity, EffectCondition::OnWorn, EffectQuantityType::Multiplicative, effect);
     }
@@ -736,13 +740,13 @@ float Item::GetTotalEffectOnEntity(World& world, entt::entity entity, EffectType
 
 ItemId Item::CreateGun(Registry& registry, std::string tag, std::string name, float rateOfFireRPM, const Component::Gun& gun)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   registry.GetRegistry().emplace<Component::Usable>(id).timeBetweenUses = 1.0f / (rateOfFireRPM / 60.0f);
   registry.GetRegistry().emplace<Component::Gun>(id, gun);
   registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = gun.model, .tint = gun.tint, .position = {0.2f, -0.2f, -0.5f}};
   registry.GetRegistry().emplace<Component::ColliderWhenDropped>(id);
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateTool(Registry& registry,
@@ -753,7 +757,7 @@ ItemId Item::CreateTool(Registry& registry,
   float timeBetweenUses,
   const Component::Tool& tool)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   registry.GetRegistry().emplace<Component::Usable>(id).timeBetweenUses  = timeBetweenUses;
   registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = std::move(model), .tint = tint, .position = {0.3f, -0.7f, -0.7f}};
@@ -773,12 +777,12 @@ ItemId Item::CreateTool(Registry& registry,
 
   registry.GetRegistry().emplace<Component::Tool>(id, tool);
   registry.GetRegistry().emplace<Component::SpawnTempHurtboxOnUse>(id) = {.position = {0, .7f, -.4f}, .damage = 10, .knockback = 5, .duration = timeBetweenUses};
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateSpear(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, float damage, float knockback)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   registry.GetRegistry().emplace<Component::Usable>(id, timeBetweenUses);
   registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = std::move(model), .tint = tint, .position = {0.2f, -0.2f, -0.5f}};
@@ -788,12 +792,12 @@ ItemId Item::CreateSpear(Registry& registry, std::string tag, std::string name, 
   auto& path = registry.GetRegistry().emplace<Component::AnimatePathOnUse>(id);
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, -1}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_OUT_BACK});
   path.frames.emplace_back(LinearPath::KeyFrame{.position = {0, 0, 0}, .offsetSeconds = timeBetweenUses * 0.45f, .easing = Math::Easing::EASE_IN_SINE});
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateSword(Registry& registry, std::string tag, std::string name, std::string model, glm::vec3 tint, float timeBetweenUses, float damage, float knockback)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   registry.GetRegistry().emplace<Component::Usable>(id, timeBetweenUses);
   registry.GetRegistry().emplace<Component::MaterializeAsMeshEntity>(id) = {.mesh = std::move(model), .tint = tint, .position = {0.3f, -0.35f, -0.7f}};
@@ -820,22 +824,22 @@ ItemId Item::CreateSword(Registry& registry, std::string tag, std::string name, 
     .offsetSeconds = timeBetweenUses * 0.5f,
     .easing        = Math::Easing::EASE_IN_CUBIC,
   });
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateSimpleSpriteItem(Registry& registry, std::string tag, std::string name, std::string sprite, int maxStackSize, glm::vec3 tint)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   registry.GetRegistry().emplace<Component::MaterializeAsSprite>(id) = {.tag = std::move(sprite), .tint = tint};
   registry.GetRegistry().emplace<Component::ColliderWhenDropped>(id);
   registry.GetRegistry().emplace<Component::Stackable>(id, maxStackSize);
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateEffector(Registry& registry, std::string tag, std::string name, EffectType type, float additive, float multiplicative)
 {
-  const auto id = registry.Create(std::move(tag));
+  const auto id = entt::entity(registry.Create(std::move(tag)).id);
   registry.GetRegistry().emplace<Name>(id, std::move(name));
   auto& effects = registry.GetRegistry().emplace<Component::StaticEffects>(id).effects;
   effects.push_back({
@@ -851,15 +855,15 @@ ItemId Item::CreateEffector(Registry& registry, std::string tag, std::string nam
     .amount       = multiplicative,
   });
   registry.GetRegistry().emplace<Component::AllowedSlots>(id, Component::AllowedSlots::Hidden);
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateEffectGranter(Registry& registry, std::string tag, std::string name, ItemId effector, float duration, std::string sprite, glm::vec3 tint)
 {
-  const auto id = CreateSimpleSpriteItem(registry, std::move(tag), std::move(name), std::move(sprite), 999, tint);
+  const auto id = entt::entity(CreateSimpleSpriteItem(registry, std::move(tag), std::move(name), std::move(sprite), 999, tint).id);
   registry.GetRegistry().emplace<Component::GiveEffectOnUse>(id) = {.effectId = effector, .duration = duration};
   registry.GetRegistry().emplace<Component::Usable>(id, 0.5f);
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::CreateArmor(Registry& registry,
@@ -870,7 +874,7 @@ ItemId Item::CreateArmor(Registry& registry,
   std::string sprite,
   glm::vec3 tint)
 {
-  const auto id = CreateSimpleSpriteItem(registry, std::move(tag), std::move(name), std::move(sprite), 1, tint);
+  const auto id = entt::entity(CreateSimpleSpriteItem(registry, std::move(tag), std::move(name), std::move(sprite), 1, tint).id);
   registry.GetRegistry().emplace<Component::AllowedSlots>(id, slot);
   registry.GetRegistry().emplace<Component::StaticEffects>(id).effects.push_back({
     .condition    = EffectCondition::OnWorn,
@@ -878,7 +882,7 @@ ItemId Item::CreateArmor(Registry& registry,
     .type         = EffectType::ArmorModifier,
     .amount       = armorModifier,
   });
-  return id;
+  return {uint32_t(id)};
 }
 
 ItemId Item::RegisterItemForBlock(World& world, BlockId block)
@@ -889,7 +893,7 @@ ItemId Item::RegisterItemForBlock(World& world, BlockId block)
   auto& blockRegistry = *world.globals->blockRegistry;
   auto name           = blockRegistry.GetIdToTagMap().at(block);
 
-  const auto e = itemRegistry.Create(name);
+  const auto e = entt::entity(itemRegistry.Create(name).id);
   if (auto* n = blockRegistry.GetRegistry().try_get<Name>(entt::entity(block)))
   {
     name = n->name;
@@ -901,6 +905,6 @@ ItemId Item::RegisterItemForBlock(World& world, BlockId block)
   reg.emplace<Item::Component::AllowedSlots>(e, Item::Component::AllowedSlots::Normal);
   reg.emplace<Item::Component::Block>(e).voxel = block;
 
-  blockRegistry.GetRegistry().emplace_or_replace<Block::Component::CorrespondingItem>(entt::entity(block), e);
-  return e;
+  blockRegistry.GetRegistry().emplace_or_replace<Block::Component::CorrespondingItem>(entt::entity(block), uint32_t(e));
+  return {uint32_t(e)};
 }

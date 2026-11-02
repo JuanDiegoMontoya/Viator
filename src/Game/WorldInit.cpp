@@ -469,20 +469,20 @@ void World::InitializeGameDefinitions()
   const auto stickId = Item::CreateSimpleSpriteItem(items, "item_stick", "Stick", "stick", 999);
   const auto coolStickId = Item::CreateSimpleSpriteItem(items, "item_cool_stick", "Cool Stick", "stick", 999, {1, .1f, .1f});
   const auto susCoin = Item::CreateSimpleSpriteItem(items, "item_suspicious_coin", "Suspicious Coin", "coin", 999, {1, .1f, .1f});
-  items.GetRegistry().emplace<Item::Component::SpawnEntityPrefabOnUse>(susCoin, "Worm Boss");
-  items.GetRegistry().emplace<Item::Component::Usable>(susCoin, 1.0f);
+  items.GetRegistry().emplace<Item::Component::SpawnEntityPrefabOnUse>(entt::entity(susCoin.id), "Worm Boss");
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(susCoin.id), 1.0f);
 
   const auto healingPotion = Item::CreateSimpleSpriteItem(items, "item_healing_potion", "Healing Potion", "potion_healing", 999);
-  items.GetRegistry().emplace<Item::Component::Usable>(healingPotion, 1.0f);
-  items.GetRegistry().emplace<Item::Component::HealUserOnUse>(healingPotion, 30.0f);
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(healingPotion.id), 1.0f);
+  items.GetRegistry().emplace<Item::Component::HealUserOnUse>(entt::entity(healingPotion.id), 30.0f);
 
   const auto fogSucc = Item::CreateSimpleSpriteItem(items, "item_fog_absorber", "Fog Vacuum", "potion_healing");
-  items.GetRegistry().emplace<Item::Component::Usable>(fogSucc, 0.0f);
-  items.GetRegistry().emplace<Item::Component::AbsorbFogOnUse>(fogSucc);
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(fogSucc.id), 0.0f);
+  items.GetRegistry().emplace<Item::Component::AbsorbFogOnUse>(entt::entity(fogSucc.id));
 
   const auto fogEmit = Item::CreateSimpleSpriteItem(items, "item_fog_emitter", "Fog Emit", "potion_healing", 1, {0, 0, 0});
-  items.GetRegistry().emplace<Item::Component::Usable>(fogEmit, 0.0f);
-  items.GetRegistry().emplace<Item::Component::EmitFogOnUse>(fogEmit);
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(fogEmit.id), 0.0f);
+  items.GetRegistry().emplace<Item::Component::EmitFogOnUse>(entt::entity(fogEmit.id));
 
   const auto opPickaxe = Item::CreateTool(items,
     "tool_op_pickaxe",
@@ -495,7 +495,7 @@ void World::InitializeGameDefinitions()
       .blockDamageTier  = 100,
       .blockDamageFlags = BlockDamageFlagBit::ALL_TOOLS,
     });
-  items.GetRegistry().emplace<Item::Component::Rainbow>(opPickaxe);
+  items.GetRegistry().emplace<Item::Component::Rainbow>(entt::entity(opPickaxe.id));
 
   const auto healthRegenId = Item::CreateEffector(items, "effect_regeneration", "Health Regeneration", Item::EffectType::HealthRegeneration);
   const auto shineId       = Item::CreateEffector(items, "effect_shine", "Shine", Item::EffectType::Shine);
@@ -519,7 +519,7 @@ void World::InitializeGameDefinitions()
 
   const auto addLeadArmorModifiers = [&](ItemId id)
   {
-    auto& effects = items.GetRegistry().get_or_emplace<Item::Component::StaticEffects>(id).effects;
+    auto& effects = items.GetRegistry().get_or_emplace<Item::Component::StaticEffects>(entt::entity(id.id)).effects;
 
     effects.append_range(std::vector<Item::Component::StaticEffect>{
       {
@@ -548,7 +548,9 @@ void World::InitializeGameDefinitions()
   addLeadArmorModifiers(leadPantsId);
 
   const auto flippersId = Item::CreateArmor(items, "armor_flippers", "Flippers", Item::Component::AllowedSlots::Accessory, 0, "potion_healing");
-  items.GetRegistry().get<Item::Component::StaticEffects>(flippersId).effects.append_range(std::vector<Item::Component::StaticEffect>{
+  items.GetRegistry()
+    .get<Item::Component::StaticEffects>(entt::entity(flippersId.id))
+    .effects.append_range(std::vector<Item::Component::StaticEffect>{
     {
       .condition    = Item::EffectCondition::OnWorn,
       .quantityType = Item::EffectQuantityType::Additive,
@@ -570,12 +572,12 @@ void World::InitializeGameDefinitions()
   });
 
   const auto ropeId = Item::CreateSimpleSpriteItem(items, "item_rope", "Rope", "potion_healing", 100, {0.5f, 0.25f, 0.1f});
-  items.GetRegistry().emplace<Item::Component::Usable>(ropeId, 0.25f);
-  items.GetRegistry().emplace<Item::Component::Rope>(ropeId);
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(ropeId.id), 0.25f);
+  items.GetRegistry().emplace<Item::Component::Rope>(entt::entity(ropeId.id));
 
   const auto grappleId = Item::CreateSimpleSpriteItem(items, "item_grappling_hook", "Grappling Hook", "potion_healing");
-  items.GetRegistry().emplace<Item::Component::Usable>(grappleId, 0.25f);
-  items.GetRegistry().emplace<Item::Component::GrapplingHookLauncher>(grappleId) = {
+  items.GetRegistry().emplace<Item::Component::Usable>(entt::entity(grappleId.id), 0.25f);
+  items.GetRegistry().emplace<Item::Component::GrapplingHookLauncher>(entt::entity(grappleId.id)) = {
     .maxDistance      = 10,
     .launchVelocity   = 30,
     .pullAcceleration = 10,

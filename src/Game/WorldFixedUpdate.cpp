@@ -429,7 +429,7 @@ void World::FixedUpdate(float dt)
 
         if (IsServer() && input.usePrimary)
         {
-          if (inventory.ActiveSlot().id != entt::null)
+          if (inventory.ActiveSlot().id != NullItem)
           {
             Item::UsePrimary(*this, dt, inventory.activeSlotEntity, inventory.ActiveSlot());
             if (inventory.ActiveSlot().count <= 0)
@@ -517,7 +517,7 @@ void World::FixedUpdate(float dt)
           for (size_t col = 0; col < inventory.width; col++)
           {
             auto& slot = inventory.slots[row][col];
-            if (slot.id != entt::null)
+            if (slot.id != NullItem)
             {
               entt::entity self = entt::null;
               if (inventory.activeSlotCoord == glm::ivec2{row, col})

@@ -30,6 +30,10 @@ namespace Core::Reflection
       ENUMERATOR(voxel_t, Air)
       ENUMERATOR(voxel_t, Null);
 
+    BEGIN_REFLECT_TYPE(ItemId)
+      MEMBER(id);
+    END_REFLECT
+
     using namespace Physics;
 
     REFLECT_ENUM(Item::EffectType)
