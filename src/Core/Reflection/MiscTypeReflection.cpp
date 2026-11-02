@@ -153,10 +153,22 @@ namespace Core::Reflection
       MEMBER(pauseDayNightCycle);
     END_REFLECT
 
+    BEGIN_REFLECT_NON_OBJECT_TYPE(PCG::Rng)
+      MEMBER(seed);
+    END_REFLECT
+
+    BEGIN_REFLECT_NON_OBJECT_TYPE(TimeScale)
+      MEMBER(scale);
+    END_REFLECT
+
+    BEGIN_REFLECT_NON_OBJECT_TYPE(TickRate)
+      MEMBER(hz);
+    END_REFLECT
+
     BEGIN_REFLECT_NON_OBJECT_TYPE(GameGlobals)
       MEMBER(gameState) TRAITS(TRANSIENT);
       MEMBER(rng);
-      MEMBER(debugging);
+      MEMBER(debugging) TRAITS(TRANSIENT);
       MEMBER(timeScale);
       MEMBER(tickRate);
       MEMBER(time);

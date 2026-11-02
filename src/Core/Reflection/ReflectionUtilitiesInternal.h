@@ -3,12 +3,26 @@
 #include "Game/World.h"
 
 #include "entt/meta/resolve.hpp"
+#include "entt/meta/fwd.hpp"
 
+#include <expected>
 #include <variant>
+#include <unordered_map>
 
 namespace Core::Reflection
 {
   std::string RemoveNamespaces(std::string name);
+
+  void GenerateHashedNamesForReflection();
+  [[nodiscard]] const std::unordered_map<uint32_t, entt::meta_type>& GetIdToTypeMap();
+
+  enum class GetHashedTypeNameError
+  {
+    PropertiesMapDoesNotExist,
+    HashedNamePropertyDoesNotExist,
+    HashedNamePropertyHasWrongType,
+  };
+  std::expected<uint32_t, GetHashedTypeNameError> GetHashedTypeName(const entt::meta_type& type);
 
   template<typename T>
   T WorldGet(World& world, entt::entity entity)

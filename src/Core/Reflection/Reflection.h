@@ -109,4 +109,5 @@ namespace Core::Reflection
   const char* EnumToIcon(entt::meta_any value);
 
   void Initialize(Scripting& scripting);
+  void Cleanup();
 }

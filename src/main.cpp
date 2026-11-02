@@ -1,3 +1,4 @@
+#include "Core/Defer.h"
 #include "Game/Game.h"
 #include "Game/Assets.h"
 #include "Core/Logging.h"
@@ -90,6 +91,7 @@ int main(int argc, const char* const* argv)
   Core::Logging::Initialize();
   auto scripting = Scripting();
   Core::Reflection::Initialize(scripting);
+  auto _ = Defer([] { Core::Reflection::Cleanup(); });
   Core::Serialization::Initialize();
   Physics::Initialize();
   auto head = std::unique_ptr<Head>();

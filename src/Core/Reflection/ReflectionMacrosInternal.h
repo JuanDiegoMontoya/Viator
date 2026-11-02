@@ -15,7 +15,9 @@
 #define REFLECT_COMPONENT_NO_DEFAULT(T, ...)                                                        \
   REGISTER_OBJECT_TYPE(T);                                                                          \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);) \
-  [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}.traits(COMPONENT __VA_OPT__(| __VA_ARGS__))
+  [[maybe_unused]] auto MAKE_IDENTIFIER() =                                                         \
+    entt::meta_factory<T>{}.traits(COMPONENT __VA_OPT__(| __VA_ARGS__))                             \
+                           .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})
 
 #define REFLECT_COMPONENT(T, ...)       \
   REGISTER_OBJECT_TYPE(T);              \
@@ -25,6 +27,7 @@
 #define REFLECT_COMPONENT_BASE(T, ...)                                                                                                                        \
   __VA_OPT__(static_assert(!((__VA_ARGS__) & Traits::TRIVIAL) || std::is_trivially_copyable_v<T>);)                                                           \
   [[maybe_unused]] auto MAKE_IDENTIFIER() = entt::meta_factory<T>{}                                                                                           \
+                                              .custom<PropertiesMap>(PropertiesMap{{"name"_hs, #T}})                                                          \
                                               .traits(COMPONENT | (std::is_empty_v<T> ? EMPTY : Traits(0)) | (is_optional_v<T> ? OPTIONAL : Traits(0)) |      \
                                                       (is_variant_v<T> ? VARIANT : Traits(0))__VA_OPT__(| __VA_ARGS__))                                       \
                                               .func<[](entt::registry* registry, entt::entity entity) { registry->emplace<T>(entity); }>("EmplaceDefault"_hs) \

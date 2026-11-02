@@ -1008,4 +1008,6 @@ void Core::Reflection::Initialize(Scripting& scripting)
     cb();
   }
   s_reflectionRegistrationFuncs.clear();
+
+  GenerateHashedNamesForReflection();
 }
